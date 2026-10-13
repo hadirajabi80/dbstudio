@@ -25,4 +25,8 @@
     <ProjectReference Include="..\DbStudio.Providers.Conformance\DbStudio.Providers.Conformance.Tests.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="../docker/seed-mssql.sql" Link="docker/seed-mssql.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

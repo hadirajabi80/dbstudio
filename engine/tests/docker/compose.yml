@@ -1,0 +1,52 @@
+# DbStudio integration-test servers (see README.md in this folder).
+#   docker compose -f engine/tests/docker/compose.yml up -d
+# SQL Server: localhost,14333  (sa / $MSSQL_SA_PASSWORD, database "shop")
+# Oracle:     localhost:15211/FREEPDB1  (shop / $APP_USER_PASSWORD; SYSTEM / $ORACLE_PASSWORD)
+name: dbstudio-it
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-DbStudio_Dev_2026!}"
+      MSSQL_PID: Developer
+    ports:
+      - "${MSSQL_PORT:-14333}:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -b -Q \"SELECT 1\" -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # One-shot: seeds the "shop" database once SQL Server is healthy (the image has no init-script hook).
+  mssql-seed:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-DbStudio_Dev_2026!}"
+    volumes:
+      - ./seed-mssql.sql:/seed/seed-mssql.sql:ro
+    entrypoint: ["/bin/sh", "-c", "/opt/mssql-tools18/bin/sqlcmd -S mssql -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -b -i /seed/seed-mssql.sql"]
+    restart: "no"
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    environment:
+      ORACLE_PASSWORD: "${ORACLE_PASSWORD:-DbStudioDev2026}"
+      APP_USER: shop
+      APP_USER_PASSWORD: "${APP_USER_PASSWORD:-shop}"
+    ports:
+      - "${ORACLE_PORT:-15211}:1521"
+    volumes:
+      # Executed once, by SYS, when the database is first created.
+      - ./seed-oracle.sql:/container-entrypoint-initdb.d/seed-oracle.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s

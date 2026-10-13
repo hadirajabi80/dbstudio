@@ -25,4 +25,8 @@
     <ProjectReference Include="..\DbStudio.Providers.Conformance\DbStudio.Providers.Conformance.Tests.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="../docker/seed-oracle.sql" Link="docker/seed-oracle.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
