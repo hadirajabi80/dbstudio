@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbStudio.Core\DbStudio.Core.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.Sqlite\DbStudio.Providers.Sqlite.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.SqlServer\DbStudio.Providers.SqlServer.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.Oracle\DbStudio.Providers.Oracle.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

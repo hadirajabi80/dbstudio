@@ -1,0 +1,28 @@
+namespace DbStudio.Core.Models;
+
+/// <param name="MaxRows">Row cap per result set; 0 = unlimited.</param>
+/// <param name="Label">"statement" | "selection" | "script".</param>
+public sealed record ExecuteRequest(IReadOnlyList<SqlBatch> Batches, int MaxRows, bool StopOnError, bool CaptureServerOutput, string Label);
+
+/// <summary>One unit sent to the server. T-SQL: a GO-delimited batch. Oracle/SQLite: a single statement. Line/Col are 1-based document positions of its first char.</summary>
+public sealed record SqlBatch(string Sql, int Line, int Col);
+
+/// <summary>kind: int | float | decimal | string | bool | date | time | datetime | datetimeoffset | guid | binary | json | xml | cursor | other.</summary>
+public sealed record ColumnInfo(
+    string Name,
+    int Ordinal,
+    string DbType,
+    string Kind,
+    bool Nullable,
+    int? Size = null,
+    int? Precision = null,
+    int? Scale = null,
+    string? Table = null,
+    string? Schema = null,
+    bool IsKey = false);
+
+/// <param name="Code">Provider error number as string ("207", "ORA-00942", "SQLITE_ERROR") or an engine code.</param>
+/// <param name="Line">1-based, absolute to the editor document (provider adds batch.Line - 1).</param>
+public sealed record ErrorInfo(string Code, string Message, int? Line = null, int? Col = null, int? State = null, string? Detail = null, int? ProviderCode = null);
+
+public sealed record ExecutionSummary(ExecutionStatus Status, long ElapsedMs, int ResultSets, long RowsAffected);

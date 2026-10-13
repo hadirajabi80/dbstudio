@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+bin/
+obj/
+publish/
+*.user
+.vs/
+.vscode/*
+!.vscode/extensions.json
+coverage/
+*.log
+.env.local
+TestResults/
+engine/tests/fixtures/*.sqlite

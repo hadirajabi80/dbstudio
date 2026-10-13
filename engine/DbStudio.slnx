@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DbStudio.Core/DbStudio.Core.csproj" />
+    <Project Path="src/DbStudio.Host/DbStudio.Host.csproj" />
+    <Project Path="src/DbStudio.Providers.Oracle/DbStudio.Providers.Oracle.csproj" />
+    <Project Path="src/DbStudio.Providers.Sqlite/DbStudio.Providers.Sqlite.csproj" />
+    <Project Path="src/DbStudio.Providers.SqlServer/DbStudio.Providers.SqlServer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DbStudio.Core.Tests/DbStudio.Core.Tests.csproj" />
+    <Project Path="tests/DbStudio.Providers.Oracle.Tests/DbStudio.Providers.Oracle.Tests.csproj" />
+    <Project Path="tests/DbStudio.Providers.Sqlite.Tests/DbStudio.Providers.Sqlite.Tests.csproj" />
+    <Project Path="tests/DbStudio.Providers.SqlServer.Tests/DbStudio.Providers.SqlServer.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/DbStudio.Providers.Conformance/">
+    <Project Path="tests/DbStudio.Providers.Conformance/DbStudio.Providers.Conformance.Tests.csproj" />
+  </Folder>
+</Solution>
