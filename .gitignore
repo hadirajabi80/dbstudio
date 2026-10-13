@@ -13,3 +13,7 @@ coverage/
 .env.local
 TestResults/
 engine/tests/fixtures/*.sqlite
+
+# DbStudio desktop (WP-E)
+*.tsbuildinfo
+Thumbs.db

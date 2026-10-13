@@ -1,16 +1,30 @@
 {
-  "name": "desktop",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "name": "dbstudio-desktop",
+  "productName": "DbStudio",
+  "version": "0.1.0",
+  "description": "DbStudio desktop shell: a fast SQL client for SQL Server, Oracle and SQLite",
+  "author": "DbStudio contributors",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "out/main.js",
   "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "bundle": "node build/bundle.mjs",
+    "build": "npm run typecheck && npm run bundle",
+    "icon": "node build/make-icon.mjs",
+    "start": "npm run build && electron .",
+    "start:fake": "npm run build && node test/run-with-fake-engine.mjs",
+    "test": "npm run build && node --test test/engine-process.test.mjs test/ipc-validate.test.mjs test/smoke.test.mjs",
+    "test:unit": "npm run build && node --test test/engine-process.test.mjs test/ipc-validate.test.mjs",
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:dir": "npm run build && electron-builder --win dir --x64 --publish never"
+  },
   "devDependencies": {
-    "electron": "^44.7.1"
+    "@types/node": "24.19.2",
+    "electron": "44.7.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3"
   }
 }

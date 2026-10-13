@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  # No Docker on the Windows runner: SQL Server/Oracle integration tests skip themselves.
+  DBSTUDIO_IT: "0"
+  # Unsigned build (PLAN R10).
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            desktop/package-lock.json
+
+      - name: Version
+        id: version
+        run: |
+          $v = (Get-Content -Raw version.json | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "DbStudio $v"
+
+      # ---- engine -----------------------------------------------------------------------------
+      - name: Engine tests
+        run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine" --results-directory TestResults
+
+      # ---- ui ---------------------------------------------------------------------------------
+      - name: UI install
+        working-directory: ui
+        run: npm ci
+      - name: UI tests
+        working-directory: ui
+        run: npm test
+      # (the UI production build runs inside scripts/build.ps1 below)
+
+      # ---- desktop ----------------------------------------------------------------------------
+      - name: Desktop install
+        working-directory: desktop
+        run: npm ci
+      - name: Desktop tests (type-check, lifecycle with fake engine, Electron smoke)
+        working-directory: desktop
+        run: npm test
+
+      # ---- package ----------------------------------------------------------------------------
+      - name: Build installer (engine publish + UI build + electron-builder)
+        run: ./scripts/build.ps1
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DbStudio-Setup-${{ steps.version.outputs.version }}
+          path: desktop/dist/DbStudio-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          if-no-files-found: ignore

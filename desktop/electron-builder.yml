@@ -1,0 +1,66 @@
+# electron-builder config: NSIS x64 installer -> desktop/dist/DbStudio-Setup-<version>.exe
+# Inputs (produced by scripts/build.ps1 before this runs):
+#   ../engine/publish  self-contained single-file engine (DbStudio.Engine.exe)
+#   ../ui/dist         built renderer
+appId: com.dbstudio.desktop
+productName: DbStudio
+copyright: Copyright (c) 2026 DbStudio contributors
+
+directories:
+  output: dist
+  buildResources: build
+
+# Only the bundled main/preload go into app.asar; there are no runtime node_modules.
+files:
+  - package.json
+  - out/main.js
+  - out/preload.js
+  - "!**/*.map"
+npmRebuild: false
+asar: true
+
+extraResources:
+  - from: ../engine/publish
+    to: engine
+    filter:
+      - "**/*"
+      - "!**/*.pdb"
+      - "!**/*.xml"
+      - "!web.config"
+      - "!*.staticwebassets.*.json"
+  - from: ../ui/dist
+    to: ui
+  - from: build/icon.png
+    to: icon.png
+
+# Hardening of the packaged Electron binary.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: DbStudio-Setup-${version}.${ext}
+  # Unsigned for now (PLAN R10: SmartScreen warning until a certificate is bought).
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DbStudio
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  uninstallDisplayName: DbStudio ${version}
+  # %APPDATA%\DbStudio holds saved connections, history and the workspace; keep it on uninstall.
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
