@@ -1,0 +1,96 @@
+/* DbStudio design tokens. Dense, JetBrains New UI–inspired. Switched by [data-theme] on <html>. */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-app: #f7f8fa;
+  --bg-panel: #ffffff;
+  --bg-sunken: #f2f3f5;
+  --bg-editor: #ffffff;
+  --bg-hover: #ebecf0;
+  --bg-active: #dfe1e5;
+  --bg-selected: #d4e2ff;
+  --bg-selected-inactive: #e6e9ef;
+  --bg-input: #ffffff;
+  --bg-tooltip: #ffffff;
+  --bg-overlay: rgba(25, 27, 32, 0.32);
+  --border: #ebecf0;
+  --border-strong: #d3d5db;
+  --border-focus: #3574f0;
+  --text: #1e1f22;
+  --text-muted: #6c707e;
+  --text-faint: #a8adbd;
+  --text-on-accent: #ffffff;
+  --accent: #3574f0;
+  --accent-hover: #2f66d8;
+  --accent-soft: #edf3ff;
+  --success: #208a3c;
+  --success-soft: #e7f5ea;
+  --warning: #c27d04;
+  --warning-soft: #fdf4e3;
+  --danger: #db3b4b;
+  --danger-soft: #fdecee;
+  --info: #3574f0;
+  --null: #a8adbd;
+  --num: #1750eb;
+  --string: #067d17;
+  --date: #871094;
+  --bool: #0033b3;
+  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --scrollbar: rgba(0, 0, 0, 0.18);
+  --scrollbar-hover: rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-app: #1e1f22;
+  --bg-panel: #2b2d30;
+  --bg-sunken: #232427;
+  --bg-editor: #1e1f22;
+  --bg-hover: #393b40;
+  --bg-active: #43454a;
+  --bg-selected: #2e436e;
+  --bg-selected-inactive: #393b40;
+  --bg-input: #1e1f22;
+  --bg-tooltip: #2b2d30;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --border: #393b40;
+  --border-strong: #4e5157;
+  --border-focus: #3574f0;
+  --text: #dfe1e5;
+  --text-muted: #9da0a8;
+  --text-faint: #6f737a;
+  --text-on-accent: #ffffff;
+  --accent: #3574f0;
+  --accent-hover: #4682fa;
+  --accent-soft: #25324d;
+  --success: #57965c;
+  --success-soft: #253627;
+  --warning: #d6ae58;
+  --warning-soft: #3d3223;
+  --danger: #e55765;
+  --danger-soft: #402929;
+  --info: #548af7;
+  --null: #6f737a;
+  --num: #2aacb8;
+  --string: #6aab73;
+  --date: #c77dbb;
+  --bool: #cf8e6d;
+  --shadow-popup: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.3);
+}
+
+:root {
+  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  --fs: 13px;
+  --fs-sm: 12px;
+  --fs-xs: 11px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --row-h: 24px;
+  --toolbar-h: 36px;
+  --tabbar-h: 34px;
+  --statusbar-h: 24px;
+  --topbar-h: 40px;
+}
