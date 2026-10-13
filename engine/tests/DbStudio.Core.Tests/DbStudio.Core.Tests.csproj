@@ -18,9 +18,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Core services are exercised end-to-end over the SQLite provider; no Host/SqlServer/Oracle dependency. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbStudio.Core\DbStudio.Core.csproj" />
-    <ProjectReference Include="..\..\src\DbStudio.Host\DbStudio.Host.csproj" />
+    <ProjectReference Include="..\..\src\DbStudio.Providers.Sqlite\DbStudio.Providers.Sqlite.csproj" />
   </ItemGroup>
 
 </Project>

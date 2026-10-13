@@ -109,6 +109,15 @@ public sealed class SqlServerSession : AdoSessionBase
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>A user-typed BEGIN TRAN (auto mode) or COMMIT inside a manual transaction is reflected in TxOpen.</summary>
+    protected override async ValueTask<bool?> QueryServerTransactionOpenAsync(BatchContext context, CancellationToken ct)
+    {
+        if (_conn.State != System.Data.ConnectionState.Open) return null;
+        await using var cmd = CreateCommand("SELECT @@TRANCOUNT");
+        var count = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return count is int n ? n > 0 : null;
+    }
+
     protected override ErrorInfo MapException(Exception exception, SqlBatch batch) => exception switch
     {
         SqlException sql => SqlServerErrors.FromException(sql, batch),
@@ -169,8 +178,7 @@ public sealed class SqlServerSession : AdoSessionBase
                 // Errors caused by our own cancel (user cancel or row cap) are not batch errors.
                 if ((CancelRequested || ctx.Items.ContainsKey(StoppingKey)) && IsCancellationError(err)) continue;
                 ctx.Items[ErrorCountKey] = (ctx.Items.TryGetValue(ErrorCountKey, out var n) && n is int c ? c : 0) + 1;
-                var vt = EmitErrorAsync(SqlServerErrors.ToErrorInfo(err, ctx.Batch));
-                if (!vt.IsCompletedSuccessfully) vt.AsTask().GetAwaiter().GetResult();
+                EmitError(SqlServerErrors.ToErrorInfo(err, ctx.Batch));
             }
             else
             {
