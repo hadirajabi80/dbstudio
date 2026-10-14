@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "engine",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-Command", "$env:DBSTUDIO_DATA_DIR='E:\\DbStudio\\.dev-data'; dotnet run --project E:\\DbStudio\\engine\\src\\DbStudio.Host -- --dev --port 5121 --token dev-token"],
+      "port": 5121
+    },
+    {
+      "name": "ui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "E:\\DbStudio\\ui", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
