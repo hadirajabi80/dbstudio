@@ -6,8 +6,8 @@
 //   { "click": "css selector" } | { "type": "text" } | { "press": "Enter" | "Escape" | "Tab" | "Control+Enter" | ... }
 //   { "wait": 500 } | { "eval": "js expression" } | { "shot": "file.png" }
 // Prints JSON { out, errors, evals } where errors are page exceptions / console errors.
-import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,12 +26,23 @@ const edge = spawn(EDGE, [
   '--no-first-run', '--no-default-browser-check', '--disable-extensions', `--window-size=${W},${H}`, 'about:blank',
 ], { stdio: 'ignore' });
 
+// Edge forks renderer/GPU/utility processes; killing only the parent leaks them (and they keep the page alive).
+function stopEdge() {
+  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(edge.pid), '/T', '/F'], { stdio: 'ignore' });
+  else edge.kill('SIGKILL');
+  for (let i = 0; i < 10; i++) {
+    try { rmSync(profile, { recursive: true, force: true }); break; } catch { spawnSync(process.execPath, ['-e', 'setTimeout(()=>{},200)']); }
+  }
+}
+process.on('exit', stopEdge);
+process.on('uncaughtException', (e) => { console.error(e); process.exit(1); });
+
 let target;
 for (let i = 0; i < 50 && !target; i++) {
   await sleep(200);
   try { target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page'); } catch { /* not up yet */ }
 }
-if (!target) { edge.kill(); throw new Error('Edge did not start'); }
+if (!target) throw new Error('Edge did not start');
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
@@ -81,6 +92,6 @@ for (const s of opt('steps', null) ? JSON.parse(readFileSync(opt('steps'), 'utf8
   await sleep(120);
 }
 await shot(out);
-ws.close(); edge.kill();
+ws.close();
 console.log(JSON.stringify({ out, errors, evals }));
 process.exit(0);
