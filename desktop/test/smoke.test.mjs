@@ -45,6 +45,10 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
     'readTextFile', 'saveWorkspace', 'setTitle', 'showOpenDialog', 'showSaveDialog', 'writeTextFile',
   ]);
   assert.equal(r.platform, 'electron');
+  // OS info outside the bridge contract (WP-K): window.dbstudioPlatform and <html class="platform-<os>">.
+  const os = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
+  assert.equal(r.osPlatform, os);
+  assert.ok(r.htmlClass.split(' ').includes(`platform-${os}`), r.htmlClass);
   assert.match(r.appVersion, /^\d+\.\d+\.\d+/);
   assert.equal(r.origin, 'dbstudio://app');
   assert.equal(r.tokenInUrl, false);

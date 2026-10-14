@@ -7,6 +7,7 @@ import { APP_VERSION_ARG } from '../shared/channels';
 import { buildCsp } from './csp';
 import { atomicWriteFile } from './fs-utils';
 import { iconPath, windowStateFile } from './paths';
+import { chromeCss, desktopOs, windowChrome } from './platform';
 import { UI_URL } from './protocol';
 
 interface WindowState { x?: number; y?: number; width: number; height: number; maximized: boolean }
@@ -127,6 +128,8 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
     backgroundColor: nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG,
     icon: fs.existsSync(icon) ? icon : undefined,
     autoHideMenuBar: false,
+    // macOS: hidden inset title bar, traffic lights inside the renderer's top bar. Windows/Linux: native frame.
+    ...windowChrome(desktopOs()),
     webPreferences: {
       preload: o.preloadPath,
       contextIsolation: true,
@@ -142,6 +145,10 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
   });
   if (state.maximized) win.maximize();
   trackState(win);
+
+  // macOS: make the top bar the window's drag region (see platform.ts chromeCss). insertCSS is exempt from the page CSP.
+  const css = chromeCss(desktopOs());
+  if (css) win.webContents.on('dom-ready', () => { void win.webContents.insertCSS(css).catch(() => undefined); });
 
   if (o.show !== false) win.once('ready-to-show', () => win.show());
   // Keep the native background in sync with OS theme changes (visible during reloads).

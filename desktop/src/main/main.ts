@@ -13,7 +13,8 @@ import { engineErrorPageUrl } from './error-page';
 import { RotatingLog } from './fs-utils';
 import { registerIpc } from './ipc';
 import { buildMenu } from './menu';
-import { electronProfileDir, engineLogFile, repoRoot, uiDir } from './paths';
+import { electronProfileDir, engineLogFile, iconPath, repoRoot, uiDir } from './paths';
+import { desktopOs, quitWhenAllWindowsClosed } from './platform';
 import { registerSchemePrivileges, registerUiProtocol } from './protocol';
 import { runSmoke } from './smoke';
 import { checkForUpdates } from './updater-stub';
@@ -21,6 +22,7 @@ import { createMainWindow, installCsp, uiEntryUrl } from './window';
 
 const APP_ID = 'com.dbstudio.desktop';
 const smokeTest = process.env.DBSTUDIO_SMOKE === '1';
+const os = desktopOs();
 
 function readDevUrl(): string | undefined {
   const raw = process.env.DBSTUDIO_DEV_URL;
@@ -53,6 +55,7 @@ function main(): void {
   let mainWindow: BrowserWindow | null = null;
   let titleLocked = false;
   let quitting = false;
+  let engineStartedOnce = false;
 
   let launch: EngineLaunch;
   try {
@@ -82,7 +85,8 @@ function main(): void {
 
   const askRestart = async (exit: EngineExit): Promise<boolean> => {
     if (smokeTest) return true;
-    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    // macOS keeps running without windows: restart silently so the next window finds a live engine.
+    if (!mainWindow || mainWindow.isDestroyed()) return !quitWhenAllWindowsClosed(os);
     const r = await dialog.showMessageBox(mainWindow, {
       type: 'error',
       title: 'DbStudio',
@@ -154,7 +158,11 @@ function main(): void {
   };
 
   app.on('second-instance', () => {
-    if (!mainWindow) return;
+    if (!mainWindow) {
+      // macOS with every window closed: launching DbStudio again opens a window.
+      if (app.isReady() && !quitting) mainWindow = openMainWindow();
+      return;
+    }
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
@@ -170,36 +178,64 @@ function main(): void {
     });
     Menu.setApplicationMenu(buildMenu({ isDev: !app.isPackaged, onRestartEngine: supervisor.isExternal ? undefined : restartEngine }));
 
-    mainWindow = createMainWindow({
-      preloadPath: path.join(__dirname, 'preload.js'),
-      appVersion: app.getVersion(),
-      devUrl,
-      show: !smokeTest,
-    });
-    mainWindow.on('page-title-updated', (e) => { if (titleLocked) e.preventDefault(); });
-    mainWindow.on('closed', () => { mainWindow = null; });
-    mainWindow.webContents.on('render-process-gone', (_e, details) => {
-      log.write('main', `renderer gone: ${details.reason} (${details.exitCode})`);
-      if (details.reason !== 'clean-exit' && !quitting) loadUi();
-    });
+    // Dev runs show Electron's icon in the Dock; packaged builds get build/icon.icns from the bundle.
+    if (os === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconPath());
+
+    mainWindow = openMainWindow();
 
     if (smokeTest) runSmoke(mainWindow, supervisor);
     // Engine and UI start in parallel; getEngineInfo() calls from the renderer wait for the handshake.
     // A failure is reported through onStartFailed (error page + Retry dialog).
     supervisor.start().catch(() => undefined);
+    engineStartedOnce = true;
     loadUi();
     void checkForUpdates();
   });
 
+  // macOS: closing the last window keeps the app (and the engine) alive; clicking the Dock icon re-creates it.
+  app.on('activate', () => {
+    if (!app.isReady() || quitting) return;
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = openMainWindow();
+  });
+
   const cleanup = () => {
     quitting = true;
-    supervisor.shutdown(); // synchronous taskkill /T /F of the engine tree
+    supervisor.shutdown(); // synchronous tree kill: taskkill /T /F, or SIGKILL to the process group
   };
-  app.on('before-quit', () => {
+  // POSIX: give the engine a chance to roll back open transactions (SIGTERM to its process group, bounded wait,
+  // then SIGKILL) before quitting. Windows keeps the immediate taskkill.
+  let engineStopped = os === 'win32' || supervisor.isExternal;
+  app.on('before-quit', (e) => {
+    if (!engineStopped && supervisor.pid !== undefined) {
+      e.preventDefault();
+      quitting = true;
+      log.write('main', 'stopping engine (SIGTERM)');
+      void supervisor.shutdownGracefully(5_000).finally(() => { engineStopped = true; app.quit(); });
+      return;
+    }
+    engineStopped = true;
     cleanup();
     log.write('main', 'quitting');
   });
   app.on('will-quit', () => { cleanup(); log.close(); });
   process.on('exit', cleanup);
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { if (quitWhenAllWindowsClosed(os) || quitting) app.quit(); });
+
+  function openMainWindow(): BrowserWindow {
+    const win = createMainWindow({
+      preloadPath: path.join(__dirname, 'preload.js'),
+      appVersion: app.getVersion(),
+      devUrl,
+      show: !smokeTest,
+    });
+    win.on('page-title-updated', (e) => { if (titleLocked) e.preventDefault(); });
+    win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
+    win.webContents.on('render-process-gone', (_e, details) => {
+      log.write('main', `renderer gone: ${details.reason} (${details.exitCode})`);
+      if (details.reason !== 'clean-exit' && !quitting && mainWindow === win) loadUi();
+    });
+    // A re-created window (macOS activate) loads the UI itself; the first one is loaded after the engine start.
+    if (engineStartedOnce) void win.loadURL(uiEntryUrl(devUrl));
+    return win;
+  }
 }

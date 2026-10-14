@@ -1,6 +1,7 @@
 # DbStudio
 
-DbStudio is a fast, keyboard-first desktop SQL client for **Microsoft SQL Server**, **Oracle** and **SQLite**.
+DbStudio is a fast, keyboard-first desktop SQL client for **Microsoft SQL Server**, **Oracle** and **SQLite**,
+for **Windows** and **macOS** (Apple Silicon and Intel).
 It pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas grid that stays
 smooth at hundreds of thousands of rows, and keeps every database driver out of the UI: a .NET 10 engine
 runs as a local sidecar process and the React UI talks to it over authenticated HTTP and WebSocket.
@@ -8,7 +9,7 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 ## Features (M1)
 
 - **Connections**: form-driven dialog per provider, Test Connection with server info, folders and colour
-  tags (production = red), read-only connections enforced by the engine, passwords stored with Windows DPAPI.
+  tags (production = red), read-only connections enforced by the engine, passwords stored with Windows DPAPI or the macOS Keychain.
 - **Object explorer**: databases/schemas, tables, views, procedures, functions, Oracle packages, sequences,
   synonyms, triggers; lazy loading, fuzzy filter, "Select top 1000", "Open DDL", drag a table into the editor.
 - **SQL editor**: multi-tab, per-tab connection/database and transaction mode (Auto/Manual with Commit/Rollback),
@@ -47,7 +48,7 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 |  glide-data-grid results          | events |  ExecutionService-> streams rows over WS        |
 |  platform/ adapter:               |        |  Providers: Sqlite | SqlServer | Oracle         |
 |    electron | browser             |        |  TSql diagnostics (ScriptDom)                   |
-+-----------------------------------+        |  SecretStore (DPAPI), History (SQLite), Settings|
++-----------------------------------+        |  SecretStore (DPAPI/Keychain), History, Settings|
                                              +----------------+--------------------------------+
                                                               | ADO.NET drivers
                                                               v
@@ -69,11 +70,11 @@ The full design is in [docs/PLAN.md](docs/PLAN.md).
 | `engine/` | .NET 10 solution (`DbStudio.slnx`): Core, Host (HTTP/WS API), providers, tests |
 | `ui/` | React 18 + TypeScript + Vite renderer, IntelliSense in `src/intel`, editor in `src/editor` |
 | `desktop/` | Electron shell: main process, preload, packaging (`electron-builder.yml`) |
-| `scripts/` | `dev.ps1`, `build.ps1`, `stamp-version.ps1` |
+| `scripts/` | `dev.ps1`, `build.ps1` (Windows installer), `build.sh` (macOS DMG), `stamp-version.ps1` |
 
 ## Prerequisites
 
-- Windows 10/11 x64
+- Windows 10/11 x64, or macOS 12+ (arm64 or x64) for development and macOS builds
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` >= 10.0)
 - [Node.js 24](https://nodejs.org/) with npm
 - Optional: Docker Desktop for the SQL Server and Oracle test databases
@@ -124,12 +125,39 @@ cd desktop; npm test                  # type-check, engine lifecycle tests, Elec
 | `DBSTUDIO_ENGINE_URL` + `DBSTUDIO_ENGINE_TOKEN` | Attach to an already running engine instead of spawning one |
 | `DBSTUDIO_ENGINE_CMD` | Full command line used to start the engine (e.g. the fake engine) |
 | `DBSTUDIO_ENGINE_PATH` | Path to a prebuilt engine exe (e.g. `engine/publish/DbStudio.Engine.exe`) |
-| `DBSTUDIO_ENGINE_EXE` | Exe name inside `resources/engine` (default `DbStudio.Engine.exe`, then `DbStudio.Host.exe`) |
+| `DBSTUDIO_ENGINE_EXE` | Exe name inside `resources/engine` (default `DbStudio.Engine.exe`, then `DbStudio.Host.exe`; on macOS `DbStudio.Engine`, then `DbStudio.Host`) |
 | `DBSTUDIO_ENGINE_TIMEOUT_MS` | READY handshake timeout (default 15 s; 180 s for `dotnet run`) |
 | `DBSTUDIO_UI_DIR` | Folder served at `dbstudio://app` (default `ui/dist`, or `resources/ui` when installed) |
-| `DBSTUDIO_DATA_DIR` | Data folder (default `%APPDATA%\DbStudio`) |
+| `DBSTUDIO_DATA_DIR` | Data folder, for the shell and the engine (default: see [Where things live](#where-things-live)) |
+| `DBSTUDIO_SECRET_STORE` | Engine password store: `dpapi`, `keychain`, `file` or `memory` (default: DPAPI on Windows, Keychain on macOS, `file` elsewhere) |
+
+## Install on Windows / macOS
+
+**Windows 10/11 (x64):** run `DbStudio-Setup-<version>.exe`. It installs per user (no admin rights needed) and lets
+you pick the folder. The installer is not code-signed yet, so SmartScreen shows "Windows protected your PC": click
+**More info**, then **Run anyway**.
+
+**macOS 12+:** download the DMG for your Mac (`DbStudio-<version>-mac-arm64.dmg` for Apple Silicon M1/M2/M3/M4,
+`...-mac-x64.dmg` for Intel; "About This Mac" shows which), open it and drag **DbStudio** to **Applications**. The
+`.zip` holds the same app for scripted installs.
+
+Builds without an Apple Developer ID are only ad-hoc signed and not notarized, so on first launch Gatekeeper says
+"DbStudio cannot be opened because Apple cannot check it for malicious software" (or, for a downloaded file,
+"is damaged and can't be opened"). Either:
+
+- **Right-click (Control-click) DbStudio in Applications, choose Open, then Open again.** On macOS 15+, if there is
+  no Open button: try to open the app once, then go to **System Settings > Privacy & Security** and click
+  **Open Anyway** next to the DbStudio message. You only do this once per installed version.
+- Or remove the quarantine flag in Terminal: `xattr -dr com.apple.quarantine /Applications/DbStudio.app`
+
+Builds signed with a Developer ID and notarized (see [Signing](#signing-and-notarization-macos)) open without any of
+this. DbStudio keeps running when you close its last window on macOS (click the Dock icon to get it back; Cmd+Q
+quits). On macOS the SQL Server "Windows Authentication" option is labelled **Integrated (Kerberos)** and needs a
+Kerberos ticket for your domain account (`kinit user@REALM`); SQL Login works everywhere.
 
 ## Building the installer
+
+### Windows (NSIS)
 
 ```powershell
 ./scripts/build.ps1                  # -> desktop/dist/DbStudio-Setup-<version>.exe
@@ -145,8 +173,49 @@ nor Node. The version comes from [`version.json`](version.json) and is injected 
 `./scripts/stamp-version.ps1 -Set 0.2.0` writes it into all three packages for a release commit.
 The installer is not code-signed yet, so Windows SmartScreen will warn on first run.
 
-CI (`.github/workflows/ci.yml`, `windows-latest`) runs the engine, UI and desktop tests, builds the installer
-and uploads it as a workflow artifact.
+### macOS (DMG + ZIP)
+
+DMGs can only be built on a Mac (Xcode command-line tools: `xcode-select --install`), or by CI:
+
+```bash
+bash scripts/build.sh                    # -> desktop/dist/DbStudio-<version>-mac-{arm64,x64}.{dmg,zip}
+bash scripts/build.sh --arch arm64       # one architecture only
+bash scripts/build.sh --dir              # unpacked desktop/dist/mac-arm64/DbStudio.app, no DMG
+bash scripts/build.sh --engine-only      # just the engines in engine/publish/osx-{arm64,x64}
+```
+
+The engine is published self-contained per architecture (`osx-arm64`, `osx-x64`) as a single-file
+`DbStudio.Engine` with its native `libe_sqlite3.dylib` next to it (so it is signed with the app instead of being
+extracted at run time). The script checks that the host-architecture engine starts, then electron-builder produces
+one DMG and one ZIP per architecture with the engine in `DbStudio.app/Contents/Resources/engine/`. Separate
+per-arch downloads were chosen over a universal app: the .NET single-file engine cannot be merged with `lipo`, so a
+universal build would ship both engines and both Electron slices to everyone (about twice the size). The app uses
+the hardened runtime with `desktop/build/entitlements.mac.plist` (JIT and unsigned executable memory for V8 and
+the .NET runtime, library validation off for ad-hoc signatures). The icon (`desktop/build/icon.icns`) is generated
+with `cd desktop; npm run icon`.
+
+From Windows you can still cross-publish and smoke-check the macOS engines:
+`./scripts/build.ps1 -EngineOnly -Runtime osx-arm64` (and `osx-x64`); electron-builder itself refuses to package
+macOS apps on Windows.
+
+#### Signing and notarization (macOS)
+
+| Environment | Result |
+|---|---|
+| nothing set (default) | ad-hoc signature (`-c.mac.identity=-`): runs on any Mac after the Gatekeeper step above |
+| `CSC_LINK` (path or base64 of a "Developer ID Application" `.p12`) + `CSC_KEY_PASSWORD`, or `CSC_NAME` (certificate already in your keychain) | signed with your Developer ID |
+| plus `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID` (or `APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_ISSUER`) | also notarized and stapled: opens with no warning |
+
+Create the app-specific password at appleid.apple.com. In CI, set the repository secrets `MAC_CSC_LINK`
+(base64 of the `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`;
+without them the macOS job produces ad-hoc signed DMGs.
+
+### CI
+
+`.github/workflows/ci.yml` has two jobs. **Windows** (`windows-latest`) runs the engine, UI and desktop tests,
+builds the NSIS installer and uploads it. **macOS** (`macos-latest`) runs the engine tests (including a real
+Keychain round trip) and the desktop tests, then `scripts/build.sh` and uploads the arm64 and x64 DMGs and ZIPs.
+Download them from the run's **Artifacts** section.
 
 ## Test databases (Docker)
 
@@ -188,11 +257,16 @@ Ctrl+Enter and F5 belong to the editor; the menu shows them without registering 
 
 ## Where things live
 
-| What | Where |
-|---|---|
-| Saved connections, settings, query history | `%APPDATA%\DbStudio` (passwords encrypted with DPAPI for the current Windows user; they do not roam to other machines or accounts) |
-| Open tabs and unsaved editor text | `%APPDATA%\DbStudio\workspace.json` |
-| Logs (engine output, startup errors) | `%APPDATA%\DbStudio\logs` (Help > Open Logs Folder) |
-| Electron profile (cache, window position) | `%APPDATA%\DbStudio\electron` |
+The data folder is `%APPDATA%\DbStudio` on Windows, `~/Library/Application Support/DbStudio` on macOS and
+`$XDG_CONFIG_HOME/DbStudio` (default `~/.config/DbStudio`) on Linux; `DBSTUDIO_DATA_DIR` overrides it.
 
-Uninstalling keeps `%APPDATA%\DbStudio`; delete it by hand for a clean slate.
+| What | Where (inside the data folder) |
+|---|---|
+| Saved connections, settings, query history | `connections.json`, `settings.json`, `history.db` |
+| Saved passwords | Windows: `secrets.dat`, encrypted with DPAPI for the current Windows user (they do not roam to other machines or accounts). macOS: the login keychain, one "DbStudio" item per connection (Keychain Access shows them; they never touch the data folder). Linux: `secrets.aes.json`, AES-GCM with a key in `secrets.key` (mode 0600); this only keeps passwords out of plain files, it does not protect them from software running as you |
+| Open tabs and unsaved editor text | `workspace.json` |
+| Logs (engine output, startup errors) | `logs/` (Help > Open Logs Folder) |
+| Electron profile (cache, window position) | `electron/` |
+
+Uninstalling keeps the data folder; delete it by hand for a clean slate (on macOS also delete the "DbStudio"
+items in Keychain Access).

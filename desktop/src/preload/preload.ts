@@ -2,6 +2,7 @@
 // Only `electron` may be required at runtime; esbuild inlines ../shared/channels.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand } from '../../../ui/src/platform/bridge';
+import { desktopOs, htmlPlatformClasses, htmlPlatformVars, type DesktopPlatformInfo } from '../main/platform';
 import { APP_VERSION_ARG, IPC } from '../shared/channels';
 
 function readAppVersion(): string {
@@ -36,3 +37,20 @@ const bridge: DbStudioBridge = {
 };
 
 contextBridge.exposeInMainWorld('dbstudio', bridge);
+
+// OS information outside the frozen DbStudioBridge contract (ui/src/platform/bridge.ts):
+//  - window.dbstudioPlatform = { platform: 'win32' | 'darwin' | 'linux', arch }
+//  - <html class="platform-darwin titlebar-inset"> (or platform-win32 / platform-linux) and the CSS variables
+//    --titlebar-inset-left (78px on macOS: room for the traffic lights) and --titlebar-drag, set before the UI runs.
+const os = desktopOs(process.platform);
+const platformInfo: DesktopPlatformInfo = Object.freeze({ platform: os, arch: process.arch });
+contextBridge.exposeInMainWorld('dbstudioPlatform', platformInfo);
+
+function applyPlatformToDocument(): boolean {
+  const html = document.documentElement;
+  if (!html) return false;
+  html.classList.add(...htmlPlatformClasses(os));
+  for (const [name, value] of Object.entries(htmlPlatformVars(os))) html.style.setProperty(name, value);
+  return true;
+}
+if (!applyPlatformToDocument()) document.addEventListener('DOMContentLoaded', () => { applyPlatformToDocument(); }, { once: true });

@@ -10,6 +10,8 @@ const PHASE1 = `(async () => {
               appVersion: b && b.appVersion, url: location.href, origin: location.origin };
   const info = await b.getEngineInfo();
   r.baseUrl = info.baseUrl;
+  r.osPlatform = window.dbstudioPlatform && window.dbstudioPlatform.platform;
+  r.htmlClass = document.documentElement.className;
   r.tokenInUrl = location.href.includes(info.token);
   r.health = await fetch(info.baseUrl + '/api/v1/health', { headers: { Authorization: 'Bearer ' + info.token } }).then((x) => x.json());
   r.unauthorizedStatus = await fetch(info.baseUrl + '/api/v1/health').then((x) => x.status);

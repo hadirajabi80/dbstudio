@@ -2,6 +2,7 @@
 //   build/icon.svg  (vector source, for docs/README)
 //   build/icon.png  (512x512, window/taskbar icon)
 //   build/icon.ico  (16..256; BMP entries for small sizes, PNG for 256, as NSIS and Windows expect)
+//   build/icon.icns (16..1024 PNG entries; artwork inset to the macOS 824/1024 grid so it matches Dock icons)
 // The raster is produced by evaluating the same shapes as the SVG with 4x4 supersampling.
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -66,15 +67,19 @@ function sample(x, y) {
   return c;
 }
 
-function render(size) {
+/** inset: fraction of the canvas left empty on each side (macOS icon grid). */
+function render(size, inset = 0) {
   const ss = 4;
+  const scale = 1 - 2 * inset;
   const px = Buffer.alloc(size * size * 4);
   for (let py = 0; py < size; py++) {
     for (let pxx = 0; pxx < size; pxx++) {
       let r = 0, g = 0, b = 0, a = 0;
       for (let sy = 0; sy < ss; sy++) {
         for (let sx = 0; sx < ss; sx++) {
-          const c = sample((pxx + (sx + 0.5) / ss) / size, (py + (sy + 0.5) / ss) / size);
+          const u = ((pxx + (sx + 0.5) / ss) / size - inset) / scale;
+          const v = ((py + (sy + 0.5) / ss) / size - inset) / scale;
+          const c = u < 0 || u > 1 || v < 0 || v > 1 ? null : sample(u, v);
           if (c) { r += c[0]; g += c[1]; b += c[2]; a += 1; }
         }
       }
@@ -163,4 +168,26 @@ const entries = [16, 24, 32, 48, 64, 128, 256].map((size) => {
   return { size, data: size === 256 ? png(size, rgba) : dib(size, rgba) };
 });
 writeFileSync(join(outDir, 'icon.ico'), ico(entries));
-console.log('icon: wrote build/icon.svg, build/icon.png (512), build/icon.ico (16-256)');
+
+// ---- ICNS (PNG payloads; one entry per OSType) ------------------------------------------------
+function icns(items) {
+  const chunks = items.map(({ type, data }) => {
+    const head = Buffer.alloc(8);
+    head.write(type, 0, 'ascii');
+    head.writeUInt32BE(data.length + 8, 4);
+    return Buffer.concat([head, data]);
+  });
+  const head = Buffer.alloc(8);
+  head.write('icns', 0, 'ascii');
+  head.writeUInt32BE(8 + chunks.reduce((n, c) => n + c.length, 0), 4);
+  return Buffer.concat([head, ...chunks]);
+}
+const MAC_INSET = (1024 - 824) / 2 / 1024; // Apple's macOS 11+ app icon grid
+const macPng = new Map();
+const macAt = (size) => { if (!macPng.has(size)) macPng.set(size, png(size, render(size, MAC_INSET))); return macPng.get(size); };
+const ICNS_TYPES = [
+  ['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128], ['ic08', 256], ['ic09', 512],
+  ['ic11', 32], ['ic12', 64], ['ic13', 256], ['ic14', 512], ['ic10', 1024],
+];
+writeFileSync(join(outDir, 'icon.icns'), icns(ICNS_TYPES.map(([type, size]) => ({ type, data: macAt(size) }))));
+console.log('icon: wrote build/icon.svg, build/icon.png (512), build/icon.ico (16-256), build/icon.icns (16-1024)');

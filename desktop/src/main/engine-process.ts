@@ -13,8 +13,32 @@ import type { EngineInfo } from '../../../ui/src/platform/bridge';
 export type { EngineInfo };
 
 export const READY_PREFIX = 'DBSTUDIO_READY ';
-/** File names tried, in order, inside resources/engine. The Host project may publish under either name. */
+/** File names tried, in order, inside resources/engine on Windows. The Host project may publish under either name. */
 export const ENGINE_EXE_CANDIDATES = ['DbStudio.Engine.exe', 'DbStudio.Host.exe'];
+/** macOS/Linux: the same apphost names without an extension. */
+export const ENGINE_EXE_CANDIDATES_POSIX = ['DbStudio.Engine', 'DbStudio.Host'];
+/** How long a POSIX engine gets to handle SIGTERM (roll back transactions, close sessions) before SIGKILL. */
+export const DEFAULT_KILL_GRACE_MS = 3_000;
+
+export function engineExeCandidates(platform: NodeJS.Platform = process.platform): string[] {
+  return platform === 'win32' ? ENGINE_EXE_CANDIDATES : ENGINE_EXE_CANDIDATES_POSIX;
+}
+
+/**
+ * POSIX: makes sure the engine apphost has its executable bits (a zip extracted by some tools, or a copy through a
+ * FAT/NTFS volume, loses them). Best effort: a read-only bundle that is already executable is left alone.
+ */
+export function ensureExecutable(file: string, platform: NodeJS.Platform = process.platform): void {
+  if (platform === 'win32') return;
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+  } catch {
+    try {
+      const mode = fs.statSync(file).mode;
+      fs.chmodSync(file, mode | 0o755);
+    } catch { /* missing file: spawn reports it */ }
+  }
+}
 export const DEFAULT_READY_TIMEOUT_MS = 15_000;
 /** `dotnet run` compiles first, which can take far longer than 15 s on a cold build. */
 export const DOTNET_RUN_READY_TIMEOUT_MS = 180_000;
@@ -46,6 +70,10 @@ export interface ResolveLaunchOptions {
   /** The renderer is served by Vite (http://localhost:5173), so the engine must allow that origin. */
   devServer: boolean;
   exists?: (p: string) => boolean;
+  /** Defaults to process.platform (tests pass 'darwin' etc.). */
+  platform?: NodeJS.Platform;
+  /** Defaults to ensureExecutable (POSIX chmod +x when needed). */
+  makeExecutable?: (file: string) => void;
 }
 
 /**
@@ -96,13 +124,16 @@ function isLoopbackHttpUrl(s: string): boolean {
  *  1. DBSTUDIO_ENGINE_URL + DBSTUDIO_ENGINE_TOKEN: attach to a running engine (no spawn).
  *  2. DBSTUDIO_ENGINE_CMD: a full command line (e.g. `node test/fake-engine.mjs`).
  *  3. DBSTUDIO_ENGINE_PATH: path to a prebuilt engine exe (e.g. engine/publish/DbStudio.Engine.exe).
- *  4. Packaged: resources/engine/<DBSTUDIO_ENGINE_EXE or a candidate name>.
+ *  4. Packaged: resources/engine/<DBSTUDIO_ENGINE_EXE or a candidate name> (DbStudio.Engine.exe on Windows,
+ *     DbStudio.Engine on macOS/Linux, i.e. DbStudio.app/Contents/Resources/engine/DbStudio.Engine).
  *  5. Dev: `dotnet run --project engine/src/DbStudio.Host --no-launch-profile -- ...`.
  * In every spawn case `--parent-pid <pid>` is appended (plus `--dev` when the UI comes from Vite).
  */
 export function resolveEngineLaunch(o: ResolveLaunchOptions): EngineLaunch {
   const env = o.env;
   const exists = o.exists ?? ((p: string) => fs.existsSync(p));
+  const platform = o.platform ?? process.platform;
+  const makeExecutable = o.makeExecutable ?? ((p: string) => ensureExecutable(p, platform));
 
   if (env.DBSTUDIO_ENGINE_URL) {
     const url = env.DBSTUDIO_ENGINE_URL.replace(/\/+$/, '');
@@ -131,6 +162,7 @@ export function resolveEngineLaunch(o: ResolveLaunchOptions): EngineLaunch {
 
   if (env.DBSTUDIO_ENGINE_PATH) {
     const exe = path.resolve(env.DBSTUDIO_ENGINE_PATH);
+    makeExecutable(exe);
     return {
       kind: 'spawn',
       spec: {
@@ -145,8 +177,9 @@ export function resolveEngineLaunch(o: ResolveLaunchOptions): EngineLaunch {
 
   if (o.isPackaged) {
     const dir = path.join(o.resourcesPath, 'engine');
-    const names = env.DBSTUDIO_ENGINE_EXE ? [env.DBSTUDIO_ENGINE_EXE] : ENGINE_EXE_CANDIDATES;
+    const names = env.DBSTUDIO_ENGINE_EXE ? [env.DBSTUDIO_ENGINE_EXE] : engineExeCandidates(platform);
     const exe = names.map((n) => path.join(dir, n)).find((p) => exists(p)) ?? path.join(dir, names[0]);
+    makeExecutable(exe);
     return {
       kind: 'spawn',
       spec: { command: exe, args: extra, cwd: dir, readyTimeoutMs: parseTimeout(env, DEFAULT_READY_TIMEOUT_MS), description: exe },
@@ -184,18 +217,49 @@ export function parseReadyLine(line: string): { port: number; token: string } | 
   return { port, token };
 }
 
-/** Kills a process and all of its descendants, synchronously (safe to call from before-quit). */
-export function killProcessTree(pid: number): void {
+export interface KillDeps {
+  platform?: NodeJS.Platform;
+  /** process.kill; injected by tests. */
+  kill?: (pid: number, signal: NodeJS.Signals | 0) => void;
+  /** Windows tree kill; injected by tests. */
+  taskkill?: (pid: number) => void;
+  /** Only signal the process group, never the single pid (after the leader was reaped its pid may be reused). */
+  groupOnly?: boolean;
+}
+
+function taskkill(pid: number): void {
+  spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 10_000 });
+}
+
+/**
+ * POSIX: sends a signal to the engine's whole process group (`kill(-pid)`; it is spawned detached, so it leads its
+ * own group and its children inherit it), falling back to the single pid. Returns false when nothing was signalled
+ * (the process is gone). Signal 0 only probes.
+ */
+export function signalProcessTree(pid: number, signal: NodeJS.Signals | 0, deps: KillDeps = {}): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  const kill = deps.kill ?? ((p: number, s: NodeJS.Signals | 0) => { process.kill(p, s); });
+  try {
+    kill(-pid, signal);
+    return true;
+  } catch {
+    if (deps.groupOnly) return false;
+    try { kill(pid, signal); return true; } catch { return false; /* already gone */ }
+  }
+}
+
+/**
+ * Kills a process and all of its descendants immediately and synchronously (safe to call from before-quit and
+ * process 'exit'): `taskkill /T /F` on Windows, SIGKILL to the process group elsewhere.
+ * For a graceful stop on macOS/Linux use EngineProcess.stopAndWait(), which sends SIGTERM first.
+ */
+export function killProcessTree(pid: number, deps: KillDeps = {}): void {
   if (!Number.isInteger(pid) || pid <= 0) return;
-  if (process.platform === 'win32') {
-    spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 10_000 });
+  if ((deps.platform ?? process.platform) === 'win32') {
+    (deps.taskkill ?? taskkill)(pid);
     return;
   }
-  try {
-    process.kill(-pid, 'SIGKILL'); // spawned detached => own process group
-  } catch {
-    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
-  }
+  signalProcessTree(pid, 'SIGKILL', deps);
 }
 
 export type EngineStartFailure = 'spawn' | 'timeout' | 'exit' | 'stopped';
@@ -225,7 +289,16 @@ export interface EngineProcessEvents {
 
 export interface EngineProcessOptions {
   spec: EngineLaunchSpec;
+  /** Immediate tree kill (default killProcessTree). */
   killTree?: (pid: number) => void;
+  /** POSIX graceful stop: signal the tree (default signalProcessTree). Not used on Windows. */
+  signalTree?: (pid: number, signal: NodeJS.Signals) => boolean;
+  /** Defaults to process.platform. */
+  platform?: NodeJS.Platform;
+  /** SIGTERM grace period before SIGKILL (POSIX). */
+  killGraceMs?: number;
+  /** POSIX: SIGKILL whatever is left in the process group after the leader exited (default: group-only kill). */
+  reapGroup?: (pid: number) => void;
   /** Lines kept for error reports. */
   tailLines?: number;
 }
@@ -238,10 +311,14 @@ export class EngineProcess extends EventEmitter<EngineProcessEvents> {
   private exited = false;
   private readonly tail: string[] = [];
   private readonly killTree: (pid: number) => void;
+  private readonly signalTree: (pid: number, signal: NodeJS.Signals) => boolean;
+  private readonly platform: NodeJS.Platform;
 
   constructor(private readonly opts: EngineProcessOptions) {
     super();
-    this.killTree = opts.killTree ?? killProcessTree;
+    this.killTree = opts.killTree ?? ((pid) => killProcessTree(pid));
+    this.signalTree = opts.signalTree ?? ((pid, sig) => signalProcessTree(pid, sig));
+    this.platform = opts.platform ?? process.platform;
   }
 
   get pid(): number | undefined { return this.child?.pid; }
@@ -276,7 +353,7 @@ export class EngineProcess extends EventEmitter<EngineProcessEvents> {
           stdio: ['pipe', 'pipe', 'pipe'],
           windowsHide: true,
           shell: spec.shell ?? false,
-          // POSIX: own process group so the whole tree can be killed. Windows: taskkill /T handles it.
+          // POSIX: own process group so the whole tree can be signalled (kill -TERM -pid). Windows: taskkill /T.
           detached: process.platform !== 'win32',
         });
       } catch (e) {
@@ -346,12 +423,33 @@ export class EngineProcess extends EventEmitter<EngineProcessEvents> {
     if (pid && !this.exited) this.killTree(pid);
   }
 
-  /** Kills the tree and waits for the 'exit' event (bounded). */
+  /**
+   * Stops the tree and waits for the 'exit' event (bounded).
+   * Windows: immediate `taskkill /T /F` (unchanged). macOS/Linux: SIGTERM to the process group so the engine can
+   * roll back open transactions and close sessions, then SIGKILL to whatever is left after the grace period.
+   */
   async stopAndWait(timeoutMs = 10_000): Promise<void> {
     if (!this.child || this.exited) { this.stopping = true; return; }
     const exited = new Promise<void>((r) => this.child!.once('exit', () => r()));
-    this.stop();
-    await Promise.race([exited, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
+    const pid = this.child.pid;
+    const wait = (ms: number) => new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), ms);
+      void exited.then(() => { clearTimeout(timer); resolve(true); });
+    });
+    if (this.platform === 'win32' || !pid) {
+      this.stop();
+      await wait(timeoutMs);
+      return;
+    }
+    this.stopping = true;
+    const grace = Math.min(this.opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS, timeoutMs);
+    if (this.signalTree(pid, 'SIGTERM') && (await wait(grace))) {
+      // The leader exited; take down grandchildren that ignored SIGTERM. Group only: the pid may be reused now.
+      (this.opts.reapGroup ?? ((p: number) => { signalProcessTree(p, 'SIGKILL', { groupOnly: true }); }))(pid);
+      return;
+    }
+    this.killTree(pid);
+    await wait(Math.max(0, timeoutMs - grace));
   }
 }
 
@@ -447,10 +545,16 @@ export class EngineSupervisor {
     }
   }
 
-  /** Synchronous tree kill, for before-quit. */
+  /** Synchronous tree kill, for before-quit and process 'exit'. */
   shutdown(): void {
     this.shuttingDown = true;
     this.current?.stop();
+  }
+
+  /** Graceful variant used when quitting on macOS/Linux: SIGTERM, bounded wait, then SIGKILL (see stopAndWait). */
+  async shutdownGracefully(timeoutMs = 5_000): Promise<void> {
+    this.shuttingDown = true;
+    if (this.current?.isRunning) await this.current.stopAndWait(timeoutMs);
   }
 
   /** Test helper and "kill engine" debugging aid: kill without marking it expected. */

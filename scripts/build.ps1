@@ -14,6 +14,8 @@
   ./scripts/build.ps1 -SkipInstaller     # engine publish + UI build + desktop compile, no electron-builder
   ./scripts/build.ps1 -EngineOnly        # just dotnet publish into engine/publish
   ./scripts/build.ps1 -Dir               # unpacked app in desktop/dist/win-unpacked (faster than NSIS)
+  ./scripts/build.ps1 -EngineOnly -Runtime osx-arm64   # cross-publish a macOS engine into engine/publish/osx-arm64
+                                                       # (the DMG itself needs a Mac: scripts/build.sh)
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +34,12 @@ $version = (Get-Content -Raw (Join-Path $root 'version.json') | ConvertFrom-Json
 if (-not ($version -match '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')) { throw "version.json: invalid version '$version'" }
 
 $hostProject = Join-Path $root 'engine/src/DbStudio.Host/DbStudio.Host.csproj'
-$publishDir = Join-Path $root 'engine/publish'
+$isWindowsRid = $Runtime -like 'win-*'
+# Windows keeps engine/publish (electron-builder win.extraResources); other RIDs go to engine/publish/<rid>
+# (mac.extraResources maps engine/publish/osx-${arch}).
+$publishDir = if ($isWindowsRid) { Join-Path $root 'engine/publish' } else { Join-Path $root "engine/publish/$Runtime" }
+$engineName = if ($isWindowsRid) { 'DbStudio.Engine.exe' } else { 'DbStudio.Engine' }
+if (-not $isWindowsRid -and -not $EngineOnly) { throw "-Runtime $Runtime needs -EngineOnly; build the macOS app on a Mac with scripts/build.sh." }
 $uiDir = Join-Path $root 'ui'
 $desktopDir = Join-Path $root 'desktop'
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -64,15 +71,15 @@ if (-not $SkipEngine) {
   Invoke-Checked 'dotnet publish' {
     & dotnet publish $hostProject -c $Configuration -r $Runtime --self-contained true -o $publishDir `
       -p:PublishSingleFile=true `
-      -p:IncludeNativeLibrariesForSelfExtract=true `
+      -p:IncludeNativeLibrariesForSelfExtract=$isWindowsRid `
       -p:EnableCompressionInSingleFile=true `
       -p:DebugType=embedded `
       -p:Version=$version `
       -nologo
   }
   # The installer and engine-process.ts expect DbStudio.Engine.exe; the Host project may publish DbStudio.Host.exe.
-  $engineExe = Join-Path $publishDir 'DbStudio.Engine.exe'
-  $hostExe = Join-Path $publishDir 'DbStudio.Host.exe'
+  $engineExe = Join-Path $publishDir $engineName
+  $hostExe = Join-Path $publishDir ($engineName -replace 'Engine', 'Host')
   if (-not (Test-Path $engineExe) -and (Test-Path $hostExe)) { Move-Item $hostExe $engineExe }
   if (-not (Test-Path $engineExe)) { throw "Engine executable not found in $publishDir" }
   $sizeMb = [math]::Round((Get-Item $engineExe).Length / 1MB, 1)

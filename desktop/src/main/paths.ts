@@ -2,7 +2,9 @@ import { app } from 'electron';
 import * as path from 'node:path';
 
 /**
- * %APPDATA%\DbStudio — shared with the engine (history.db, settings, connections).
+ * <appData>/DbStudio — shared with the engine (history.db, settings, connections); the engine computes the same
+ * folder (engine/src/DbStudio.Core/Platform/DataDirectory.cs):
+ *   Windows %APPDATA%\DbStudio, macOS ~/Library/Application Support/DbStudio, Linux $XDG_CONFIG_HOME|~/.config/DbStudio.
  * DBSTUDIO_DATA_DIR overrides it (tests use a temp folder so they never touch real user data).
  */
 export function dataDir(): string {

@@ -1,7 +1,11 @@
-# electron-builder config: NSIS x64 installer -> desktop/dist/DbStudio-Setup-<version>.exe
-# Inputs (produced by scripts/build.ps1 before this runs):
-#   ../engine/publish  self-contained single-file engine (DbStudio.Engine.exe)
-#   ../ui/dist         built renderer
+# electron-builder config.
+#   Windows: NSIS x64 installer          -> desktop/dist/DbStudio-Setup-<version>.exe     (scripts/build.ps1)
+#   macOS:   DMG + ZIP, arm64 and x64    -> desktop/dist/DbStudio-<version>-mac-<arch>.dmg (scripts/build.sh, on a Mac)
+# Inputs (produced by the build scripts before this runs):
+#   ../engine/publish              self-contained single-file engine for win-x64 (DbStudio.Engine.exe)
+#   ../engine/publish/osx-arm64    self-contained engine for macOS arm64 (DbStudio.Engine + native dylibs)
+#   ../engine/publish/osx-x64      self-contained engine for macOS x64
+#   ../ui/dist                     built renderer
 appId: com.dbstudio.desktop
 productName: DbStudio
 copyright: Copyright (c) 2026 DbStudio contributors
@@ -19,15 +23,8 @@ files:
 npmRebuild: false
 asar: true
 
+# Shared by every platform; the engine (different per OS/arch) is mapped in win/mac below.
 extraResources:
-  - from: ../engine/publish
-    to: engine
-    filter:
-      - "**/*"
-      - "!**/*.pdb"
-      - "!**/*.xml"
-      - "!web.config"
-      - "!*.staticwebassets.*.json"
   - from: ../ui/dist
     to: ui
   - from: build/icon.png
@@ -49,6 +46,17 @@ win:
   icon: build/icon.ico
   artifactName: DbStudio-Setup-${version}.${ext}
   # Unsigned for now (PLAN R10: SmartScreen warning until a certificate is bought).
+  extraResources:
+    - from: ../engine/publish
+      to: engine
+      filter:
+        - "**/*"
+        - "!**/*.pdb"
+        - "!**/*.xml"
+        - "!web.config"
+        - "!*.staticwebassets.*.json"
+        - "!osx-*/**"
+        - "!linux-*/**"
 
 nsis:
   oneClick: false
@@ -64,3 +72,52 @@ nsis:
   # %APPDATA%\DbStudio holds saved connections, history and the workspace; keep it on uninstall.
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+
+# macOS: one DMG + ZIP per architecture rather than a universal binary. The engine is a per-arch .NET
+# single-file apphost that cannot be merged with lipo, so a universal app would carry both engines (and both
+# Electron slices): roughly double the download for every user. Separate artifacts stay small and simple.
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  artifactName: DbStudio-${version}-mac-${arch}.${ext}
+  minimumSystemVersion: "12.0"
+  darkModeSupport: true
+  # Signing: scripts/build.sh passes -c.mac.identity=- (ad-hoc) unless CSC_LINK/CSC_NAME provide a Developer ID
+  # certificate. Notarization runs automatically when APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID (or an
+  # App Store Connect API key) are set. See README "Install on Windows / macOS".
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSHumanReadableCopyright: Copyright (c) 2026 DbStudio contributors
+  # ${arch} is arm64 or x64, matching the .NET RIDs osx-arm64 / osx-x64.
+  extraResources:
+    - from: ../engine/publish/osx-${arch}
+      to: engine
+      filter:
+        - "**/*"
+        - "!**/*.pdb"
+        - "!**/*.dSYM/**"
+        - "!**/*.xml"
+        - "!web.config"
+        - "!*.staticwebassets.*.json"
+
+dmg:
+  title: DbStudio ${version}
+  writeUpdateInfo: false
+  contents:
+    - x: 140
+      y: 200
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380

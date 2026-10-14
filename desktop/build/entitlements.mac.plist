@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for DbStudio.app and everything signed inside it (electron-builder uses this file
+  for the app and, via entitlementsInherit, for helpers and Contents/Resources/engine/DbStudio.Engine).
+
+  - allow-jit: V8 (Electron 20+ on arm64) and the .NET JIT map executable memory with MAP_JIT.
+  - allow-unsigned-executable-memory: the .NET runtime still creates W+X pages outside MAP_JIT in some paths
+    (x64, stubs/precode); without it the engine dies with SIGKILL (Code Signature Invalid) at startup.
+  - disable-library-validation: needed for ad-hoc signed builds (no Team ID, so hardened runtime would refuse the
+    pre-signed Electron framework and the engine's native libe_sqlite3.dylib), and lets the .NET host load native
+    libraries that ship next to it. Harmless with a Developer ID signature.
+  No App Sandbox: the engine must reach arbitrary database hosts and the user's files.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

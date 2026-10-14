@@ -13,13 +13,15 @@ concurrency:
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-  # No Docker on the Windows runner: SQL Server/Oracle integration tests skip themselves.
+  # No Docker on the runners: SQL Server/Oracle integration tests skip themselves.
   DBSTUDIO_IT: "0"
-  # Unsigned build (PLAN R10).
+  # Windows: unsigned build (PLAN R10). macOS: scripts/build.sh decides (ad-hoc unless signing secrets are set).
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 jobs:
+  # Windows: tests + NSIS installer (unchanged).
   build:
+    name: Windows (tests + installer)
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -85,5 +87,81 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # macOS: engine + desktop tests on a Mac (Keychain store, process-group kill, Electron smoke), then a DMG and ZIP
+  # per architecture. macos-latest is Apple Silicon; the x64 engine and app are cross-built and packaged there.
+  macos:
+    name: macOS (tests + DMG)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            desktop/package-lock.json
+
+      - name: Version
+        id: version
+        run: |
+          v=$(node -p "require('./version.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "DbStudio $v"
+
+      # ---- tests ------------------------------------------------------------------------------
+      - name: Engine tests (includes the real Keychain round trip)
+        run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine-macos" --results-directory TestResults
+
+      - name: UI install
+        working-directory: ui
+        run: npm ci
+      # (UI tests are platform independent and run in the Windows job; the production build runs in build.sh.)
+
+      - name: Desktop install
+        working-directory: desktop
+        run: npm ci
+      - name: Desktop tests (type-check, lifecycle, platform, Electron smoke)
+        working-directory: desktop
+        run: npm test
+
+      # ---- package ----------------------------------------------------------------------------
+      # Ad-hoc signed unless the repository defines these secrets (Developer ID .p12 as base64, plus notarization).
+      - name: Build DMG + ZIP (engine publish osx-arm64/osx-x64 + UI build + electron-builder)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/build.sh
+
+      - name: Upload DMG and ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DbStudio-${{ steps.version.outputs.version }}-mac
+          path: |
+            desktop/dist/DbStudio-*-mac-*.dmg
+            desktop/dist/DbStudio-*-mac-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
           path: TestResults/
           if-no-files-found: ignore
