@@ -9,7 +9,9 @@ export interface ApiErrorBody {
 }
 export type ApiErrorCode =
   | 'UNAUTHORIZED' | 'NOT_FOUND' | 'VALIDATION' | 'SESSION_BUSY' | 'SESSION_BROKEN'
-  | 'TX_OPEN' | 'PROVIDER_ERROR' | 'BIND_VARS_UNSUPPORTED' | 'NOT_SUPPORTED' | 'READ_ONLY';
+  | 'TX_OPEN' | 'PROVIDER_ERROR' | 'BIND_VARS_UNSUPPORTED' | 'NOT_SUPPORTED' | 'READ_ONLY'
+  // M1.5 (docs/PLAN-M1.5.md 3.7–3.9)
+  | 'SESSION_LIMIT' | 'DDL_FAILED' | 'NOT_EDITABLE';
 
 // ---------- 3.1 Meta ----------
 export interface Health { status: 'ok'; version: string; pid: number; dev: boolean }
@@ -45,11 +47,18 @@ export interface Settings {
     qualifyColumns: 'ambiguous' | 'always';
     tabSize: number;
     blankLineSplitsStatements: boolean;
+    /** M1.5: per-dialect override of blankLineSplitsStatements (a missing dialect uses the global flag). */
+    blankLineSplitsStatementsByDialect?: Partial<Record<Dialect, boolean>>;
   };
   results: { maxRows: number; nullText: string; dateFormat: 'iso' | 'locale' };
   confirmDestructive: boolean;
   /** Free-form UI state persisted by the engine (MRU completion usage, layout sizes, ...). */
   ui?: Record<string, unknown>;
+  // M1.5 additive keys: always present in engine responses, optional here so M1 defaults still type-check.
+  format?: FormatOptions;
+  snippets?: Snippet[];
+  grid?: GridSettings;
+  connections?: ConnectionsSettings;
 }
 
 // ---------- 3.2 Connections ----------
@@ -183,6 +192,11 @@ export interface SessionInfo {
   txOpen: boolean;
   state: SessionState;
   dialect: Dialect;
+  /** M1.5: start of the running execution (ISO), null when idle. */
+  executingSince?: string | null;
+  /** M1.5: from the last ExecuteRequest.source. */
+  tabId?: string | null;
+  label?: string | null;
 }
 
 /** line/col are 1-based positions of the batch's first character in the editor document. */
@@ -192,10 +206,12 @@ export interface ExecuteRequest {
   batches: SqlBatch[];
   maxRows: number;
   stopOnError: boolean;
-  label: RunLabel;
+  label: ExecLabel;
   source?: { tabId: string; title: string };
   /** Set after the user confirmed a destructive statement; otherwise read-only connections reject non-queries. */
   confirmedDestructive?: boolean;
+  /** M1.5 (A2): bind values. Bound by name (`@id`, `:id`, `$id`) or by position when the name is numeric or the SQL uses `?`. */
+  params?: QueryParam[] | null;
 }
 export interface ExecuteResponse { executionId: string; startedAt: string }
 
@@ -242,7 +258,7 @@ export interface HistoryEntry {
   rowsAffected: number | null;
   resultRows: number | null;
   error: string | null;
-  label: RunLabel;
+  label: ExecLabel;
   pinned: boolean;
 }
 
@@ -289,8 +305,11 @@ export type WsEvent =
   | (Ev<'exec.done'> & {
       executionId: string; sessionId: string; status: 'ok' | 'error' | 'cancelled'; elapsedMs: number;
       resultSets: number; rowsAffected: number; txOpen: boolean;
+      /** M1.5: values of out/inout params (refcursor outs arrive as normal result sets instead). */
+      outParams?: OutParamValue[];
     })
   | (Ev<'exec.diagnostics'> & { executionId: string; diagnostics: ServerDiagnostic[] })
+  | (Ev<'exec.plan'> & ExecPlanPayload)
   | (Ev<'session.changed'> & { sessionId: string; state: SessionState; txOpen: boolean; database: string | null; txMode: TxMode })
   | (Ev<'catalog.changed'> & { connectionId: string; database: string | null; schemas: string[]; version: number })
   | (Ev<'export.progress'> & { exportId: string; rows: number })
@@ -302,3 +321,314 @@ export type WsEventOf<T extends WsEventType> = Extract<WsEvent, { type: T }>;
 
 /** Client → server frames. */
 export type WsClientFrame = { type: 'auth'; token: string } | { type: 'ping' };
+
+// ---------- M1.5 ----------
+// Additive wire types of docs/PLAN-M1.5.md (sections 1, 2 and 3.7–3.9). Authored by WP-F; the engine DTOs live in
+// engine/src/DbStudio.Host/Contracts/M15.cs and engine/src/DbStudio.Core/{Designer,Plans,Params}.
+
+/** Execution labels: the M1 run labels plus the M1.5 origins shown in history. */
+export type ExecLabel = RunLabel | 'filter' | 'data' | 'multi' | 'explain';
+
+// ----- Settings additions -----
+export type CaseStyle = 'upper' | 'lower' | 'asIs';
+export interface FormatOptions {
+  keywordCase: CaseStyle;
+  identifierCase: CaseStyle;
+  indent: number;
+  useTabs: boolean;
+  commaStyle: 'trailing' | 'leading';
+  lineWidth: number;
+  clauseKeywordsOnOwnLine: boolean;
+  andOrOnNewLine: boolean;
+  alignAliases: boolean;
+  blankLineBetweenStatements: number;
+  maxConsecutiveBlankLines: number;
+  functionCase: CaseStyle;
+  datatypeCase: CaseStyle;
+  /** Explorer "Open DDL" formats the DDL text on open. */
+  formatDdlOnOpen: boolean;
+}
+export interface Snippet {
+  id: string;
+  name: string;
+  prefix: string;
+  /** null = all dialects. */
+  dialects: Dialect[] | null;
+  /** Monaco snippet syntax: `$1`, `${1:default}`, `$0`. */
+  body: string;
+  description?: string | null;
+}
+export interface GridSettings { density: 'comfortable' | 'compact'; pageSize: number; verifyUnchanged: boolean }
+export interface ConnectionsSettings { maxSessionsPerProfile: number }
+
+// ----- Error details -----
+/** `detail` of a 429 SESSION_LIMIT error. */
+export interface SessionLimitDetail { connectionId: string; limit: number; open: number }
+/** `detail` of a 409 DDL_FAILED error from POST .../designer/apply. */
+export interface DdlFailedDetail {
+  failedIndex: number;
+  executed: number;
+  rolledBack: boolean;
+  providerError: ErrorInfo;
+}
+
+// ----- 1.1 Filter model (shared by grid, explorer and history; evaluated in the renderer) -----
+export type FilterOp =
+  | 'eq' | 'neq' | 'lt' | 'lte' | 'gt' | 'gte' | 'between' | 'contains' | 'notContains' | 'startsWith' | 'endsWith'
+  | 'in' | 'notIn' | 'isNull' | 'isNotNull' | 'isTrue' | 'isFalse' | 'isEmpty' | 'regex' | 'before' | 'after'
+  | 'onDate' | 'last' | 'next';
+export type FilterValue = string | number | boolean | null;
+export interface FilterCondition {
+  id: string;
+  column: string;
+  op: FilterOp;
+  values: FilterValue[];
+  caseSensitive?: boolean;
+}
+export interface FilterGroup { id: string; logic: 'and' | 'or'; items: (FilterCondition | FilterGroup)[] }
+export interface FilterModel { root: FilterGroup; quick?: string }
+
+// ----- 3.7 Saved filters and history filters -----
+export interface SavedFilter {
+  id: string;
+  connectionId: string;
+  /** Sorted `name:kind` list joined with `|`, e.g. "Id:int|Name:string|Total:decimal". */
+  signature: string;
+  name: string;
+  model: FilterModel;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+export type SavedFilterInput = Pick<SavedFilter, 'connectionId' | 'signature' | 'name' | 'model'>;
+export type SavedFilterPatch = Partial<Pick<SavedFilter, 'name' | 'model' | 'lastUsedAt'>>;
+
+export type HistoryStatus = HistoryEntry['status'];
+export interface HistoryQuery {
+  connectionId?: string | null;
+  q?: string;
+  limit?: number;
+  before?: string | number | null;
+  /** M1.5 filters (all optional, combined with AND). */
+  status?: HistoryStatus[] | null;
+  /** ISO timestamps, inclusive. */
+  from?: string | null;
+  to?: string | null;
+  /** true = only pinned entries. */
+  pinned?: boolean | null;
+}
+
+// ----- 3.8 Parameters -----
+export type ParamKind =
+  | 'int' | 'string' | 'decimal' | 'float' | 'bool' | 'date' | 'datetime' | 'datetimeoffset' | 'time' | 'guid'
+  | 'binary' | 'null' | 'refcursor';
+export type ParamDirection = 'in' | 'out' | 'inout';
+export interface QueryParam {
+  /** Without prefix (`id` for `@id`/`:id`); numeric ("1") = positional. A leading `@`/`:`/`$` is tolerated. */
+  name: string;
+  kind: ParamKind;
+  /** decimal/int64 as string or number; dates ISO; binary base64; null for NULL and for refcursor/out params. */
+  value: FilterValue;
+  /** Default "in". `refcursor` is always an out param (Oracle) and yields an extra result set. */
+  direction?: ParamDirection;
+  /** Optional size for out/inout string/binary params (default 4000). */
+  size?: number | null;
+}
+export interface OutParamValue { name: string; value: CellValue }
+
+// ----- 3.8 Describe -----
+export interface DescribeRequest { sql: string; params?: QueryParam[] | null }
+export interface DescribeResponse {
+  columns: ColumnInfo[];
+  /** True when the result maps to one base table and all of its key columns are present. */
+  editable: boolean;
+  table: { schema: string | null; name: string } | null;
+  keyColumns: string[];
+  warnings: string[];
+}
+
+// ----- 3.8 Explain plan -----
+export type ExplainMode = 'estimated' | 'actual';
+export interface ExplainRequest {
+  sql: string;
+  params?: QueryParam[] | null;
+  mode: ExplainMode;
+  /** 1-based editor position of `sql` (error line mapping); default 1/1. */
+  line?: number;
+  col?: number;
+  /** Row cap for result sets delivered in actual mode (default: settings results.maxRows). */
+  maxRows?: number;
+  source?: { tabId: string; title: string };
+  /** Actual mode runs the statement: required for non-queries on read-only connections (rejected otherwise). */
+  confirmedDestructive?: boolean;
+}
+export interface PlanNode {
+  id: number;
+  /** Physical operator / Oracle "OPERATION OPTIONS" / SQLite detail text. */
+  op: string;
+  logicalOp: string | null;
+  object: string | null;
+  estRows: number | null;
+  actualRows: number | null;
+  /** Subtree cost in the provider's unit (SQL Server cost units, Oracle cost); null when unknown (SQLite). */
+  cost: number | null;
+  /** Share of the root's total cost spent in this node alone (0–100); null when costs are unknown. */
+  costPct: number | null;
+  predicate: string | null;
+  warnings: string[];
+  /** Extra provider attributes for a detail pane (e.g. "Bytes", "EstimateIO", "Access predicates"). */
+  props?: Record<string, string>;
+  children: PlanNode[];
+}
+export interface ExecPlanPayload {
+  executionId: string;
+  dialect: Dialect;
+  mode: ExplainMode;
+  root: PlanNode;
+  raw: string;
+  rawFormat: 'xml' | 'text';
+  warnings: string[];
+}
+export type ExecPlanEvent = WsEventOf<'exec.plan'>;
+
+// ----- 3.8 Sample database -----
+export interface SampleDbRequest {
+  /** Recreate the file even if it exists (default false: reuse the existing file and profile). */
+  reset?: boolean;
+}
+export interface SampleDbResponse { path: string; connectionId: string; profile: ConnectionProfile; created: boolean }
+
+// ----- 3.9 Designer -----
+export type ReferentialAction = 'NO ACTION' | 'CASCADE' | 'SET NULL' | 'SET DEFAULT' | 'RESTRICT';
+export interface TableColumnModel {
+  /** Stable id assigned by the UI (= original column name for existing columns); a rename keeps the id. */
+  id?: string | null;
+  name: string;
+  /** Full type text incl. size: `nvarchar(100)`, `NUMBER(10,2)`, `TEXT`. */
+  type: string;
+  nullable: boolean;
+  /** Default as SQL expression text (`0`, `'x'`, `SYSUTCDATETIME()`); null = none. */
+  default: string | null;
+  /** SQL Server default constraint name. */
+  defaultName: string | null;
+  /** `always` (Oracle GENERATED ALWAYS) defaults to false = BY DEFAULT. */
+  identity: { seed: number; increment: number; always?: boolean } | null;
+  computed: { expression: string; persisted: boolean } | null;
+  collation: string | null;
+  comment: string | null;
+  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT. */
+  autoincrement: boolean;
+}
+export interface PrimaryKeyModel { name: string | null; columns: string[]; clustered: boolean }
+export interface UniqueModel { name: string | null; columns: string[] }
+export interface IndexColumnModel { name: string; desc: boolean }
+export interface IndexModel {
+  name: string;
+  columns: IndexColumnModel[];
+  unique: boolean;
+  clustered: boolean;
+  include: string[];
+  filter: string | null;
+}
+export interface ForeignKeyModel {
+  name: string | null;
+  columns: string[];
+  refSchema: string | null;
+  refTable: string;
+  refColumns: string[];
+  onDelete: ReferentialAction;
+  onUpdate: ReferentialAction;
+}
+export interface CheckModel { name: string | null; expression: string }
+export interface TableOptions { withoutRowid: boolean; strict: boolean; tablespace: string | null }
+export interface TableModel {
+  schema: string | null;
+  name: string;
+  comment: string | null;
+  options: TableOptions;
+  columns: TableColumnModel[];
+  primaryKey: PrimaryKeyModel | null;
+  uniques: UniqueModel[];
+  indexes: IndexModel[];
+  foreignKeys: ForeignKeyModel[];
+  checks: CheckModel[];
+}
+
+export type DesignerTypeParams = 'length' | 'precisionScale' | 'precision' | 'none';
+export interface DesignerType {
+  name: string;
+  params: DesignerTypeParams;
+  /** Suggested full type text, e.g. "nvarchar(100)". */
+  default: string;
+  category: 'string' | 'number' | 'date' | 'binary' | 'other';
+}
+export interface DesignerFeatures {
+  identity: boolean;
+  computed: boolean;
+  clusteredIndexes: boolean;
+  includedColumns: boolean;
+  filteredIndexes: boolean;
+  onUpdateAction: boolean;
+  comments: boolean;
+  renameColumn: boolean;
+  dropColumn: boolean;
+  withoutRowid: boolean;
+  strict: boolean;
+  transactionalDdl: boolean;
+  autoincrement: boolean;
+  /** The dialect has schemas (false for SQLite). */
+  schemas: boolean;
+}
+export interface DesignerTypesResponse { types: DesignerType[]; features: DesignerFeatures }
+
+export type DdlStatementKind = 'create' | 'alter' | 'drop' | 'rename' | 'rebuild' | 'comment' | 'index' | 'pragma';
+export interface DdlStatement { sql: string; kind: DdlStatementKind; warning: string | null }
+export interface DdlScript {
+  /** Ordered; never contains BEGIN/COMMIT (apply manages the transaction). */
+  statements: DdlStatement[];
+  rebuildRequired: boolean;
+  /** true: apply runs every statement in one transaction (SQL Server, SQLite); false: autocommit per statement (Oracle). */
+  transactional: boolean;
+  warnings: string[];
+}
+
+/** Change list computed by TableDiff (informational; the script is the source of truth). */
+export type TableChangeKind =
+  | 'tableRenamed' | 'tableCommentChanged' | 'optionsChanged'
+  | 'columnAdded' | 'columnDropped' | 'columnRenamed' | 'columnTypeChanged' | 'columnNullabilityChanged'
+  | 'columnDefaultChanged' | 'columnIdentityChanged' | 'columnComputedChanged' | 'columnCollationChanged'
+  | 'columnCommentChanged' | 'columnsReordered'
+  | 'primaryKeyAdded' | 'primaryKeyDropped' | 'uniqueAdded' | 'uniqueDropped' | 'indexAdded' | 'indexDropped'
+  | 'foreignKeyAdded' | 'foreignKeyDropped' | 'checkAdded' | 'checkDropped';
+export interface TableChange { kind: TableChangeKind; target: string; detail: string | null }
+
+export interface TableScriptRequest { database: string | null; original: TableModel | null; desired: TableModel }
+export interface TableScriptResponse extends DdlScript { changes: TableChange[] }
+
+export interface ViewOptions { schemaBinding: boolean; checkOption: boolean; force: boolean }
+export interface ViewModel {
+  schema: string | null;
+  name: string;
+  /** The SELECT only (CREATE ... AS header stripped from the stored DDL). */
+  body: string;
+  options: ViewOptions;
+  /** The stored DDL as returned by the server. */
+  ddl: string;
+}
+export interface ViewScriptRequest {
+  database: string | null;
+  schema: string | null;
+  name: string;
+  /** Existing view's name when editing (a rename when it differs from name); null for a new view. */
+  originalName: string | null;
+  body: string;
+  options: ViewOptions;
+}
+
+export interface DdlApplyRequest {
+  database: string | null;
+  statements: string[];
+  transactional: boolean;
+  /** Schema to refresh in the catalog after success (default: the connection's default schema). */
+  schema?: string | null;
+}
+export interface DdlApplyResponse { ok: true; executed: number; elapsedMs: number }

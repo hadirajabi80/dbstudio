@@ -1,0 +1,97 @@
+{
+  "type": "exec.plan",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "dialect": "tsql",
+  "mode": "estimated",
+  "root": {
+    "id": 1,
+    "op": "SELECT",
+    "logicalOp": null,
+    "object": null,
+    "estRows": 42.5,
+    "actualRows": null,
+    "cost": 0.0563219,
+    "costPct": 0,
+    "predicate": null,
+    "warnings": [
+      "Missing index (impact 71.2%): dbo.Orders (Total) INCLUDE (CustomerId)"
+    ],
+    "props": {
+      "Statement": "SELECT c.Name, o.Total FROM dbo.Customers c JOIN dbo.Orders o ON o.CustomerId = c.Id WHERE o.Total \u003E @min",
+      "Optimization level": "FULL",
+      "Degree of parallelism": "1",
+      "Memory grant (KB)": "1056"
+    },
+    "children": [
+      {
+        "id": 2,
+        "op": "Hash Match",
+        "logicalOp": "Inner Join",
+        "object": null,
+        "estRows": 42.5,
+        "actualRows": null,
+        "cost": 0.0563219,
+        "costPct": 36.6,
+        "predicate": "[shop].[dbo].[Orders].[CustomerId] as [o].[CustomerId]=[shop].[dbo].[Customers].[Id] as [c].[Id]",
+        "warnings": [],
+        "props": {
+          "Node id": "0",
+          "Estimated I/O cost": "0",
+          "Estimated CPU cost": "0.0177",
+          "Average row size (B)": "45",
+          "Estimated executions": "1"
+        },
+        "children": [
+          {
+            "id": 3,
+            "op": "Clustered Index Scan",
+            "logicalOp": "Clustered Index Scan",
+            "object": "dbo.Customers.PK_Customers (c)",
+            "estRows": 100,
+            "actualRows": null,
+            "cost": 0.003392,
+            "costPct": 6,
+            "predicate": null,
+            "warnings": [],
+            "props": {
+              "Node id": "1",
+              "Estimated I/O cost": "0.003125",
+              "Estimated CPU cost": "0.000267",
+              "Average row size (B)": "37",
+              "Estimated executions": "1"
+            },
+            "children": []
+          },
+          {
+            "id": 4,
+            "op": "Clustered Index Scan",
+            "logicalOp": "Clustered Index Scan",
+            "object": "dbo.Orders.PK_Orders (o)",
+            "estRows": 42.5,
+            "actualRows": null,
+            "cost": 0.0323,
+            "costPct": 57.3,
+            "predicate": "[shop].[dbo].[Orders].[Total] as [o].[Total]\u003E[@min]",
+            "warnings": [
+              "Type conversion may affect the plan: CONVERT_IMPLICIT(decimal(38,2),[@min],0)"
+            ],
+            "props": {
+              "Node id": "2",
+              "Estimated I/O cost": "0.0312",
+              "Estimated CPU cost": "0.0011",
+              "Average row size (B)": "19",
+              "Estimated executions": "1"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "raw": "\u003C?xml version=\u00221.0\u0022 encoding=\u0022utf-16\u0022?\u003E\n\u003CShowPlanXML xmlns:xsi=\u0022http://www.w3.org/2001/XMLSchema-instance\u0022 xmlns:xsd=\u0022http://www.w3.org/2001/XMLSchema\u0022 Version=\u00221.564\u0022 Build=\u002216.0.4135.4\u0022 xmlns=\u0022http://schemas.microsoft.com/sqlserver/2004/07/showplan\u0022\u003E\n  \u003CBatchSequence\u003E\n    \u003CBatch\u003E\n      \u003CStatements\u003E\n        \u003CStmtSimple StatementCompId=\u00221\u0022 StatementEstRows=\u002242.5\u0022 StatementId=\u00221\u0022 StatementOptmLevel=\u0022FULL\u0022 CardinalityEstimationModelVersion=\u0022160\u0022 StatementSubTreeCost=\u00220.0563219\u0022 StatementText=\u0022SELECT c.Name, o.Total FROM dbo.Customers c JOIN dbo.Orders o ON o.CustomerId = c.Id WHERE o.Total \u0026gt; @min\u0022 StatementType=\u0022SELECT\u0022 QueryHash=\u00220x1\u0022 QueryPlanHash=\u00220x2\u0022 RetrievedFromCache=\u0022false\u0022\u003E\n          \u003CStatementSetOptions ANSI_NULLS=\u0022true\u0022 ANSI_PADDING=\u0022true\u0022 ANSI_WARNINGS=\u0022true\u0022 ARITHABORT=\u0022true\u0022 CONCAT_NULL_YIELDS_NULL=\u0022true\u0022 NUMERIC_ROUNDABORT=\u0022false\u0022 QUOTED_IDENTIFIER=\u0022true\u0022 /\u003E\n          \u003CQueryPlan DegreeOfParallelism=\u00221\u0022 CachedPlanSize=\u002232\u0022 CompileTime=\u00222\u0022 CompileCPU=\u00222\u0022 CompileMemory=\u0022320\u0022\u003E\n            \u003CMissingIndexes\u003E\n              \u003CMissingIndexGroup Impact=\u002271.2\u0022\u003E\n                \u003CMissingIndex Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022\u003E\n                  \u003CColumnGroup Usage=\u0022INEQUALITY\u0022\u003E\n                    \u003CColumn Name=\u0022[Total]\u0022 ColumnId=\u00224\u0022 /\u003E\n                  \u003C/ColumnGroup\u003E\n                  \u003CColumnGroup Usage=\u0022INCLUDE\u0022\u003E\n                    \u003CColumn Name=\u0022[CustomerId]\u0022 ColumnId=\u00222\u0022 /\u003E\n                  \u003C/ColumnGroup\u003E\n                \u003C/MissingIndex\u003E\n              \u003C/MissingIndexGroup\u003E\n            \u003C/MissingIndexes\u003E\n            \u003CMemoryGrantInfo SerialRequiredMemory=\u00221024\u0022 SerialDesiredMemory=\u00221056\u0022 GrantedMemory=\u00221056\u0022 MaxUsedMemory=\u00220\u0022 /\u003E\n            \u003CRelOp AvgRowSize=\u002245\u0022 EstimateCPU=\u00220.0177\u0022 EstimateIO=\u00220\u0022 EstimateRebinds=\u00220\u0022 EstimateRewinds=\u00220\u0022 EstimatedExecutionMode=\u0022Row\u0022 EstimateRows=\u002242.5\u0022 LogicalOp=\u0022Inner Join\u0022 NodeId=\u00220\u0022 Parallel=\u0022false\u0022 PhysicalOp=\u0022Hash Match\u0022 EstimatedTotalSubtreeCost=\u00220.0563219\u0022\u003E\n              \u003COutputList\u003E\n                \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Alias=\u0022[c]\u0022 Column=\u0022Name\u0022 /\u003E\n                \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022 Alias=\u0022[o]\u0022 Column=\u0022Total\u0022 /\u003E\n              \u003C/OutputList\u003E\n              \u003CMemoryFractions Input=\u00221\u0022 Output=\u00221\u0022 /\u003E\n              \u003CHash\u003E\n                \u003CDefinedValues /\u003E\n                \u003CHashKeysBuild\u003E\n                  \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Alias=\u0022[c]\u0022 Column=\u0022Id\u0022 /\u003E\n                \u003C/HashKeysBuild\u003E\n                \u003CHashKeysProbe\u003E\n                  \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022 Alias=\u0022[o]\u0022 Column=\u0022CustomerId\u0022 /\u003E\n                \u003C/HashKeysProbe\u003E\n                \u003CProbeResidual\u003E\n                  \u003CScalarOperator ScalarString=\u0022[shop].[dbo].[Orders].[CustomerId] as [o].[CustomerId]=[shop].[dbo].[Customers].[Id] as [c].[Id]\u0022 /\u003E\n                \u003C/ProbeResidual\u003E\n                \u003CRelOp AvgRowSize=\u002237\u0022 EstimateCPU=\u00220.000267\u0022 EstimateIO=\u00220.003125\u0022 EstimateRebinds=\u00220\u0022 EstimateRewinds=\u00220\u0022 EstimatedExecutionMode=\u0022Row\u0022 EstimateRows=\u0022100\u0022 LogicalOp=\u0022Clustered Index Scan\u0022 NodeId=\u00221\u0022 Parallel=\u0022false\u0022 PhysicalOp=\u0022Clustered Index Scan\u0022 EstimatedTotalSubtreeCost=\u00220.003392\u0022 TableCardinality=\u0022100\u0022\u003E\n                  \u003COutputList\u003E\n                    \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Alias=\u0022[c]\u0022 Column=\u0022Id\u0022 /\u003E\n                    \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Alias=\u0022[c]\u0022 Column=\u0022Name\u0022 /\u003E\n                  \u003C/OutputList\u003E\n                  \u003CIndexScan Ordered=\u0022false\u0022 ForcedIndex=\u0022false\u0022 ForceScan=\u0022false\u0022 NoExpandHint=\u0022false\u0022 Storage=\u0022RowStore\u0022\u003E\n                    \u003CDefinedValues /\u003E\n                    \u003CObject Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Index=\u0022[PK_Customers]\u0022 Alias=\u0022[c]\u0022 IndexKind=\u0022Clustered\u0022 Storage=\u0022RowStore\u0022 /\u003E\n                  \u003C/IndexScan\u003E\n                \u003C/RelOp\u003E\n                \u003CRelOp AvgRowSize=\u002219\u0022 EstimateCPU=\u00220.0011\u0022 EstimateIO=\u00220.0312\u0022 EstimateRebinds=\u00220\u0022 EstimateRewinds=\u00220\u0022 EstimatedExecutionMode=\u0022Row\u0022 EstimateRows=\u002242.5\u0022 LogicalOp=\u0022Clustered Index Scan\u0022 NodeId=\u00222\u0022 Parallel=\u0022false\u0022 PhysicalOp=\u0022Clustered Index Scan\u0022 EstimatedTotalSubtreeCost=\u00220.0323\u0022 TableCardinality=\u00221000\u0022\u003E\n                  \u003COutputList\u003E\n                    \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022 Alias=\u0022[o]\u0022 Column=\u0022CustomerId\u0022 /\u003E\n                    \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022 Alias=\u0022[o]\u0022 Column=\u0022Total\u0022 /\u003E\n                  \u003C/OutputList\u003E\n                  \u003CWarnings\u003E\n                    \u003CPlanAffectingConvert ConvertIssue=\u0022Seek Plan\u0022 Expression=\u0022CONVERT_IMPLICIT(decimal(38,2),[@min],0)\u0022 /\u003E\n                  \u003C/Warnings\u003E\n                  \u003CIndexScan Ordered=\u0022false\u0022 ForcedIndex=\u0022false\u0022 ForceScan=\u0022false\u0022 NoExpandHint=\u0022false\u0022 Storage=\u0022RowStore\u0022\u003E\n                    \u003CDefinedValues /\u003E\n                    \u003CObject Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Orders]\u0022 Index=\u0022[PK_Orders]\u0022 Alias=\u0022[o]\u0022 IndexKind=\u0022Clustered\u0022 Storage=\u0022RowStore\u0022 /\u003E\n                    \u003CPredicate\u003E\n                      \u003CScalarOperator ScalarString=\u0022[shop].[dbo].[Orders].[Total] as [o].[Total]\u0026gt;[@min]\u0022 /\u003E\n                    \u003C/Predicate\u003E\n                  \u003C/IndexScan\u003E\n                \u003C/RelOp\u003E\n              \u003C/Hash\u003E\n            \u003C/RelOp\u003E\n            \u003CParameterList\u003E\n              \u003CColumnReference Column=\u0022@min\u0022 ParameterDataType=\u0022decimal(38,2)\u0022 ParameterCompiledValue=\u0022(100.00)\u0022 /\u003E\n            \u003C/ParameterList\u003E\n          \u003C/QueryPlan\u003E\n        \u003C/StmtSimple\u003E\n      \u003C/Statements\u003E\n    \u003C/Batch\u003E\n  \u003C/BatchSequence\u003E\n\u003C/ShowPlanXML\u003E\n",
+  "rawFormat": "xml",
+  "warnings": [
+    "Missing index (impact 71.2%): dbo.Orders (Total) INCLUDE (CustomerId)"
+  ]
+}

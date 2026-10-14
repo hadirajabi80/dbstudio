@@ -1,0 +1,41 @@
+{
+  "request": {
+    "sql": "SELECT c.FirstName, o.Total FROM Customers c JOIN Orders o ON o.CustomerId = c.Id"
+  },
+  "response": {
+    "columns": [
+      {
+        "name": "FirstName",
+        "ordinal": 0,
+        "dbType": "TEXT",
+        "kind": "string",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Customers",
+        "schema": null,
+        "isKey": false
+      },
+      {
+        "name": "Total",
+        "ordinal": 1,
+        "dbType": "NUMERIC",
+        "kind": "decimal",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Orders",
+        "schema": null,
+        "isKey": false
+      }
+    ],
+    "editable": false,
+    "table": null,
+    "keyColumns": [],
+    "warnings": [
+      "Not editable: the result combines several tables."
+    ]
+  }
+}

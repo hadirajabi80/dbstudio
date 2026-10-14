@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "SESSION_LIMIT",
+    "message": "The connection 'Sample: Shop' already has 8 open sessions (limit 8). Close idle tabs or raise the limit in Settings.",
+    "detail": {
+      "connectionId": "c_sample",
+      "limit": 8,
+      "open": 8
+    }
+  }
+}

@@ -27,12 +27,13 @@ public static class ConnectionEndpoints
             return updated;
         });
 
-        g.MapDelete("/{id}", async (string id, ConnectionStore store, CatalogService catalog, SessionManager sessions) =>
+        g.MapDelete("/{id}", async (string id, ConnectionStore store, CatalogService catalog, SessionManager sessions, Core.Filters.FilterStore filters) =>
         {
             store.Get(id); // 404 when unknown
             await sessions.CloseAllForConnectionAsync(id);
             store.Delete(id);
             catalog.Forget(id);
+            filters.DeleteForConnection(id); // M1.5 saved filters of the connection
             return Results.NoContent();
         });
 

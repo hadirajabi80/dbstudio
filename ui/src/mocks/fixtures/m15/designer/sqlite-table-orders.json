@@ -1,0 +1,160 @@
+{
+  "schema": "main",
+  "name": "Orders",
+  "comment": null,
+  "options": {
+    "withoutRowid": false,
+    "strict": false,
+    "tablespace": null
+  },
+  "columns": [
+    {
+      "id": "Id",
+      "name": "Id",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "CustomerId",
+      "name": "CustomerId",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "OrderDate",
+      "name": "OrderDate",
+      "type": "DATE",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Status",
+      "name": "Status",
+      "type": "TEXT",
+      "nullable": false,
+      "default": "'new'",
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "ShippedAt",
+      "name": "ShippedAt",
+      "type": "DATETIME",
+      "nullable": true,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Total",
+      "name": "Total",
+      "type": "NUMERIC(12,2)",
+      "nullable": false,
+      "default": "0",
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Note",
+      "name": "Note",
+      "type": "TEXT",
+      "nullable": true,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    }
+  ],
+  "primaryKey": {
+    "name": null,
+    "columns": [
+      "Id"
+    ],
+    "clustered": true
+  },
+  "uniques": [],
+  "indexes": [
+    {
+      "name": "IX_Orders_CustomerId",
+      "columns": [
+        {
+          "name": "CustomerId",
+          "desc": false
+        }
+      ],
+      "unique": false,
+      "clustered": false,
+      "include": [],
+      "filter": null
+    },
+    {
+      "name": "IX_Orders_OrderDate",
+      "columns": [
+        {
+          "name": "OrderDate",
+          "desc": true
+        }
+      ],
+      "unique": false,
+      "clustered": false,
+      "include": [],
+      "filter": null
+    }
+  ],
+  "foreignKeys": [
+    {
+      "name": "FK_Orders_Customers",
+      "columns": [
+        "CustomerId"
+      ],
+      "refSchema": null,
+      "refTable": "Customers",
+      "refColumns": [
+        "Id"
+      ],
+      "onDelete": "NO ACTION",
+      "onUpdate": "NO ACTION"
+    }
+  ],
+  "checks": [
+    {
+      "name": "CK_Orders_Status",
+      "expression": "Status IN ('new', 'paid', 'shipped', 'delivered', 'cancelled')"
+    }
+  ]
+}

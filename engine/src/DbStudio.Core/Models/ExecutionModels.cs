@@ -1,8 +1,17 @@
+using DbStudio.Core.Params;
+
 namespace DbStudio.Core.Models;
 
 /// <param name="MaxRows">Row cap per result set; 0 = unlimited.</param>
-/// <param name="Label">"statement" | "selection" | "script".</param>
-public sealed record ExecuteRequest(IReadOnlyList<SqlBatch> Batches, int MaxRows, bool StopOnError, bool CaptureServerOutput, string Label);
+/// <param name="Label">"statement" | "selection" | "script" (M1.5 also "filter" | "data" | "multi" | "explain").</param>
+/// <param name="Params">M1.5 bind values (docs/PLAN-M1.5.md 3.8); null/empty = no binding (M1 behaviour).</param>
+public sealed record ExecuteRequest(
+    IReadOnlyList<SqlBatch> Batches,
+    int MaxRows,
+    bool StopOnError,
+    bool CaptureServerOutput,
+    string Label,
+    IReadOnlyList<QueryParam>? Params = null);
 
 /// <summary>One unit sent to the server. T-SQL: a GO-delimited batch. Oracle/SQLite: a single statement. Line/Col are 1-based document positions of its first char.</summary>
 public sealed record SqlBatch(string Sql, int Line, int Col);
@@ -25,4 +34,6 @@ public sealed record ColumnInfo(
 /// <param name="Line">1-based, absolute to the editor document (provider adds batch.Line - 1).</param>
 public sealed record ErrorInfo(string Code, string Message, int? Line = null, int? Col = null, int? State = null, string? Detail = null, int? ProviderCode = null);
 
-public sealed record ExecutionSummary(ExecutionStatus Status, long ElapsedMs, int ResultSets, long RowsAffected);
+/// <param name="OutParams">M1.5: values of out/inout params (refcursor outs are delivered as result sets instead).</param>
+public sealed record ExecutionSummary(ExecutionStatus Status, long ElapsedMs, int ResultSets, long RowsAffected,
+    IReadOnlyList<OutParamValue>? OutParams = null);

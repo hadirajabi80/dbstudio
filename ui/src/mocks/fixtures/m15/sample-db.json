@@ -1,0 +1,22 @@
+{
+  "path": "C:\\Users\\me\\AppData\\Roaming\\DbStudio\\sample\\shop.sqlite",
+  "connectionId": "c_sample",
+  "profile": {
+    "id": "c_sample",
+    "name": "Sample: Shop",
+    "providerId": "sqlite",
+    "color": "#16a34a",
+    "folder": null,
+    "readOnly": false,
+    "props": {
+      "path": "C:\\Users\\me\\AppData\\Roaming\\DbStudio\\sample\\shop.sqlite",
+      "readOnly": false,
+      "createIfMissing": false
+    },
+    "hasPassword": false,
+    "savePassword": false,
+    "createdAt": "2026-10-14T10:00:00.000Z",
+    "lastUsedAt": "2026-10-14T10:00:00.000Z"
+  },
+  "created": true
+}

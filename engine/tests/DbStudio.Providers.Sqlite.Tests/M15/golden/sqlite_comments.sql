@@ -1,0 +1,2 @@
+-- rebuildRequired: false, transactional: true
+-- warning: SQLite does not store table or column comments; they are ignored.

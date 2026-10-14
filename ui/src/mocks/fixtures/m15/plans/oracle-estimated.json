@@ -1,0 +1,114 @@
+{
+  "type": "exec.plan",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "dialect": "plsql",
+  "mode": "estimated",
+  "root": {
+    "id": 0,
+    "op": "SELECT STATEMENT",
+    "logicalOp": "SELECT STATEMENT",
+    "object": null,
+    "estRows": 12,
+    "actualRows": null,
+    "cost": 7,
+    "costPct": 0,
+    "predicate": null,
+    "warnings": [],
+    "props": {
+      "Bytes": "240"
+    },
+    "children": [
+      {
+        "id": 1,
+        "op": "HASH GROUP BY",
+        "logicalOp": "HASH",
+        "object": null,
+        "estRows": 12,
+        "actualRows": null,
+        "cost": 7,
+        "costPct": 14.3,
+        "predicate": null,
+        "warnings": [],
+        "props": {
+          "Bytes": "240"
+        },
+        "children": [
+          {
+            "id": 2,
+            "op": "HASH JOIN",
+            "logicalOp": "HASH JOIN",
+            "object": null,
+            "estRows": 120,
+            "actualRows": null,
+            "cost": 6,
+            "costPct": 0,
+            "predicate": "\u0022O\u0022.\u0022CUSTOMER_ID\u0022=\u0022C\u0022.\u0022ID\u0022",
+            "warnings": [],
+            "props": {
+              "Bytes": "2400",
+              "Access predicates": "\u0022O\u0022.\u0022CUSTOMER_ID\u0022=\u0022C\u0022.\u0022ID\u0022"
+            },
+            "children": [
+              {
+                "id": 3,
+                "op": "TABLE ACCESS FULL",
+                "logicalOp": "TABLE ACCESS",
+                "object": "SHOP.CUSTOMERS",
+                "estRows": 300,
+                "actualRows": null,
+                "cost": 3,
+                "costPct": 42.9,
+                "predicate": null,
+                "warnings": [
+                  "Full table scan of SHOP.CUSTOMERS"
+                ],
+                "props": {
+                  "Bytes": "6000"
+                },
+                "children": []
+              },
+              {
+                "id": 4,
+                "op": "TABLE ACCESS BY INDEX ROWID BATCHED",
+                "logicalOp": "TABLE ACCESS",
+                "object": "SHOP.ORDERS",
+                "estRows": 120,
+                "actualRows": null,
+                "cost": 3,
+                "costPct": 28.6,
+                "predicate": null,
+                "warnings": [],
+                "props": {
+                  "Bytes": "2400"
+                },
+                "children": [
+                  {
+                    "id": 5,
+                    "op": "INDEX RANGE SCAN",
+                    "logicalOp": "INDEX",
+                    "object": "SHOP.IX_ORDERS_DATE",
+                    "estRows": 120,
+                    "actualRows": null,
+                    "cost": 1,
+                    "costPct": 14.3,
+                    "predicate": "\u0022O\u0022.\u0022ORDER_DATE\u0022\u003E=:SINCE",
+                    "warnings": [],
+                    "props": {
+                      "Bytes": "2400",
+                      "Access predicates": "\u0022O\u0022.\u0022ORDER_DATE\u0022\u003E=:SINCE"
+                    },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "raw": "Plan hash value: 1234567890\n\n-------------------------------------------------------------\n| Id  | Operation                    | Name           | Rows  |\n-------------------------------------------------------------\n|   0 | SELECT STATEMENT             |                |    12 |\n|   1 |  HASH GROUP BY               |                |    12 |\n|*  2 |   HASH JOIN                  |                |   120 |\n|   3 |    TABLE ACCESS FULL         | CUSTOMERS      |   300 |\n|   4 |    TABLE ACCESS BY INDEX ROWID BATCHED| ORDERS |   120 |\n|*  5 |     INDEX RANGE SCAN         | IX_ORDERS_DATE |   120 |\n-------------------------------------------------------------",
+  "rawFormat": "text",
+  "warnings": []
+}

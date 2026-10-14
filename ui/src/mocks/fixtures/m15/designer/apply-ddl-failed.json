@@ -1,0 +1,20 @@
+{
+  "error": {
+    "code": "DDL_FAILED",
+    "message": "Statement 2 failed: table T1 already exists. All changes were rolled back.",
+    "detail": {
+      "failedIndex": 1,
+      "executed": 1,
+      "rolledBack": true,
+      "providerError": {
+        "code": "SQLITE_ERROR",
+        "message": "table T1 already exists",
+        "line": null,
+        "col": null,
+        "state": null,
+        "detail": null,
+        "providerCode": 1
+      }
+    }
+  }
+}

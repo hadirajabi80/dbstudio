@@ -22,6 +22,21 @@ public sealed class EngineOptions
         ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "dbstudio://app", "http://localhost:5173", "http://127.0.0.1:5173" }
         : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "dbstudio://app" };
 
+    /// <summary>
+    /// CORS / WebSocket origin check. Always allows the fixed <see cref="AllowedOrigins"/>; with <c>--dev</c> also any
+    /// <c>http://localhost:&lt;port&gt;</c> or <c>http://127.0.0.1:&lt;port&gt;</c> (Vite on any port).
+    /// </summary>
+    public bool IsOriginAllowed(string? origin)
+    {
+        if (string.IsNullOrEmpty(origin)) return false;
+        if (AllowedOrigins.Contains(origin)) return true;
+        if (!Dev || !Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme == Uri.UriSchemeHttp
+            && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || uri.Host == "127.0.0.1")
+            && uri.AbsolutePath == "/" && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.UserInfo)
+            && origin.TrimEnd('/').Equals($"{uri.Scheme}://{uri.Authority}", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static EngineOptions Parse(string[] args)
     {
         int port = 0;

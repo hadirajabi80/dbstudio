@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
 using DbStudio.Core.Providers;
 using DbStudio.Core.Sql;
 
@@ -56,6 +57,9 @@ public sealed class BatchContext
     /// <summary>Free-form per-batch state for provider hooks.</summary>
     public IDictionary<string, object?> Items { get; } = new Dictionary<string, object?>();
 
+    /// <summary>M1.5: parameters bound to <see cref="Command"/> (empty when the request has no params).</summary>
+    public BoundParameters Parameters { get; internal set; } = BoundParameters.None;
+
     /// <summary>Set by the base class when an error was raised by a cancellation the engine itself triggered (row cap).</summary>
     internal bool SuppressErrors { get; set; }
 }
@@ -97,6 +101,8 @@ public abstract class AdoSessionBase : IDbSession
     private readonly object _cancelLock = new();
     private Task? _runningExecution;
     private RowBuffer? _rowBuffer;
+    private ParamBindCursor _bindCursor = new();
+    private List<OutParamValue>? _outParams;
 
     /// <param name="connection">An already opened connection; the session owns and disposes it.</param>
     /// <param name="profile">The connection profile (for timeouts and provider props).</param>
@@ -188,6 +194,42 @@ public abstract class AdoSessionBase : IDbSession
     /// fetch sizes, etc. The base already set CommandText, CommandType.Text, Transaction and CommandTimeout.
     /// </summary>
     protected virtual void ConfigureCommand(DbCommand command, BatchContext context) { }
+
+    /// <summary>M1.5: binder for <see cref="ExecuteRequest.Params"/>; null = the provider does not support parameters.</summary>
+    protected virtual IParamBinder? ParamBinder => null;
+
+    /// <summary>
+    /// M1.5: binds the request's params the batch references (called after <see cref="ConfigureCommand"/>, so the
+    /// command text is final). Default: <see cref="ParamBinder"/>.Bind with the execution's positional cursor.
+    /// </summary>
+    protected virtual void BindParameters(DbCommand command, BatchContext context)
+    {
+        var parameters = context.Request.Params;
+        if (parameters is not { Count: > 0 }) return;
+        var binder = ParamBinder ?? throw new EngineException(400, ErrorCodes.NotSupported, "This provider does not support query parameters.");
+        context.Parameters = binder.Bind(command, parameters, _bindCursor);
+    }
+
+    /// <summary>
+    /// M1.5: called after the batch's reader closed (output parameters are populated), before out values are collected.
+    /// Oracle streams REF CURSOR out params that the reader did not already return.
+    /// </summary>
+    protected virtual ValueTask OnParametersAvailableAsync(BatchContext context, CancellationToken ct) => ValueTask.CompletedTask;
+
+    /// <summary>
+    /// M1.5: entered for <see cref="RunExclusiveAsync"/> work so driver errors throw instead of being routed as messages
+    /// (SQL Server turns off FireInfoMessageEventOnUserErrors). Return null when nothing changes.
+    /// </summary>
+    protected virtual IDisposable? EnterDirectMode() => null;
+
+    /// <summary>M1.5: statement text used by <see cref="DescribeAsync"/> (default: trailing semicolons removed).</summary>
+    protected virtual string PrepareDescribeSql(string sql) => sql.Trim().TrimEnd(';').TrimEnd();
+
+    /// <summary>M1.5: command behavior used by <see cref="DescribeAsync"/>.</summary>
+    protected virtual CommandBehavior DescribeBehavior => CommandBehavior.SchemaOnly | CommandBehavior.KeyInfo;
+
+    /// <summary>M1.5: customise the describe command (Oracle: BindByName).</summary>
+    protected virtual void ConfigureDescribeCommand(DbCommand command) { }
 
     /// <summary>Executes the command. Default: <c>command.ExecuteReaderAsync(CommandBehavior.Default, ct)</c>.</summary>
     protected virtual Task<DbDataReader> ExecuteReaderAsync(DbCommand command, BatchContext context, CancellationToken ct) =>
@@ -303,6 +345,7 @@ public abstract class AdoSessionBase : IDbSession
             Message: db.Message,
             Line: FirstCodeLine(batch, Dialect),
             ProviderCode: db.ErrorCode),
+        EngineException ee => new ErrorInfo(ee.Code, ee.Message, FirstCodeLine(batch, Dialect)),
         _ => new ErrorInfo(ErrorCodes.EngineError, exception.Message, FirstCodeLine(batch, Dialect), Detail: exception.GetType().Name),
     };
 
@@ -656,6 +699,9 @@ public abstract class AdoSessionBase : IDbSession
         var total = Stopwatch.StartNew();
         var sink = new CountingSink(userSink);
         CurrentSink = sink;
+        _bindCursor = new ParamBindCursor();
+        _outParams = null;
+        if (request.Params is { Count: > 0 } requestParams) ParamValues.Validate(requestParams);
         var anyError = false;
         var cancelled = false;
         ExecutionSummary? summary = null;
@@ -680,7 +726,7 @@ public abstract class AdoSessionBase : IDbSession
             }
 
             var status2 = cancelled ? ExecutionStatus.Cancelled : anyError ? ExecutionStatus.Error : ExecutionStatus.Ok;
-            summary = new ExecutionSummary(status2, total.ElapsedMilliseconds, sink.ResultSets, sink.TotalRowsAffected);
+            summary = new ExecutionSummary(status2, total.ElapsedMilliseconds, sink.ResultSets, sink.TotalRowsAffected, _outParams);
             try
             {
                 await OnExecutionCompletedAsync(request, summary).ConfigureAwait(false);
@@ -794,6 +840,7 @@ public abstract class AdoSessionBase : IDbSession
             cmd = CreateCommand(ctx.Batch.Sql);
             ctx.Command = cmd;
             ConfigureCommand(cmd, ctx);
+            BindParameters(cmd, ctx);
             lock (_cancelLock)
             {
                 _currentCommand = cmd;
@@ -820,6 +867,11 @@ public abstract class AdoSessionBase : IDbSession
             await CloseReaderAsync(reader, ctx).ConfigureAwait(false);
             reader = null;
             if (!stop) await ReportRowsAffectedAsync(ctx, ctx.RecordsAffected).ConfigureAwait(false);
+            if (!stop && ctx.Parameters.Bound.Count > 0)
+            {
+                await OnParametersAvailableAsync(ctx, ct).ConfigureAwait(false);
+                CollectOutputs(ctx);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -914,6 +966,151 @@ public abstract class AdoSessionBase : IDbSession
     }
 
     private ValueTask FlushRowsAsync() => _rowBuffer?.FlushAsync() ?? ValueTask.CompletedTask;
+
+    // ------------------------------------------------------------------ M1.5: parameters, direct access, describe
+
+    private void CollectOutputs(BatchContext ctx)
+    {
+        var binder = ParamBinder;
+        if (binder is null) return;
+        foreach (var (param, parameter) in ctx.Parameters.Outputs)
+        {
+            if (param.Kind == ParamKinds.RefCursor) continue;
+            object? value;
+            try { value = binder.ReadOutput(parameter); }
+            catch (Exception ex) when (ex is InvalidCastException or InvalidOperationException or OverflowException) { value = parameter.Value?.ToString(); }
+            (_outParams ??= []).Add(new OutParamValue(param.BareName, value));
+        }
+    }
+
+    /// <summary>
+    /// Streams <paramref name="reader"/>'s current result set to the sink as a normal result set of the batch (row cap,
+    /// batching), e.g. an Oracle REF CURSOR out parameter. Returns false when the row cap stopped it.
+    /// </summary>
+    protected Task<bool> StreamResultSetAsync(DbDataReader reader, BatchContext context, CancellationToken ct) =>
+        ReadResultSetAsync(reader, context, ct);
+
+    /// <summary>
+    /// M1.5: runs provider-level work on the session's connection while holding the session exclusively (state
+    /// Executing, so executions and transaction calls are rejected meanwhile). <see cref="Cancel"/> cancels the token
+    /// and the command created last through the scope. Used by describe and the explain-plan readers. The work runs on
+    /// a thread-pool thread; the open manual transaction (if any) is assigned to every command.
+    /// </summary>
+    public async Task<T> RunExclusiveAsync<T>(Func<SessionScope, CancellationToken, Task<T>> work, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        var prev = Interlocked.CompareExchange(ref _state, StateExecuting, StateIdle);
+        if (prev != StateIdle)
+        {
+            if (prev == StateBroken) throw new SessionBrokenException();
+            if (prev == StateClosed) throw new ObjectDisposedException(GetType().Name, "The session is closed.");
+            throw new SessionBusyException();
+        }
+
+        CancellationTokenSource cts;
+        lock (_cancelLock)
+        {
+            _cancelRequested = false;
+            cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _executionCts = cts;
+        }
+        try
+        {
+            using var direct = EnterDirectMode();
+            var scope = new SessionScope(this);
+            return await Task.Run(() => work(scope, cts.Token), CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_cancelLock)
+            {
+                _executionCts = null;
+                _currentCommand = null;
+            }
+            cts.Dispose();
+            if (Transaction is not null && Transaction.Connection is null) Transaction = null;
+            var broken = IsConnectionBroken(null);
+            if (broken)
+            {
+                Transaction = null;
+                ServerTxOpen = false;
+            }
+            Interlocked.CompareExchange(ref _state, broken ? StateBroken : StateIdle, StateExecuting);
+        }
+    }
+
+    /// <summary>
+    /// M1.5 <c>POST /sessions/{sid}/describe</c>: the columns a query would return, using
+    /// <see cref="DescribeBehavior"/> (SchemaOnly) so nothing is executed. Placeholders without a parameter are bound
+    /// to NULL. Callers must reject non-queries first.
+    /// </summary>
+    public Task<ColumnInfo[]> DescribeAsync(string sql, IReadOnlyList<QueryParam>? parameters, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        if (parameters is { Count: > 0 }) ParamValues.Validate(parameters);
+        return RunExclusiveAsync(async (scope, token) =>
+        {
+            var text = PrepareDescribeSql(sql);
+            await using var cmd = scope.CreateCommand(text);
+            ConfigureDescribeCommand(cmd);
+            if (ParamBinder is { } binder)
+            {
+                var all = new List<QueryParam>(parameters ?? []);
+                var known = new HashSet<string>(all.Select(p => p.BareName), StringComparer.OrdinalIgnoreCase);
+                var unnamed = 0;
+                foreach (var ph in binder.FindPlaceholders(text))
+                {
+                    if (ph.Name is null) unnamed++;
+                    else if (known.Add(ph.Name)) all.Add(new QueryParam(ph.Name, ParamKinds.Null));
+                }
+                var positional = all.Count(p => p.IsPositional);
+                for (var i = positional + 1; i <= unnamed; i++) all.Add(new QueryParam(i.ToString(System.Globalization.CultureInfo.InvariantCulture), ParamKinds.Null));
+                binder.Bind(cmd, all, new ParamBindCursor());
+            }
+            else if (parameters is { Count: > 0 })
+            {
+                throw new EngineException(400, ErrorCodes.NotSupported, "This provider does not support query parameters.");
+            }
+            await using var reader = await cmd.ExecuteReaderAsync(DescribeBehavior, token).ConfigureAwait(false);
+            var batch = new SqlBatch(text, 1, 1);
+            var context = new BatchContext(0, batch, new ExecuteRequest([batch], 0, true, false, "describe", parameters), NullSink.Instance, Dialect, token);
+            return reader.FieldCount > 0 ? DescribeColumns(reader, context) : [];
+        }, ct);
+    }
+
+    /// <summary>Access to the session connection inside <see cref="RunExclusiveAsync"/>.</summary>
+    public sealed class SessionScope
+    {
+        private readonly AdoSessionBase _session;
+
+        internal SessionScope(AdoSessionBase session) => _session = session;
+
+        public DbConnection Connection => _session.Connection;
+        public DbTransaction? Transaction => _session.Transaction;
+        public Dialect Dialect => _session.Dialect;
+        public IParamBinder? Binder => _session.ParamBinder;
+
+        /// <summary>A command on the session connection (session timeout, open transaction) that <see cref="Cancel"/> can interrupt.</summary>
+        public DbCommand CreateCommand(string sql)
+        {
+            var cmd = _session.CreateCommand(sql);
+            lock (_session._cancelLock) _session._currentCommand = cmd;
+            return cmd;
+        }
+    }
+
+    private sealed class NullSink : IExecutionSink
+    {
+        public static readonly NullSink Instance = new();
+        public ValueTask BatchStarted(int batchIndex) => ValueTask.CompletedTask;
+        public ValueTask ResultSetStarted(int resultSetId, int batchIndex, ColumnInfo[] columns) => ValueTask.CompletedTask;
+        public ValueTask Rows(int resultSetId, IReadOnlyList<object?[]> rows) => ValueTask.CompletedTask;
+        public ValueTask ResultSetEnded(int resultSetId, long rowCount, bool truncated, long elapsedMs) => ValueTask.CompletedTask;
+        public ValueTask RowsAffected(int batchIndex, long count, string? statementKind) => ValueTask.CompletedTask;
+        public ValueTask Message(int batchIndex, MessageSeverity severity, string text, int? line, int? code, MessageSource source) => ValueTask.CompletedTask;
+        public ValueTask Error(int batchIndex, ErrorInfo error) => ValueTask.CompletedTask;
+        public ValueTask BatchEnded(int batchIndex, long elapsedMs, BatchStatus status) => ValueTask.CompletedTask;
+    }
 
     // ------------------------------------------------------------------ disposal
 

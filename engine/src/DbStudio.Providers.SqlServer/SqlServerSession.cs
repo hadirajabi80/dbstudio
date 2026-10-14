@@ -1,7 +1,9 @@
 using System.Data.Common;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
 using DbStudio.Core.Services;
 using DbStudio.Core.Sql;
+using DbStudio.Providers.SqlServer.Params;
 using Microsoft.Data.SqlClient;
 using SqlBatch = DbStudio.Core.Models.SqlBatch;
 
@@ -38,6 +40,22 @@ public sealed class SqlServerSession : AdoSessionBase
     }
 
     // ------------------------------------------------------------------ hooks
+
+    /// <summary>M1.5: @name parameters (sp_executesql).</summary>
+    protected override IParamBinder? ParamBinder => SqlServerParamBinder.Instance;
+
+    /// <summary>M1.5: direct work (describe, explain helpers) gets server errors as exceptions, not InfoMessages.</summary>
+    protected override IDisposable? EnterDirectMode()
+    {
+        if (!_conn.FireInfoMessageEventOnUserErrors) return null;
+        _conn.FireInfoMessageEventOnUserErrors = false;
+        return new RestoreInfoMessages(_conn);
+    }
+
+    private sealed class RestoreInfoMessages(SqlConnection conn) : IDisposable
+    {
+        public void Dispose() => conn.FireInfoMessageEventOnUserErrors = true;
+    }
 
     protected override void ConfigureCommand(DbCommand command, BatchContext context)
     {

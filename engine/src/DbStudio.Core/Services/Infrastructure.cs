@@ -4,8 +4,9 @@ using System.Text;
 namespace DbStudio.Core.Services;
 
 /// <summary>
-/// Locations of the engine's files (docs/PLAN.md 2.8). Root is <c>%APPDATA%\DbStudio</c>, overridable with the
-/// <c>DBSTUDIO_DATA_DIR</c> environment variable (tests use a temp dir).
+/// Locations of the engine's files (docs/PLAN.md 2.8). Root is <c>%APPDATA%\DbStudio</c> on Windows,
+/// <c>~/Library/Application Support/DbStudio</c> on macOS and <c>~/.config/DbStudio</c> (XDG) on Linux, overridable with
+/// the <c>DBSTUDIO_DATA_DIR</c> environment variable (tests use a temp dir).
 /// </summary>
 public sealed class AppPaths
 {
@@ -24,14 +25,8 @@ public sealed class AppPaths
     public string HistoryDatabase => Path.Combine(DataDir, "history.db");
     public string LogsDir => Path.Combine(DataDir, "logs");
 
-    public static AppPaths FromEnvironment()
-    {
-        var overrideDir = Environment.GetEnvironmentVariable(DataDirVariable);
-        if (!string.IsNullOrWhiteSpace(overrideDir)) return new AppPaths(overrideDir);
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        if (string.IsNullOrEmpty(appData)) appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-        return new AppPaths(Path.Combine(appData, "DbStudio"));
-    }
+    /// <summary>Per-OS default (Windows %APPDATA%, macOS Application Support, Linux XDG); see <see cref="Platform.DataDirectory"/>.</summary>
+    public static AppPaths FromEnvironment() => new(Platform.DataDirectory.Default());
 }
 
 /// <summary>Atomic file replacement: write a temp file next to the target, flush, then move over it.</summary>

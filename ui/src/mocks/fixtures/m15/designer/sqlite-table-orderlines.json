@@ -1,0 +1,148 @@
+{
+  "schema": "main",
+  "name": "OrderLines",
+  "comment": null,
+  "options": {
+    "withoutRowid": false,
+    "strict": false,
+    "tablespace": null
+  },
+  "columns": [
+    {
+      "id": "OrderId",
+      "name": "OrderId",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "LineNo",
+      "name": "LineNo",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "ProductId",
+      "name": "ProductId",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Qty",
+      "name": "Qty",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "UnitPrice",
+      "name": "UnitPrice",
+      "type": "NUMERIC(10,2)",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Discount",
+      "name": "Discount",
+      "type": "NUMERIC(4,2)",
+      "nullable": false,
+      "default": "0",
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    }
+  ],
+  "primaryKey": {
+    "name": "PK_OrderLines",
+    "columns": [
+      "OrderId",
+      "LineNo"
+    ],
+    "clustered": true
+  },
+  "uniques": [],
+  "indexes": [
+    {
+      "name": "IX_OrderLines_ProductId",
+      "columns": [
+        {
+          "name": "ProductId",
+          "desc": false
+        }
+      ],
+      "unique": false,
+      "clustered": false,
+      "include": [],
+      "filter": null
+    }
+  ],
+  "foreignKeys": [
+    {
+      "name": "FK_OrderLines_Orders",
+      "columns": [
+        "OrderId"
+      ],
+      "refSchema": null,
+      "refTable": "Orders",
+      "refColumns": [
+        "Id"
+      ],
+      "onDelete": "CASCADE",
+      "onUpdate": "NO ACTION"
+    },
+    {
+      "name": "FK_OrderLines_Products",
+      "columns": [
+        "ProductId"
+      ],
+      "refSchema": null,
+      "refTable": "Products",
+      "refColumns": [
+        "Id"
+      ],
+      "onDelete": "NO ACTION",
+      "onUpdate": "NO ACTION"
+    }
+  ],
+  "checks": [
+    {
+      "name": "CK_OrderLines_Qty",
+      "expression": "Qty > 0"
+    }
+  ]
+}

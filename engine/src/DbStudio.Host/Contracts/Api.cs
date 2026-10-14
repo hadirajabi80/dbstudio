@@ -59,7 +59,8 @@ public sealed record ExecuteRequestDto(
     bool? StopOnError,
     string? Label,
     ExecuteSource? Source,
-    bool? ConfirmedDestructive);
+    bool? ConfirmedDestructive,
+    List<DbStudio.Core.Params.QueryParam>? Params = null);
 
 public sealed record ExecuteResponse(string ExecutionId, string StartedAt);
 

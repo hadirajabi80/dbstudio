@@ -38,7 +38,18 @@ public sealed record ExecErrorEvent(string ExecutionId, int BatchIndex, string C
 public sealed record ExecBatchEndedEvent(string ExecutionId, int BatchIndex, long ElapsedMs, BatchStatus Status) : EngineEvent("exec.batch.ended");
 
 public sealed record ExecDoneEvent(string ExecutionId, string SessionId, ExecutionStatus Status, long ElapsedMs, int ResultSets, long RowsAffected, bool TxOpen)
-    : EngineEvent("exec.done");
+    : EngineEvent("exec.done")
+{
+    /// <summary>M1.5: values of out/inout parameters (omitted when none).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<Params.OutParamValue>? OutParams { get; init; }
+}
+
+/// <summary>M1.5 explain plan result (docs/PLAN-M1.5.md 3.8), published before exec.done.</summary>
+/// <param name="Mode">"estimated" | "actual".</param>
+/// <param name="RawFormat">"xml" | "text".</param>
+public sealed record ExecPlanEvent(string ExecutionId, Dialect Dialect, string Mode, Plans.PlanNode Root, string Raw, string RawFormat, IReadOnlyList<string> Warnings)
+    : EngineEvent("exec.plan");
 
 public sealed record ExecDiagnosticsEvent(string ExecutionId, IReadOnlyList<SqlDiagnostic> Diagnostics) : EngineEvent("exec.diagnostics");
 

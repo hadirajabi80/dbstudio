@@ -68,9 +68,10 @@ public static class SessionEndpoints
         {
             if (req?.Batches is null) throw EngineException.Validation("batches is required.", new { field = "batches" });
             var maxRows = req.MaxRows ?? settings.DefaultMaxRows();
-            var label = req.Label is "statement" or "selection" or "script" ? req.Label : "statement";
+            var label = req.Label is not null && ExecLabels.All.Contains(req.Label) ? req.Label : "statement";
             var started = executions.Start(sid, new ExecuteCommand(
-                req.Batches, maxRows, req.StopOnError ?? true, label, req.ConfirmedDestructive ?? false, req.Source?.TabId, req.Source?.Title));
+                req.Batches, maxRows, req.StopOnError ?? true, label, req.ConfirmedDestructive ?? false, req.Source?.TabId, req.Source?.Title,
+                req.Params is { Count: > 0 } ps ? ps : null));
             return Results.Json(new ExecuteResponse(started.ExecutionId, started.StartedAt), CoreJson.Options, statusCode: StatusCodes.Status202Accepted);
         });
 

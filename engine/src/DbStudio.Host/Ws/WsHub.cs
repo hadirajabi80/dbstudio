@@ -70,7 +70,7 @@ public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPub
             return;
         }
         var origin = ctx.Request.Headers.Origin.ToString();
-        if (origin.Length > 0 && !options.AllowedOrigins.Contains(origin))
+        if (origin.Length > 0 && !options.IsOriginAllowed(origin))
         {
             ctx.Response.StatusCode = 403;
             return;

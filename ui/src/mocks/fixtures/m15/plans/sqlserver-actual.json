@@ -1,0 +1,76 @@
+{
+  "type": "exec.plan",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "dialect": "tsql",
+  "mode": "actual",
+  "root": {
+    "id": 1,
+    "op": "SELECT",
+    "logicalOp": null,
+    "object": null,
+    "estRows": 1,
+    "actualRows": 1,
+    "cost": 0.0065704,
+    "costPct": 0,
+    "predicate": null,
+    "warnings": [],
+    "props": {
+      "Statement": "SELECT TOP (10) Id, Name FROM dbo.Customers WHERE Id = @id ORDER BY Name",
+      "Optimization level": "TRIVIAL",
+      "Degree of parallelism": "1"
+    },
+    "children": [
+      {
+        "id": 2,
+        "op": "Top",
+        "logicalOp": "Top",
+        "object": null,
+        "estRows": 1,
+        "actualRows": 1,
+        "cost": 0.0065704,
+        "costPct": 50,
+        "predicate": null,
+        "warnings": [],
+        "props": {
+          "Node id": "0",
+          "Estimated I/O cost": "0",
+          "Estimated CPU cost": "1E-07",
+          "Average row size (B)": "37",
+          "Estimated executions": "1",
+          "Actual executions": "1",
+          "Actual elapsed (ms)": "0"
+        },
+        "children": [
+          {
+            "id": 3,
+            "op": "Clustered Index Seek",
+            "logicalOp": "Clustered Index Seek",
+            "object": "dbo.Customers.PK_Customers",
+            "estRows": 1,
+            "actualRows": 1,
+            "cost": 0.0032831,
+            "costPct": 50,
+            "predicate": "[Id] = [@id]",
+            "warnings": [],
+            "props": {
+              "Node id": "1",
+              "Estimated I/O cost": "0.003125",
+              "Estimated CPU cost": "0.0001581",
+              "Average row size (B)": "37",
+              "Estimated executions": "1",
+              "Seek predicate": "[Id] = [@id]",
+              "Actual executions": "1",
+              "Actual elapsed (ms)": "0",
+              "Logical reads": "2"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "raw": "\u003C?xml version=\u00221.0\u0022 encoding=\u0022utf-16\u0022?\u003E\n\u003CShowPlanXML xmlns:xsi=\u0022http://www.w3.org/2001/XMLSchema-instance\u0022 xmlns:xsd=\u0022http://www.w3.org/2001/XMLSchema\u0022 Version=\u00221.564\u0022 Build=\u002216.0.4135.4\u0022 xmlns=\u0022http://schemas.microsoft.com/sqlserver/2004/07/showplan\u0022\u003E\n  \u003CBatchSequence\u003E\n    \u003CBatch\u003E\n      \u003CStatements\u003E\n        \u003CStmtSimple StatementCompId=\u00221\u0022 StatementEstRows=\u00221\u0022 StatementId=\u00221\u0022 StatementOptmLevel=\u0022TRIVIAL\u0022 StatementSubTreeCost=\u00220.0065704\u0022 StatementText=\u0022SELECT TOP (10) Id, Name FROM dbo.Customers WHERE Id = @id ORDER BY Name\u0022 StatementType=\u0022SELECT\u0022\u003E\n          \u003CQueryPlan DegreeOfParallelism=\u00221\u0022 CachedPlanSize=\u002216\u0022\u003E\n            \u003CRelOp AvgRowSize=\u002237\u0022 EstimateCPU=\u00221E-07\u0022 EstimateIO=\u00220\u0022 EstimateRebinds=\u00220\u0022 EstimateRewinds=\u00220\u0022 EstimatedExecutionMode=\u0022Row\u0022 EstimateRows=\u00221\u0022 LogicalOp=\u0022Top\u0022 NodeId=\u00220\u0022 Parallel=\u0022false\u0022 PhysicalOp=\u0022Top\u0022 EstimatedTotalSubtreeCost=\u00220.0065704\u0022\u003E\n              \u003COutputList /\u003E\n              \u003CRunTimeInformation\u003E\n                \u003CRunTimeCountersPerThread Thread=\u00220\u0022 ActualRows=\u00221\u0022 ActualEndOfScans=\u00221\u0022 ActualExecutions=\u00221\u0022 ActualElapsedms=\u00220\u0022 ActualCPUms=\u00220\u0022 /\u003E\n              \u003C/RunTimeInformation\u003E\n              \u003CTop RowCount=\u0022false\u0022 IsPercent=\u0022false\u0022 WithTies=\u0022false\u0022\u003E\n                \u003CTopExpression\u003E\n                  \u003CScalarOperator ScalarString=\u0022(10)\u0022 /\u003E\n                \u003C/TopExpression\u003E\n                \u003CRelOp AvgRowSize=\u002237\u0022 EstimateCPU=\u00220.0001581\u0022 EstimateIO=\u00220.003125\u0022 EstimateRebinds=\u00220\u0022 EstimateRewinds=\u00220\u0022 EstimatedExecutionMode=\u0022Row\u0022 EstimateRows=\u00221\u0022 LogicalOp=\u0022Clustered Index Seek\u0022 NodeId=\u00221\u0022 Parallel=\u0022false\u0022 PhysicalOp=\u0022Clustered Index Seek\u0022 EstimatedTotalSubtreeCost=\u00220.0032831\u0022 TableCardinality=\u0022300\u0022\u003E\n                  \u003COutputList /\u003E\n                  \u003CRunTimeInformation\u003E\n                    \u003CRunTimeCountersPerThread Thread=\u00220\u0022 ActualRows=\u00221\u0022 ActualRowsRead=\u00221\u0022 ActualEndOfScans=\u00221\u0022 ActualExecutions=\u00221\u0022 ActualElapsedms=\u00220\u0022 ActualCPUms=\u00220\u0022 ActualScans=\u00220\u0022 ActualLogicalReads=\u00222\u0022 ActualPhysicalReads=\u00220\u0022 /\u003E\n                  \u003C/RunTimeInformation\u003E\n                  \u003CIndexScan Ordered=\u0022true\u0022 ScanDirection=\u0022FORWARD\u0022 ForcedIndex=\u0022false\u0022 ForceSeek=\u0022false\u0022 ForceScan=\u0022false\u0022 NoExpandHint=\u0022false\u0022 Storage=\u0022RowStore\u0022\u003E\n                    \u003CDefinedValues /\u003E\n                    \u003CObject Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Index=\u0022[PK_Customers]\u0022 IndexKind=\u0022Clustered\u0022 Storage=\u0022RowStore\u0022 /\u003E\n                    \u003CSeekPredicates\u003E\n                      \u003CSeekPredicateNew\u003E\n                        \u003CSeekKeys\u003E\n                          \u003CPrefix ScanType=\u0022EQ\u0022\u003E\n                            \u003CRangeColumns\u003E\n                              \u003CColumnReference Database=\u0022[shop]\u0022 Schema=\u0022[dbo]\u0022 Table=\u0022[Customers]\u0022 Column=\u0022Id\u0022 /\u003E\n                            \u003C/RangeColumns\u003E\n                            \u003CRangeExpressions\u003E\n                              \u003CScalarOperator ScalarString=\u0022[@id]\u0022 /\u003E\n                            \u003C/RangeExpressions\u003E\n                          \u003C/Prefix\u003E\n                        \u003C/SeekKeys\u003E\n                      \u003C/SeekPredicateNew\u003E\n                    \u003C/SeekPredicates\u003E\n                  \u003C/IndexScan\u003E\n                \u003C/RelOp\u003E\n              \u003C/Top\u003E\n            \u003C/RelOp\u003E\n          \u003C/QueryPlan\u003E\n        \u003C/StmtSimple\u003E\n      \u003C/Statements\u003E\n    \u003C/Batch\u003E\n  \u003C/BatchSequence\u003E\n\u003C/ShowPlanXML\u003E\n",
+  "rawFormat": "xml",
+  "warnings": []
+}

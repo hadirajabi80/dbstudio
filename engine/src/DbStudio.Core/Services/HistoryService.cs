@@ -20,6 +20,16 @@ public sealed record HistoryEntry(
     string Label,
     bool Pinned);
 
+/// <summary>M1.5 history filters (docs/PLAN-M1.5.md 1.1.3); every member is optional and they combine with AND.</summary>
+/// <param name="Statuses">"ok" | "error" | "cancelled".</param>
+/// <param name="From">Inclusive lower bound of started_at.</param>
+/// <param name="To">Inclusive upper bound of started_at.</param>
+/// <param name="PinnedOnly">true = only pinned entries.</param>
+public sealed record HistoryFilter(IReadOnlyList<string>? Statuses = null, DateTimeOffset? From = null, DateTimeOffset? To = null, bool PinnedOnly = false)
+{
+    public static readonly HistoryFilter None = new();
+}
+
 /// <summary>
 /// Query history in <c>history.db</c> (SQLite with an FTS5 index over the SQL text). One row per execution.
 /// Falls back to LIKE search when FTS5 is unavailable.
@@ -118,7 +128,7 @@ public sealed class HistoryService : IDisposable
             cmd.Parameters.AddWithValue("$c", connectionId);
             cmd.Parameters.AddWithValue("$d", (object?)database ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$s", sql);
-            cmd.Parameters.AddWithValue("$t", startedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture));
+            cmd.Parameters.AddWithValue("$t", FormatTime(startedAt));
             cmd.Parameters.AddWithValue("$ms", durationMs);
             cmd.Parameters.AddWithValue("$st", StatusText(status));
             cmd.Parameters.AddWithValue("$ra", (object?)rowsAffected ?? DBNull.Value);
@@ -135,8 +145,13 @@ public sealed class HistoryService : IDisposable
 
     /// <param name="query">Free text; every word must match (prefix match with FTS5).</param>
     /// <param name="before">Return entries with id &lt; before (paging).</param>
-    public async Task<IReadOnlyList<HistoryEntry>> SearchAsync(string? connectionId, string? query, int limit, long? before, CancellationToken ct = default)
+    public Task<IReadOnlyList<HistoryEntry>> SearchAsync(string? connectionId, string? query, int limit, long? before, CancellationToken ct = default) =>
+        SearchAsync(connectionId, query, limit, before, HistoryFilter.None, ct);
+
+    /// <summary>Search with the M1.5 filters (status list, started_at range, pinned only).</summary>
+    public async Task<IReadOnlyList<HistoryEntry>> SearchAsync(string? connectionId, string? query, int limit, long? before, HistoryFilter filter, CancellationToken ct = default)
     {
+        filter ??= HistoryFilter.None;
         limit = Math.Clamp(limit <= 0 ? 200 : limit, 1, 5000);
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -165,6 +180,20 @@ public sealed class HistoryService : IDisposable
             }
             if (!string.IsNullOrEmpty(connectionId)) { where.Add("h.connection_id = $c"); cmd.Parameters.AddWithValue("$c", connectionId); }
             if (before is not null) { where.Add("h.id < $b"); cmd.Parameters.AddWithValue("$b", before.Value); }
+            if (filter.Statuses is { Count: > 0 } statuses)
+            {
+                var names = new List<string>();
+                for (var i = 0; i < statuses.Count; i++)
+                {
+                    names.Add($"$st{i}");
+                    cmd.Parameters.AddWithValue($"$st{i}", statuses[i]);
+                }
+                where.Add($"h.status IN ({string.Join(", ", names)})");
+            }
+            // started_at is stored as UTC "yyyy-MM-ddTHH:mm:ss.fffZ", so text comparison orders correctly.
+            if (filter.From is { } from) { where.Add("h.started_at >= $from"); cmd.Parameters.AddWithValue("$from", FormatTime(from)); }
+            if (filter.To is { } to) { where.Add("h.started_at <= $to"); cmd.Parameters.AddWithValue("$to", FormatTime(to)); }
+            if (filter.PinnedOnly) where.Add("h.pinned = 1");
             if (where.Count > 0) sql.Append(" WHERE ").AppendJoin(" AND ", where);
             sql.Append(" ORDER BY h.id DESC LIMIT $limit");
             cmd.Parameters.AddWithValue("$limit", limit);
@@ -229,6 +258,8 @@ public sealed class HistoryService : IDisposable
         if (sb.Length > 0) words.Add(sb.ToString());
         return words.Take(16).ToList();
     }
+
+    private static string FormatTime(DateTimeOffset t) => t.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     public static string StatusText(ExecutionStatus s) => s switch
     {

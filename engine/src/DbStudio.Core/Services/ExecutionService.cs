@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using DbStudio.Core.Catalog;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
+using DbStudio.Core.Plans;
 using DbStudio.Core.Providers;
 using DbStudio.Core.Sql;
 using Microsoft.Extensions.Logging;
@@ -9,8 +11,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DbStudio.Core.Services;
 
-/// <param name="Label">"statement" | "selection" | "script".</param>
+/// <param name="Label">"statement" | "selection" | "script" (M1.5: also "filter" | "data" | "multi" | "explain").</param>
 /// <param name="ConfirmedDestructive">The user confirmed running non-queries (required on read-only connections).</param>
+/// <param name="Params">M1.5 bind values.</param>
 public sealed record ExecuteCommand(
     IReadOnlyList<SqlBatch> Batches,
     int MaxRows,
@@ -18,7 +21,29 @@ public sealed record ExecuteCommand(
     string Label,
     bool ConfirmedDestructive = false,
     string? TabId = null,
+    string? Title = null,
+    IReadOnlyList<QueryParam>? Params = null);
+
+/// <summary>M1.5 explain request (POST /sessions/{sid}/explain).</summary>
+public sealed record ExplainCommand(
+    string Sql,
+    string Mode,
+    int MaxRows,
+    IReadOnlyList<QueryParam>? Params = null,
+    int Line = 1,
+    int Col = 1,
+    bool ConfirmedDestructive = false,
+    string? TabId = null,
     string? Title = null);
+
+/// <summary>Labels accepted for executions (docs/PLAN-M1.5.md 3.7).</summary>
+public static class ExecLabels
+{
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "statement", "selection", "script", "filter", "data", "multi", "explain",
+    };
+}
 
 public sealed record ExecutionStarted(string ExecutionId, string StartedAt);
 
@@ -27,7 +52,7 @@ public sealed record ExecutionStarted(string ExecutionId, string StartedAt);
 /// busy check (409 synchronously), background run, result store, history, DDL-driven catalog invalidation,
 /// <c>exec.*</c> and <c>session.changed</c> events.
 /// </summary>
-public sealed class ExecutionService
+public sealed partial class ExecutionService
 {
     private readonly SessionManager _sessions;
     private readonly ResultStore _results;
@@ -57,13 +82,15 @@ public sealed class ExecutionService
     {
         var h = _sessions.Get(sessionId);
         Validate(cmd);
-        EnforceReadOnly(h, cmd);
+        ParamValues.Validate(cmd.Params);
+        EnforceReadOnly(h, cmd.Batches, cmd.ConfirmedDestructive);
 
         var executionId = Ids.New("x");
         if (!h.TryReserve(executionId))
             throw new EngineException(409, ErrorCodes.SessionBusy, "The session is already executing a statement.");
 
         var startedAt = DateTimeOffset.UtcNow;
+        Track(h, startedAt, cmd.TabId, cmd.Title);
         var task = Task.Run(() => RunAsync(h, executionId, cmd, startedAt));
         _running[executionId] = task;
         _ = task.ContinueWith(_ => _running.TryRemove(executionId, out var _), TaskScheduler.Default);
@@ -90,10 +117,17 @@ public sealed class ExecutionService
         }
     }
 
-    private static void EnforceReadOnly(SessionHandle h, ExecuteCommand cmd)
+    private static void Track(SessionHandle h, DateTimeOffset startedAt, string? tabId, string? title)
     {
-        if (!h.Profile.ReadOnly || cmd.ConfirmedDestructive) return;
-        foreach (var batch in cmd.Batches)
+        h.ExecutingSince = startedAt;
+        if (tabId is not null) h.TabId = tabId;
+        if (title is not null) h.Label = title;
+    }
+
+    private static void EnforceReadOnly(SessionHandle h, IReadOnlyList<SqlBatch> batches, bool confirmedDestructive)
+    {
+        if (!h.Profile.ReadOnly || confirmedDestructive) return;
+        foreach (var batch in batches)
         {
             var classification = StatementClassifier.Classify(batch.Sql, h.Dialect);
             if (classification.IsQueryOnly) continue;
@@ -120,7 +154,7 @@ public sealed class ExecutionService
             if (reconnectMessage is not null)
                 _events.Publish(new ExecMessageEvent(executionId, 0, MessageSeverity.Warning, reconnectMessage, null, null, MessageSource.Engine));
 
-            var request = new ExecuteRequest(cmd.Batches, cmd.MaxRows, cmd.StopOnError, h.Options.CaptureServerOutput, cmd.Label);
+            var request = new ExecuteRequest(cmd.Batches, cmd.MaxRows, cmd.StopOnError, h.Options.CaptureServerOutput, cmd.Label, cmd.Params);
             summary = await h.Session.ExecuteAsync(request, sink, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -143,7 +177,10 @@ public sealed class ExecutionService
         }
 
         var session = h.Session;
-        _events.Publish(new ExecDoneEvent(executionId, h.Id, summary.Status, summary.ElapsedMs, summary.ResultSets, summary.RowsAffected, session.TxOpen));
+        _events.Publish(new ExecDoneEvent(executionId, h.Id, summary.Status, summary.ElapsedMs, summary.ResultSets, summary.RowsAffected, session.TxOpen)
+        {
+            OutParams = summary.OutParams is { Count: > 0 } outs ? outs : null,
+        });
         _sessions.PublishChanged(h);
 
         InvalidateCatalog(h, cmd, sink);

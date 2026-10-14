@@ -1,0 +1,77 @@
+{
+  "request": {
+    "sql": "SELECT Id, Sku, Name, Price FROM Products WHERE Price > :min",
+    "params": [
+      {
+        "name": "min",
+        "kind": "decimal",
+        "value": "100"
+      }
+    ]
+  },
+  "response": {
+    "columns": [
+      {
+        "name": "Id",
+        "ordinal": 0,
+        "dbType": "INTEGER",
+        "kind": "int",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Products",
+        "schema": null,
+        "isKey": true
+      },
+      {
+        "name": "Sku",
+        "ordinal": 1,
+        "dbType": "TEXT",
+        "kind": "string",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Products",
+        "schema": null,
+        "isKey": false
+      },
+      {
+        "name": "Name",
+        "ordinal": 2,
+        "dbType": "TEXT",
+        "kind": "string",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Products",
+        "schema": null,
+        "isKey": false
+      },
+      {
+        "name": "Price",
+        "ordinal": 3,
+        "dbType": "NUMERIC",
+        "kind": "decimal",
+        "nullable": false,
+        "size": null,
+        "precision": null,
+        "scale": null,
+        "table": "Products",
+        "schema": null,
+        "isKey": false
+      }
+    ],
+    "editable": true,
+    "table": {
+      "schema": null,
+      "name": "Products"
+    },
+    "keyColumns": [
+      "Id"
+    ],
+    "warnings": []
+  }
+}

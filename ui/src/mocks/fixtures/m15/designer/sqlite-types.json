@@ -1,0 +1,86 @@
+{
+  "types": [
+    {
+      "name": "INTEGER",
+      "params": "none",
+      "default": "INTEGER",
+      "category": "number"
+    },
+    {
+      "name": "REAL",
+      "params": "none",
+      "default": "REAL",
+      "category": "number"
+    },
+    {
+      "name": "NUMERIC",
+      "params": "precisionScale",
+      "default": "NUMERIC(10,2)",
+      "category": "number"
+    },
+    {
+      "name": "TEXT",
+      "params": "none",
+      "default": "TEXT",
+      "category": "string"
+    },
+    {
+      "name": "BLOB",
+      "params": "none",
+      "default": "BLOB",
+      "category": "binary"
+    },
+    {
+      "name": "BOOLEAN",
+      "params": "none",
+      "default": "BOOLEAN",
+      "category": "number"
+    },
+    {
+      "name": "DATE",
+      "params": "none",
+      "default": "DATE",
+      "category": "date"
+    },
+    {
+      "name": "DATETIME",
+      "params": "none",
+      "default": "DATETIME",
+      "category": "date"
+    },
+    {
+      "name": "VARCHAR",
+      "params": "length",
+      "default": "VARCHAR(100)",
+      "category": "string"
+    },
+    {
+      "name": "DECIMAL",
+      "params": "precisionScale",
+      "default": "DECIMAL(12,2)",
+      "category": "number"
+    },
+    {
+      "name": "ANY",
+      "params": "none",
+      "default": "ANY",
+      "category": "other"
+    }
+  ],
+  "features": {
+    "identity": false,
+    "computed": true,
+    "clusteredIndexes": false,
+    "includedColumns": false,
+    "filteredIndexes": true,
+    "onUpdateAction": true,
+    "comments": false,
+    "renameColumn": true,
+    "dropColumn": true,
+    "withoutRowid": true,
+    "strict": true,
+    "transactionalDdl": true,
+    "autoincrement": true,
+    "schemas": false
+  }
+}

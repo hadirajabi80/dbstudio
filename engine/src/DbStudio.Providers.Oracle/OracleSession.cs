@@ -1,8 +1,10 @@
 using System.Data;
 using System.Data.Common;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
 using DbStudio.Core.Providers;
 using DbStudio.Core.Services;
+using DbStudio.Providers.Oracle.Params;
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 
@@ -57,11 +59,44 @@ public sealed class OracleSession : AdoSessionBase
             return new ErrorInfo(ErrorCodes.Validation, "The statement is empty.", batch.Line, batch.Col);
         var binds = OracleSqlText.FindBindVariables(sql);
         if (binds.Count == 0) return null;
-        var first = OracleSqlText.Tokenize(sql).First(t => t.Kind == OracleTokenKind.Bind);
+        // M1.5: binds with a typed parameter are bound (OracleParamBinder); the error remains for binds without one.
+        var supplied = new HashSet<string>((context.Request.Params ?? []).Select(p => p.BareName), StringComparer.OrdinalIgnoreCase);
+        var missing = binds.Where(b => !supplied.Contains(OracleParamBinder.BindName(":" + b))).ToList();
+        if (missing.Count == 0) return null;
+        var first = OracleSqlText.Tokenize(sql).First(t => t.Kind == OracleTokenKind.Bind
+            && missing.Contains(t.Text[1..], StringComparer.OrdinalIgnoreCase));
         var (line, col) = OracleErrors.FromBatchOffset(batch, offset + first.Offset);
         return new ErrorInfo(ErrorCodes.BindVarsUnsupported,
-            $"Bind variables are not supported yet ({OracleSqlText.JoinNames(binds)}). Replace them with literal values.",
-            line, col, Detail: string.Join(",", binds));
+            $"Bind variables need typed values ({OracleSqlText.JoinNames(missing)}). Run with parameters (Ctrl+Alt+P) or replace them with literal values.",
+            line, col, Detail: string.Join(",", missing));
+    }
+
+    /// <summary>M1.5: :name / :1 binds, REF CURSOR outs.</summary>
+    protected override IParamBinder? ParamBinder => OracleParamBinder.Instance;
+
+    /// <summary>M1.5: REF CURSOR out params whose rows the reader did not already return are streamed as result sets.</summary>
+    protected override async ValueTask OnParametersAvailableAsync(BatchContext context, CancellationToken ct)
+    {
+        var cursors = context.Parameters.Outputs.Where(o => o.Param.Kind == ParamKinds.RefCursor).ToList();
+        for (var i = context.ResultSetCount; i < cursors.Count; i++)
+        {
+            if (cursors[i].Parameter.Value is not OracleRefCursor rc || rc.IsNull) continue;
+            await using var reader = rc.GetDataReader();
+            if (reader.FieldCount == 0) continue;
+            if (!await StreamResultSetAsync(reader, context, ct).ConfigureAwait(false)) break;
+        }
+    }
+
+    protected override string PrepareDescribeSql(string sql) => OracleSqlText.Prepare(sql).Sql;
+
+    protected override CommandBehavior DescribeBehavior => CommandBehavior.SchemaOnly;
+
+    protected override void ConfigureDescribeCommand(DbCommand command)
+    {
+        var cmd = (OracleCommand)command;
+        cmd.BindByName = true;
+        cmd.InitialLONGFetchSize = -1;
+        cmd.InitialLOBFetchSize = -1;
     }
 
     protected override void ConfigureCommand(DbCommand command, BatchContext context)

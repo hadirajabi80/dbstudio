@@ -14,7 +14,7 @@ public static class SqlServerConnectionStrings
     [
         new FormField("server", "Server", "text", Required: true, Placeholder: "localhost\\SQLEXPRESS or host,1433"),
         new FormField("auth", "Authentication", "select", Default: JsonValue.Create("sql"),
-            Options: [new FormOption("sql", "SQL Login"), new FormOption("windows", "Windows Authentication")]),
+            Options: [new FormOption("sql", "SQL Login"), new FormOption("windows", OperatingSystem.IsWindows() ? "Windows Authentication" : "Integrated (Kerberos)")]),
         new FormField("user", "User", "text", VisibleWhen: new Dictionary<string, string> { ["auth"] = "sql" }),
         new FormField("password", "Password", "password", VisibleWhen: new Dictionary<string, string> { ["auth"] = "sql" }),
         new FormField("database", "Database", "text", Placeholder: "default database of the login"),

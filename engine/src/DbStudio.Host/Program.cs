@@ -1,7 +1,12 @@
 using System.Net;
 using System.Text.Json;
 using DbStudio.Core.Catalog;
+using DbStudio.Core.Designer;
 using DbStudio.Core.Export;
+using DbStudio.Core.Filters;
+using DbStudio.Core.Params;
+using DbStudio.Core.Plans;
+using DbStudio.Core.Sample;
 using DbStudio.Core.Providers;
 using DbStudio.Core.Services;
 using DbStudio.Host;
@@ -9,8 +14,17 @@ using DbStudio.Host.Endpoints;
 using DbStudio.Host.Infrastructure;
 using DbStudio.Host.Ws;
 using DbStudio.Providers.Oracle;
+using DbStudio.Providers.Oracle.Designer;
+using DbStudio.Providers.Oracle.Params;
+using DbStudio.Providers.Oracle.Plans;
 using DbStudio.Providers.SqlServer;
+using DbStudio.Providers.SqlServer.Designer;
+using DbStudio.Providers.SqlServer.Params;
+using DbStudio.Providers.SqlServer.Plans;
 using DbStudio.Providers.Sqlite;
+using DbStudio.Providers.Sqlite.Designer;
+using DbStudio.Providers.Sqlite.Params;
+using DbStudio.Providers.Sqlite.Plans;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http.Json;
@@ -62,7 +76,7 @@ try
     services.Configure<JsonOptions>(o => CoreJson.Configure(o.SerializerOptions));
     services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
     services.AddCors(c => c.AddDefaultPolicy(p => p
-        .SetIsOriginAllowed(origin => options.AllowedOrigins.Contains(origin))
+        .SetIsOriginAllowed(options.IsOriginAllowed)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .WithExposedHeaders("ETag", "Content-Disposition")
@@ -70,7 +84,7 @@ try
 
     services.AddSingleton(options);
     services.AddSingleton(paths);
-    services.AddSingleton<ISecretStore>(_ => OperatingSystem.IsWindows() ? new DpapiSecretStore(paths) : new InMemorySecretStore());
+    services.AddSingleton<ISecretStore>(_ => DbStudio.Core.Secrets.SecretStoreFactory.Create(paths)); // DPAPI | Keychain | AES file
     services.AddSingleton<IDbProvider, SqlServerProvider>();
     services.AddSingleton<IDbProvider, OracleProvider>();
     services.AddSingleton<IDbProvider, SqliteProvider>();
@@ -86,6 +100,25 @@ try
     services.AddSingleton<ExecutionService>();
     services.AddSingleton<ExportService>();
     services.AddHostedService<ParentWatchdog>();
+
+    // ---- M1.5 (docs/PLAN-M1.5.md): per-provider features as keyed services by provider id.
+    services.AddKeyedSingleton<IDdlScripter, SqlServerDdlScripter>("sqlserver");
+    services.AddKeyedSingleton<IDdlScripter, OracleDdlScripter>("oracle");
+    services.AddKeyedSingleton<IDdlScripter, SqliteDdlScripter>("sqlite");
+    services.AddKeyedSingleton<IDesignerDatabase, SqlServerDesignerDatabase>("sqlserver");
+    services.AddKeyedSingleton<IDesignerDatabase, OracleDesignerDatabase>("oracle");
+    services.AddKeyedSingleton<IDesignerDatabase, SqliteDesignerDatabase>("sqlite");
+    services.AddKeyedSingleton<IPlanReader, SqlServerPlanReader>("sqlserver");
+    services.AddKeyedSingleton<IPlanReader, OraclePlanReader>("oracle");
+    services.AddKeyedSingleton<IPlanReader, SqlitePlanReader>("sqlite");
+    services.AddKeyedSingleton<IParamBinder>("sqlserver", SqlServerParamBinder.Instance);
+    services.AddKeyedSingleton<IParamBinder>("oracle", OracleParamBinder.Instance);
+    services.AddKeyedSingleton<IParamBinder>("sqlite", SqliteParamBinder.Instance);
+    services.AddSingleton(sp => ProviderFeatures.FromServices(sp));
+    services.AddSingleton<FilterStore>();
+    services.AddSingleton<DesignerService>();
+    services.AddSingleton<DescribeService>();
+    services.AddSingleton<SampleDatabase>();
 
     var app = builder.Build();
 
@@ -105,7 +138,13 @@ try
         .MapSessions()
         .MapExecutions()
         .MapHistory()
-        .MapSql();
+        .MapSql()
+        // M1.5
+        .MapFilters()
+        .MapDescribe()
+        .MapPlans()
+        .MapDesigner()
+        .MapSampleDb();
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {

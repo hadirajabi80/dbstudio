@@ -1,0 +1,179 @@
+{
+  "schema": "main",
+  "name": "Customers",
+  "comment": null,
+  "options": {
+    "withoutRowid": false,
+    "strict": false,
+    "tablespace": null
+  },
+  "columns": [
+    {
+      "id": "Id",
+      "name": "Id",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": true
+    },
+    {
+      "id": "FirstName",
+      "name": "FirstName",
+      "type": "TEXT",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "LastName",
+      "name": "LastName",
+      "type": "TEXT",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Email",
+      "name": "Email",
+      "type": "TEXT",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "Phone",
+      "name": "Phone",
+      "type": "TEXT",
+      "nullable": true,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "City",
+      "name": "City",
+      "type": "TEXT",
+      "nullable": true,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "CountryId",
+      "name": "CountryId",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "IsActive",
+      "name": "IsActive",
+      "type": "BOOLEAN",
+      "nullable": false,
+      "default": "1",
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    },
+    {
+      "id": "CreatedAt",
+      "name": "CreatedAt",
+      "type": "DATETIME",
+      "nullable": false,
+      "default": "CURRENT_TIMESTAMP",
+      "defaultName": null,
+      "identity": null,
+      "computed": null,
+      "collation": null,
+      "comment": null,
+      "autoincrement": false
+    }
+  ],
+  "primaryKey": {
+    "name": "PK_Customers",
+    "columns": [
+      "Id"
+    ],
+    "clustered": true
+  },
+  "uniques": [
+    {
+      "name": "UQ_Customers_Email",
+      "columns": [
+        "Email"
+      ]
+    }
+  ],
+  "indexes": [
+    {
+      "name": "IX_Customers_LastName",
+      "columns": [
+        {
+          "name": "LastName",
+          "desc": false
+        },
+        {
+          "name": "FirstName",
+          "desc": false
+        }
+      ],
+      "unique": false,
+      "clustered": false,
+      "include": [],
+      "filter": null
+    }
+  ],
+  "foreignKeys": [
+    {
+      "name": "FK_Customers_Countries",
+      "columns": [
+        "CountryId"
+      ],
+      "refSchema": null,
+      "refTable": "Countries",
+      "refColumns": [
+        "Id"
+      ],
+      "onDelete": "NO ACTION",
+      "onUpdate": "NO ACTION"
+    }
+  ],
+  "checks": []
+}

@@ -1,8 +1,10 @@
 using System.Data.Common;
 using System.Text.RegularExpressions;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
 using DbStudio.Core.Services;
 using DbStudio.Core.Sql;
+using DbStudio.Providers.Sqlite.Params;
 using Microsoft.Data.Sqlite;
 
 namespace DbStudio.Providers.Sqlite;
@@ -21,6 +23,9 @@ internal sealed class SqliteSession : AdoSessionBase
         _connection = connection;
         CurrentDatabase = "main";
     }
+
+    /// <summary>M1.5: named (:x @x $x ?N) and positional (?) parameters.</summary>
+    protected override IParamBinder? ParamBinder => SqliteParamBinder.Instance;
 
     /// <summary>sqlite3_interrupt is safe to call from any thread; it aborts the statement running on the connection.</summary>
     protected override void CancelCommand(DbCommand command)

@@ -1,0 +1,24 @@
+{
+  "id": "f_01M4XVSTVDZ07NNGCEP4W34RYN",
+  "connectionId": "c_sample",
+  "signature": "Email:string|FirstName:string|Id:int",
+  "name": "Gmail customers",
+  "model": {
+    "root": {
+      "id": "g1",
+      "logic": "and",
+      "items": [
+        {
+          "id": "c1",
+          "column": "Email",
+          "op": "endsWith",
+          "values": [
+            "@gmail.com"
+          ]
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-14T10:00:00.000Z",
+  "lastUsedAt": "2026-10-14T10:00:00.000Z"
+}

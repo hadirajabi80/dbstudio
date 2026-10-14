@@ -1,0 +1,421 @@
+{
+  "request": {
+    "database": null,
+    "original": {
+      "schema": "main",
+      "name": "Orders",
+      "comment": null,
+      "options": {
+        "withoutRowid": false,
+        "strict": false,
+        "tablespace": null
+      },
+      "columns": [
+        {
+          "id": "Id",
+          "name": "Id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "CustomerId",
+          "name": "CustomerId",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "OrderDate",
+          "name": "OrderDate",
+          "type": "DATE",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Status",
+          "name": "Status",
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'new'",
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "ShippedAt",
+          "name": "ShippedAt",
+          "type": "DATETIME",
+          "nullable": true,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Total",
+          "name": "Total",
+          "type": "NUMERIC(12,2)",
+          "nullable": false,
+          "default": "0",
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Note",
+          "name": "Note",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        }
+      ],
+      "primaryKey": {
+        "name": null,
+        "columns": [
+          "Id"
+        ],
+        "clustered": true
+      },
+      "uniques": [],
+      "indexes": [
+        {
+          "name": "IX_Orders_CustomerId",
+          "columns": [
+            {
+              "name": "CustomerId",
+              "desc": false
+            }
+          ],
+          "unique": false,
+          "clustered": false,
+          "include": [],
+          "filter": null
+        },
+        {
+          "name": "IX_Orders_OrderDate",
+          "columns": [
+            {
+              "name": "OrderDate",
+              "desc": true
+            }
+          ],
+          "unique": false,
+          "clustered": false,
+          "include": [],
+          "filter": null
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Orders_Customers",
+          "columns": [
+            "CustomerId"
+          ],
+          "refSchema": null,
+          "refTable": "Customers",
+          "refColumns": [
+            "Id"
+          ],
+          "onDelete": "NO ACTION",
+          "onUpdate": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "CK_Orders_Status",
+          "expression": "Status IN ('new', 'paid', 'shipped', 'delivered', 'cancelled')"
+        }
+      ]
+    },
+    "desired": {
+      "schema": "main",
+      "name": "Orders",
+      "comment": null,
+      "options": {
+        "withoutRowid": false,
+        "strict": false,
+        "tablespace": null
+      },
+      "columns": [
+        {
+          "id": "Id",
+          "name": "Id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "CustomerId",
+          "name": "CustomerId",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "OrderDate",
+          "name": "OrderDate",
+          "type": "DATE",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Status",
+          "name": "Status",
+          "type": "TEXT",
+          "nullable": true,
+          "default": "'new'",
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "ShippedAt",
+          "name": "ShippedAt",
+          "type": "DATETIME",
+          "nullable": true,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Total",
+          "name": "Total",
+          "type": "NUMERIC(12,2)",
+          "nullable": false,
+          "default": "0",
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "Note",
+          "name": "Note",
+          "type": "VARCHAR(500)",
+          "nullable": true,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        }
+      ],
+      "primaryKey": {
+        "name": null,
+        "columns": [
+          "Id"
+        ],
+        "clustered": true
+      },
+      "uniques": [],
+      "indexes": [
+        {
+          "name": "IX_Orders_CustomerId",
+          "columns": [
+            {
+              "name": "CustomerId",
+              "desc": false
+            }
+          ],
+          "unique": false,
+          "clustered": false,
+          "include": [],
+          "filter": null
+        },
+        {
+          "name": "IX_Orders_OrderDate",
+          "columns": [
+            {
+              "name": "OrderDate",
+              "desc": true
+            }
+          ],
+          "unique": false,
+          "clustered": false,
+          "include": [],
+          "filter": null
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Orders_Customers",
+          "columns": [
+            "CustomerId"
+          ],
+          "refSchema": null,
+          "refTable": "Customers",
+          "refColumns": [
+            "Id"
+          ],
+          "onDelete": "NO ACTION",
+          "onUpdate": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "CK_Orders_Status",
+          "expression": "Status IN ('new', 'paid', 'shipped', 'delivered', 'cancelled')"
+        }
+      ]
+    }
+  },
+  "response": {
+    "statements": [
+      {
+        "sql": "PRAGMA foreign_keys = OFF",
+        "kind": "pragma",
+        "warning": null
+      },
+      {
+        "sql": "DROP VIEW IF EXISTS \"CustomerOrderTotals\"",
+        "kind": "drop",
+        "warning": null
+      },
+      {
+        "sql": "DROP TRIGGER IF EXISTS \"TR_OrderLines_Delete\"",
+        "kind": "drop",
+        "warning": null
+      },
+      {
+        "sql": "DROP TRIGGER IF EXISTS \"TR_OrderLines_Insert\"",
+        "kind": "drop",
+        "warning": null
+      },
+      {
+        "sql": "CREATE TABLE \"Orders__new\" (\n    \"Id\" INTEGER NOT NULL,\n    \"CustomerId\" INTEGER NOT NULL,\n    \"OrderDate\" DATE NOT NULL,\n    \"Status\" TEXT DEFAULT 'new',\n    \"ShippedAt\" DATETIME,\n    \"Total\" NUMERIC(12,2) NOT NULL DEFAULT 0,\n    \"Note\" VARCHAR(500),\n    PRIMARY KEY (\"Id\"),\n    CONSTRAINT \"CK_Orders_Status\" CHECK (Status IN ('new', 'paid', 'shipped', 'delivered', 'cancelled')),\n    CONSTRAINT \"FK_Orders_Customers\" FOREIGN KEY (\"CustomerId\") REFERENCES \"Customers\" (\"Id\")\n)",
+        "kind": "rebuild",
+        "warning": null
+      },
+      {
+        "sql": "INSERT INTO \"Orders__new\" (\"Id\", \"CustomerId\", \"OrderDate\", \"Status\", \"ShippedAt\", \"Total\", \"Note\")\nSELECT \"Id\", \"CustomerId\", \"OrderDate\", \"Status\", \"ShippedAt\", \"Total\", \"Note\"\nFROM \"Orders\"",
+        "kind": "rebuild",
+        "warning": null
+      },
+      {
+        "sql": "DROP TABLE \"Orders\"",
+        "kind": "rebuild",
+        "warning": null
+      },
+      {
+        "sql": "ALTER TABLE \"Orders__new\" RENAME TO \"Orders\"",
+        "kind": "rebuild",
+        "warning": null
+      },
+      {
+        "sql": "CREATE INDEX \"IX_Orders_CustomerId\" ON \"Orders\" (\"CustomerId\")",
+        "kind": "index",
+        "warning": null
+      },
+      {
+        "sql": "CREATE INDEX \"IX_Orders_OrderDate\" ON \"Orders\" (\"OrderDate\" DESC)",
+        "kind": "index",
+        "warning": null
+      },
+      {
+        "sql": "CREATE VIEW CustomerOrderTotals AS\nSELECT c.Id AS CustomerId,\n       c.FirstName || ' ' || c.LastName AS CustomerName,\n       co.Name AS Country,\n       count(o.Id) AS Orders,\n       round(coalesce(sum(o.Total), 0), 2) AS Revenue,\n       max(o.OrderDate) AS LastOrder\nFROM Customers c\nJOIN Countries co ON co.Id = c.CountryId\nLEFT JOIN Orders o ON o.CustomerId = c.Id AND o.Status <> 'cancelled'\nGROUP BY c.Id, c.FirstName, c.LastName, co.Name",
+        "kind": "create",
+        "warning": null
+      },
+      {
+        "sql": "CREATE TRIGGER TR_OrderLines_Delete AFTER DELETE ON OrderLines\nBEGIN\n    UPDATE Orders SET Total = (SELECT round(coalesce(sum(Qty * UnitPrice * (1 - Discount)), 0), 2) FROM OrderLines WHERE OrderId = OLD.OrderId)\n    WHERE Id = OLD.OrderId;\nEND",
+        "kind": "create",
+        "warning": null
+      },
+      {
+        "sql": "CREATE TRIGGER TR_OrderLines_Insert AFTER INSERT ON OrderLines\nBEGIN\n    UPDATE Orders SET Total = (SELECT round(coalesce(sum(Qty * UnitPrice * (1 - Discount)), 0), 2) FROM OrderLines WHERE OrderId = NEW.OrderId)\n    WHERE Id = NEW.OrderId;\nEND",
+        "kind": "create",
+        "warning": null
+      },
+      {
+        "sql": "PRAGMA foreign_key_check",
+        "kind": "pragma",
+        "warning": null
+      },
+      {
+        "sql": "PRAGMA foreign_keys = ON",
+        "kind": "pragma",
+        "warning": null
+      }
+    ],
+    "rebuildRequired": true,
+    "transactional": true,
+    "warnings": [
+      "SQLite cannot alter this in place (column Status changed; column Note changed): the table is rebuilt and its data copied."
+    ],
+    "changes": [
+      {
+        "kind": "columnNullabilityChanged",
+        "target": "Status",
+        "detail": "NULL"
+      },
+      {
+        "kind": "columnTypeChanged",
+        "target": "Note",
+        "detail": "TEXT → VARCHAR(500)"
+      }
+    ]
+  }
+}

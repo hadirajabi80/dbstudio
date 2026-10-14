@@ -6,6 +6,12 @@ import type {
   ResultSetExportRequest, RowsPage, SchemasResponse, SessionInfo, Settings, TestConnectionRequest,
   TestConnectionResult, TxMode,
 } from './types';
+// M1.5
+import type {
+  DdlApplyRequest, DdlApplyResponse, DdlScript, DescribeRequest, DescribeResponse, DesignerTypesResponse,
+  ExplainRequest, HistoryQuery, SampleDbRequest, SampleDbResponse, SavedFilter, SavedFilterInput, SavedFilterPatch,
+  TableModel, TableScriptRequest, TableScriptResponse, ViewModel, ViewScriptRequest,
+} from './types';
 
 export const API_PREFIX = '/api/v1';
 
@@ -208,9 +214,16 @@ export const api = {
     return (await res.json()) as { path: string; rows: number };
   },
   exportQuery: (req: QueryExportRequest) => json<{ exportId: string }>('POST', '/export', { body: req }),
-  history: (q: { connectionId?: string | null; q?: string; limit?: number; before?: string | number | null }) =>
+  history: (q: HistoryQuery) =>
     json<HistoryEntry[]>('GET', '/history', {
-      query: { connectionId: q.connectionId ?? undefined, q: q.q, limit: q.limit ?? 200, before: q.before ?? undefined },
+      query: {
+        connectionId: q.connectionId ?? undefined, q: q.q, limit: q.limit ?? 200, before: q.before ?? undefined,
+        // M1.5 filters
+        status: q.status?.length ? q.status.join(',') : undefined,
+        from: q.from ?? undefined,
+        to: q.to ?? undefined,
+        pinned: q.pinned ? 'true' : undefined,
+      },
     }),
   deleteHistory: (id: number) => json<void>('DELETE', `/history/${id}`),
   clearHistory: (connectionId?: string | null) => json<void>('DELETE', '/history', { query: { connectionId } }),
@@ -219,6 +232,36 @@ export const api = {
   // 3.5 SQL services
   diagnostics: (req: DiagnosticsRequest, signal?: AbortSignal) =>
     json<DiagnosticsResponse>('POST', '/sql/diagnostics', { body: req, signal }),
+
+  // ---------- M1.5 ----------
+  // 3.7 Saved filters
+  listFilters: (connectionId: string, signature?: string | null) =>
+    json<SavedFilter[]>('GET', '/filters', { query: { connectionId, signature: signature ?? undefined } }),
+  createFilter: (f: SavedFilterInput) => json<SavedFilter>('POST', '/filters', { body: f }),
+  updateFilter: (id: string, patch: SavedFilterPatch) => json<SavedFilter>('PUT', `/filters/${enc(id)}`, { body: patch }),
+  deleteFilter: (id: string) => json<void>('DELETE', `/filters/${enc(id)}`),
+
+  // 3.8 Describe, explain, sample database
+  describe: (sid: string, req: DescribeRequest, signal?: AbortSignal) =>
+    json<DescribeResponse>('POST', `/sessions/${enc(sid)}/describe`, { body: req, signal }),
+  /** 202; the run streams over WS and ends with `exec.plan` (then `exec.done`). */
+  explain: (sid: string, req: ExplainRequest) => json<ExecuteResponse>('POST', `/sessions/${enc(sid)}/explain`, { body: req }),
+  createSampleDb: (req: SampleDbRequest = {}) => json<SampleDbResponse>('POST', '/sample-db', { body: req }),
+
+  // 3.9 Designer
+  designerTypes: (cid: string, database: string | null) =>
+    json<DesignerTypesResponse>('GET', `/connections/${enc(cid)}/designer/types`, { query: { database } }),
+  designerTable: (cid: string, database: string | null, schema: string | null, name: string) =>
+    json<TableModel>('GET', `/connections/${enc(cid)}/designer/table`, { query: { database, schema, name } }),
+  scriptTable: (cid: string, req: TableScriptRequest, signal?: AbortSignal) =>
+    json<TableScriptResponse>('POST', `/connections/${enc(cid)}/designer/table/script`, { body: req, signal }),
+  designerView: (cid: string, database: string | null, schema: string | null, name: string) =>
+    json<ViewModel>('GET', `/connections/${enc(cid)}/designer/view`, { query: { database, schema, name } }),
+  scriptView: (cid: string, req: ViewScriptRequest, signal?: AbortSignal) =>
+    json<DdlScript>('POST', `/connections/${enc(cid)}/designer/view/script`, { body: req, signal }),
+  /** Errors: 409 DDL_FAILED with `detail: DdlFailedDetail`. */
+  applyDdl: (cid: string, req: DdlApplyRequest) =>
+    json<DdlApplyResponse>('POST', `/connections/${enc(cid)}/designer/apply`, { body: req }),
 };
 
 export type Api = typeof api;

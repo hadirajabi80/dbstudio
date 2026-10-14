@@ -1,0 +1,11 @@
+{
+  "schema": "main",
+  "name": "CustomerOrderTotals",
+  "body": "SELECT c.Id AS CustomerId,\n       c.FirstName || ' ' || c.LastName AS CustomerName,\n       co.Name AS Country,\n       count(o.Id) AS Orders,\n       round(coalesce(sum(o.Total), 0), 2) AS Revenue,\n       max(o.OrderDate) AS LastOrder\nFROM Customers c\nJOIN Countries co ON co.Id = c.CountryId\nLEFT JOIN Orders o ON o.CustomerId = c.Id AND o.Status <> 'cancelled'\nGROUP BY c.Id, c.FirstName, c.LastName, co.Name",
+  "options": {
+    "schemaBinding": false,
+    "checkOption": false,
+    "force": false
+  },
+  "ddl": "CREATE VIEW CustomerOrderTotals AS\nSELECT c.Id AS CustomerId,\n       c.FirstName || ' ' || c.LastName AS CustomerName,\n       co.Name AS Country,\n       count(o.Id) AS Orders,\n       round(coalesce(sum(o.Total), 0), 2) AS Revenue,\n       max(o.OrderDate) AS LastOrder\nFROM Customers c\nJOIN Countries co ON co.Id = c.CountryId\nLEFT JOIN Orders o ON o.CustomerId = c.Id AND o.Status <> 'cancelled'\nGROUP BY c.Id, c.FirstName, c.LastName, co.Name"
+}

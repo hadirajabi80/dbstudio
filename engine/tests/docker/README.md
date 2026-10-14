@@ -61,3 +61,33 @@ run starts from the same data.
 ```powershell
 docker compose -f engine/tests/docker/compose.yml down -v
 ```
+
+## M1.5 endpoints (curl)
+
+The M1.5 provider tests (`*/M15/*`) follow the same rules: SQLite always runs, SQL Server/Oracle skip without a
+server. Golden DDL files live in `engine/tests/<project>/M15/golden/`; rewrite them (and the plan fixtures under
+`ui/src/mocks/fixtures/m15/`) with `DBSTUDIO_UPDATE_GOLDEN=1 dotnet test` and review the diff.
+`engine/tests/smoke/M15/run-smoke-m15.ps1` runs an HTTP smoke test of every M1.5 endpoint on SQLite.
+
+Against a dev engine (`--dev --port 5121 --token dev-token`, `$h` = `-H "Authorization: Bearer dev-token" -H "Content-Type: application/json"`):
+
+```bash
+# Sample database + connection profile "Sample: Shop"
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sample-db -d '{}'
+# Execute with typed parameters (Oracle :name, SQL Server @name, SQLite :name/@name/$name/?)
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/execute -d '{"batches":[{"sql":"SELECT * FROM Orders WHERE CustomerId = :c","line":1,"col":1}],"maxRows":100,"stopOnError":true,"label":"statement","params":[{"name":"c","kind":"int","value":5}]}'
+# Oracle REF CURSOR out parameter → extra result set
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/execute -d '{"batches":[{"sql":"BEGIN OPEN :rc FOR SELECT * FROM customers; END;","line":1,"col":1}],"maxRows":100,"stopOnError":true,"label":"statement","params":[{"name":"rc","kind":"refcursor","value":null}]}'
+# Describe (SchemaOnly, nothing executes)
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/describe -d '{"sql":"SELECT Id, Name FROM Customers"}'
+# Explain: 202 {executionId}; the plan arrives as the exec.plan WebSocket event
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/explain -d '{"sql":"SELECT * FROM Orders WHERE Id = 1","mode":"estimated"}'
+# Designer
+curl -s $h "http://127.0.0.1:5121/api/v1/connections/$CID/designer/types"
+curl -s $h "http://127.0.0.1:5121/api/v1/connections/$CID/designer/table?schema=dbo&name=Orders"
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/connections/$CID/designer/table/script -d "{\"database\":null,\"original\":$ORIGINAL,\"desired\":$DESIRED}"
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/connections/$CID/designer/apply -d '{"database":null,"statements":["ALTER TABLE Orders ADD Note2 TEXT"],"transactional":true}'
+# Saved filters and history filters
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/filters -d '{"connectionId":"'$CID'","signature":"Id:int","name":"Small ids","model":{"root":{"id":"g","logic":"and","items":[]}}}'
+curl -s $h "http://127.0.0.1:5121/api/v1/history?connectionId=$CID&status=ok,error&from=2026-01-01T00:00:00Z&pinned=true"
+```

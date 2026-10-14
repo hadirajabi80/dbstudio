@@ -227,6 +227,11 @@ public interface ICatalogReader
 
 ## 3. HTTP/WebSocket API contract (`/api/v1`, JSON, camelCase, `Authorization: Bearer <token>`)
 
+> **M1.5 additions** (filters, history filters, query parameters, describe, explain plan with `exec.plan`, sample
+> database, designer endpoints, `SESSION_LIMIT` / `DDL_FAILED`, new settings keys) are specified in
+> `docs/PLAN-M1.5.md` sections 3.7–3.9; the wire types are the `// ---------- M1.5 ----------` block of
+> `ui/src/api/types.ts`. Everything there is additive to this section.
+
 Errors: non-2xx → `{ "error": { "code": "SESSION_BUSY", "message": "...", "detail": {...} } }`. Codes: `UNAUTHORIZED`, `NOT_FOUND`, `VALIDATION`, `SESSION_BUSY`, `SESSION_BROKEN`, `TX_OPEN`, `PROVIDER_ERROR`, `BIND_VARS_UNSUPPORTED`, `NOT_SUPPORTED`.
 
 ### 3.1 Meta

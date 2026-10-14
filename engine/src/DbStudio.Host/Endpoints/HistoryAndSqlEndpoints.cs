@@ -9,8 +9,9 @@ public static class HistoryAndSqlEndpoints
     {
         var g = api.MapGroup("/history");
 
-        g.MapGet("", (string? connectionId, string? q, int? limit, long? before, HistoryService history, CancellationToken ct) =>
-            history.SearchAsync(connectionId, q, limit ?? 200, before, ct));
+        g.MapGet("", (string? connectionId, string? q, int? limit, long? before, string? status, string? from, string? to, bool? pinned,
+            HistoryService history, CancellationToken ct) =>
+            history.SearchAsync(connectionId, q, limit ?? 200, before, ParseFilter(status, from, to, pinned), ct));
 
         g.MapPut("/{id:long}", async (long id, HistoryUpdateRequest? req, HistoryService history, CancellationToken ct) =>
         {
@@ -32,6 +33,26 @@ public static class HistoryAndSqlEndpoints
         });
 
         return api;
+    }
+
+    /// <summary>M1.5 history filters: status=ok,error&amp;from=ISO&amp;to=ISO&amp;pinned=true.</summary>
+    internal static HistoryFilter ParseFilter(string? status, string? from, string? to, bool? pinned)
+    {
+        List<string>? statuses = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            statuses = status.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(x => x.ToLowerInvariant()).Distinct().ToList();
+            var bad = statuses.FirstOrDefault(x => x is not ("ok" or "error" or "cancelled"));
+            if (bad is not null) throw EngineException.Validation($"status '{bad}' must be ok, error or cancelled.", new { field = "status" });
+        }
+        return new HistoryFilter(statuses, ParseTime(from, "from"), ParseTime(to, "to"), pinned == true);
+    }
+
+    private static DateTimeOffset? ParseTime(string? value, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var t)) return t;
+        throw EngineException.Validation($"{field} must be an ISO 8601 timestamp.", new { field });
     }
 
     public static RouteGroupBuilder MapSql(this RouteGroupBuilder api)

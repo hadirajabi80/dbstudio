@@ -1,0 +1,139 @@
+{
+  "request": {
+    "database": null,
+    "original": null,
+    "desired": {
+      "schema": null,
+      "name": "Suppliers",
+      "comment": null,
+      "options": {
+        "withoutRowid": false,
+        "strict": false,
+        "tablespace": null
+      },
+      "columns": [
+        {
+          "id": "n1",
+          "name": "Id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": true
+        },
+        {
+          "id": "n2",
+          "name": "Name",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": "NOCASE",
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "n3",
+          "name": "CountryId",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        },
+        {
+          "id": "n4",
+          "name": "Rating",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "3",
+          "defaultName": null,
+          "identity": null,
+          "computed": null,
+          "collation": null,
+          "comment": null,
+          "autoincrement": false
+        }
+      ],
+      "primaryKey": {
+        "name": null,
+        "columns": [
+          "Id"
+        ],
+        "clustered": true
+      },
+      "uniques": [
+        {
+          "name": "UQ_Suppliers_Name",
+          "columns": [
+            "Name"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "IX_Suppliers_CountryId",
+          "columns": [
+            {
+              "name": "CountryId",
+              "desc": false
+            }
+          ],
+          "unique": false,
+          "clustered": false,
+          "include": [],
+          "filter": null
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "FK_Suppliers_Countries",
+          "columns": [
+            "CountryId"
+          ],
+          "refSchema": null,
+          "refTable": "Countries",
+          "refColumns": [
+            "Id"
+          ],
+          "onDelete": "SET NULL",
+          "onUpdate": "NO ACTION"
+        }
+      ],
+      "checks": [
+        {
+          "name": "CK_Suppliers_Rating",
+          "expression": "Rating BETWEEN 1 AND 5"
+        }
+      ]
+    }
+  },
+  "response": {
+    "statements": [
+      {
+        "sql": "CREATE TABLE \"Suppliers\" (\n    \"Id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,\n    \"Name\" TEXT NOT NULL COLLATE NOCASE,\n    \"CountryId\" INTEGER,\n    \"Rating\" INTEGER NOT NULL DEFAULT 3,\n    CONSTRAINT \"UQ_Suppliers_Name\" UNIQUE (\"Name\"),\n    CONSTRAINT \"CK_Suppliers_Rating\" CHECK (Rating BETWEEN 1 AND 5),\n    CONSTRAINT \"FK_Suppliers_Countries\" FOREIGN KEY (\"CountryId\") REFERENCES \"Countries\" (\"Id\") ON DELETE SET NULL\n)",
+        "kind": "create",
+        "warning": null
+      },
+      {
+        "sql": "CREATE INDEX \"IX_Suppliers_CountryId\" ON \"Suppliers\" (\"CountryId\")",
+        "kind": "index",
+        "warning": null
+      }
+    ],
+    "rebuildRequired": false,
+    "transactional": true,
+    "warnings": [],
+    "changes": []
+  }
+}

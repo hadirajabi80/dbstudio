@@ -15,7 +15,10 @@ public sealed record SessionInfo(
     TransactionMode TxMode,
     bool TxOpen,
     SessionState State,
-    Dialect Dialect);
+    Dialect Dialect,
+    string? ExecutingSince = null,
+    string? TabId = null,
+    string? Label = null);
 
 /// <summary>A tab session: the provider session plus engine bookkeeping (busy flag, reopen data).</summary>
 public sealed class SessionHandle
@@ -58,15 +61,28 @@ public sealed class SessionHandle
     public void Release()
     {
         ActiveOperation = null;
+        ExecutingSince = null;
         LastActivity = DateTimeOffset.UtcNow;
         Interlocked.Exchange(ref _busy, 0);
     }
 
     public bool IsReserved => Volatile.Read(ref _busy) != 0;
 
-    public SessionInfo ToInfo() => new(
-        Id, Profile.Id, Session.Server, Session.CurrentDatabase, Session.TxMode, Session.TxOpen,
-        IsReserved && Session.State == SessionState.Idle ? SessionState.Executing : Session.State, Dialect);
+    /// <summary>M1.5: start of the running execution (set by ExecutionService), null when idle.</summary>
+    public DateTimeOffset? ExecutingSince { get; internal set; }
+
+    /// <summary>M1.5: tab id and title from the last ExecuteRequest.source.</summary>
+    public string? TabId { get; internal set; }
+    public string? Label { get; internal set; }
+
+    public SessionInfo ToInfo()
+    {
+        var executing = IsReserved && ActiveOperation is not "ping";
+        return new SessionInfo(
+            Id, Profile.Id, Session.Server, Session.CurrentDatabase, Session.TxMode, Session.TxOpen,
+            IsReserved && Session.State == SessionState.Idle ? SessionState.Executing : Session.State, Dialect,
+            executing ? ExecutingSince?.ToString("O") : null, TabId, Label);
+    }
 }
 
 /// <summary>
@@ -82,11 +98,17 @@ public sealed class SessionManager : IAsyncDisposable
     private readonly ILogger _log;
     private readonly ConcurrentDictionary<string, SessionHandle> _sessions = new(StringComparer.Ordinal);
     private readonly Timer _pingTimer;
+    private readonly SettingsService? _settings;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _createGates = new(StringComparer.Ordinal);
     private int _pinging;
 
+    /// <summary>Default of settings connections.maxSessionsPerProfile.</summary>
+    public const int DefaultMaxSessionsPerProfile = 8;
+
     public SessionManager(ProviderRegistry providers, ConnectionStore connections, IEventPublisher events, ResultStore results,
-        ILogger<SessionManager>? log = null, TimeSpan? pingInterval = null)
+        ILogger<SessionManager>? log = null, TimeSpan? pingInterval = null, SettingsService? settings = null)
     {
+        _settings = settings;
         _providers = providers;
         _connections = connections;
         _events = events;
@@ -102,12 +124,38 @@ public sealed class SessionManager : IAsyncDisposable
         var provider = _providers.Get(profile.ProviderId);
         var id = Ids.New("s");
         var options = new SessionOptions(id, string.IsNullOrWhiteSpace(database) ? null : database, txMode, captureServerOutput);
-        var session = await provider.OpenSessionAsync(profile, _connections.GetPassword(connectionId), options, ct).ConfigureAwait(false);
-        var handle = new SessionHandle(id, profile, provider, session, options);
-        _sessions[id] = handle;
+
+        // M1.5: per-profile session limit (429 SESSION_LIMIT). A per-profile gate makes count + add atomic.
+        var gate = _createGates.GetOrAdd(connectionId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        SessionHandle handle;
+        try
+        {
+            var limit = MaxSessionsPerProfile();
+            var open = _sessions.Values.Count(s => s.Profile.Id == connectionId);
+            if (limit > 0 && open >= limit)
+                throw new EngineException(429, "SESSION_LIMIT",
+                    $"The connection '{profile.Name}' already has {open} open sessions (limit {limit}). Close idle tabs or raise the limit in Settings.",
+                    new { connectionId, limit, open });
+            var session = await provider.OpenSessionAsync(profile, _connections.GetPassword(connectionId), options, ct).ConfigureAwait(false);
+            handle = new SessionHandle(id, profile, provider, session, options);
+            _sessions[id] = handle;
+        }
+        finally
+        {
+            gate.Release();
+        }
         _connections.Touch(connectionId);
         _log.LogInformation("Session {SessionId} opened on {ConnectionId} ({Provider})", id, connectionId, provider.Id);
         return handle;
+    }
+
+    /// <summary>settings connections.maxSessionsPerProfile (0 = unlimited).</summary>
+    public int MaxSessionsPerProfile()
+    {
+        if (_settings is null) return DefaultMaxSessionsPerProfile;
+        var node = _settings.Get()["connections"]?["maxSessionsPerProfile"];
+        return node is null ? DefaultMaxSessionsPerProfile : (int)Math.Clamp(SettingsService.Number(node), 0, 10_000);
     }
 
     public SessionHandle Get(string sessionId) =>

@@ -1,0 +1,71 @@
+{
+  "type": "exec.plan",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "dialect": "sqlite",
+  "mode": "estimated",
+  "root": {
+    "id": 0,
+    "op": "QUERY PLAN",
+    "logicalOp": null,
+    "object": null,
+    "estRows": null,
+    "actualRows": null,
+    "cost": null,
+    "costPct": null,
+    "predicate": null,
+    "warnings": [],
+    "children": [
+      {
+        "id": 10,
+        "op": "SCAN c USING INDEX IX_Customers_LastName",
+        "logicalOp": "Scan",
+        "object": "c",
+        "estRows": null,
+        "actualRows": null,
+        "cost": null,
+        "costPct": null,
+        "predicate": null,
+        "warnings": [],
+        "props": {
+          "Index": "IX_Customers_LastName"
+        },
+        "children": []
+      },
+      {
+        "id": 16,
+        "op": "SEARCH o USING INDEX IX_Orders_CustomerId (CustomerId=?)",
+        "logicalOp": "Seek",
+        "object": "o",
+        "estRows": null,
+        "actualRows": null,
+        "cost": null,
+        "costPct": null,
+        "predicate": "CustomerId=?",
+        "warnings": [],
+        "props": {
+          "Index": "IX_Orders_CustomerId"
+        },
+        "children": []
+      },
+      {
+        "id": 51,
+        "op": "USE TEMP B-TREE FOR ORDER BY",
+        "logicalOp": "Sort",
+        "object": null,
+        "estRows": null,
+        "actualRows": null,
+        "cost": null,
+        "costPct": null,
+        "predicate": null,
+        "warnings": [
+          "Temporary B-tree: for order by"
+        ],
+        "children": []
+      }
+    ]
+  },
+  "raw": "QUERY PLAN\n|--SCAN c USING INDEX IX_Customers_LastName\n|--SEARCH o USING INDEX IX_Orders_CustomerId (CustomerId=?)\n`--USE TEMP B-TREE FOR ORDER BY\n",
+  "rawFormat": "text",
+  "warnings": []
+}

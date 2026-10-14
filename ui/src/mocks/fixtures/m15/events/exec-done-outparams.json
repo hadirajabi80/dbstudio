@@ -1,0 +1,17 @@
+{
+  "type": "exec.done",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "sessionId": "s_fixture",
+  "status": "ok",
+  "elapsedMs": 12,
+  "resultSets": 1,
+  "rowsAffected": 0,
+  "txOpen": false,
+  "outParams": [
+    {
+      "name": "total",
+      "value": "1250.50"
+    }
+  ]
+}

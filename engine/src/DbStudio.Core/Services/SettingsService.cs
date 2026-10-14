@@ -28,6 +28,8 @@ public sealed class SettingsService
             ["qualifyColumns"] = "ambiguous",
             ["tabSize"] = 4,
             ["blankLineSplitsStatements"] = true,
+            // M1.5: per-dialect override ({ "plsql": false }); a missing dialect uses blankLineSplitsStatements.
+            ["blankLineSplitsStatementsByDialect"] = new JsonObject(),
         },
         ["results"] = new JsonObject
         {
@@ -37,6 +39,35 @@ public sealed class SettingsService
         },
         ["confirmDestructive"] = true,
         ["ui"] = new JsonObject(),
+        // ---- M1.5 (docs/PLAN-M1.5.md 3.9 "Settings additions")
+        ["format"] = new JsonObject
+        {
+            ["keywordCase"] = "upper",
+            ["identifierCase"] = "asIs",
+            ["indent"] = 4,
+            ["useTabs"] = false,
+            ["commaStyle"] = "trailing",
+            ["lineWidth"] = 120,
+            ["clauseKeywordsOnOwnLine"] = true,
+            ["andOrOnNewLine"] = true,
+            ["alignAliases"] = false,
+            ["blankLineBetweenStatements"] = 1,
+            ["maxConsecutiveBlankLines"] = 1,
+            ["functionCase"] = "upper",
+            ["datatypeCase"] = "upper",
+            ["formatDdlOnOpen"] = true,
+        },
+        ["snippets"] = new JsonArray(),
+        ["grid"] = new JsonObject
+        {
+            ["density"] = "comfortable",
+            ["pageSize"] = 1000,
+            ["verifyUnchanged"] = false,
+        },
+        ["connections"] = new JsonObject
+        {
+            ["maxSessionsPerProfile"] = 8,
+        },
     };
 
     private static readonly Dictionary<string, string[]> Enums = new()
@@ -47,6 +78,12 @@ public sealed class SettingsService
         ["editor.qualifyObjects"] = ["never", "nonDefaultSchema", "always"],
         ["editor.qualifyColumns"] = ["ambiguous", "always"],
         ["results.dateFormat"] = ["iso", "locale"],
+        ["format.keywordCase"] = ["upper", "lower", "asIs"],
+        ["format.identifierCase"] = ["upper", "lower", "asIs"],
+        ["format.commaStyle"] = ["trailing", "leading"],
+        ["format.functionCase"] = ["upper", "lower", "asIs"],
+        ["format.datatypeCase"] = ["upper", "lower", "asIs"],
+        ["grid.density"] = ["comfortable", "compact"],
     };
 
     public JsonObject Get()
@@ -128,6 +165,8 @@ public sealed class SettingsService
         var fontSize = Number(editor["fontSize"]);
         if (fontSize is < 6 or > 72) throw EngineException.Validation("editor.fontSize must be between 6 and 72.", new { field = "editor.fontSize" });
 
+        ValidateM15(s, editor);
+
         foreach (var (path, allowed) in Enums)
         {
             var parts = path.Split('.');
@@ -136,6 +175,63 @@ public sealed class SettingsService
             if (text is null || !allowed.Contains(text))
                 throw EngineException.Validation($"{path} must be one of: {string.Join(", ", allowed)}.", new { field = path });
         }
+    }
+
+    private static readonly string[] Dialects = ["tsql", "plsql", "sqlite"];
+
+    /// <summary>M1.5 keys: format, snippets, grid, connections, editor.blankLineSplitsStatementsByDialect.</summary>
+    private static void ValidateM15(JsonObject s, JsonObject editor)
+    {
+        if (editor["blankLineSplitsStatementsByDialect"] is not JsonObject byDialect) throw Invalid("editor.blankLineSplitsStatementsByDialect", "object");
+        foreach (var (k, v) in byDialect)
+        {
+            if (!Dialects.Contains(k)) throw EngineException.Validation($"editor.blankLineSplitsStatementsByDialect: unknown dialect '{k}'.", new { field = "editor.blankLineSplitsStatementsByDialect" });
+            if (v is null || v.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False)) throw Invalid($"editor.blankLineSplitsStatementsByDialect.{k}", "true or false");
+        }
+
+        if (s["format"] is not JsonObject format) throw Invalid("format", "object");
+        foreach (var key in new[] { "useTabs", "clauseKeywordsOnOwnLine", "andOrOnNewLine", "alignAliases", "formatDdlOnOpen" })
+            CheckKind(format, key, JsonValueKind.True, JsonValueKind.False);
+        CheckRange(format, "format.indent", 0, 16);
+        CheckRange(format, "format.lineWidth", 40, 1000);
+        CheckRange(format, "format.blankLineBetweenStatements", 0, 10);
+        CheckRange(format, "format.maxConsecutiveBlankLines", 0, 10);
+
+        if (s["snippets"] is not JsonArray snippets) throw Invalid("snippets", "array");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < snippets.Count; i++)
+        {
+            var field = $"snippets[{i}]";
+            if (snippets[i] is not JsonObject sn) throw Invalid(field, "object");
+            foreach (var key in new[] { "id", "name", "prefix", "body" })
+            {
+                if (sn[key] is not JsonValue v || v.GetValueKind() != JsonValueKind.String || string.IsNullOrWhiteSpace(v.GetValue<string>()) && key != "body")
+                    throw EngineException.Validation($"{field}.{key} must be a non-empty string.", new { field = $"{field}.{key}" });
+            }
+            if (!ids.Add(sn["id"]!.GetValue<string>())) throw EngineException.Validation($"{field}.id is not unique.", new { field = $"{field}.id" });
+            var dialects = sn["dialects"];
+            if (dialects is not null)
+            {
+                if (dialects is not JsonArray list || list.Any(d => d?.GetValueKind() != JsonValueKind.String || !Dialects.Contains(d.GetValue<string>())))
+                    throw EngineException.Validation($"{field}.dialects must be null or a list of tsql, plsql, sqlite.", new { field = $"{field}.dialects" });
+            }
+        }
+
+        if (s["grid"] is not JsonObject grid) throw Invalid("grid", "object");
+        CheckKind(grid, "verifyUnchanged", JsonValueKind.True, JsonValueKind.False);
+        CheckRange(grid, "grid.pageSize", 1, 1_000_000);
+
+        if (s["connections"] is not JsonObject connections) throw Invalid("connections", "object");
+        CheckRange(connections, "connections.maxSessionsPerProfile", 0, 1000);
+    }
+
+    private static void CheckRange(JsonObject o, string path, double min, double max)
+    {
+        var key = path[(path.LastIndexOf('.') + 1)..];
+        CheckKind(o, key, JsonValueKind.Number);
+        var n = Number(o[key]);
+        if (n < min || n > max || Math.Floor(n) != n)
+            throw EngineException.Validation($"{path} must be an integer between {min} and {max}.", new { field = path });
     }
 
     /// <summary>Numeric value of a settings node regardless of how it was created (int, double, parsed JSON).</summary>
