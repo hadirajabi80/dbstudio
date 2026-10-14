@@ -1,0 +1,139 @@
+// Dev playground (route /#/playground, mounted by the app shell): the SQL editor against the fixture catalogs,
+// with a dialect switcher, theme toggle, two editors side by side (multi-instance check) and a run log.
+import { useMemo, useRef, useState } from 'react';
+import type { CatalogSnapshot, Dialect, ObjectRef, RunLabel, Settings, SqlBatch } from '../../api/types';
+import { SqlEditor } from '../SqlEditor';
+import type { SqlEditorHandle } from '../SqlEditor.types';
+import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
+import plsqlShop from '../../intel/__tests__/fixtures/shop-plsql.json';
+import sqliteShop from '../../intel/__tests__/fixtures/shop-sqlite.json';
+
+const CATALOGS: Record<Dialect, CatalogSnapshot> = {
+  tsql: tsqlShop as unknown as CatalogSnapshot,
+  plsql: plsqlShop as unknown as CatalogSnapshot,
+  sqlite: sqliteShop as unknown as CatalogSnapshot,
+};
+
+const SAMPLES: Record<Dialect, string> = {
+  tsql: `-- T-SQL playground: try Ctrl+Space, '.', JOIN suggestions, F12 and hover
+SELECT c.Name, o.Total
+FROM Customers c
+JOIN Orders o ON o.CustomerId = c.Id
+WHERE o.Total > 100
+ORDER BY o.Total DESC;
+
+WITH big AS (SELECT Id, Total AS Amt FROM Orders)
+SELECT b. FROM big b
+
+DECLARE @t TABLE (X int, Y nvarchar(10));
+SELECT  FROM @t
+GO
+EXEC GetCustomer @Id = 1
+`,
+  plsql: `-- PL/SQL playground
+SELECT c.name, o.total
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id;
+
+DECLARE
+  r customers%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM customers WHERE id = 1;
+  dbms_output.put_line(r.name);
+  order_api.create_order(1, 100);
+END;
+/
+`,
+  sqlite: `-- SQLite playground
+SELECT o.id, o.total, json_extract(o.order_date, '$.x')
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.total > 10
+LIMIT 20;
+
+SELECT * FROM archive.orders_2020;
+`,
+};
+
+const SETTINGS: Settings['editor'] = {
+  fontSize: 14, keywordCase: 'upper', identifierCase: 'asIs', qualifyObjects: 'nonDefaultSchema', qualifyColumns: 'ambiguous',
+  tabSize: 4, blankLineSplitsStatements: true,
+};
+
+interface LogEntry { at: string; editor: string; label: RunLabel | 'cancel' | 'open'; detail: string }
+
+export function EditorPlayground() {
+  const [dialect, setDialect] = useState<Dialect>('tsql');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  const [texts, setTexts] = useState<Record<string, string>>({ a: SAMPLES.tsql, b: 'SELECT * FROM ' });
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  const [cursor, setCursor] = useState('1:1');
+  const [twoEditors, setTwoEditors] = useState(true);
+  const a = useRef<SqlEditorHandle>(null);
+  const catalog = CATALOGS[dialect];
+  const add = (e: Omit<LogEntry, 'at'>) => setLog((l) => [{ ...e, at: new Date().toLocaleTimeString() }, ...l].slice(0, 50));
+  const onRun = (editor: string) => (label: RunLabel, batches: SqlBatch[]) => add({ editor, label, detail: JSON.stringify(batches, null, 1) });
+  const onOpen = (editor: string) => (ref: ObjectRef) => add({ editor, label: 'open', detail: JSON.stringify(ref) });
+  const resolvePublicSynonym = useMemo(() => (dialect === 'plsql'
+    ? async (name: string) => (name === 'DUAL' ? { t: 'table' as const, n: 'DUAL', c: [['DUMMY', 'VARCHAR2(1)', 1, 0, 0, null] as [string, string, 0 | 1, 0 | 1, number, string | null]] } : null)
+    : undefined), [dialect]);
+
+  const bg = theme === 'dark' ? '#18191c' : '#f3f4f6';
+  const fg = theme === 'dark' ? '#d4d4d4' : '#1f2328';
+  const panel = theme === 'dark' ? '#1e1f22' : '#ffffff';
+  const border = theme === 'dark' ? '#33363c' : '#d0d7de';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: bg, color: fg, font: '13px system-ui, sans-serif' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 12px', borderBottom: `1px solid ${border}`, flexWrap: 'wrap' }}>
+        <strong>Editor playground</strong>
+        <label>Dialect{' '}
+          <select value={dialect} onChange={(e) => { const d = e.target.value as Dialect; setDialect(d); setTexts({ a: SAMPLES[d], b: 'SELECT * FROM ' }); }}>
+            <option value="tsql">SQL Server (T-SQL)</option>
+            <option value="plsql">Oracle (PL/SQL)</option>
+            <option value="sqlite">SQLite</option>
+          </select>
+        </label>
+        <button onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>Theme: {theme}</button>
+        <label><input type="checkbox" checked={twoEditors} onChange={(e) => setTwoEditors(e.target.checked)} /> second editor</label>
+        <button onClick={() => { const t = a.current?.getRunTarget('statement'); add({ editor: 'A', label: 'statement', detail: 'getRunTarget: ' + JSON.stringify(t) }); }}>getRunTarget()</button>
+        <span style={{ opacity: 0.7 }}>A cursor {cursor} · Ctrl+Enter statement · F5 / Ctrl+Shift+Enter script · Esc cancel · F12 definition</span>
+      </div>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ flex: 2, minHeight: 0, borderBottom: `1px solid ${border}` }}>
+            <SqlEditor
+              ref={a} tabId={`playground-a-${dialect}`} dialect={dialect} catalog={catalog} value={texts.a}
+              onChange={(v) => setTexts((t) => ({ ...t, a: v }))} onRun={onRun('A')} onCancel={() => add({ editor: 'A', label: 'cancel', detail: '' })}
+              onOpenObject={onOpen('A')} theme={theme} settings={SETTINGS} usage={usage} onUsageChange={setUsage}
+              resolvePublicSynonym={resolvePublicSynonym} onCursorChange={(l, c) => setCursor(`${l}:${c}`)}
+              requestServerDiagnostics={async () => []}
+            />
+          </div>
+          {twoEditors && (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <SqlEditor
+                tabId={`playground-b-${dialect}`} dialect={dialect} catalog={catalog} value={texts.b}
+                onChange={(v) => setTexts((t) => ({ ...t, b: v }))} onRun={onRun('B')} onCancel={() => add({ editor: 'B', label: 'cancel', detail: '' })}
+                onOpenObject={onOpen('B')} theme={theme} settings={SETTINGS} usage={usage} onUsageChange={setUsage}
+              />
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 260, overflow: 'auto', background: panel, borderLeft: `1px solid ${border}`, padding: 8 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Run log</div>
+          {log.length === 0 && <div style={{ opacity: 0.6 }}>Nothing run yet.</div>}
+          {log.map((e, i) => (
+            <div key={i} style={{ borderBottom: `1px solid ${border}`, padding: '4px 0' }}>
+              <div><code>{e.at}</code> editor <b>{e.editor}</b> · {e.label}</div>
+              {e.detail && <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12 }}>{e.detail}</pre>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default EditorPlayground;

@@ -17,3 +17,4 @@ engine/tests/fixtures/*.sqlite
 # DbStudio desktop (WP-E)
 *.tsbuildinfo
 Thumbs.db
+.dev-data/

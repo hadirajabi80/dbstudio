@@ -1,0 +1,4943 @@
+{
+  "functions": [
+    {
+      "name": "ASCII",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ASCII code of the leftmost character in a character expression."
+    },
+    {
+      "name": "CHAR",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "integer_expression int"
+          ],
+          "returns": "char(1)"
+        }
+      ],
+      "returns": "char(1)",
+      "doc": "Converts an integer code (0-255) into its single-byte character; values outside that range return NULL."
+    },
+    {
+      "name": "CHARINDEX",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression_to_find varchar",
+            "expression_to_search varchar",
+            "[start_location bigint]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the 1-based position of the first occurrence of one string within another, or 0 when absent. start_location sets where searching begins; bigint is returned for max types."
+    },
+    {
+      "name": "CONCAT",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "value1 any",
+            "value2 any",
+            "valueN ... any"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Joins two or more values into a single string. NULL arguments become empty strings and non-string values are implicitly converted.",
+      "since": "2012"
+    },
+    {
+      "name": "CONCAT_WS",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "separator nvarchar",
+            "value1 any",
+            "value2 any",
+            "valueN ... any"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Joins values into one string with the separator between each pair. NULL values, and their separators, are skipped.",
+      "since": "2017"
+    },
+    {
+      "name": "DIFFERENCE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression1 varchar",
+            "expression2 varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Compares the SOUNDEX codes of two strings and returns 0 to 4; 4 indicates the closest phonetic match."
+    },
+    {
+      "name": "FORMAT",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "value any",
+            "format nvarchar",
+            "[culture nvarchar]"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Formats a numeric or date/time value with a .NET format string and optional culture (e.g. 'en-US'). Returns NULL for an invalid format; relies on the CLR so it is comparatively slow.",
+      "since": "2012"
+    },
+    {
+      "name": "LEFT",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar",
+            "integer_expression bigint"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns the given number of characters from the start of a string."
+    },
+    {
+      "name": "LEN",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_expression varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the character count of a string, not counting trailing spaces. Returns bigint for varchar(max), nvarchar(max) or varbinary(max) input."
+    },
+    {
+      "name": "LOWER",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns the string with all uppercase characters converted to lowercase."
+    },
+    {
+      "name": "LTRIM",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "varchar"
+        },
+        {
+          "params": [
+            "character_expression varchar",
+            "characters varchar"
+          ],
+          "returns": "varchar",
+          "doc": "SQL Server 2022+: strips any of the listed characters instead of spaces."
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Removes leading spaces from a string. From SQL Server 2022 an optional second argument specifies the characters to remove."
+    },
+    {
+      "name": "NCHAR",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "integer_expression int"
+          ],
+          "returns": "nchar(1)"
+        }
+      ],
+      "returns": "nchar(1)",
+      "doc": "Returns the Unicode character for the given integer code point."
+    },
+    {
+      "name": "PATINDEX",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "pattern varchar",
+            "expression varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the 1-based start position of the first match of a LIKE-style pattern (wildcards allowed, usually wrapped in %) in an expression, or 0 if there is no match."
+    },
+    {
+      "name": "QUOTENAME",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_string sysname",
+            "[quote_character char(1)]"
+          ],
+          "returns": "nvarchar(258)"
+        }
+      ],
+      "returns": "nvarchar(258)",
+      "doc": "Wraps a string in delimiters (square brackets by default) to make a valid delimited identifier, doubling embedded closing delimiters. Input over 128 characters returns NULL."
+    },
+    {
+      "name": "REPLACE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_expression varchar",
+            "string_pattern varchar",
+            "string_replacement varchar"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Replaces every occurrence of string_pattern in a string with string_replacement. Matching follows the input collation."
+    },
+    {
+      "name": "REPLICATE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_expression varchar",
+            "integer_expression bigint"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Repeats a string the given number of times; a negative count returns NULL. Output is capped at 8000 bytes unless the input is a max type."
+    },
+    {
+      "name": "REVERSE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_expression varchar"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns the characters of a string in reverse order."
+    },
+    {
+      "name": "RIGHT",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar",
+            "integer_expression bigint"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns the given number of characters from the end of a string."
+    },
+    {
+      "name": "RTRIM",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "varchar"
+        },
+        {
+          "params": [
+            "character_expression varchar",
+            "characters varchar"
+          ],
+          "returns": "varchar",
+          "doc": "SQL Server 2022+: strips any of the listed characters instead of spaces."
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Removes trailing spaces from a string. From SQL Server 2022 an optional second argument specifies the characters to remove."
+    },
+    {
+      "name": "SOUNDEX",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "varchar(4)"
+        }
+      ],
+      "returns": "varchar(4)",
+      "doc": "Returns a four-character code describing how a string sounds when spoken in English, for phonetic comparisons."
+    },
+    {
+      "name": "SPACE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "integer_expression int"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns a string made of the given number of spaces; a negative count returns NULL."
+    },
+    {
+      "name": "STR",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float",
+            "[length int]",
+            "[decimal int]"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Converts a number to a right-justified string of total length (default 10) with the given decimal places (default 0). Returns asterisks if the value does not fit."
+    },
+    {
+      "name": "STRING_ESCAPE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "text nvarchar",
+            "type nvarchar ('json')"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Escapes special and control characters in text using the rules of the given type. Only 'json' is currently supported.",
+      "since": "2016"
+    },
+    {
+      "name": "STUFF",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar",
+            "start int",
+            "length int",
+            "replace_with_expression varchar"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Deletes length characters starting at the 1-based start position and inserts another string there. Returns NULL if start is out of range."
+    },
+    {
+      "name": "SUBSTRING",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression varchar",
+            "start bigint",
+            "length bigint"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns part of a character, binary, text or image value. start is 1-based; a start below 1 shortens the result instead of failing. A negative length raises an error."
+    },
+    {
+      "name": "TRANSLATE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "input_string nvarchar",
+            "characters nvarchar",
+            "translations nvarchar"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Replaces each character found in characters with the character at the same position in translations. Both lists must have equal length.",
+      "since": "2017"
+    },
+    {
+      "name": "TRIM",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string nvarchar"
+          ],
+          "returns": "nvarchar"
+        },
+        {
+          "params": [
+            "characters nvarchar FROM string nvarchar"
+          ],
+          "returns": "nvarchar",
+          "doc": "Removes the listed characters instead of spaces."
+        },
+        {
+          "params": [
+            "LEADING|TRAILING|BOTH keyword",
+            "[characters nvarchar] FROM string nvarchar"
+          ],
+          "returns": "nvarchar",
+          "doc": "SQL Server 2022+ (compatibility level 160): choose which side to trim."
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Removes spaces, or a set of specified characters, from the start and end of a string.",
+      "since": "2017"
+    },
+    {
+      "name": "UNICODE",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "ncharacter_expression nvarchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the Unicode code point of the first character of the input."
+    },
+    {
+      "name": "UPPER",
+      "category": "string",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "character_expression varchar"
+          ],
+          "returns": "varchar"
+        }
+      ],
+      "returns": "varchar",
+      "doc": "Returns the string with all lowercase characters converted to uppercase."
+    },
+    {
+      "name": "ABS",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns the absolute (non-negative) value of a number, in the same type as the input."
+    },
+    {
+      "name": "ACOS",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the angle in radians whose cosine is the given value, which must be between -1 and 1."
+    },
+    {
+      "name": "ASIN",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the angle in radians whose sine is the given value, which must be between -1 and 1."
+    },
+    {
+      "name": "ATAN",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the angle in radians whose tangent is the given value."
+    },
+    {
+      "name": "ATN2",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "y float",
+            "x float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the angle in radians between the positive x-axis and the ray to point (x, y), using both signs to pick the correct quadrant."
+    },
+    {
+      "name": "CEILING",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns the smallest integer greater than or equal to the value, keeping the input data type."
+    },
+    {
+      "name": "COS",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the cosine of an angle given in radians."
+    },
+    {
+      "name": "COT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the cotangent of an angle given in radians."
+    },
+    {
+      "name": "DEGREES",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Converts an angle from radians to degrees, keeping the input data type."
+    },
+    {
+      "name": "EXP",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns e raised to the given power; the inverse of LOG."
+    },
+    {
+      "name": "FLOOR",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns the largest integer less than or equal to the value, keeping the input data type."
+    },
+    {
+      "name": "LOG",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        },
+        {
+          "params": [
+            "float_expression float",
+            "base float"
+          ],
+          "returns": "float",
+          "doc": "Logarithm in the given base (SQL Server 2012+)."
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the natural logarithm of a positive number, or its logarithm in the specified base."
+    },
+    {
+      "name": "LOG10",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the base-10 logarithm of a positive number."
+    },
+    {
+      "name": "PI",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the constant pi as a float."
+    },
+    {
+      "name": "POWER",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression numeric",
+            "y float"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Raises a number to the power y. The result type follows the first argument, so integer input gives an integer result."
+    },
+    {
+      "name": "RADIANS",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Converts an angle from degrees to radians, keeping the input data type (use a decimal input to avoid integer truncation)."
+    },
+    {
+      "name": "RAND",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[seed int]"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns a pseudo-random float from 0 up to, but not including, 1. A seed restarts the sequence. It is evaluated once per query reference, not once per row."
+    },
+    {
+      "name": "ROUND",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric",
+            "length int"
+          ],
+          "returns": "numeric"
+        },
+        {
+          "params": [
+            "numeric_expression numeric",
+            "length int",
+            "function int"
+          ],
+          "returns": "numeric",
+          "doc": "A non-zero function value truncates instead of rounding."
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Rounds a number to length decimal places; a negative length rounds to the left of the decimal point."
+    },
+    {
+      "name": "SIGN",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "numeric_expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns -1, 0 or 1 for a negative, zero or positive input."
+    },
+    {
+      "name": "SIN",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the sine of an angle given in radians."
+    },
+    {
+      "name": "SQRT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the square root of a non-negative number."
+    },
+    {
+      "name": "SQUARE",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the value multiplied by itself."
+    },
+    {
+      "name": "TAN",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "float_expression float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the tangent of an angle given in radians."
+    },
+    {
+      "name": "GREATEST",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression1 any",
+            "expressionN ... any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the largest value among 1 to 254 comparable expressions, ignoring NULLs; returns NULL only if all are NULL.",
+      "since": "2022"
+    },
+    {
+      "name": "LEAST",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression1 any",
+            "expressionN ... any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the smallest value among 1 to 254 comparable expressions, ignoring NULLs; returns NULL only if all are NULL.",
+      "since": "2022"
+    },
+    {
+      "name": "LEFT_SHIFT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "integer_value int",
+            "shift_amount int"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Shifts the bits of an integer or binary value left by shift_amount positions; the result has the input type. Equivalent to the << operator.",
+      "since": "2022"
+    },
+    {
+      "name": "RIGHT_SHIFT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "integer_value int",
+            "shift_amount int"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Shifts the bits of an integer or binary value right by shift_amount positions; the result has the input type. Equivalent to the >> operator.",
+      "since": "2022"
+    },
+    {
+      "name": "BIT_COUNT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression_value int"
+          ],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns the number of bits set to 1 in an integer or binary value.",
+      "since": "2022"
+    },
+    {
+      "name": "GET_BIT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression_value int",
+            "bit_offset int"
+          ],
+          "returns": "bit"
+        }
+      ],
+      "returns": "bit",
+      "doc": "Returns the bit (0 or 1) at the given zero-based offset of an integer or binary value, counting from the least significant bit.",
+      "since": "2022"
+    },
+    {
+      "name": "SET_BIT",
+      "category": "numeric",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression_value int",
+            "bit_offset int",
+            "[bit_value bit]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the value with the bit at bit_offset set to bit_value (default 1). The result has the type of expression_value.",
+      "since": "2022"
+    },
+    {
+      "name": "GETDATE",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Returns the current date and time of the database server as datetime, with no time zone offset."
+    },
+    {
+      "name": "GETUTCDATE",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Returns the current UTC date and time of the server as datetime."
+    },
+    {
+      "name": "SYSDATETIME",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetime2(7)"
+        }
+      ],
+      "returns": "datetime2(7)",
+      "doc": "Returns the current server date and time as datetime2(7), with more fractional precision than GETDATE."
+    },
+    {
+      "name": "SYSUTCDATETIME",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetime2(7)"
+        }
+      ],
+      "returns": "datetime2(7)",
+      "doc": "Returns the current UTC date and time of the server as datetime2(7)."
+    },
+    {
+      "name": "SYSDATETIMEOFFSET",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetimeoffset(7)"
+        }
+      ],
+      "returns": "datetimeoffset(7)",
+      "doc": "Returns the current server date and time as datetimeoffset(7), including the server time zone offset."
+    },
+    {
+      "name": "CURRENT_TIMESTAMP",
+      "category": "date",
+      "kind": "niladic",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "ANSI SQL equivalent of GETDATE(): the current server date and time as datetime. Written without parentheses."
+    },
+    {
+      "name": "DATEADD",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|weekday|hour|minute|second|millisecond|microsecond|nanosecond)",
+            "number int",
+            "date datetime"
+          ],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Adds a signed integer number of datepart units to a date and returns a value of the same type as the date argument."
+    },
+    {
+      "name": "DATEDIFF",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|weekday|hour|minute|second|millisecond|microsecond|nanosecond)",
+            "startdate datetime",
+            "enddate datetime"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the count of datepart boundaries crossed between startdate and enddate as int. Raises an overflow error if the result exceeds int; see DATEDIFF_BIG."
+    },
+    {
+      "name": "DATEDIFF_BIG",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|weekday|hour|minute|second|millisecond|microsecond|nanosecond)",
+            "startdate datetime",
+            "enddate datetime"
+          ],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Like DATEDIFF, but returns the count of datepart boundaries crossed as bigint, avoiding overflow for small units over long ranges.",
+      "since": "2016"
+    },
+    {
+      "name": "DATENAME",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|weekday|hour|minute|second|millisecond|microsecond|nanosecond|tzoffset|iso_week)",
+            "date datetime"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Returns a string for the given datepart of a date, e.g. the month or weekday name. Names depend on the session language."
+    },
+    {
+      "name": "DATEPART",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|weekday|hour|minute|second|millisecond|microsecond|nanosecond|tzoffset|iso_week)",
+            "date datetime"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns an integer for the given datepart of a date. week and weekday results depend on SET DATEFIRST; iso_week uses ISO 8601 weeks."
+    },
+    {
+      "name": "DAY",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "date datetime"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the day of the month (1-31) of a date; same as DATEPART(day, date)."
+    },
+    {
+      "name": "MONTH",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "date datetime"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the month number (1-12) of a date; same as DATEPART(month, date)."
+    },
+    {
+      "name": "YEAR",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "date datetime"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the year of a date as an integer; same as DATEPART(year, date)."
+    },
+    {
+      "name": "EOMONTH",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "start_date date",
+            "[month_to_add int]"
+          ],
+          "returns": "date"
+        }
+      ],
+      "returns": "date",
+      "doc": "Returns the last day of the month containing start_date, optionally shifted by month_to_add months.",
+      "since": "2012"
+    },
+    {
+      "name": "DATEFROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "year int",
+            "month int",
+            "day int"
+          ],
+          "returns": "date"
+        }
+      ],
+      "returns": "date",
+      "doc": "Builds a date from year, month and day integers. Returns NULL if any argument is NULL; invalid values raise an error.",
+      "since": "2012"
+    },
+    {
+      "name": "DATETIMEFROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "year int",
+            "month int",
+            "day int",
+            "hour int",
+            "minute int",
+            "seconds int",
+            "milliseconds int"
+          ],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Builds a datetime value from its date and time parts. Returns NULL if any argument is NULL.",
+      "since": "2012"
+    },
+    {
+      "name": "DATETIME2FROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "year int",
+            "month int",
+            "day int",
+            "hour int",
+            "minute int",
+            "seconds int",
+            "fractions int",
+            "precision int"
+          ],
+          "returns": "datetime2"
+        }
+      ],
+      "returns": "datetime2",
+      "doc": "Builds a datetime2 value from its parts; fractions is interpreted according to precision (a literal 0-7).",
+      "since": "2012"
+    },
+    {
+      "name": "DATETIMEOFFSETFROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "year int",
+            "month int",
+            "day int",
+            "hour int",
+            "minute int",
+            "seconds int",
+            "fractions int",
+            "hour_offset int",
+            "minute_offset int",
+            "precision int"
+          ],
+          "returns": "datetimeoffset"
+        }
+      ],
+      "returns": "datetimeoffset",
+      "doc": "Builds a datetimeoffset value from date and time parts plus a time zone offset; fractions is interpreted using precision.",
+      "since": "2012"
+    },
+    {
+      "name": "SMALLDATETIMEFROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "year int",
+            "month int",
+            "day int",
+            "hour int",
+            "minute int"
+          ],
+          "returns": "smalldatetime"
+        }
+      ],
+      "returns": "smalldatetime",
+      "doc": "Builds a smalldatetime value from year, month, day, hour and minute.",
+      "since": "2012"
+    },
+    {
+      "name": "TIMEFROMPARTS",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "hour int",
+            "minute int",
+            "seconds int",
+            "fractions int",
+            "precision int"
+          ],
+          "returns": "time"
+        }
+      ],
+      "returns": "time",
+      "doc": "Builds a time value from its parts; fractions is interpreted according to precision (a literal 0-7).",
+      "since": "2012"
+    },
+    {
+      "name": "SWITCHOFFSET",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datetimeoffset_expression datetimeoffset",
+            "timezoneoffset_expression varchar"
+          ],
+          "returns": "datetimeoffset"
+        }
+      ],
+      "returns": "datetimeoffset",
+      "doc": "Returns the datetimeoffset value moved to another time zone offset (e.g. '-05:00'), keeping the same UTC instant."
+    },
+    {
+      "name": "TODATETIMEOFFSET",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datetime_expression datetime2",
+            "timezoneoffset_expression varchar"
+          ],
+          "returns": "datetimeoffset"
+        }
+      ],
+      "returns": "datetimeoffset",
+      "doc": "Attaches a time zone offset to a date/time value, treating the input as local time in that offset; the clock time is not shifted."
+    },
+    {
+      "name": "ISDATE",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the expression is a valid datetime or smalldatetime value, else 0. Depends on SET DATEFORMAT and LANGUAGE; does not accept datetime2-only ranges."
+    },
+    {
+      "name": "DATE_BUCKET",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|week|day|hour|minute|second|millisecond)",
+            "number int",
+            "date datetime",
+            "[origin datetime]"
+          ],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Returns the start of the fixed-width bucket (number dateparts wide) that contains date, aligned to origin (default 1900-01-01). Result type matches date.",
+      "since": "2022"
+    },
+    {
+      "name": "DATETRUNC",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "datepart keyword (year|quarter|month|dayofyear|day|week|iso_week|hour|minute|second|millisecond|microsecond)",
+            "date datetime"
+          ],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Truncates a date or time value to the start of the given datepart, e.g. the first day of the month. Result type matches the input date type.",
+      "since": "2022"
+    },
+    {
+      "name": "CURRENT_TIMEZONE",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Returns the name of the time zone used by the server or instance, e.g. (UTC+01:00) Amsterdam, Berlin.",
+      "since": "2019"
+    },
+    {
+      "name": "CURRENT_TIMEZONE_ID",
+      "category": "date",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Returns the Windows time zone ID of the server or instance, e.g. Pacific Standard Time, usable with AT TIME ZONE.",
+      "since": "2022"
+    },
+    {
+      "name": "AVG",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns the average of non-NULL values in a group. Integer input produces an integer result. Can be used as a window aggregate with OVER."
+    },
+    {
+      "name": "CHECKSUM_AGG",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression int"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns a checksum of the values in a group, ignoring NULLs; useful for detecting changes in a table."
+    },
+    {
+      "name": "COUNT",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "*"
+          ],
+          "returns": "int"
+        },
+        {
+          "params": [
+            "[ALL | DISTINCT] expression any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the number of items in a group as int. COUNT(*) counts all rows; COUNT(expression) counts non-NULL values."
+    },
+    {
+      "name": "COUNT_BIG",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "*"
+          ],
+          "returns": "bigint"
+        },
+        {
+          "params": [
+            "[ALL | DISTINCT] expression any"
+          ],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Like COUNT, but returns bigint. COUNT_BIG(*) counts all rows; COUNT_BIG(expression) counts non-NULL values."
+    },
+    {
+      "name": "GROUPING",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "column_expression any"
+          ],
+          "returns": "tinyint"
+        }
+      ],
+      "returns": "tinyint",
+      "doc": "Returns 1 when the GROUP BY column is aggregated in the row (a ROLLUP, CUBE or GROUPING SETS subtotal), otherwise 0."
+    },
+    {
+      "name": "GROUPING_ID",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "column_expression1 any",
+            "column_expressionN ... any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns an integer bitmap of GROUPING() results for the listed columns, identifying the grouping level of each row."
+    },
+    {
+      "name": "MAX",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the highest non-NULL value in a group. Works with numeric, character, date and uniqueidentifier types."
+    },
+    {
+      "name": "MIN",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the lowest non-NULL value in a group. Works with numeric, character, date and uniqueidentifier types."
+    },
+    {
+      "name": "STDEV",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the sample statistical standard deviation of the values in a group."
+    },
+    {
+      "name": "STDEVP",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the population statistical standard deviation of the values in a group."
+    },
+    {
+      "name": "SUM",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "numeric"
+        }
+      ],
+      "returns": "numeric",
+      "doc": "Returns the total of the non-NULL numeric values in a group. Can be used as a window aggregate with OVER."
+    },
+    {
+      "name": "VAR",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the sample statistical variance of the values in a group."
+    },
+    {
+      "name": "VARP",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "[ALL | DISTINCT] expression numeric"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the population statistical variance of the values in a group."
+    },
+    {
+      "name": "STRING_AGG",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "expression nvarchar",
+            "separator nvarchar"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Concatenates non-NULL values from a group into one string with a separator. Append WITHIN GROUP (ORDER BY ...) to control the order of values.",
+      "since": "2017"
+    },
+    {
+      "name": "APPROX_COUNT_DISTINCT",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "expression any"
+          ],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns an approximate count of distinct non-NULL values, using less memory than COUNT(DISTINCT) on large data sets (about 2% error).",
+      "since": "2019"
+    },
+    {
+      "name": "APPROX_PERCENTILE_CONT",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "percentile float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns an approximate interpolated percentile (0.0-1.0) of a group. Use WITHIN GROUP (ORDER BY expression). Suited to large data sets.",
+      "since": "2022"
+    },
+    {
+      "name": "APPROX_PERCENTILE_DISC",
+      "category": "aggregate",
+      "kind": "aggregate",
+      "signatures": [
+        {
+          "params": [
+            "percentile float"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns an approximate percentile (0.0-1.0) value that exists in the group. Use WITHIN GROUP (ORDER BY expression). Suited to large data sets.",
+      "since": "2022"
+    },
+    {
+      "name": "ROW_NUMBER",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Assigns sequential numbers starting at 1 to rows within each partition. Requires OVER ([PARTITION BY ...] ORDER BY ...)."
+    },
+    {
+      "name": "RANK",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns the rank of each row within its partition; ties share a rank and leave gaps after them. Requires OVER ([PARTITION BY ...] ORDER BY ...)."
+    },
+    {
+      "name": "DENSE_RANK",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns the rank of each row within its partition; ties share a rank with no gaps. Requires OVER ([PARTITION BY ...] ORDER BY ...)."
+    },
+    {
+      "name": "NTILE",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "integer_expression int"
+          ],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Divides the ordered rows of each partition into the given number of groups and returns the group number. Requires OVER ([PARTITION BY ...] ORDER BY ...)."
+    },
+    {
+      "name": "LAG",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "scalar_expression any",
+            "[offset bigint]",
+            "[default any]"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns a value from the row offset rows (default 1) before the current one, or default when none exists. Requires OVER ([PARTITION BY ...] ORDER BY ...).",
+      "since": "2012"
+    },
+    {
+      "name": "LEAD",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "scalar_expression any",
+            "[offset bigint]",
+            "[default any]"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns a value from the row offset rows (default 1) after the current one, or default when none exists. Requires OVER ([PARTITION BY ...] ORDER BY ...).",
+      "since": "2012"
+    },
+    {
+      "name": "FIRST_VALUE",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "scalar_expression any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the first value in the ordered window frame. Use OVER ([PARTITION BY ...] ORDER BY ... [ROWS|RANGE ...]); IGNORE NULLS allowed from 2022.",
+      "since": "2012"
+    },
+    {
+      "name": "LAST_VALUE",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "scalar_expression any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the last value in the window frame. The default frame ends at the current row, so specify ROWS BETWEEN ... AND UNBOUNDED FOLLOWING for the partition end.",
+      "since": "2012"
+    },
+    {
+      "name": "CUME_DIST",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the cumulative distribution (0 < x <= 1) of a row within its partition. Requires OVER ([PARTITION BY ...] ORDER BY ...).",
+      "since": "2012"
+    },
+    {
+      "name": "PERCENT_RANK",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns the relative rank (0 to 1) of a row within its partition, (rank - 1) / (rows - 1). Requires OVER ([PARTITION BY ...] ORDER BY ...).",
+      "since": "2012"
+    },
+    {
+      "name": "PERCENTILE_CONT",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "percentile float"
+          ],
+          "returns": "float"
+        }
+      ],
+      "returns": "float",
+      "doc": "Returns an interpolated percentile (0.0-1.0) using WITHIN GROUP (ORDER BY expr) OVER ([PARTITION BY ...]); the result may not exist in the data.",
+      "since": "2012"
+    },
+    {
+      "name": "PERCENTILE_DISC",
+      "category": "window",
+      "kind": "window",
+      "signatures": [
+        {
+          "params": [
+            "percentile float"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the smallest value whose cumulative distribution is >= percentile, using WITHIN GROUP (ORDER BY expr) OVER ([PARTITION BY ...]).",
+      "since": "2012"
+    },
+    {
+      "name": "CAST",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression AS data_type"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Converts an expression to the specified data type (ANSI syntax), e.g. CAST(x AS varchar(10)). Raises an error if the conversion fails."
+    },
+    {
+      "name": "CONVERT",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "data_type",
+            "expression",
+            "[style int]"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Converts an expression to the given data type; style controls date/time, money, float, binary and XML formatting (e.g. 112 = yyyymmdd)."
+    },
+    {
+      "name": "PARSE",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_value AS data_type [USING culture]"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Converts a string to a date/time or numeric type, optionally using a .NET culture. Raises an error on failure and requires the CLR.",
+      "since": "2012"
+    },
+    {
+      "name": "TRY_CAST",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression AS data_type"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Like CAST, but returns NULL instead of an error when the conversion fails. Explicitly disallowed conversions still raise an error.",
+      "since": "2012"
+    },
+    {
+      "name": "TRY_CONVERT",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "data_type",
+            "expression",
+            "[style int]"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Like CONVERT, but returns NULL instead of an error when the conversion fails. Explicitly disallowed conversions still raise an error.",
+      "since": "2012"
+    },
+    {
+      "name": "TRY_PARSE",
+      "category": "conversion",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "string_value AS data_type [USING culture]"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Like PARSE, but returns NULL when the string cannot be converted. Requires the CLR.",
+      "since": "2012"
+    },
+    {
+      "name": "IIF",
+      "category": "logical",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "boolean_expression",
+            "true_value any",
+            "false_value any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns true_value or false_value depending on a Boolean expression; shorthand for CASE WHEN. Can be nested up to 10 levels.",
+      "since": "2012"
+    },
+    {
+      "name": "CHOOSE",
+      "category": "logical",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "index int",
+            "value1 any",
+            "valueN ... any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the value at the given 1-based index from the list, or NULL if the index is out of range.",
+      "since": "2012"
+    },
+    {
+      "name": "COALESCE",
+      "category": "logical",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression1 any",
+            "expressionN ... any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns the first non-NULL argument. The result type follows data type precedence; it is shorthand for a CASE expression."
+    },
+    {
+      "name": "NULLIF",
+      "category": "logical",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression1 any",
+            "expression2 any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns NULL when the two expressions are equal; otherwise returns the first expression."
+    },
+    {
+      "name": "ISNULL",
+      "category": "logical",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "check_expression any",
+            "replacement_value any"
+          ],
+          "returns": "any"
+        }
+      ],
+      "returns": "any",
+      "doc": "Returns replacement_value when check_expression is NULL, otherwise check_expression. The result has the type of check_expression."
+    },
+    {
+      "name": "ISJSON",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression nvarchar"
+          ],
+          "returns": "int"
+        },
+        {
+          "params": [
+            "expression nvarchar",
+            "json_type_constraint keyword (VALUE|ARRAY|OBJECT|SCALAR)"
+          ],
+          "returns": "int",
+          "doc": "Type constraint argument added in SQL Server 2022."
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the string is valid JSON, 0 if not, and NULL for NULL input. Optionally checks for a specific JSON type.",
+      "since": "2016"
+    },
+    {
+      "name": "JSON_VALUE",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression nvarchar",
+            "path nvarchar"
+          ],
+          "returns": "nvarchar(4000)"
+        }
+      ],
+      "returns": "nvarchar(4000)",
+      "doc": "Extracts a scalar value from JSON at the given path. If the path is missing or not scalar, returns NULL in lax mode or errors in strict mode.",
+      "since": "2016"
+    },
+    {
+      "name": "JSON_QUERY",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression nvarchar",
+            "[path nvarchar]"
+          ],
+          "returns": "nvarchar(max)"
+        }
+      ],
+      "returns": "nvarchar(max)",
+      "doc": "Extracts an object or array from JSON at the given path (whole input if omitted). A scalar at the path returns NULL in lax mode or errors in strict mode.",
+      "since": "2016"
+    },
+    {
+      "name": "JSON_MODIFY",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression nvarchar",
+            "path nvarchar",
+            "new_value any"
+          ],
+          "returns": "nvarchar(max)"
+        }
+      ],
+      "returns": "nvarchar(max)",
+      "doc": "Returns the JSON text with the value at path updated, inserted or appended (append prefix). In lax mode, a NULL new_value deletes the key.",
+      "since": "2016"
+    },
+    {
+      "name": "JSON_OBJECT",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[key nvarchar : value any, ...]",
+            "[{NULL | ABSENT} ON NULL]"
+          ],
+          "returns": "nvarchar(max)"
+        }
+      ],
+      "returns": "nvarchar(max)",
+      "doc": "Builds a JSON object from zero or more key:value pairs. NULL ON NULL (default) keeps null values; ABSENT ON NULL omits them.",
+      "since": "2022"
+    },
+    {
+      "name": "JSON_ARRAY",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[value any, ...]",
+            "[{NULL | ABSENT} ON NULL]"
+          ],
+          "returns": "nvarchar(max)"
+        }
+      ],
+      "returns": "nvarchar(max)",
+      "doc": "Builds a JSON array from zero or more values. ABSENT ON NULL (default) skips NULLs; NULL ON NULL writes them as null.",
+      "since": "2022"
+    },
+    {
+      "name": "JSON_PATH_EXISTS",
+      "category": "json",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "value_expression nvarchar",
+            "sql_json_path nvarchar"
+          ],
+          "returns": "bit"
+        }
+      ],
+      "returns": "bit",
+      "doc": "Returns 1 if the SQL/JSON path exists in the JSON input, 0 if it does not, and NULL for NULL input.",
+      "since": "2022"
+    },
+    {
+      "name": "OPENJSON",
+      "category": "json",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "json_expression nvarchar",
+            "[path nvarchar]"
+          ],
+          "returns": "table",
+          "doc": "Default schema: columns key, value, type."
+        },
+        {
+          "params": [
+            "json_expression nvarchar",
+            "[path nvarchar]",
+            "WITH (column_name data_type [column_path] [AS JSON], ...)"
+          ],
+          "returns": "table",
+          "doc": "Explicit schema maps properties to typed columns."
+        }
+      ],
+      "returns": "table",
+      "doc": "Table-valued function that parses JSON into rows of key/value/type, or typed columns via a WITH clause. Requires compatibility level 130 or higher.",
+      "since": "2016"
+    },
+    {
+      "name": "NEWID",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "uniqueidentifier"
+        }
+      ],
+      "returns": "uniqueidentifier",
+      "doc": "Generates a new random unique value of type uniqueidentifier."
+    },
+    {
+      "name": "NEWSEQUENTIALID",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "uniqueidentifier"
+        }
+      ],
+      "returns": "uniqueidentifier",
+      "doc": "Generates a GUID greater than any previously generated by this function on the machine since Windows started. Only allowed in a DEFAULT constraint."
+    },
+    {
+      "name": "SCOPE_IDENTITY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "numeric(38,0)"
+        }
+      ],
+      "returns": "numeric(38,0)",
+      "doc": "Returns the last identity value inserted in the current session and scope, unaffected by inserts made in triggers."
+    },
+    {
+      "name": "IDENT_CURRENT",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table_or_view varchar"
+          ],
+          "returns": "numeric(38,0)"
+        }
+      ],
+      "returns": "numeric(38,0)",
+      "doc": "Returns the last identity value generated for the given table or view, in any session and any scope."
+    },
+    {
+      "name": "IDENT_INCR",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table_or_view varchar"
+          ],
+          "returns": "numeric(38,0)"
+        }
+      ],
+      "returns": "numeric(38,0)",
+      "doc": "Returns the increment value defined for the identity column of a table or view."
+    },
+    {
+      "name": "IDENT_SEED",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table_or_view varchar"
+          ],
+          "returns": "numeric(38,0)"
+        }
+      ],
+      "returns": "numeric(38,0)",
+      "doc": "Returns the original seed value defined for the identity column of a table or view."
+    },
+    {
+      "name": "IDENTITY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "data_type",
+            "[seed int]",
+            "[increment int]"
+          ],
+          "returns": "data_type"
+        }
+      ],
+      "returns": "data_type",
+      "doc": "Used only in SELECT ... INTO to add an identity column to the new table, e.g. IDENTITY(int, 1, 1) AS id."
+    },
+    {
+      "name": "ERROR_LINE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Inside a CATCH block, returns the line number where the error occurred; NULL outside a CATCH block."
+    },
+    {
+      "name": "ERROR_MESSAGE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(4000)"
+        }
+      ],
+      "returns": "nvarchar(4000)",
+      "doc": "Inside a CATCH block, returns the full text of the error message; NULL outside a CATCH block."
+    },
+    {
+      "name": "ERROR_NUMBER",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Inside a CATCH block, returns the error number that triggered it; NULL outside a CATCH block."
+    },
+    {
+      "name": "ERROR_PROCEDURE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Inside a CATCH block, returns the name of the procedure or trigger where the error occurred, or NULL if none."
+    },
+    {
+      "name": "ERROR_SEVERITY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Inside a CATCH block, returns the severity level of the error; NULL outside a CATCH block."
+    },
+    {
+      "name": "ERROR_STATE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Inside a CATCH block, returns the state number of the error; NULL outside a CATCH block."
+    },
+    {
+      "name": "XACT_STATE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Reports the transaction state of the session: 1 = active and committable, -1 = active but uncommittable (must roll back), 0 = no transaction."
+    },
+    {
+      "name": "HOST_NAME",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the workstation name supplied by the client; it can be spoofed, so do not rely on it for security."
+    },
+    {
+      "name": "HOST_ID",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "char(10)"
+        }
+      ],
+      "returns": "char(10)",
+      "doc": "Returns the workstation identification number (client process ID) supplied by the client application."
+    },
+    {
+      "name": "APP_NAME",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the application name set by the client for the current session; client-controlled, so not suitable for security checks."
+    },
+    {
+      "name": "COMPRESS",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression any"
+          ],
+          "returns": "varbinary(max)"
+        }
+      ],
+      "returns": "varbinary(max)",
+      "doc": "Compresses a string or binary value using the GZIP algorithm and returns varbinary(max).",
+      "since": "2016"
+    },
+    {
+      "name": "DECOMPRESS",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression varbinary"
+          ],
+          "returns": "varbinary(max)"
+        }
+      ],
+      "returns": "varbinary(max)",
+      "doc": "Decompresses a GZIP-compressed binary value; cast the result to the original string type to read it.",
+      "since": "2016"
+    },
+    {
+      "name": "FORMATMESSAGE",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "msg_number int",
+            "[param_value ... any]"
+          ],
+          "returns": "nvarchar(2047)",
+          "doc": "Uses a message from sys.messages."
+        },
+        {
+          "params": [
+            "msg_string nvarchar",
+            "[param_value ... any]"
+          ],
+          "returns": "nvarchar(2047)",
+          "doc": "Ad hoc printf-style message string (SQL Server 2016+)."
+        }
+      ],
+      "returns": "nvarchar(2047)",
+      "doc": "Builds a message from sys.messages or a supplied format string, substituting %s/%d style placeholders with parameter values."
+    },
+    {
+      "name": "ISNUMERIC",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the expression can convert to any numeric type, else 0. Accepts symbols like +, -, $ and ., so prefer TRY_CONVERT for validation."
+    },
+    {
+      "name": "CHECKSUM",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "*"
+          ],
+          "returns": "int"
+        },
+        {
+          "params": [
+            "expression1 any",
+            "expressionN ... any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Computes an int hash over a row or a list of expressions, often used for hash indexes. Collisions are possible."
+    },
+    {
+      "name": "BINARY_CHECKSUM",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "*"
+          ],
+          "returns": "int"
+        },
+        {
+          "params": [
+            "expression1 any",
+            "expressionN ... any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Computes a binary checksum over a row or expressions; unlike CHECKSUM it is sensitive to case and collation differences."
+    },
+    {
+      "name": "HASHBYTES",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "algorithm varchar ('MD2'|'MD4'|'MD5'|'SHA'|'SHA1'|'SHA2_256'|'SHA2_512')",
+            "input varbinary"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Returns the hash of the input using the chosen algorithm. Only SHA2_256 and SHA2_512 are recommended; the input size limit was removed in 2016."
+    },
+    {
+      "name": "ROWCOUNT_BIG",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns the number of rows affected by the last statement as bigint; like @@ROWCOUNT for very large counts."
+    },
+    {
+      "name": "SESSION_CONTEXT",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key nvarchar"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns the value stored for a key in the session context (set with sp_set_session_context), or NULL if not set.",
+      "since": "2016"
+    },
+    {
+      "name": "CONTEXT_INFO",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "varbinary(128)"
+        }
+      ],
+      "returns": "varbinary(128)",
+      "doc": "Returns the context_info value set for the current session or batch with SET CONTEXT_INFO."
+    },
+    {
+      "name": "CURRENT_REQUEST_ID",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Returns the ID of the current request within the current session."
+    },
+    {
+      "name": "CURRENT_TRANSACTION_ID",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "bigint"
+        }
+      ],
+      "returns": "bigint",
+      "doc": "Returns the transaction ID of the current transaction in the session.",
+      "since": "2016"
+    },
+    {
+      "name": "GET_FILESTREAM_TRANSACTION_CONTEXT",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "varbinary(max)"
+        }
+      ],
+      "returns": "varbinary(max)",
+      "doc": "Returns a token for the current transaction that client applications use to bind FILESTREAM file system operations to it; NULL outside a transaction."
+    },
+    {
+      "name": "MIN_ACTIVE_ROWVERSION",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "binary(8)"
+        }
+      ],
+      "returns": "binary(8)",
+      "doc": "Returns the lowest rowversion value still active in the database, i.e. not yet committed; useful for change tracking with rowversion."
+    },
+    {
+      "name": "DATALENGTH",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression any"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the number of bytes used to store a value, including trailing spaces. Returns bigint for max types and NULL for NULL input."
+    },
+    {
+      "name": "CONNECTIONPROPERTY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "property varchar ('net_transport'|'protocol_type'|'auth_scheme'|'local_net_address'|'local_tcp_port'|'client_net_address'|'physical_net_transport')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns a property of the current connection, such as transport protocol, auth scheme or client network address."
+    },
+    {
+      "name": "GETANSINULL",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[database sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the database default allows NULL for new columns (ANSI null default), otherwise 0."
+    },
+    {
+      "name": "TRIGGER_NESTLEVEL",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[object_id int]",
+            "[trigger_type varchar ('AFTER'|'IOT')]",
+            "[trigger_event_category varchar ('DML'|'DDL')]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns how many triggers fired the current statement, or how many times a given trigger fired, to detect trigger recursion."
+    },
+    {
+      "name": "COLUMNS_UPDATED",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "varbinary"
+        }
+      ],
+      "returns": "varbinary",
+      "doc": "Inside a DML trigger, returns a bit pattern showing which columns were inserted or updated."
+    },
+    {
+      "name": "EVENTDATA",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "xml"
+        }
+      ],
+      "returns": "xml",
+      "doc": "Inside a DDL or logon trigger, returns XML describing the server or database event that fired it."
+    },
+    {
+      "name": "SESSIONPROPERTY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "option varchar ('ANSI_NULLS'|'ANSI_PADDING'|'ANSI_WARNINGS'|'ARITHABORT'|'CONCAT_NULL_YIELDS_NULL'|'NUMERIC_ROUNDABORT'|'QUOTED_IDENTIFIER')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns the current value of a SET option for the session, 1 if on and 0 if off."
+    },
+    {
+      "name": "SQL_VARIANT_PROPERTY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression sql_variant",
+            "property varchar ('BaseType'|'Precision'|'Scale'|'TotalBytes'|'Collation'|'MaxLength')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns base type and other metadata about a sql_variant value."
+    },
+    {
+      "name": "COLLATIONPROPERTY",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "collation_name nvarchar",
+            "property varchar ('CodePage'|'LCID'|'ComparisonStyle'|'Version')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns a property of the given collation, such as its code page or locale ID."
+    },
+    {
+      "name": "TERTIARY_WEIGHTS",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "expression varchar"
+          ],
+          "returns": "varbinary"
+        }
+      ],
+      "returns": "varbinary",
+      "doc": "Returns the tertiary sort weights for each character of a non-Unicode string under a SQL tertiary collation."
+    },
+    {
+      "name": "GET_TRANSMISSION_STATUS",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "conversation_handle uniqueidentifier"
+          ],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Returns the status of the last Service Broker transmission for one side of a conversation; empty string if successful."
+    },
+    {
+      "name": "PUBLISHINGSERVERNAME",
+      "category": "system",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar"
+        }
+      ],
+      "returns": "nvarchar",
+      "doc": "Returns the name of the original publishing server for a published database in database mirroring or availability groups."
+    },
+    {
+      "name": "OBJECT_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_name nvarchar",
+            "[object_type char(2)]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the object ID of a schema-scoped object, or NULL if not found. Accepts one- to three-part names; use tempdb..#name for temp tables."
+    },
+    {
+      "name": "OBJECT_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int",
+            "[database_id int]"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the name of a schema-scoped object from its object ID, optionally in another database."
+    },
+    {
+      "name": "OBJECT_SCHEMA_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int",
+            "[database_id int]"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the schema name of a schema-scoped object from its object ID."
+    },
+    {
+      "name": "OBJECT_DEFINITION",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int"
+          ],
+          "returns": "nvarchar(max)"
+        }
+      ],
+      "returns": "nvarchar(max)",
+      "doc": "Returns the T-SQL source of a module such as a view, procedure, function or trigger; NULL if encrypted or not permitted."
+    },
+    {
+      "name": "OBJECTPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "id int",
+            "property varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a schema-scoped object in the current database, e.g. IsUserTable or IsProcedure."
+    },
+    {
+      "name": "OBJECTPROPERTYEX",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "id int",
+            "property varchar"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns information about a schema-scoped object, supporting more properties than OBJECTPROPERTY, such as BaseType."
+    },
+    {
+      "name": "SCHEMA_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[schema_name sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of the named schema, or of the caller's default schema when no name is given."
+    },
+    {
+      "name": "SCHEMA_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[schema_id int]"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the name of the schema with the given ID, or of the caller's default schema when no ID is given."
+    },
+    {
+      "name": "DB_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[database_name sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of the named database, or of the current database when no name is given."
+    },
+    {
+      "name": "DB_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[database_id int]"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the name of the database with the given ID, or of the current database when no ID is given."
+    },
+    {
+      "name": "COL_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table_id int",
+            "column_id int"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the column name for the given table ID and column ID."
+    },
+    {
+      "name": "COL_LENGTH",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table varchar",
+            "column varchar"
+          ],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Returns the defined length of a column in bytes; -1 for max types. Often used to test whether a column exists."
+    },
+    {
+      "name": "COLUMNPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "id int",
+            "column sysname",
+            "property varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a column or procedure parameter, such as AllowsNull, IsIdentity or Precision."
+    },
+    {
+      "name": "TYPE_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "type_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of a data type by name; qualify user-defined types with their schema."
+    },
+    {
+      "name": "TYPE_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "type_id int"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the unqualified name of a data type from its type ID."
+    },
+    {
+      "name": "TYPEPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "type sysname",
+            "property varchar ('AllowsNull'|'OwnerId'|'Precision'|'Scale'|'UsesAnsiTrim')"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a data type, such as its precision or whether it allows NULL."
+    },
+    {
+      "name": "DATABASEPROPERTYEX",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "database sysname",
+            "property nvarchar"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns the current setting of a database option or property, e.g. Status, Recovery, Collation or Updateability."
+    },
+    {
+      "name": "SERVERPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "property varchar"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns information about the server instance, e.g. ProductVersion, Edition, MachineName, InstanceName or Collation."
+    },
+    {
+      "name": "INDEX_COL",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "table_or_view_name varchar",
+            "index_id int",
+            "key_id int"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the name of the key column at the given position in an index."
+    },
+    {
+      "name": "INDEXPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int",
+            "index_or_statistics_name nvarchar",
+            "property varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns a property of a named index or statistics object, such as IsClustered, IsUnique or IndexDepth."
+    },
+    {
+      "name": "INDEXKEY_PROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int",
+            "index_id int",
+            "key_id int",
+            "property nvarchar ('ColumnId'|'IsDescending')"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a key column of an index, such as its column ID or sort direction."
+    },
+    {
+      "name": "FILE_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "file_name sysname"
+          ],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Returns the file ID for a logical file name in the current database. Deprecated; use FILE_IDEX.",
+      "deprecated": true
+    },
+    {
+      "name": "FILE_IDEX",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "file_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the file ID for a logical data, log or full-text file name in the current database."
+    },
+    {
+      "name": "FILE_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "file_id int"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the logical file name for a file ID in the current database."
+    },
+    {
+      "name": "FILEGROUP_ID",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "filegroup_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of the named filegroup."
+    },
+    {
+      "name": "FILEGROUP_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "filegroup_id smallint"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the name of the filegroup with the given ID."
+    },
+    {
+      "name": "FILEGROUPPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "filegroup_name sysname",
+            "property varchar ('IsReadOnly'|'IsUserDefinedFG'|'IsDefault')"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the value of a property for the named filegroup."
+    },
+    {
+      "name": "FILEPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "file_name sysname",
+            "property varchar ('IsReadOnly'|'IsPrimaryFile'|'IsLogFile'|'SpaceUsed')"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns a property of a database file by logical name, e.g. SpaceUsed in 8-KB pages."
+    },
+    {
+      "name": "APPLOCK_MODE",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "database_principal sysname",
+            "resource_name nvarchar",
+            "lock_owner nvarchar ('Transaction'|'Session')"
+          ],
+          "returns": "nvarchar(32)"
+        }
+      ],
+      "returns": "nvarchar(32)",
+      "doc": "Returns the lock mode the owner holds on an application lock resource, or NoLock."
+    },
+    {
+      "name": "APPLOCK_TEST",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "database_principal sysname",
+            "resource_name nvarchar",
+            "lock_mode nvarchar",
+            "lock_owner nvarchar ('Transaction'|'Session')"
+          ],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Returns 1 if an application lock could be granted with the given mode right now without blocking, otherwise 0."
+    },
+    {
+      "name": "STATS_DATE",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_id int",
+            "stats_id int"
+          ],
+          "returns": "datetime"
+        }
+      ],
+      "returns": "datetime",
+      "doc": "Returns when the statistics object on a table or indexed view was last updated."
+    },
+    {
+      "name": "ASSEMBLYPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "assembly_name sysname",
+            "property_name nvarchar ('CultureInfo'|'PublicKey'|'MvID'|'VersionMajor'|'VersionMinor'|'VersionBuild'|'VersionRevision'|'SimpleName'|'Architecture'|'CLRName')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns information about a property of a registered CLR assembly."
+    },
+    {
+      "name": "PARSENAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "object_name sysname",
+            "object_piece int"
+          ],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns one part of a dot-separated name: 1 = object, 2 = schema, 3 = database, 4 = server. Does not check that the object exists."
+    },
+    {
+      "name": "ORIGINAL_DB_NAME",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the database name specified in the connection string, or the login default database if none was given."
+    },
+    {
+      "name": "FULLTEXTCATALOGPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "catalog_name sysname",
+            "property varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a full-text catalog property, such as ItemCount or PopulateStatus."
+    },
+    {
+      "name": "FULLTEXTSERVICEPROPERTY",
+      "category": "metadata",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "property varchar"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns information about a property of the full-text engine, such as IsFullTextInstalled or LoadOSResources."
+    },
+    {
+      "name": "USER_NAME",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[id int]"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the database user name for the given ID, or the current user when omitted."
+    },
+    {
+      "name": "USER_ID",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[user sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the database principal ID for a user name. Deprecated; use DATABASE_PRINCIPAL_ID.",
+      "deprecated": true
+    },
+    {
+      "name": "DATABASE_PRINCIPAL_ID",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[principal_name sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of a database principal, or of the current user when no name is given."
+    },
+    {
+      "name": "SUSER_NAME",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[server_user_id int]"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the login name for a server principal ID, or the current login when omitted."
+    },
+    {
+      "name": "SUSER_SNAME",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[server_user_sid varbinary(85)]"
+          ],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the login name associated with a security identifier (SID), or the current login when omitted."
+    },
+    {
+      "name": "SUSER_ID",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[login nvarchar]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the server principal ID of a login, or of the current login when omitted."
+    },
+    {
+      "name": "SUSER_SID",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[login sysname]",
+            "[param2 int]"
+          ],
+          "returns": "varbinary(85)"
+        }
+      ],
+      "returns": "varbinary(85)",
+      "doc": "Returns the security identifier (SID) of a login, or of the current login when omitted."
+    },
+    {
+      "name": "IS_MEMBER",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "group_or_role sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the current user is a member of the Windows group or database role, 0 if not, NULL if it is invalid."
+    },
+    {
+      "name": "IS_SRVROLEMEMBER",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "role sysname",
+            "[login sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the login (default: current) is a member of the fixed or user-defined server role, 0 if not, NULL if invalid."
+    },
+    {
+      "name": "IS_ROLEMEMBER",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "role sysname",
+            "[database_principal sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the database principal (default: current user) is a member of the database role, 0 if not, NULL if invalid.",
+      "since": "2012"
+    },
+    {
+      "name": "HAS_PERMS_BY_NAME",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "securable sysname",
+            "securable_class nvarchar",
+            "permission sysname",
+            "[sub_securable sysname]",
+            "[sub_securable_class nvarchar]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the current user has the given effective permission on a securable, 0 if not, NULL if the query is invalid."
+    },
+    {
+      "name": "HAS_DBACCESS",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "database_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the current user can access the database, 0 if not, NULL if the name is invalid."
+    },
+    {
+      "name": "PERMISSIONS",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "[object_id int]",
+            "[column sysname]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns a bitmap of the current user's statement, object or column permissions. Deprecated; use HAS_PERMS_BY_NAME or fn_my_permissions.",
+      "deprecated": true
+    },
+    {
+      "name": "ORIGINAL_LOGIN",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the login that first connected to the instance, even after impersonation with EXECUTE AS."
+    },
+    {
+      "name": "CURRENT_USER",
+      "category": "security",
+      "kind": "niladic",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "sysname"
+        }
+      ],
+      "returns": "sysname",
+      "doc": "Returns the name of the current database user, reflecting EXECUTE AS context. Equivalent to USER_NAME(); written without parentheses."
+    },
+    {
+      "name": "SESSION_USER",
+      "category": "security",
+      "kind": "niladic",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the user name of the current context in the current database. Written without parentheses."
+    },
+    {
+      "name": "SYSTEM_USER",
+      "category": "security",
+      "kind": "niladic",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the login name of the current context, like SUSER_SNAME(). Written without parentheses."
+    },
+    {
+      "name": "USER",
+      "category": "security",
+      "kind": "niladic",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Returns the database user name of the current context, equivalent to USER_NAME(). Written without parentheses."
+    },
+    {
+      "name": "LOGINPROPERTY",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "login_name sysname",
+            "property_name varchar ('BadPasswordCount'|'BadPasswordTime'|'DaysUntilExpiration'|'DefaultDatabase'|'DefaultLanguage'|'IsExpired'|'IsLocked'|'IsMustChange'|'PasswordHash'|'PasswordLastSetTime')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns information about the password policy settings of a SQL Server login."
+    },
+    {
+      "name": "PWDCOMPARE",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "clear_text_password nvarchar",
+            "password_hash varbinary",
+            "[version int]"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Hashes a clear-text password and returns 1 if it matches the given password hash, otherwise 0. Useful for finding weak passwords."
+    },
+    {
+      "name": "PWDENCRYPT",
+      "category": "security",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "password nvarchar"
+          ],
+          "returns": "varbinary(256)"
+        }
+      ],
+      "returns": "varbinary(256)",
+      "doc": "Returns the SQL Server password hash of the input using the current hashing algorithm."
+    },
+    {
+      "name": "ENCRYPTBYKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key_guid uniqueidentifier",
+            "cleartext any",
+            "[add_authenticator int]",
+            "[authenticator sysname]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Encrypts data with a symmetric key identified by its GUID (see KEY_GUID). The key must be opened first with OPEN SYMMETRIC KEY."
+    },
+    {
+      "name": "DECRYPTBYKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "ciphertext varbinary",
+            "[add_authenticator int]",
+            "[authenticator any]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data encrypted with a symmetric key; the key must already be open in the session. Returns NULL if no suitable key is open."
+    },
+    {
+      "name": "ENCRYPTBYPASSPHRASE",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "passphrase nvarchar",
+            "cleartext any",
+            "[add_authenticator int]",
+            "[authenticator sysname]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Encrypts data with a symmetric key derived from a passphrase."
+    },
+    {
+      "name": "DECRYPTBYPASSPHRASE",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "passphrase nvarchar",
+            "ciphertext varbinary",
+            "[add_authenticator int]",
+            "[authenticator sysname]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data encrypted with ENCRYPTBYPASSPHRASE using the same passphrase; returns NULL if it does not match."
+    },
+    {
+      "name": "ENCRYPTBYCERT",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "certificate_id int",
+            "cleartext any"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Encrypts data with the public key of a certificate."
+    },
+    {
+      "name": "DECRYPTBYCERT",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "certificate_id int",
+            "ciphertext varbinary",
+            "[cert_password nvarchar]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data with the private key of a certificate."
+    },
+    {
+      "name": "ENCRYPTBYASYMKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "asym_key_id int",
+            "cleartext any"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Encrypts data with an asymmetric key."
+    },
+    {
+      "name": "DECRYPTBYASYMKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "asym_key_id int",
+            "ciphertext varbinary",
+            "[asym_key_password nvarchar]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data with the private key of an asymmetric key."
+    },
+    {
+      "name": "DECRYPTBYKEYAUTOCERT",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_id int",
+            "cert_password nvarchar",
+            "ciphertext varbinary",
+            "[add_authenticator int]",
+            "[authenticator sysname]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data with a symmetric key that is automatically opened using a certificate."
+    },
+    {
+      "name": "DECRYPTBYKEYAUTOASYMKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "akey_id int",
+            "akey_password nvarchar",
+            "ciphertext varbinary",
+            "[add_authenticator int]",
+            "[authenticator sysname]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Decrypts data with a symmetric key that is automatically opened using an asymmetric key."
+    },
+    {
+      "name": "CERT_ID",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of a certificate in the current database."
+    },
+    {
+      "name": "KEY_ID",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of a symmetric key in the current database; prefix with # for a temporary key."
+    },
+    {
+      "name": "KEY_GUID",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key_name sysname"
+          ],
+          "returns": "uniqueidentifier"
+        }
+      ],
+      "returns": "uniqueidentifier",
+      "doc": "Returns the GUID of a symmetric key in the current database, as needed by ENCRYPTBYKEY."
+    },
+    {
+      "name": "ASYMKEY_ID",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "asym_key_name sysname"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns the ID of an asymmetric key in the current database."
+    },
+    {
+      "name": "CERTPROPERTY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_id int",
+            "property varchar ('Expiry_Date'|'Start_Date'|'Issuer_Name'|'Cert_Serial_Number'|'Subject'|'SID'|'String_SID')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns the value of a certificate property, such as its expiry date or subject."
+    },
+    {
+      "name": "ASYMKEYPROPERTY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key_id int",
+            "property varchar ('algorithm_desc'|'string_sid'|'sid')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns a property of an asymmetric key, such as its algorithm."
+    },
+    {
+      "name": "SYMKEYPROPERTY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "key_id int",
+            "property varchar ('algorithm_desc'|'string_sid'|'sid')"
+          ],
+          "returns": "sql_variant"
+        }
+      ],
+      "returns": "sql_variant",
+      "doc": "Returns the algorithm of a symmetric key created from an EKM module."
+    },
+    {
+      "name": "SIGNBYCERT",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "certificate_id int",
+            "plaintext any",
+            "[password nvarchar]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Signs text with a certificate and returns the signature."
+    },
+    {
+      "name": "SIGNBYASYMKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "asym_key_id int",
+            "plaintext any",
+            "[password nvarchar]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Signs plaintext with an asymmetric key and returns the signature."
+    },
+    {
+      "name": "VERIFYSIGNEDBYCERT",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_id int",
+            "signed_data any",
+            "signature varbinary"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if data and signature match the given certificate, otherwise 0."
+    },
+    {
+      "name": "VERIFYSIGNEDBYASYMKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "asym_key_id int",
+            "clear_text any",
+            "signature varbinary"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if data and signature match the given asymmetric key, otherwise 0."
+    },
+    {
+      "name": "IS_OBJECTSIGNED",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "class nvarchar ('OBJECT')",
+            "object_id int",
+            "thumbprint_class nvarchar ('certificate'|'asymmetric key')",
+            "thumbprint varbinary"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if the object is signed by the certificate or asymmetric key with the given thumbprint, otherwise 0."
+    },
+    {
+      "name": "CRYPT_GEN_RANDOM",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "length int",
+            "[seed varbinary]"
+          ],
+          "returns": "varbinary(8000)"
+        }
+      ],
+      "returns": "varbinary(8000)",
+      "doc": "Returns a cryptographically random binary value of the given length (1-8000 bytes) from the CryptoAPI."
+    },
+    {
+      "name": "CERTENCODED",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_id int"
+          ],
+          "returns": "varbinary"
+        }
+      ],
+      "returns": "varbinary",
+      "doc": "Returns the public portion of a certificate in binary DER form, usable with CREATE CERTIFICATE ... FROM BINARY.",
+      "since": "2012"
+    },
+    {
+      "name": "CERTPRIVATEKEY",
+      "category": "crypto",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cert_id int",
+            "encryption_password nvarchar",
+            "[decryption_password nvarchar]"
+          ],
+          "returns": "varbinary"
+        }
+      ],
+      "returns": "varbinary",
+      "doc": "Returns the private key of a certificate in binary form, encrypted with encryption_password.",
+      "since": "2012"
+    },
+    {
+      "name": "CURSOR_STATUS",
+      "category": "cursor",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "cursor_source varchar ('local'|'global'|'variable')",
+            "cursor_name_or_variable nvarchar"
+          ],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Reports whether a cursor or cursor variable is open with rows (1), open but empty (0), closed (-1), not allocated (-2) or does not exist (-3)."
+    },
+    {
+      "name": "OPENROWSET",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "'provider_name'",
+            "'datasource';'user_id';'password' | 'provider_string'",
+            "[catalog.][schema.]object | 'query'"
+          ],
+          "returns": "table",
+          "doc": "Ad hoc access to remote data through an OLE DB provider."
+        },
+        {
+          "params": [
+            "BULK 'data_file'",
+            "FORMATFILE = 'format_file_path' | SINGLE_BLOB | SINGLE_CLOB | SINGLE_NCLOB",
+            "[bulk_options ...]"
+          ],
+          "returns": "table",
+          "doc": "Reads a file as a rowset or as a single LOB value."
+        }
+      ],
+      "returns": "table",
+      "doc": "Reads remote data via an OLE DB provider, or a file via BULK, as a table usable in FROM. Ad hoc provider access requires the Ad Hoc Distributed Queries option."
+    },
+    {
+      "name": "OPENQUERY",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "linked_server identifier",
+            "'query' varchar"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Runs a pass-through query on a linked server and exposes the result as a table in FROM. The query must be a literal string up to 8 KB."
+    },
+    {
+      "name": "OPENDATASOURCE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "'provider_name' varchar",
+            "'init_string' varchar"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Supplies ad hoc connection information as the server part of a four-part object name, without defining a linked server."
+    },
+    {
+      "name": "OPENXML",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "idoc int",
+            "rowpattern nvarchar",
+            "[flags tinyint]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Shreds an XML document prepared with sp_xml_preparedocument into rows. Add WITH (schema_declaration | table_name) to shape the columns."
+    },
+    {
+      "name": "STRING_SPLIT",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "string nvarchar",
+            "separator nchar(1)"
+          ],
+          "returns": "table"
+        },
+        {
+          "params": [
+            "string nvarchar",
+            "separator nchar(1)",
+            "enable_ordinal int"
+          ],
+          "returns": "table",
+          "doc": "SQL Server 2022+: 1 adds an ordinal column with 1-based positions."
+        }
+      ],
+      "returns": "table",
+      "doc": "Splits a string into rows (column value) on a single-character separator. Output order is not guaranteed without enable_ordinal. Needs compatibility level 130.",
+      "since": "2016"
+    },
+    {
+      "name": "GENERATE_SERIES",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "start numeric",
+            "stop numeric",
+            "[step numeric]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Returns a one-column table (value) of numbers from start to stop, stepping by step (default 1 or -1). Requires compatibility level 160.",
+      "since": "2022"
+    },
+    {
+      "name": "CONTAINSTABLE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "table",
+            "column_name | (column_list) | *",
+            "'contains_search_condition'",
+            "[LANGUAGE language_term]",
+            "[top_n_by_rank int]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Full-text search returning a table of KEY and RANK columns for rows matching a CONTAINS-style condition."
+    },
+    {
+      "name": "FREETEXTTABLE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "table",
+            "column_name | (column_list) | *",
+            "'freetext_string'",
+            "[LANGUAGE language_term]",
+            "[top_n_by_rank int]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Full-text search returning a table of KEY and RANK columns for rows whose meaning matches the free-text string."
+    },
+    {
+      "name": "SEMANTICKEYPHRASETABLE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "table",
+            "column | (column_list) | *",
+            "[source_key]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Returns statistically significant key phrases found in columns with semantic indexing.",
+      "since": "2012"
+    },
+    {
+      "name": "SEMANTICSIMILARITYTABLE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "table",
+            "column | (column_list) | *",
+            "source_key"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Returns documents that are semantically similar to a given document in columns with semantic indexing.",
+      "since": "2012"
+    },
+    {
+      "name": "SEMANTICSIMILARITYDETAILSTABLE",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "table",
+            "source_column",
+            "source_key",
+            "matched_column",
+            "matched_key"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Returns the key phrases that two semantically indexed documents have in common.",
+      "since": "2012"
+    },
+    {
+      "name": "PREDICT",
+      "category": "rowset",
+      "kind": "table",
+      "signatures": [
+        {
+          "params": [
+            "MODEL = model varbinary",
+            "DATA = table_source AS alias",
+            "[RUNTIME = ONNX]"
+          ],
+          "returns": "table"
+        }
+      ],
+      "returns": "table",
+      "doc": "Scores data with a stored machine learning model and returns predictions; declare output columns with a WITH clause.",
+      "since": "2017"
+    },
+    {
+      "name": "CONTAINS",
+      "category": "text",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "column_name | (column_list) | *",
+            "'contains_search_condition'",
+            "[LANGUAGE language_term]"
+          ],
+          "returns": "boolean"
+        }
+      ],
+      "returns": "boolean",
+      "doc": "Full-text predicate used in WHERE; matches words, phrases, prefixes, proximity or inflections in full-text indexed columns."
+    },
+    {
+      "name": "FREETEXT",
+      "category": "text",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "column_name | (column_list) | *",
+            "'freetext_string'",
+            "[LANGUAGE language_term]"
+          ],
+          "returns": "boolean"
+        }
+      ],
+      "returns": "boolean",
+      "doc": "Full-text predicate used in WHERE; matches rows by the meaning of the search text rather than its exact wording."
+    },
+    {
+      "name": "TEXTPTR",
+      "category": "text",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "column text"
+          ],
+          "returns": "varbinary(16)"
+        }
+      ],
+      "returns": "varbinary(16)",
+      "doc": "Returns the text pointer of a text, ntext or image column for use with READTEXT, WRITETEXT and UPDATETEXT.",
+      "deprecated": true
+    },
+    {
+      "name": "TEXTVALID",
+      "category": "text",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "'table.column' nvarchar",
+            "text_ptr varbinary(16)"
+          ],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Returns 1 if a text, ntext or image pointer is valid, otherwise 0.",
+      "deprecated": true
+    },
+    {
+      "name": "XML_SCHEMA_NAMESPACE",
+      "category": "xml",
+      "kind": "scalar",
+      "signatures": [
+        {
+          "params": [
+            "relational_schema sysname",
+            "xml_schema_collection_name sysname",
+            "[namespace nvarchar]"
+          ],
+          "returns": "xml"
+        }
+      ],
+      "returns": "xml",
+      "doc": "Rebuilds and returns the XML schemas stored in an XML schema collection, optionally only for one target namespace."
+    },
+    {
+      "name": "@@CONNECTIONS",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of attempted connections, successful or not, since SQL Server last started."
+    },
+    {
+      "name": "@@CPU_BUSY",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Ticks of CPU time SQL Server has spent working since it last started; multiply by @@TIMETICKS for microseconds."
+    },
+    {
+      "name": "@@CURSOR_ROWS",
+      "category": "cursor",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Qualifying row count of the last cursor opened on the connection: -m while populating asynchronously, -1 for dynamic cursors, 0 if none open."
+    },
+    {
+      "name": "@@DATEFIRST",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "tinyint"
+        }
+      ],
+      "returns": "tinyint",
+      "doc": "Current SET DATEFIRST value for the session, i.e. the first day of the week (1 = Monday ... 7 = Sunday; U.S. English default is 7)."
+    },
+    {
+      "name": "@@DBTS",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "varbinary(8)"
+        }
+      ],
+      "returns": "varbinary(8)",
+      "doc": "Last-used rowversion (timestamp) value of the current database."
+    },
+    {
+      "name": "@@ERROR",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Error number of the last executed statement, or 0 if it succeeded. Reset by each statement, so capture it immediately."
+    },
+    {
+      "name": "@@FETCH_STATUS",
+      "category": "cursor",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Result of the last FETCH on the connection: 0 = success, -1 = failed or past the result set, -2 = row missing, -9 = no fetch."
+    },
+    {
+      "name": "@@IDENTITY",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "numeric(38,0)"
+        }
+      ],
+      "returns": "numeric(38,0)",
+      "doc": "Last identity value inserted in the session in any scope, including by triggers. SCOPE_IDENTITY() is usually safer."
+    },
+    {
+      "name": "@@IDLE",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Ticks SQL Server has been idle since it last started; multiply by @@TIMETICKS for microseconds."
+    },
+    {
+      "name": "@@IO_BUSY",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Ticks SQL Server has spent on input and output operations since it last started."
+    },
+    {
+      "name": "@@LANGID",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Local language ID of the language currently in use by the session."
+    },
+    {
+      "name": "@@LANGUAGE",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Name of the language currently in use by the session."
+    },
+    {
+      "name": "@@LOCK_TIMEOUT",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Current lock timeout of the session in milliseconds; -1 means wait indefinitely (the default)."
+    },
+    {
+      "name": "@@MAX_CONNECTIONS",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Maximum number of simultaneous user connections the instance allows, not necessarily the configured value."
+    },
+    {
+      "name": "@@MAX_PRECISION",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "tinyint"
+        }
+      ],
+      "returns": "tinyint",
+      "doc": "Precision used by the decimal and numeric types on the server, 38 by default."
+    },
+    {
+      "name": "@@NESTLEVEL",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Nesting level of the current module execution: 0 at the top level, incremented by each nested call (maximum 32)."
+    },
+    {
+      "name": "@@OPTIONS",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Bit mask describing the SET options currently enabled for the session."
+    },
+    {
+      "name": "@@PACK_RECEIVED",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of input network packets read by SQL Server since it last started."
+    },
+    {
+      "name": "@@PACK_SENT",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of output network packets written by SQL Server since it last started."
+    },
+    {
+      "name": "@@PACKET_ERRORS",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of network packet errors on SQL Server connections since it last started."
+    },
+    {
+      "name": "@@PROCID",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Object ID of the currently executing module, such as a stored procedure, trigger or user-defined function."
+    },
+    {
+      "name": "@@REMSERVER",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Name of the remote server as it appears in the login record. Deprecated.",
+      "deprecated": true
+    },
+    {
+      "name": "@@ROWCOUNT",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of rows affected or read by the last statement. Use ROWCOUNT_BIG() when the count can exceed 2 billion."
+    },
+    {
+      "name": "@@SERVERNAME",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Name of the local server running SQL Server, including the instance name for named instances."
+    },
+    {
+      "name": "@@SERVICENAME",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(128)"
+        }
+      ],
+      "returns": "nvarchar(128)",
+      "doc": "Registry key name of the SQL Server service: MSSQLSERVER for a default instance, otherwise the instance name."
+    },
+    {
+      "name": "@@SPID",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "smallint"
+        }
+      ],
+      "returns": "smallint",
+      "doc": "Session ID of the current user process."
+    },
+    {
+      "name": "@@TEXTSIZE",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Current SET TEXTSIZE value: maximum bytes of large-value or text/ntext/image data returned by a SELECT."
+    },
+    {
+      "name": "@@TIMETICKS",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of microseconds per tick, used to convert @@CPU_BUSY, @@IDLE and @@IO_BUSY."
+    },
+    {
+      "name": "@@TOTAL_ERRORS",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of disk write errors encountered by SQL Server since it last started."
+    },
+    {
+      "name": "@@TOTAL_READ",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of physical disk reads performed by SQL Server since it last started."
+    },
+    {
+      "name": "@@TOTAL_WRITE",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of physical disk writes performed by SQL Server since it last started."
+    },
+    {
+      "name": "@@TRANCOUNT",
+      "category": "global",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "int"
+        }
+      ],
+      "returns": "int",
+      "doc": "Number of BEGIN TRANSACTION statements currently open on the connection; 0 means no active transaction."
+    },
+    {
+      "name": "@@VERSION",
+      "category": "configuration",
+      "kind": "global",
+      "signatures": [
+        {
+          "params": [],
+          "returns": "nvarchar(300)"
+        }
+      ],
+      "returns": "nvarchar(300)",
+      "doc": "Version, edition, build, processor architecture and operating system details of the current SQL Server installation."
+    }
+  ]
+}

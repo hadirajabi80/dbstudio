@@ -1,0 +1,417 @@
+{
+ "connectionId": "c_ora",
+ "dialect": "plsql",
+ "database": null,
+ "defaultSchema": "SHOP",
+ "version": 1,
+ "databases": [],
+ "schemas": [
+  {
+   "name": "SHOP",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "CUSTOMERS",
+     "cm": "Registered customers",
+     "c": [
+      [
+       "ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "NAME",
+       "VARCHAR2(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "EMAIL",
+       "VARCHAR2(200)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "COUNTRY_ID",
+       "NUMBER",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "ID"
+     ],
+     "fk": [
+      {
+       "n": "FK_CUSTOMERS_COUNTRIES",
+       "cols": [
+        "COUNTRY_ID"
+       ],
+       "rs": "SHOP",
+       "rt": "COUNTRIES",
+       "rcols": [
+        "ID"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "ORDERS",
+     "c": [
+      [
+       "ID",
+       "NUMBER",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "CUSTOMER_ID",
+       "NUMBER",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "ORDER_DATE",
+       "DATE",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "TOTAL",
+       "NUMBER(12,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "ID"
+     ],
+     "fk": [
+      {
+       "n": "FK_ORDERS_CUSTOMERS",
+       "cols": [
+        "CUSTOMER_ID"
+       ],
+       "rs": "SHOP",
+       "rt": "CUSTOMERS",
+       "rcols": [
+        "ID"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "ORDER_LINES",
+     "c": [
+      [
+       "ORDER_ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "PRODUCT_ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "QTY",
+       "NUMBER",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "ORDER_ID",
+      "PRODUCT_ID"
+     ],
+     "fk": [
+      {
+       "n": "FK_LINES_ORDERS",
+       "cols": [
+        "ORDER_ID"
+       ],
+       "rs": "SHOP",
+       "rt": "ORDERS",
+       "rcols": [
+        "ID"
+       ]
+      },
+      {
+       "n": "FK_LINES_PRODUCTS",
+       "cols": [
+        "PRODUCT_ID"
+       ],
+       "rs": "SHOP",
+       "rt": "PRODUCTS",
+       "rcols": [
+        "ID"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "PRODUCTS",
+     "c": [
+      [
+       "ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "NAME",
+       "VARCHAR2(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "PRICE",
+       "NUMBER(10,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "ID"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "COUNTRIES",
+     "c": [
+      [
+       "ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "NAME",
+       "VARCHAR2(100)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "ID"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "MixedCase",
+     "c": [
+      [
+       "Value",
+       "VARCHAR2(10)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "ID",
+       "NUMBER",
+       0,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "view",
+     "n": "V_ORDER_TOTALS",
+     "c": [
+      [
+       "CUSTOMER_ID",
+       "NUMBER",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "TOTAL",
+       "NUMBER",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "package",
+     "n": "ORDER_API",
+     "members": [
+      {
+       "n": "CREATE_ORDER",
+       "k": "proc",
+       "ov": 1,
+       "p": [
+        [
+         "p_cust",
+         "NUMBER",
+         "in",
+         0
+        ],
+        [
+         "p_total",
+         "NUMBER",
+         "in",
+         0
+        ]
+       ]
+      },
+      {
+       "n": "GET_TOTAL",
+       "k": "func",
+       "ov": 1,
+       "p": [
+        [
+         "",
+         "NUMBER",
+         "return",
+         0
+        ],
+        [
+         "p_id",
+         "NUMBER",
+         "in",
+         0
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "t": "sequence",
+     "n": "ORDERS_SEQ"
+    },
+    {
+     "t": "synonym",
+     "n": "CUST",
+     "target": {
+      "s": "SHOP",
+      "n": "CUSTOMERS",
+      "t": "table"
+     }
+    },
+    {
+     "t": "proc",
+     "n": "LOG_EVENT",
+     "p": [
+      [
+       "p_msg",
+       "VARCHAR2",
+       "in",
+       0
+      ],
+      [
+       "p_level",
+       "NUMBER",
+       "in",
+       1
+      ]
+     ]
+    },
+    {
+     "t": "func",
+     "n": "CUSTOMER_NAME",
+     "p": [
+      [
+       "",
+       "VARCHAR2",
+       "return",
+       0
+      ],
+      [
+       "p_id",
+       "NUMBER",
+       "in",
+       0
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "HR",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "EMPLOYEES",
+     "c": [
+      [
+       "EMPLOYEE_ID",
+       "NUMBER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "LAST_NAME",
+       "VARCHAR2(50)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "MANAGER_ID",
+       "NUMBER",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "EMPLOYEE_ID"
+     ]
+    }
+   ]
+  }
+ ]
+}

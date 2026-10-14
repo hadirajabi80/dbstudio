@@ -1,0 +1,388 @@
+{
+ "connectionId": "c_tsql",
+ "dialect": "tsql",
+ "database": "shop",
+ "defaultSchema": "dbo",
+ "version": 1,
+ "databases": [
+  "master",
+  "shop",
+  "tempdb"
+ ],
+ "schemas": [
+  {
+   "name": "dbo",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "Customers",
+     "cm": "Registered customers",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "Name",
+       "nvarchar(100)",
+       0,
+       0,
+       0,
+       "Display name"
+      ],
+      [
+       "Email",
+       "nvarchar(200)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "CountryId",
+       "int",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "Id"
+     ],
+     "fk": [
+      {
+       "n": "FK_Customers_Countries",
+       "cols": [
+        "CountryId"
+       ],
+       "rs": "dbo",
+       "rt": "Countries",
+       "rcols": [
+        "Id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "Orders",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "CustomerId",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "OrderDate",
+       "datetime2",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "Total",
+       "decimal(18,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "Id"
+     ],
+     "fk": [
+      {
+       "n": "FK_Orders_Customers",
+       "cols": [
+        "CustomerId"
+       ],
+       "rs": "dbo",
+       "rt": "Customers",
+       "rcols": [
+        "Id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "OrderLines",
+     "c": [
+      [
+       "OrderId",
+       "int",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "ProductId",
+       "int",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "Qty",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "OrderId",
+      "ProductId"
+     ],
+     "fk": [
+      {
+       "n": "FK_OrderLines_Orders",
+       "cols": [
+        "OrderId"
+       ],
+       "rs": "dbo",
+       "rt": "Orders",
+       "rcols": [
+        "Id"
+       ]
+      },
+      {
+       "n": "FK_OrderLines_Products",
+       "cols": [
+        "ProductId"
+       ],
+       "rs": "dbo",
+       "rt": "Products",
+       "rcols": [
+        "Id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "Products",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "Name",
+       "nvarchar(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "Price",
+       "decimal(18,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "Id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "Countries",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "Name",
+       "nvarchar(100)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "Id"
+     ]
+    },
+    {
+     "t": "view",
+     "n": "vActiveCustomers",
+     "cm": "Customers with at least one order",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "Name",
+       "nvarchar(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "OrderCount",
+       "int",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "GetCustomer",
+     "p": [
+      [
+       "@Id",
+       "int",
+       "in",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "func",
+     "n": "fnTax",
+     "p": [
+      [
+       "",
+       "decimal",
+       "return",
+       0
+      ],
+      [
+       "@amount",
+       "decimal",
+       "in",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "synonym",
+     "n": "Cust",
+     "target": {
+      "d": null,
+      "s": "dbo",
+      "n": "Customers",
+      "t": "table"
+     }
+    }
+   ]
+  },
+  {
+   "name": "Sales",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "Invoices",
+     "c": [
+      [
+       "Id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "OrderId",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "Amount",
+       "decimal(18,2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "IssuedAt",
+       "datetime2",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "Id"
+     ],
+     "fk": [
+      {
+       "n": "FK_Invoices_Orders",
+       "cols": [
+        "OrderId"
+       ],
+       "rs": "dbo",
+       "rt": "Orders",
+       "rcols": [
+        "Id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "CloseInvoice",
+     "p": [
+      [
+       "@InvoiceId",
+       "int",
+       "in",
+       0
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}
