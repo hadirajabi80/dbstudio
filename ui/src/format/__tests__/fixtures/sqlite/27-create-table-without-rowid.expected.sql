@@ -1,0 +1,4 @@
+CREATE TABLE kv (
+    k TEXT PRIMARY KEY,
+    v BLOB
+) WITHOUT ROWID;

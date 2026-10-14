@@ -5,7 +5,9 @@ import type { ConnectionInput, ConnectionProfile, FormField, ProviderId, Provide
 import { getPlatform } from '../../platform';
 import { useConnections } from '../../store/connections';
 import { toast, useUi, type ConnectionDialogState } from '../../store/ui';
-import { CONNECTION_COLORS } from '../common/ConnectionBadge';
+import { connectAndOpen } from '../../app/actions';
+import { isMac } from '../../commands/keys';
+import { CONNECTION_PALETTE, connColorCss } from '../../theme/connColors';
 import { Dialog } from '../common/Dialog';
 import { ProviderIcon } from '../common/icons';
 
@@ -142,7 +144,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
     }
   };
 
-  const onSave = async () => {
+  const onSave = async (connect = false) => {
     if (!provider || !validate()) return;
     setSaving(true);
     const input: ConnectionInput = {
@@ -157,8 +159,11 @@ export function ConnectionDialog({ state, onClose }: Props) {
     };
     try {
       const saved = await save(input, isEdit ? editing!.id : undefined);
-      toast('success', isEdit ? `Saved “${saved.name}”` : `Added “${saved.name}”`);
       onClose();
+      if (connect) {
+        connectAndOpen(saved.id);
+        toast('success', `Connected to “${saved.name}”`);
+      } else toast('success', isEdit ? `Saved “${saved.name}”` : `Added “${saved.name}”`);
     } catch (e) {
       toast('error', 'Could not save the connection', errorMessage(e));
     } finally {
@@ -167,6 +172,8 @@ export function ConnectionDialog({ state, onClose }: Props) {
   };
 
   const title = isEdit ? `Edit connection — ${editing!.name}` : 'New connection';
+  // "Connect" (new connections, default action) saves and opens a console in one step.
+  const connectFirst = !isEdit && (state.mode !== 'new' || state.connectAfter !== false);
 
   return (
     <Dialog
@@ -175,7 +182,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
       onClose={onClose}
       width={760}
       className="conn-dialog"
-      onSubmit={onSave}
+      onSubmit={() => void onSave(connectFirst)}
       footer={
         <>
           <button className="btn" onClick={runTest} disabled={!provider || testing}>
@@ -186,9 +193,21 @@ export function ConnectionDialog({ state, onClose }: Props) {
           <button className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={onSave} disabled={!provider || saving}>
-            {isEdit ? 'Save' : 'Create'}
-          </button>
+          {connectFirst ? (
+            <>
+              <button className="btn" onClick={() => void onSave(false)} disabled={!provider || saving}>
+                Save
+              </button>
+              <button className="btn btn-primary" onClick={() => void onSave(true)} disabled={!provider || saving}>
+                {saving ? <LoaderCircle size={14} className="spin" /> : null}
+                Connect
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-primary" onClick={() => void onSave(false)} disabled={!provider || saving}>
+              {isEdit ? 'Save' : 'Create'}
+            </button>
+          )}
         </>
       }
     >
@@ -253,17 +272,21 @@ export function ConnectionDialog({ state, onClose }: Props) {
                 title="No color"
                 onClick={() => setColor(null)}
               />
-              {CONNECTION_COLORS.map((c) => (
+              {CONNECTION_PALETTE.map((c) => (
                 <button
-                  key={c}
-                  className={`swatch${color === c ? ' selected' : ''}`}
+                  key={c.id}
+                  className={`swatch${color?.toLowerCase() === c.hex ? ' selected' : ''}`}
                   role="radio"
-                  aria-checked={color === c}
-                  title={c}
-                  style={{ background: c }}
-                  onClick={() => setColor(c)}
+                  aria-checked={color?.toLowerCase() === c.hex}
+                  aria-label={c.name}
+                  title={c.name}
+                  style={{ background: connColorCss(c.hex) }}
+                  onClick={() => setColor(c.hex)}
                 />
               ))}
+              {color && !CONNECTION_PALETTE.some((c) => c.hex === color.toLowerCase()) && (
+                <button className="swatch selected" role="radio" aria-checked aria-label="Current colour" title="Current colour" style={{ background: connColorCss(color) }} onClick={() => {}} />
+              )}
             </div>
             <label className="form-label" htmlFor="conn-folder">
               Folder
@@ -285,7 +308,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
               {fields.some((f) => f.type === 'password') && (
                 <label className="check">
                   <input type="checkbox" checked={savePassword} onChange={(e) => setSavePassword(e.target.checked)} />
-                  Save password <span className="muted">(encrypted with Windows DPAPI)</span>
+                  Save password <span className="muted">({isMac() ? 'encrypted for your macOS user account' : 'encrypted with Windows DPAPI for your user account'})</span>
                 </label>
               )}
             </div>

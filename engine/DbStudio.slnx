@@ -7,6 +7,7 @@
     <Project Path="src/DbStudio.Providers.SqlServer/DbStudio.Providers.SqlServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Codegen.Smoke/Codegen.Smoke.csproj" />
     <Project Path="tests/DbStudio.Core.Tests/DbStudio.Core.Tests.csproj" />
     <Project Path="tests/DbStudio.Providers.Oracle.Tests/DbStudio.Providers.Oracle.Tests.csproj" />
     <Project Path="tests/DbStudio.Providers.Sqlite.Tests/DbStudio.Providers.Sqlite.Tests.csproj" />

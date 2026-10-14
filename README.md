@@ -26,6 +26,24 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 - **History** with full-text search and pinning; **session restore** of open tabs and unsaved text;
   light/dark themes following the OS; command palette.
 
+## Features (M1.5 shell)
+
+- **Everything one keystroke away**: every menu, toolbar and context-menu action is a registered command, listed in
+  the command palette (Ctrl+Shift+P / ⇧⌘P) with its shortcut; F1 or Ctrl+K Ctrl+S opens a searchable shortcut sheet.
+  Shortcuts are platform-aware (Ctrl on Windows, ⌘ on macOS).
+- **Go to object** (Ctrl+P): fuzzy search over every loaded schema of every open connection, with `t:` `v:` `p:`
+  `f:` `c:` prefixes; Enter opens, Ctrl+Enter opens the data, Shift+Enter inserts the name, Alt+Enter reveals it.
+- **Several connections at once**: connection pill and database pill on every console (Ctrl+Shift+K / Ctrl+Shift+D),
+  colour bars on tabs, explorer roots and pills, read-only lock glyphs, production colour on the Run button,
+  an *Active connections* panel (sessions, state, elapsed time, cancel, disconnect), and **Run on multiple
+  connections** (Ctrl+Alt+Enter) with results grouped per connection.
+- **Explorer and history filters**: object-type chips, column search and "load schema to search it" hints in the
+  explorer; Connection / Status / When / Only pinned chips in the history.
+- **First launch**: welcome screen with provider cards, "Open a SQLite file" and "Try the sample database";
+  the connection dialog's *Connect* saves and opens a console in one step; a one-time tips strip after the first run.
+- **Design system**: tokens for light and dark themes (following the OS live), lucide icons, empty states,
+  visible focus rings, screen-reader announcements of run results, Settings (Ctrl+,).
+
 ## Architecture
 
 ```
@@ -250,7 +268,16 @@ integration tests are skipped and the rest of the suite still runs.
 | Go to definition | F12 / Ctrl+click |
 | Trigger completion / parameter hints | Ctrl+Space / Ctrl+Shift+Space |
 | Zoom in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Full screen | F11 |
+| Full screen | F11 (macOS: Ctrl+⌘F) |
+| Go to object | Ctrl+P |
+| Keyboard shortcuts | F1 / Ctrl+K Ctrl+S |
+| Change connection / database | Ctrl+Shift+K / Ctrl+Shift+D |
+| Run on multiple connections | Ctrl+Alt+Enter |
+| Reopen closed tab / switch tabs | Ctrl+Shift+T / Ctrl+Tab, Ctrl+1…9 |
+| Maximize results | Ctrl+Shift+R |
+| Settings | Ctrl+, |
+
+On macOS every Ctrl shortcut above uses ⌘ (Cmd). The shortcut sheet (F1) always shows the complete, current list.
 
 Commit, Rollback and Toggle theme are in the Query and View menus and the command palette.
 Ctrl+Enter and F5 belong to the editor; the menu shows them without registering them, so they never fire twice.

@@ -1,6 +1,6 @@
 // Dev playground (route /#/playground, mounted by the app shell): the SQL editor against the fixture catalogs,
 // with a dialect switcher, theme toggle, two editors side by side (multi-instance check) and a run log.
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogSnapshot, Dialect, ObjectRef, RunLabel, Settings, SqlBatch } from '../../api/types';
 import { SqlEditor } from '../SqlEditor';
 import type { SqlEditorHandle } from '../SqlEditor.types';
@@ -79,10 +79,14 @@ export function EditorPlayground() {
     ? async (name: string) => (name === 'DUAL' ? { t: 'table' as const, n: 'DUAL', c: [['DUMMY', 'VARCHAR2(1)', 1, 0, 0, null] as [string, string, 0 | 1, 0 | 1, number, string | null]] } : null)
     : undefined), [dialect]);
 
-  const bg = theme === 'dark' ? '#18191c' : '#f3f4f6';
-  const fg = theme === 'dark' ? '#d4d4d4' : '#1f2328';
-  const panel = theme === 'dark' ? '#1e1f22' : '#ffffff';
-  const border = theme === 'dark' ? '#33363c' : '#d0d7de';
+  // Design tokens (ui/src/theme/tokens.css) follow <html data-theme>; the playground drives it from its toggle.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  const bg = 'var(--bg-app)';
+  const fg = 'var(--fg)';
+  const panel = 'var(--bg-panel)';
+  const border = 'var(--border)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: bg, color: fg, font: '13px system-ui, sans-serif' }}>

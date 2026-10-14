@@ -1,0 +1,1 @@
+alter table dbo.Orders add Note nvarchar(200) null constraint DF_Orders_Note default (N'') ; alter table dbo.Orders drop constraint DF_Orders_Note alter table dbo.Orders alter column Note nvarchar(400) null

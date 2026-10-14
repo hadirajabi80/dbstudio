@@ -1,0 +1,1 @@
+select Id, row_number() over (partition by CustomerId order by OrderDate desc) as rn, sum(Total) over (partition by CustomerId order by OrderDate rows between unbounded preceding and current row) as running from Orders

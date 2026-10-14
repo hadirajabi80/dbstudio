@@ -5,12 +5,19 @@
 // once (ensureMonacoSetup), and providers find this editor's intel through the model URI (registry.ts).
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as monaco from './monaco';
-import type { RunLabel, ServerDiagnostic } from '../api/types';
+import type { ExplainMode, RunLabel, ServerDiagnostic } from '../api/types';
 import { createIntel, type Intel } from '../intel';
 import { intelOptionsFromSettings } from './settings';
 import type { SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from './monaco-setup';
-import { bindModel } from './registry';
+import { bindModel, setActiveBinding, type ModelBinding } from './registry';
+import { formatDocument, formatSelection, openSnippetPicker, runExplain } from './actions';
+import { getEditorConfig } from './config';
+import { guardEditorSuggest } from './suggest-guard';
+import { paramHintText, statementParams } from './param-hint';
+import { snippetSource } from '../snippets';
+import { postfixSource } from '../intel/complete/postfix';
+import { displayShortcut } from '../commands/keys';
 import { resolveRunTarget } from './run-target';
 import { LatestRequest, MARKER_OWNERS, serverMarkers, softMarkers, type MarkerSeverities } from './markers-core';
 
@@ -38,6 +45,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   const serverReq = useRef(new LatestRequest<ServerDiagnostic[]>(400));
   const softTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashIds = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const bindingRef = useRef<ModelBinding | null>(null);
+  const hintIds = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ------------------------------------------------------------ helpers (stable through refs)
 
@@ -85,6 +95,51 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     setTimeout(() => { if (flashIds.current === coll) { coll.clear(); flashIds.current = null; } }, 650);
   };
 
+  const fmtOptions = () => propsRef.current.formatOptions ?? getEditorConfig().format;
+  const doFormat = (selectionOnly: boolean) => {
+    const ed = edRef.current;
+    if (!ed) return 0;
+    return (selectionOnly ? formatSelection : formatDocument)(ed, propsRef.current.dialect, fmtOptions()).length;
+  };
+  const doExplain = (mode: ExplainMode) => {
+    const ed = edRef.current;
+    if (!ed) return false;
+    const onExplain = propsRef.current.onExplain;
+    return runExplain(ed, bindingRef.current ?? undefined, mode, onExplain ? (t) => onExplain(t.mode, t.batch) : null);
+  };
+
+  /** "2 parameters · Ctrl+Alt+P to edit" after the first line of the statement at the cursor. */
+  const refreshParamHint = () => {
+    const ed = edRef.current, intel = intelRef.current, model = ed?.getModel();
+    if (!ed || !intel || !model) return;
+    hintIds.current ??= ed.createDecorationsCollection();
+    const pos = ed.getPosition();
+    const st = pos && propsRef.current.parameterHint !== false ? intel.statementAt(uriRef.current, model.getOffsetAt(pos)) : null;
+    if (!st || st.skipOnRun) { hintIds.current.clear(); return; }
+    const toks = intel.tokens(uriRef.current);
+    let a = 0;
+    while (a < toks.length && toks[a].start < st.start) a++;
+    let b = a;
+    while (b < toks.length && toks[b].end <= st.end && toks[b].kind !== 'eof') b++;
+    let batch: typeof toks | undefined;
+    if (propsRef.current.dialect === 'tsql') {
+      const sameBatch = intel.statements(uriRef.current).filter((x) => x.batchIndex === st.batchIndex);
+      const from = sameBatch[0]?.start ?? st.start, to = sameBatch[sameBatch.length - 1]?.end ?? st.end;
+      batch = toks.filter((t) => t.start >= from && t.end <= to);
+    }
+    const params = statementParams(toks, a, b, propsRef.current.dialect, batch);
+    if (!params.length) { hintIds.current.clear(); return; }
+    const line = st.line;
+    hintIds.current.set([{
+      range: new monaco.Range(line, model.getLineMaxColumn(line), line, model.getLineMaxColumn(line)),
+      options: { after: { content: '  ' + paramHintText(params.length, displayShortcut('Ctrl+Alt+P')), inlineClassName: 'dbstudio-param-hint' }, showIfCollapsed: true },
+    }]);
+  };
+  const scheduleParamHint = () => {
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(refreshParamHint, 150);
+  };
+
   const run = (label: RunLabel) => {
     const t = runTarget(label);
     if (!t) return;
@@ -114,6 +169,10 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       ed.focus();
     },
     getValue: () => edRef.current?.getModel()?.getValue() ?? propsRef.current.value,
+    formatDocument: () => doFormat(false),
+    formatSelection: () => doFormat(true),
+    openSnippetPicker: () => { if (edRef.current) openSnippetPicker(edRef.current, bindingRef.current ?? undefined); },
+    explain: (mode: ExplainMode) => doExplain(mode),
   }), []);
 
   // ------------------------------------------------------------ mount / dialect change
@@ -136,6 +195,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     intel.setDocument(uriRef.current, model.getValue());
     if (p.resolvePublicSynonym) intel.setPublicSynonymResolver((n) => propsRef.current.resolvePublicSynonym?.(n) ?? Promise.resolve(null));
     intel.setSchemaRequester((s) => propsRef.current.requestSchema?.(s));
+    intel.setExtraCompletionSources([snippetSource(dialect, () => propsRef.current.snippets ?? getEditorConfig().snippets), postfixSource]);
 
     const ed = monaco.editor.create(host.current, {
       model,
@@ -167,8 +227,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       stickyScroll: { enabled: false },
     });
     edRef.current = ed;
+    guardEditorSuggest(ed);
 
-    const unbind = bindModel({
+    const binding: ModelBinding = {
       uri: uriRef.current,
       intel,
       editor: ed,
@@ -181,7 +242,13 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         lastUsage.current = u;
         propsRef.current.onUsageChange?.(u);
       },
-    });
+      dialect,
+      tabId: p.tabId,
+      formatOptions: fmtOptions,
+      snippets: () => propsRef.current.snippets ?? getEditorConfig().snippets,
+    };
+    bindingRef.current = binding;
+    const unbind = bindModel(binding);
 
     const subs: monaco.IDisposable[] = [];
     subs.push(model.onDidChangeContent((e) => {
@@ -193,7 +260,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       }
       if (!externalEdit.current) propsRef.current.onChange(model.getValue());
       scheduleDiagnostics();    }));
-    subs.push(ed.onDidChangeCursorPosition((e) => propsRef.current.onCursorChange?.(e.position.lineNumber, e.position.column)));
+    subs.push(ed.onDidChangeCursorPosition((e) => { propsRef.current.onCursorChange?.(e.position.lineNumber, e.position.column); scheduleParamHint(); }));
+    subs.push(ed.onDidFocusEditorText(() => setActiveBinding(binding.uri)));
+    subs.push(model.onDidChangeContent(() => scheduleParamHint()));
     subs.push({ dispose: intel.onDidChange(() => scheduleDiagnostics()) });
 
     // per-editor actions (never addCommand: that binds to the last created editor)
@@ -207,13 +276,40 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     subs.push(ed.addAction({ id: 'dbstudio.cancel', label: 'Cancel Running Query', keybindings: [C.Escape], precondition: ESC_PRECONDITION, run: () => propsRef.current.onCancel?.() }));
     subs.push(ed.addAction({ id: 'dbstudio.duplicateLine', label: 'Duplicate Line', keybindings: [K.CtrlCmd | C.KeyD], run: (x) => x.trigger('dbstudio', 'editor.action.copyLinesDownAction', {}) }));
     subs.push(ed.addAction({ id: 'dbstudio.upperCase', label: 'Transform to Upper Case', keybindings: [K.CtrlCmd | K.Shift | C.KeyU], run: (x) => x.trigger('dbstudio', 'editor.action.transformToUppercase', {}) }));
-    subs.push(ed.addAction({ id: 'dbstudio.lowerCase', label: 'Transform to Lower Case', keybindings: [K.CtrlCmd | K.Shift | C.KeyL], run: (x) => x.trigger('dbstudio', 'editor.action.transformToLowercase', {}) }));
+    // Ctrl+Shift+L is Explain (actual) in M1.5 (PLAN-M1.5 section 3 reserved shortcuts); lower case keeps its palette entry
+    subs.push(ed.addAction({ id: 'dbstudio.lowerCase', label: 'Transform to Lower Case', run: (x) => x.trigger('dbstudio', 'editor.action.transformToLowercase', {}) }));
+    // M1.5 (WP-H): formatter, snippets, explain. KeyMod.CtrlCmd = Ctrl on Windows/Linux, Cmd on macOS.
+    subs.push(ed.addAction({
+      id: 'dbstudio.formatDocument', label: 'Format SQL (Document)', keybindings: [K.Shift | K.Alt | C.KeyF],
+      contextMenuGroupId: '1_modification', contextMenuOrder: 1, precondition: '!editorReadonly', run: () => { doFormat(false); },
+    }));
+    subs.push(ed.addAction({
+      id: 'dbstudio.formatSelection', label: 'Format SQL (Selection or Statement)', keybindings: [K.chord(K.CtrlCmd | C.KeyK, K.CtrlCmd | C.KeyF)],
+      contextMenuGroupId: '1_modification', contextMenuOrder: 2, precondition: '!editorReadonly', run: () => { doFormat(true); },
+    }));
+    subs.push(ed.addAction({
+      id: 'dbstudio.insertSnippet', label: 'Insert Snippet…', keybindings: [K.CtrlCmd | C.KeyJ],
+      contextMenuGroupId: '1_modification', contextMenuOrder: 3, precondition: '!editorReadonly',
+      run: (x) => openSnippetPicker(x as monaco.editor.IStandaloneCodeEditor, bindingRef.current ?? undefined),
+    }));
+    subs.push(ed.addAction({
+      id: 'dbstudio.explainEstimated', label: 'Explain Plan (Estimated)', keybindings: [K.CtrlCmd | C.KeyL],
+      contextMenuGroupId: 'navigation', contextMenuOrder: 2, run: () => { doExplain('estimated'); },
+    }));
+    subs.push(ed.addAction({
+      id: 'dbstudio.explainActual', label: 'Explain Plan (Actual, runs the statement)', keybindings: [K.CtrlCmd | K.Shift | C.KeyL],
+      contextMenuGroupId: 'navigation', contextMenuOrder: 3, run: () => { doExplain('actual'); },
+    }));
     subs.push(ed.addAction({ id: 'dbstudio.signatureHelp', label: 'Parameter Info', keybindings: [K.CtrlCmd | K.Shift | C.Space], run: (x) => x.trigger('dbstudio', 'editor.action.triggerParameterHints', {}) }));
 
     refreshSoft();
     scheduleDiagnostics();
+    scheduleParamHint();
 
     return () => {
+      if (hintTimer.current) clearTimeout(hintTimer.current);
+      hintIds.current = null;
+      bindingRef.current = null;
       serverReq.current.cancel();
       if (softTimer.current) clearTimeout(softTimer.current);
       for (const s of subs) s.dispose();

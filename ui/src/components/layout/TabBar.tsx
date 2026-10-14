@@ -1,31 +1,67 @@
-import { Plus, SquareTerminal, X } from 'lucide-react';
-import { useState, type CSSProperties } from 'react';
-import { closeTab, newConsole } from '../../app/actions';
+import { Lock, Plus, SquareTerminal, X } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { closeTab } from '../../app/actions';
+import { runCommand } from '../../commands/registry';
+import { commandView } from '../../commands/useCommands';
 import { useConnections } from '../../store/connections';
 import { useResults } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { useSessions } from '../../store/sessions';
 import { isDirty, useTabs, type Tab } from '../../store/tabs';
+import { useUi } from '../../store/ui';
+import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
 import { ObjectIcon } from '../common/icons';
+import { commandIcon, contextMenu } from './commandMenu';
+import { getTabView } from './tabViews';
 
-/** Editor tabs. Each tab shows its connection colour (top bar) and name, dirty dot, running/tx state. */
+/** Editor tabs: connection colour bar + name, dirty dot, running/tx state; draggable, middle-click closes. */
 export function TabBar() {
   const tabs = useTabs((s) => s.tabs);
   const activeId = useTabs((s) => s.activeId);
   const [dragId, setDragId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.querySelector<HTMLElement>('.tab.active')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [activeId]);
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    const idx = tabs.findIndex((t) => t.id === activeId);
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (idx + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else if (e.key === 'Delete' && activeId) {
+      e.preventDefault();
+      void closeTab(activeId);
+      return;
+    }
+    if (next < 0) return;
+    e.preventDefault();
+    useTabs.getState().activate(tabs[next].id);
+    setTimeout(() => scrollRef.current?.querySelector<HTMLElement>('.tab.active')?.focus(), 0);
+  };
+
+  const add = commandView('file.newConsole');
   return (
-    <div className="tabbar" role="tablist" aria-label="Editor tabs">
-      <div className="tabbar-scroll">
+    <div className="tabbar" role="tablist" aria-label="Editor tabs" onKeyDown={onKeyDown}>
+      <div className="tabbar-scroll" ref={scrollRef}>
         {tabs.map((t) => (
           <TabItem key={t.id} tab={t} active={t.id === activeId} dragId={dragId} setDragId={setDragId} />
         ))}
       </div>
-      <button className="icon-btn tabbar-add" title="New console (Ctrl+T)" aria-label="New console" onClick={() => newConsole()}>
-        <Plus size={15} />
+      <button className="icon-btn tabbar-add" title={add.tooltip} aria-label="New console" onClick={add.run}>
+        <Plus size={16} strokeWidth={1.5} />
       </button>
     </div>
   );
+}
+
+function TabIcon({ tab }: { tab: Tab }) {
+  if (tab.kind === 'object') return <ObjectIcon type={tab.ref.type} size={14} />;
+  if (tab.kind === 'view') return commandIcon(getTabView(tab.view)?.icon ?? 'File', 14) ?? <SquareTerminal size={14} strokeWidth={1.5} />;
+  return <SquareTerminal size={14} strokeWidth={1.5} />;
 }
 
 function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean; dragId: string | null; setDragId: (id: string | null) => void }) {
@@ -33,19 +69,27 @@ function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean
   const running = useResults((s) => isRunning(s.executions[s.byTab[tab.id]]));
   const txOpen = useSessions((s) => {
     const sid = s.byTab[tab.id];
-    return sid ? s.sessions[sid]?.txOpen : false;
+    return sid ? !!s.sessions[sid]?.txOpen : false;
   });
+  const renaming = useUi((s) => s.renamingTabId === tab.id);
   const dirty = isDirty(tab);
   const t = useTabs.getState();
-  const [renaming, setRenaming] = useState(false);
+  const color = connColorCss(conn?.color);
+  const tooltip = [
+    tab.title,
+    conn ? `${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''}${conn.readOnly ? ' · read-only' : ''}` : null,
+    tab.kind === 'console' && tab.filePath ? tab.filePath : null,
+    txOpen ? 'Uncommitted transaction' : null,
+  ].filter(Boolean).join('\n');
 
   return (
     <div
       role="tab"
       aria-selected={active}
-      className={`tab${active ? ' active' : ''}${dragId === tab.id ? ' dragging' : ''}`}
-      style={conn?.color ? ({ '--tab-color': conn.color } as CSSProperties) : undefined}
-      title={`${tab.title}${conn ? ` — ${conn.name}` : ''}${tab.kind === 'console' && tab.filePath ? `\n${tab.filePath}` : ''}`}
+      tabIndex={active ? 0 : -1}
+      className={`tab${active ? ' active' : ''}${dragId === tab.id ? ' dragging' : ''}${color ? ' has-color' : ''}`}
+      style={color ? ({ '--tab-color': color } as CSSProperties) : undefined}
+      title={tooltip}
       draggable={!renaming}
       onDragStart={(e) => {
         setDragId(tab.id);
@@ -67,46 +111,41 @@ function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean
           void closeTab(tab.id);
         } else if (e.button === 0) t.activate(tab.id);
       }}
-      onDoubleClick={() => tab.kind === 'console' && setRenaming(true)}
-      onContextMenu={(e) =>
-        showContextMenu(e, [
-          { label: 'Close', shortcut: 'Ctrl+W', onClick: () => void closeTab(tab.id) },
-          { label: 'Close others', onClick: () => useTabs.getState().tabs.filter((x) => x.id !== tab.id).forEach((x) => void closeTab(x.id)) },
-          { separator: true },
-          { label: 'Rename', disabled: tab.kind !== 'console', onClick: () => setRenaming(true) },
-          {
-            label: 'Duplicate console',
-            disabled: tab.kind !== 'console',
-            onClick: () => tab.kind === 'console' && newConsole(tab.connectionId, tab.database, tab.text),
-          },
-        ])
-      }
+      onDoubleClick={() => tab.kind === 'console' && runCommand('tab.rename', { kind: 'tab', tabId: tab.id })}
+      onContextMenu={(e) => showContextMenu(e, contextMenu('tab', { kind: 'tab', tabId: tab.id }))}
     >
-      <span className="tab-icon">{tab.kind === 'object' ? <ObjectIcon type={tab.ref.type} size={13} /> : <SquareTerminal size={13} />}</span>
+      <span className="tab-icon">
+        <TabIcon tab={tab} />
+      </span>
       {renaming ? (
         <input
           className="tab-rename"
           autoFocus
+          aria-label="Tab name"
           defaultValue={tab.title}
           onMouseDown={(e) => e.stopPropagation()}
+          onFocus={(e) => e.target.select()}
           onBlur={(e) => {
             if (e.target.value.trim()) t.rename(tab.id, e.target.value.trim());
-            setRenaming(false);
+            useUi.getState().setRenamingTab(null);
           }}
           onKeyDown={(e) => {
+            e.stopPropagation();
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            if (e.key === 'Escape') setRenaming(false);
+            if (e.key === 'Escape') useUi.getState().setRenamingTab(null);
           }}
         />
       ) : (
         <span className="tab-title">{tab.title}</span>
       )}
       {conn && <span className="tab-conn">{conn.name}</span>}
-      {running && <span className="tab-running" title="Running" />}
+      {conn?.readOnly && <Lock size={11} className="tab-lock" aria-label="Read-only connection" />}
+      {running && <span className="tab-running" role="img" aria-label="Running" />}
       {txOpen && <span className="tab-tx" title="Uncommitted transaction">tx</span>}
       <button
         className={`tab-close${dirty ? ' dirty' : ''}`}
         aria-label={`Close ${tab.title}`}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
@@ -114,7 +153,7 @@ function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean
         }}
       >
         <span className="tab-dirty-dot" />
-        <X size={13} />
+        <X size={14} />
       </button>
     </div>
   );

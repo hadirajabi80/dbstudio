@@ -1,0 +1,38 @@
+{
+  "Customer": {
+    "id": 1,
+    "name": "text",
+    "email": "text",
+    "countryId": 1
+  },
+  "Order": {
+    "id": 1,
+    "customerId": 1,
+    "orderDate": "text",
+    "total": 1.5
+  },
+  "OrderLine": {
+    "orderId": 1,
+    "productId": 1,
+    "qty": 1
+  },
+  "Product": {
+    "id": 1,
+    "name": "text",
+    "price": 1.5
+  },
+  "Country": {
+    "id": 1,
+    "name": "text"
+  },
+  "CustomerTotal": {
+    "customerId": 1,
+    "total": 1.5
+  },
+  "CustomerOrdersRow": {
+    "id": 1,
+    "name": "text",
+    "total": 1.5,
+    "orderDate": "text"
+  }
+}

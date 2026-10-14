@@ -1,0 +1,119 @@
+/* Explain plan view (WP-H). Theme tokens only. */
+.pv {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-panel);
+  color: var(--fg);
+}
+.pv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.pv-icon { color: var(--accent); flex-shrink: 0; }
+.pv-title { font-weight: 600; white-space: nowrap; }
+.pv-chip {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.pv-meta { color: var(--fg-muted); font-size: var(--text-sm); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.pv-warn-count { color: var(--warning); }
+.pv-seg { display: inline-flex; border: 1px solid var(--border-control); border-radius: var(--radius-sm); overflow: hidden; }
+.pv-seg button {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 24px; padding: 0 var(--space-2);
+  background: transparent; color: var(--fg-muted); border: 0; cursor: pointer; font: inherit; font-size: var(--text-sm);
+}
+.pv-seg button + button { border-left: 1px solid var(--border-control); }
+.pv-seg button.active { background: var(--accent-soft); color: var(--fg); }
+.pv-seg button:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+.pv-empty { padding: var(--space-6); color: var(--fg-muted); display: flex; align-items: center; gap: var(--space-2); }
+.pv-error { color: var(--danger); }
+.pv-plan-warnings, .pv-node-warnings { list-style: none; margin: 0; padding: var(--space-1) var(--space-3); }
+.pv-plan-warnings { border-bottom: 1px solid var(--border); background: var(--warning-soft); }
+.pv-plan-warnings li, .pv-node-warnings li { display: flex; gap: var(--space-1); align-items: flex-start; padding: 2px 0; color: var(--fg); }
+.pv-plan-warnings svg, .pv-node-warnings svg { color: var(--warning); flex-shrink: 0; margin-top: 2px; }
+
+.pv-body { flex: 1; display: flex; min-height: 0; }
+.pv-scroll { flex: 1; overflow: auto; min-width: 0; }
+.pv-table { width: 100%; border-collapse: collapse; font-size: var(--text-md); }
+.pv-table th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  text-align: left; font-weight: 600; color: var(--fg-muted); font-size: var(--text-sm);
+  padding: 4px 6px; white-space: nowrap;
+}
+.pv-table td { padding: 0 6px; height: 28px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+.pv-num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: var(--text-sm); }
+.pv-table th.pv-num { text-align: right; }
+.pv-col-op { min-width: 280px; }
+.pv-col-obj { max-width: 320px; overflow: hidden; text-overflow: ellipsis; color: var(--fg-muted); font-family: var(--font-mono); font-size: var(--text-sm); }
+.pv-col-pct { width: 150px; }
+.pv-row { cursor: default; }
+.pv-row:hover { background: var(--bg-hover); }
+.pv-row.selected { background: var(--bg-selected); }
+.pv-row:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+.pv-heat-1 .pv-op { font-weight: 600; }
+.pv-heat-2 { background: var(--warning-soft); }
+.pv-heat-2 .pv-op { font-weight: 600; }
+.pv-heat-3 { background: var(--danger-soft); }
+.pv-heat-3 .pv-op { font-weight: 600; color: var(--danger); }
+.pv-row.selected.pv-heat-2, .pv-row.selected.pv-heat-3 { box-shadow: inset 3px 0 0 var(--accent); }
+.pv-twisty {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; margin-right: 2px; vertical-align: middle;
+  border: 0; background: transparent; color: var(--fg-muted); cursor: pointer; border-radius: var(--radius-sm);
+}
+.pv-twisty:hover { background: var(--bg-active); color: var(--fg); }
+.pv-twisty-space { display: inline-block; width: 20px; }
+.pv-flame { color: var(--danger); vertical-align: middle; margin-right: 4px; }
+.pv-warn { color: var(--warning); vertical-align: middle; margin-left: 6px; }
+.pv-op { vertical-align: middle; }
+.pv-logical { margin-left: 6px; color: var(--fg-muted); font-size: var(--text-sm); vertical-align: middle; }
+.pv-off { color: var(--warning); font-weight: 600; }
+.pv-off-mark { color: var(--warning); }
+.pv-bar { display: inline-block; width: 80px; height: 6px; margin-right: 6px; border-radius: 3px; background: var(--bg-sunken); vertical-align: middle; overflow: hidden; }
+.pv-bar > span { display: block; height: 100%; background: var(--accent); }
+.pv-heat-2 .pv-bar > span { background: var(--warning); }
+.pv-heat-3 .pv-bar > span { background: var(--danger); }
+.pv-pct { font-variant-numeric: tabular-nums; font-size: var(--text-sm); vertical-align: middle; }
+
+.pv-details {
+  width: 320px; flex-shrink: 0; overflow: auto;
+  border-left: 1px solid var(--border);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  font-size: var(--text-sm);
+}
+.pv-details dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.pv-prop { display: contents; }
+.pv-prop dt { color: var(--fg-muted); white-space: nowrap; }
+.pv-prop dd { margin: 0; word-break: break-word; font-family: var(--font-mono); }
+.pv-details-h { margin: var(--space-3) 0 var(--space-1); font-weight: 600; color: var(--fg-muted); }
+.pv-predicate {
+  margin: 0; padding: var(--space-2);
+  background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: var(--text-sm);
+}
+.pv-node-warnings { padding: 0; }
+.pv-raw {
+  flex: 1; margin: 0; overflow: auto; padding: var(--space-3);
+  font-family: var(--font-mono); font-size: var(--text-sm); color: var(--fg);
+  background: var(--bg-editor, var(--bg-panel)); white-space: pre;
+}
+.pv-raw:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+@media (max-width: 900px) { .pv-details { display: none; } }

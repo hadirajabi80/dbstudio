@@ -77,9 +77,9 @@ describe('Explorer', () => {
   it('skips the schema level when a database has a single schema (SQLite) and keeps connections independent', async () => {
     render(<Explorer />);
     await expand('Shop (SQLite)');
-    await waitFor(() => expect(row('main')).toBeDefined());
-    await expand('main');
+    // SQLite's single "main" database and single schema are both flattened.
     await waitFor(() => expect(row('Tables')).toBeDefined());
+    expect(row('main')).toBeUndefined();
     expect(row('Triggers')).toBeDefined();
     // a second connection open at the same time
     await expand('Prod SQL');
@@ -91,9 +91,9 @@ describe('Explorer', () => {
   it('fuzzy-filters loaded objects across connections', async () => {
     render(<Explorer />);
     await expand('Shop (SQLite)');
-    await waitFor(() => expect(row('main')).toBeDefined());
-    await expand('main');
+    // SQLite's single "main" database and single schema are both flattened.
     await waitFor(() => expect(row('Tables')).toBeDefined());
+    expect(row('main')).toBeUndefined();
     act(() => useExplorer.getState().setFilter('ordln'));
     await waitFor(() => expect(row('order_lines')).toBeDefined());
     expect(row('customers')).toBeUndefined();

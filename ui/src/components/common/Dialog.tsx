@@ -13,11 +13,14 @@ interface DialogProps {
   ariaLabel?: string;
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Modal dialog: role=dialog + aria-modal, focus trapped, Esc closes, initial focus on the first input. */
 export function Dialog({ title, onClose, children, footer, width = 520, className, onSubmit, ariaLabel }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus], input, select, textarea, button.btn-primary');
+    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus], .dialog-body input, .dialog-body select, .dialog-body textarea, button.btn-primary');
     first?.focus();
     return () => prev?.focus?.();
   }, []);
@@ -34,6 +37,18 @@ export function Dialog({ title, onClose, children, footer, width = 520, classNam
           if (e.key === 'Escape') {
             e.stopPropagation();
             onClose();
+          } else if (e.key === 'Tab') {
+            const els = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])].filter((el) => el.offsetParent !== null || el === document.activeElement);
+            if (!els.length) return;
+            const first = els[0];
+            const last = els[els.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first.focus();
+            }
           } else if (
             e.key === 'Enter' && onSubmit && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLButtonElement)
             && !(e.target instanceof HTMLSelectElement)

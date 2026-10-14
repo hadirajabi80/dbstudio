@@ -1,80 +1,29 @@
-import { ChevronDown, ChevronRight, ChevronsDownUp, Folder, LoaderCircle, Plus, RefreshCw, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { create } from 'zustand';
-import type { ConnectionProfile } from '../../api/types';
-import { copyText, newConsole, openObject, selectTop } from '../../app/actions';
-import { qualifiedName, isTabular } from '../../lib/sql';
+import {
+  ChevronDown, ChevronRight, ChevronsDownUp, Columns3, Database, Folder, LoaderCircle, Lock, Plus, RefreshCw, Search,
+  SquareTerminal, Unplug, X,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import type { CatalogObjectType, ConnectionProfile } from '../../api/types';
+import { newConsole, openObject } from '../../app/actions';
+import { displayShortcut } from '../../commands/keys';
+import { hasCommand, runCommand } from '../../commands/registry';
+import type { CommandTarget } from '../../commands/types';
+import { useCommandContext } from '../../commands/useCommands';
+import { isTabular, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
 import { dialectOf, useConnections } from '../../store/connections';
 import { useSessions } from '../../store/sessions';
-import { toast, useUi } from '../../store/ui';
-import { showContextMenu, type MenuItem } from '../common/Menu';
+import { connColorCss, connColorName } from '../../theme/connColors';
+import { showContextMenu } from '../common/Menu';
 import { ColumnIcon, DatabaseIcon, ObjectIcon, ProviderIcon } from '../common/icons';
-import { buildTree, databasesOf, nodeId, refOf, singleSchema, type TreeRow } from './tree';
+import { EmptyState } from '../EmptyState/EmptyState';
+import { contextMenu } from '../layout/commandMenu';
+import { activeChips, TYPE_CHIPS, useExplorer } from './explorerStore';
+import { buildTree, databasesOf, nodeId, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
 
-const ROW_H = 22;
-const EXPANDED_KEY = 'dbstudio.explorer.expanded.v1';
+export { useExplorer } from './explorerStore';
 
-function loadSet(key: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    /* ignore */
-  }
-  return new Set();
-}
-
-interface ExplorerState {
-  expanded: Set<string>;
-  collapsedFolders: Set<string>;
-  filter: string;
-  selected: string | null;
-  toggle(id: string, open?: boolean): void;
-  toggleFolder(f: string): void;
-  collapseAll(): void;
-  setFilter(f: string): void;
-  select(id: string | null): void;
-}
-
-export const useExplorer = create<ExplorerState>((set, get) => ({
-  expanded: loadSet(EXPANDED_KEY),
-  collapsedFolders: new Set(),
-  filter: '',
-  selected: null,
-  toggle(id, open) {
-    const next = new Set(get().expanded);
-    const willOpen = open ?? !next.has(id);
-    if (willOpen) next.add(id);
-    else next.delete(id);
-    set({ expanded: next });
-    try {
-      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next].slice(-500)));
-    } catch {
-      /* ignore */
-    }
-  },
-  toggleFolder(f) {
-    const next = new Set(get().collapsedFolders);
-    if (next.has(f)) next.delete(f);
-    else next.add(f);
-    set({ collapsedFolders: next });
-  },
-  collapseAll() {
-    set({ expanded: new Set() });
-    try {
-      localStorage.removeItem(EXPANDED_KEY);
-    } catch {
-      /* ignore */
-    }
-  },
-  setFilter(f) {
-    set({ filter: f });
-  },
-  select(id) {
-    set({ selected: id });
-  },
-}));
+const ROW_H = 24;
 
 /** Trigger lazy loads for expanded nodes whose data is missing (never auto-retries errors). */
 function useLazyLoads(connections: ConnectionProfile[]) {
@@ -101,7 +50,7 @@ function useLazyLoads(connections: ConnectionProfile[]) {
       }
       const list = databasesOf(c, cc);
       if (!list) continue;
-      if (list.length === 1 && list[0] === null) ensureDb(c.id, null);
+      if (list.length === 1 && (list[0] === null || c.providerId === 'sqlite')) ensureDb(c.id, list[0]);
       for (const db of list) {
         if (db !== null && expanded.has(nodeId.db(c.id, db))) ensureDb(c.id, db);
       }
@@ -126,26 +75,84 @@ function Highlight({ text, positions }: { text: string; positions?: number[] }) 
     if (last && last.hit === hit) last.s += text[i];
     else parts.push({ s: text[i], hit });
   }
-  return (
-    <>
-      {parts.map((p, i) => (p.hit ? <mark key={i}>{p.s}</mark> : <span key={i}>{p.s}</span>))}
-    </>
-  );
+  return <>{parts.map((p, i) => (p.hit ? <mark key={i}>{p.s}</mark> : <span key={i}>{p.s}</span>))}</>;
+}
+
+/** Command target of a tree row (context-menu args; also stored as the explorer selection). */
+export function targetOfRow(r: TreeRow): CommandTarget | null {
+  if (!r.connectionId) return null;
+  if (r.kind === 'connection') return { kind: 'connection', connectionId: r.connectionId };
+  if (r.kind === 'object' || r.kind === 'column') {
+    const ref = refOf(r);
+    return ref ? { kind: 'object', connectionId: r.connectionId, database: r.database ?? null, ref } : null;
+  }
+  if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') {
+    return { kind: 'container', connectionId: r.connectionId, database: r.database ?? null, schema: r.schema ?? null, objectType: r.kind === 'folder' ? r.objectType : undefined };
+  }
+  return null;
+}
+
+const ROUTINES = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc', 'package', 'trigger']);
+
+export function contextMenuIdOf(r: TreeRow): string | null {
+  if (r.kind === 'cfolder') return 'explorer.folder';
+  if (r.kind === 'connection') return 'explorer.connection';
+  if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') return 'explorer.container';
+  if (r.kind === 'object' || r.kind === 'column') {
+    const t = r.objectType;
+    if (t === 'table') return 'explorer.table';
+    if (t === 'view' || t === 'mview') return 'explorer.view';
+    if (t && ROUTINES.has(t)) return 'explorer.routine';
+    return 'explorer.object';
+  }
+  return null;
+}
+
+/** Enter / double-click: tables & views open their data (when the data tab exists), other objects their details. */
+function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
+  if (r.kind === 'status' && r.status === 'load' && r.connectionId && r.loadSchema) {
+    void useCatalog.getState().loadSchema(r.connectionId, r.database ?? null, r.loadSchema);
+    return;
+  }
+  if (r.kind === 'object' || r.kind === 'column') {
+    const t = targetOfRow(r);
+    if (!t || t.kind !== 'object') return;
+    if (r.kind === 'object' && isTabular(t.ref.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
+    openObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
+  } else toggle(r);
 }
 
 export function Explorer() {
+  useCommandContext();
   const connections = useConnections((s) => s.connections);
   const conns = useCatalog((s) => s.conns);
   const dbs = useCatalog((s) => s.dbs);
-  const { expanded, collapsedFolders, filter, selected } = useExplorer();
+  const expanded = useExplorer((s) => s.expanded);
+  const collapsedFolders = useExplorer((s) => s.collapsedFolders);
+  const filter = useExplorer((s) => s.filter);
+  const selected = useExplorer((s) => s.selected);
+  const chipsMap = useExplorer((s) => s.chips);
+  const chipScope = useExplorer((s) => s.chipScope);
+  const searchColumns = useExplorer((s) => s.searchColumns);
+  const focusFilterSeq = useExplorer((s) => s.focusFilterSeq);
+  const focusTreeSeq = useExplorer((s) => s.focusTreeSeq);
+  const revealSeq = useExplorer((s) => s.revealSeq);
   const ex = useExplorer.getState;
   const sessions = useSessions((s) => s.sessions);
-  const openDialog = useUi((s) => s.openConnectionDialog);
   useLazyLoads(connections);
 
+  const chips = activeChips({ chips: chipsMap, chipScope });
+  const typesFor = useMemo(() => {
+    const cache = new Map<string, ReturnType<typeof typesOfChips>>();
+    return (cid: string) => {
+      if (!cache.has(cid)) cache.set(cid, typesOfChips(chipsMap[cid] ?? chipsMap['*'] ?? []));
+      return cache.get(cid)!;
+    };
+  }, [chipsMap]);
+
   const rows = useMemo(
-    () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter }),
-    [connections, conns, dbs, expanded, collapsedFolders, filter],
+    () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns }),
+    [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns],
   );
   const activeConnections = useMemo(() => new Set(Object.values(sessions).map((s) => s.connectionId)), [sessions]);
 
@@ -159,10 +166,22 @@ export function Explorer() {
     const ro = new ResizeObserver(() => setHeight(el.clientHeight || 600));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [connections.length]);
+
+  useEffect(() => {
+    if (focusFilterSeq) {
+      filterRef.current?.focus();
+      filterRef.current?.select();
+    }
+  }, [focusFilterSeq]);
+  useEffect(() => {
+    if (focusTreeSeq) listRef.current?.focus();
+  }, [focusTreeSeq]);
 
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 10);
   const last = Math.min(rows.length, Math.ceil((scrollTop + height) / ROW_H) + 10);
+
+  const select = (r: TreeRow | undefined) => ex().select(r?.id ?? null, r ? targetOfRow(r) : null);
 
   const toggleRow = (r: TreeRow, open?: boolean) => {
     if (!r.expandable) return;
@@ -170,33 +189,40 @@ export function Explorer() {
     else ex().toggle(r.id, open);
   };
 
-  const activate = (r: TreeRow) => {
-    if (r.kind === 'object' || r.kind === 'column') {
-      const ref = refOf(r);
-      if (ref && r.connectionId) openObject(r.connectionId, r.database ?? null, ref, r.kind === 'column' ? r.column?.name : null);
-    } else toggleRow(r);
-  };
-
   const scrollIntoView = (idx: number) => {
     const el = listRef.current;
-    if (!el) return;
+    if (!el || idx < 0) return;
     const top = idx * ROW_H;
     if (top < el.scrollTop) el.scrollTop = top;
     else if (top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW_H - el.clientHeight;
   };
+
+  // Reveal (palette Alt+Enter): scroll the selected row into view once it exists.
+  useEffect(() => {
+    if (!revealSeq) return;
+    const idx = rows.findIndex((r) => r.id === selected);
+    if (idx >= 0) {
+      scrollIntoView(idx);
+      const r = rows[idx];
+      ex().select(r.id, targetOfRow(r));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealSeq, rows]);
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const idx = rows.findIndex((r) => r.id === selected);
     const r = rows[idx];
     const move = (i: number) => {
       const n = Math.max(0, Math.min(rows.length - 1, i));
-      ex().select(rows[n]?.id ?? null);
+      select(rows[n]);
       scrollIntoView(n);
     };
     if (e.key === 'ArrowDown') { e.preventDefault(); move(idx + 1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(idx - 1); }
     else if (e.key === 'Home') { e.preventDefault(); move(0); }
     else if (e.key === 'End') { e.preventDefault(); move(rows.length - 1); }
+    else if (e.key === 'PageDown') { e.preventDefault(); move(idx + Math.floor(height / ROW_H)); }
+    else if (e.key === 'PageUp') { e.preventDefault(); move(idx - Math.floor(height / ROW_H)); }
     else if (e.key === 'ArrowRight' && r) {
       e.preventDefault();
       if (r.expandable && !r.expanded) toggleRow(r, true);
@@ -207,9 +233,13 @@ export function Explorer() {
       else {
         for (let i = idx - 1; i >= 0; i--) if (rows[i].depth < r.depth) { move(i); break; }
       }
-    } else if (e.key === 'Enter' && r) { e.preventDefault(); activate(r); }
-    else if (e.key === 'F5' && r?.connectionId) { e.preventDefault(); void refreshRow(r); }
-    else if (e.key === 'Escape' && filter) { e.preventDefault(); ex().setFilter(''); }
+    } else if (e.key === 'Enter' && r) { e.preventDefault(); activateRow(r, toggleRow); }
+    else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && r) {
+      e.preventDefault();
+      const el = listRef.current?.querySelector<HTMLElement>(`[data-id="${CSS.escape(r.id)}"]`);
+      const rect = el?.getBoundingClientRect();
+      openMenu(r, { clientX: (rect?.left ?? 0) + 40, clientY: rect?.bottom ?? 0 });
+    } else if (e.key === 'Escape' && filter) { e.preventDefault(); ex().setFilter(''); }
     else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && /\S/.test(e.key)) {
       // Speed search: typing in the tree filters it.
       e.preventDefault();
@@ -218,179 +248,154 @@ export function Explorer() {
     }
   };
 
+  const openMenu = (r: TreeRow, e: { clientX: number; clientY: number; preventDefault?: () => void }) => {
+    const id = contextMenuIdOf(r);
+    if (!id) return e.preventDefault?.();
+    const args = r.kind === 'cfolder' ? { folder: r.label } : targetOfRow(r);
+    const items = contextMenu(id, args);
+    if (items.length) showContextMenu(e, items);
+    else e.preventDefault?.();
+  };
+
+  const nothingOpen = !filter && connections.length > 0 && Object.keys(conns).length === 0 && !connections.some((c) => expanded.has(nodeId.conn(c.id)));
+  const recentConn = [...connections].sort((a, b) => (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? ''))[0];
+  const scopedName = chipScope !== '*' ? connections.find((c) => c.id === chipScope)?.name : null;
+
   return (
-    <div className="explorer" aria-label="Database explorer">
+    <div className="explorer dock-panel" aria-label="Database explorer" data-command-scope="explorer">
       <div className="panel-header">
-        <span className="panel-title">Database Explorer</span>
+        <span className="panel-title">Explorer</span>
         <div className="panel-actions">
-          <button className="icon-btn" title="New connection" aria-label="New connection" onClick={() => openDialog({ mode: 'new' })}>
-            <Plus size={15} />
+          <button className="icon-btn" title={`New connection (${displayShortcut('Mod+Shift+N')})`} aria-label="New connection" onClick={() => runCommand('file.newConnection')}>
+            <Plus size={16} strokeWidth={1.5} />
           </button>
           <button
             className="icon-btn"
-            title="Refresh selected connection (F5)"
+            title={`Refresh selected (${displayShortcut('F5')})`}
             aria-label="Refresh"
             onClick={() => {
-              const r = rows.find((x) => x.id === selected);
-              if (r?.connectionId) void refreshRow(r);
+              const t = ex().selectedTarget;
+              if (t) runCommand('connections.refreshCatalog', t);
               else for (const c of connections) if (conns[c.id]) void useCatalog.getState().refresh(c.id);
             }}
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={16} strokeWidth={1.5} />
           </button>
           <button className="icon-btn" title="Collapse all" aria-label="Collapse all" onClick={() => ex().collapseAll()}>
-            <ChevronsDownUp size={15} />
+            <ChevronsDownUp size={16} strokeWidth={1.5} />
           </button>
         </div>
       </div>
-      <div className="explorer-filter">
-        <Search size={13} className="explorer-filter-icon" />
-        <input
-          ref={filterRef}
-          className="input sm"
-          placeholder="Filter objects (fuzzy)"
-          aria-label="Filter objects"
-          value={filter}
-          spellCheck={false}
-          onChange={(e) => ex().setFilter(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              ex().setFilter('');
-              listRef.current?.focus();
-            } else if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              ex().select(rows.find((r) => r.kind === 'object')?.id ?? rows[0]?.id ?? null);
-              listRef.current?.focus();
-            }
-          }}
-        />
-        {filter && (
-          <button className="icon-btn sm" aria-label="Clear filter" onClick={() => ex().setFilter('')}>
-            <X size={13} />
-          </button>
-        )}
-      </div>
-      {connections.length === 0 ? (
-        <div className="explorer-empty">
-          <DatabaseIcon size={28} />
-          <p>No connections yet.</p>
-          <button className="btn btn-primary" onClick={() => openDialog({ mode: 'new' })}>
-            <Plus size={14} /> New connection
-          </button>
-        </div>
-      ) : (
-        <div
-          ref={listRef}
-          className="tree"
-          role="tree"
-          aria-label="Connections"
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          onScroll={(e) => setScrollTop((e.target as HTMLElement).scrollTop)}
-        >
-          <div style={{ height: rows.length * ROW_H, position: 'relative' }}>
-            {rows.slice(first, last).map((r, i) => (
-              <TreeRowView
-                key={r.id}
-                row={r}
-                top={(first + i) * ROW_H}
-                selected={r.id === selected}
-                active={r.kind === 'connection' && !!r.connectionId && (activeConnections.has(r.connectionId) || conns[r.connectionId]?.status === 'ready')}
-                onSelect={() => ex().select(r.id)}
-                onToggle={() => toggleRow(r)}
-                onActivate={() => activate(r)}
-              />
+      {connections.length > 0 && (
+        <div className="explorer-filter">
+          <div className="search-box">
+            <Search size={14} strokeWidth={1.5} />
+            <input
+              ref={filterRef}
+              className="input borderless"
+              placeholder={`Filter objects (${displayShortcut('Mod+F')})`}
+              aria-label="Filter objects"
+              value={filter}
+              spellCheck={false}
+              onChange={(e) => ex().setFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  if (filter) ex().setFilter('');
+                  else listRef.current?.focus();
+                } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                  e.preventDefault();
+                  const r = rows.find((x) => x.kind === 'object') ?? rows[0];
+                  select(r);
+                  listRef.current?.focus();
+                  if (e.key === 'Enter' && r) activateRow(r, toggleRow);
+                }
+              }}
+            />
+            {filter && (
+              <button className="search-toggle" aria-label="Clear filter" title="Clear filter (Esc)" onClick={() => ex().setFilter('')}>
+                <X size={14} />
+              </button>
+            )}
+            <button
+              className={`search-toggle${searchColumns ? ' on' : ''}`}
+              aria-pressed={searchColumns}
+              aria-label="Search columns too"
+              title="Search column names too"
+              onClick={() => ex().setSearchColumns(!searchColumns)}
+            >
+              <Columns3 size={14} strokeWidth={1.75} />
+            </button>
+          </div>
+          <div className="chip-row" role="group" aria-label={`Object types${scopedName ? ` for ${scopedName}` : ''}`}>
+            {TYPE_CHIPS.map((c) => (
+              <button key={c.id} className={`chip${chips.includes(c.id) ? ' on' : ''}`} aria-pressed={chips.includes(c.id)} onClick={() => ex().toggleChip(c.id)}>
+                {c.label}
+              </button>
             ))}
+            {chips.length > 0 && (
+              <button className="chip chip-clear" onClick={() => ex().clearChips()} title="Show all object types">
+                Clear
+              </button>
+            )}
           </div>
         </div>
       )}
+      {connections.length === 0 ? (
+        <EmptyState
+          icon={<Database size={32} strokeWidth={1.25} />}
+          title="Add your first connection"
+          hint="SQL Server, Oracle or a SQLite file."
+          action={{ command: 'file.newConnection', label: 'New connection' }}
+          secondary={{ command: 'file.sampleDb', label: 'Try the sample database' }}
+        />
+      ) : (
+        <>
+          <div
+            ref={listRef}
+            className="tree"
+            role="tree"
+            aria-label="Connections"
+            aria-activedescendant={selected ? `tree-${selected}` : undefined}
+            tabIndex={0}
+            onKeyDown={onKeyDown}
+            onFocus={() => {
+              if (!selected && rows[0]) select(rows[0]);
+            }}
+            onScroll={(e) => setScrollTop((e.target as HTMLElement).scrollTop)}
+          >
+            <div style={{ height: rows.length * ROW_H, position: 'relative' }}>
+              {rows.slice(first, last).map((r, i) => (
+                <TreeRowView
+                  key={r.id}
+                  row={r}
+                  top={(first + i) * ROW_H}
+                  selected={r.id === selected}
+                  active={r.kind === 'connection' && !!r.connectionId && (activeConnections.has(r.connectionId) || conns[r.connectionId]?.status === 'ready')}
+                  onSelect={() => select(r)}
+                  onToggle={() => toggleRow(r)}
+                  onActivate={() => activateRow(r, toggleRow)}
+                  onMenu={(e) => {
+                    select(r);
+                    openMenu(r, e);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          {nothingOpen && recentConn && (
+            <EmptyState
+              compact
+              className="explorer-connect"
+              icon={<Database size={24} strokeWidth={1.25} />}
+              title="Connect to browse objects"
+              action={{ label: `Connect to ${recentConn.name}`, onClick: () => ex().toggle(nodeId.conn(recentConn.id), true) }}
+            />
+          )}
+        </>
+      )}
     </div>
   );
-}
-
-async function refreshRow(r: TreeRow) {
-  if (!r.connectionId) return;
-  const cat = useCatalog.getState();
-  if (r.kind === 'connection') await cat.refresh(r.connectionId);
-  else if (r.schema && (r.kind === 'schema' || r.kind === 'folder' || r.kind === 'object' || r.kind === 'column')) {
-    await cat.loadSchema(r.connectionId, r.database ?? null, r.schema, true);
-  } else await cat.refresh(r.connectionId, r.database ?? null);
-  toast('info', 'Refreshed');
-}
-
-function contextItems(r: TreeRow): MenuItem[] {
-  const cid = r.connectionId;
-  const ui = useUi.getState();
-  if (r.kind === 'cfolder') {
-    return [{ label: 'New connection in folder', icon: <Plus size={14} />, onClick: () => ui.openConnectionDialog({ mode: 'new', folder: r.label }) }];
-  }
-  if (!cid) return [];
-  const dialect = dialectOf(cid);
-  const refresh: MenuItem = { label: 'Refresh', icon: <RefreshCw size={14} />, shortcut: 'F5', onClick: () => void refreshRow(r) };
-  if (r.kind === 'connection') {
-    const conn = useConnections.getState().connections.find((c) => c.id === cid);
-    return [
-      { label: 'Open console', shortcut: 'Ctrl+T', onClick: () => newConsole(cid, null) },
-      { separator: true },
-      { label: 'Edit connection…', onClick: () => ui.openConnectionDialog({ mode: 'edit', id: cid }) },
-      { label: 'Duplicate…', onClick: () => ui.openConnectionDialog({ mode: 'duplicate', id: cid }) },
-      { label: 'New connection…', onClick: () => ui.openConnectionDialog({ mode: 'new', folder: conn?.folder ?? null }) },
-      { separator: true },
-      refresh,
-      {
-        label: 'Disconnect explorer',
-        onClick: () => {
-          useCatalog.getState().forget(cid);
-          useExplorer.getState().toggle(r.id, false);
-        },
-      },
-      { label: 'Copy name', onClick: () => void copyText(r.label) },
-      { separator: true },
-      {
-        label: 'Delete connection',
-        danger: true,
-        onClick: async () => {
-          const ok = await ui.askConfirm({ title: 'Delete connection', message: `Delete “${r.label}”? Its saved password is removed too.`, confirmLabel: 'Delete', danger: true });
-          if (!ok) return;
-          try {
-            await useConnections.getState().remove(cid);
-            useCatalog.getState().forget(cid);
-          } catch (e) {
-            toast('error', 'Delete failed', e instanceof Error ? e.message : String(e));
-          }
-        },
-      },
-    ];
-  }
-  if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') {
-    return [
-      { label: 'Open console', onClick: () => newConsole(cid, r.database ?? null) },
-      refresh,
-      { label: 'Copy name', onClick: () => void copyText(r.kind === 'schema' ? r.schema ?? r.label : r.label) },
-    ];
-  }
-  const ref = refOf(r);
-  if (!ref) return [];
-  const defaultSchema = useCatalog.getState().dbs[dbKey(cid, r.database ?? null)]?.defaultSchema ?? null;
-  const qualified = qualifiedName(ref, dialect, { defaultSchema });
-  if (r.kind === 'column') {
-    return [
-      { label: 'Copy column name', onClick: () => void copyText(r.column!.name) },
-      { label: `Open ${ref.name}`, onClick: () => openObject(cid, r.database ?? null, ref, r.column?.name) },
-    ];
-  }
-  return [
-    ...(isTabular(ref.type)
-      ? [{ label: 'Select top 1000 rows', onClick: () => selectTop(cid, r.database ?? null, ref, 1000) } satisfies MenuItem]
-      : []),
-    { label: 'Open DDL / details', shortcut: 'Enter', onClick: () => openObject(cid, r.database ?? null, ref) },
-    { label: 'Open console', onClick: () => newConsole(cid, r.database ?? null) },
-    { separator: true },
-    { label: 'Copy qualified name', onClick: () => void copyText(qualifiedName(ref, dialect, { always: true })) },
-    { label: 'Copy name', onClick: () => void copyText(qualified) },
-    { separator: true },
-    refresh,
-  ];
 }
 
 interface RowProps {
@@ -401,31 +406,40 @@ interface RowProps {
   onSelect: () => void;
   onToggle: () => void;
   onActivate: () => void;
+  onMenu: (e: ReactMouseEvent) => void;
 }
 
-function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActivate }: RowProps) {
+function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActivate, onMenu }: RowProps) {
   const conn = useConnections((s) => (r.kind === 'connection' ? s.connections.find((c) => c.id === r.connectionId) : undefined));
   const draggable = r.kind === 'object' || r.kind === 'column';
   let icon: ReactNode = null;
-  if (r.kind === 'connection' && conn) icon = <ProviderIcon providerId={conn.providerId} color={conn.color} size={15} />;
-  else if (r.kind === 'cfolder') icon = <Folder size={14} className="obj-icon obj-folder" />;
+  if (r.kind === 'connection' && conn) icon = <ProviderIcon providerId={conn.providerId} color={null} size={16} />;
+  else if (r.kind === 'cfolder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
   else if (r.kind === 'database') icon = <DatabaseIcon />;
-  else if (r.kind === 'schema') icon = <span className="schema-glyph">S</span>;
-  else if (r.kind === 'folder') icon = <Folder size={14} className="obj-icon obj-folder" />;
+  else if (r.kind === 'schema') icon = <span className="schema-glyph" aria-hidden="true">S</span>;
+  else if (r.kind === 'folder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
   else if (r.kind === 'object' && r.objectType) icon = <ObjectIcon type={r.objectType} />;
-  else if (r.kind === 'column') icon = <ColumnIcon pk={r.column?.pk} />;
-  else if (r.status === 'loading') icon = <LoaderCircle size={13} className="spin" />;
+  else if (r.kind === 'column') icon = <ColumnIcon pk={r.column?.pk} fk={r.column?.fk} />;
+  else if (r.status === 'loading') icon = <LoaderCircle size={14} className="spin" />;
+  else if (r.status === 'load') icon = <Database size={14} strokeWidth={1.5} />;
+
+  const color = conn ? connColorCss(conn.color) : undefined;
+  const title =
+    r.kind === 'column' ? `${r.label} ${r.detail ?? ''}${r.column?.pk ? ' · primary key' : ''}${r.column?.fk ? ' · foreign key' : ''}`
+      : r.kind === 'connection' && conn ? `${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''}${conn.readOnly ? ' · read-only' : ''}`
+        : r.object?.cm ?? undefined;
 
   return (
     <div
-      className={`tree-row${selected ? ' selected' : ''}${r.kind === 'status' ? ` status ${r.status}` : ''}`}
+      id={`tree-${r.id}`}
+      className={`tree-row${selected ? ' selected' : ''}${r.kind === 'status' ? ` status ${r.status}` : ''}${r.kind === 'connection' ? ' root' : ''}`}
       role="treeitem"
       aria-level={r.depth + 1}
       aria-expanded={r.expandable ? r.expanded : undefined}
       aria-selected={selected}
       data-kind={r.kind}
       data-id={r.id}
-      style={{ top, paddingLeft: 6 + r.depth * 14 }}
+      style={{ top, paddingLeft: 8 + r.depth * 16, ...(color ? { ['--conn-color' as string]: color } : {}) }}
       draggable={draggable}
       onDragStart={(e) => {
         if (!r.connectionId) return;
@@ -436,22 +450,23 @@ function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActi
           text = qualifiedName(ref, dialectOf(r.connectionId), { defaultSchema: def });
         }
         e.dataTransfer.setData('text/plain', text);
+        e.dataTransfer.setData('application/x-dbstudio-object', JSON.stringify({ connectionId: r.connectionId, name: text }));
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onMouseDown={() => onSelect()}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('.tree-twisty')) return;
-        if (r.kind === 'cfolder' || r.kind === 'folder') onToggle();
+        if ((e.target as HTMLElement).closest('.tree-twisty, .tree-row-actions')) return;
+        if (r.kind === 'cfolder' || r.kind === 'folder' || r.kind === 'database' || r.kind === 'schema') onToggle();
+        if (r.kind === 'status' && r.status === 'load') onActivate();
       }}
-      onDoubleClick={() => onActivate()}
-      onContextMenu={(e) => {
-        onSelect();
-        const items = contextItems(r);
-        if (items.length) showContextMenu(e, items);
-        else e.preventDefault();
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest('.tree-row-actions')) return;
+        if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column') onActivate();
       }}
-      title={r.kind === 'column' ? `${r.label} ${r.detail ?? ''}` : r.object?.cm ?? undefined}
+      onContextMenu={onMenu}
+      title={title}
     >
+      {r.kind === 'connection' && color && <span className="tree-conn-bar" aria-hidden="true" />}
       <span
         className="tree-twisty"
         onClick={(e) => {
@@ -465,9 +480,23 @@ function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActi
       <span className={`tree-label${r.kind === 'connection' ? ' strong' : ''}`}>
         <Highlight text={r.label} positions={r.match} />
       </span>
-      {active && <span className="conn-active-dot" title="Connected" />}
+      {conn?.readOnly && <Lock size={11} className="tree-lock" aria-label="Read-only" />}
+      {r.busy && <LoaderCircle size={12} className="spin tree-spinner" aria-label="Loading" />}
+      {active && !r.busy && <span className="conn-active-dot" title="Connected" />}
       {r.detail && <span className="tree-detail">{r.detail}</span>}
-      {r.count !== undefined && r.kind !== 'object' && <span className="tree-count">{r.count}</span>}
+      {r.count !== undefined && r.kind !== 'object' && <span className="tree-count">{r.count.toLocaleString()}</span>}
+      {r.kind === 'connection' && r.connectionId && (
+        <span className="tree-row-actions">
+          <button className="icon-btn xs" title="Open console" aria-label={`Open console on ${r.label}`} tabIndex={-1} onClick={() => newConsole(r.connectionId!, null)}>
+            <SquareTerminal size={13} />
+          </button>
+          {active && (
+            <button className="icon-btn xs" title="Disconnect" aria-label={`Disconnect ${r.label}`} tabIndex={-1} onClick={() => runCommand('connections.disconnect', { kind: 'connection', connectionId: r.connectionId })}>
+              <Unplug size={13} />
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }

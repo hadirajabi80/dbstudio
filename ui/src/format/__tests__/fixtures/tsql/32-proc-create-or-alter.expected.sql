@@ -1,0 +1,4 @@
+CREATE OR ALTER PROC dbo.p (@a INT, @b INT = 2)
+WITH RECOMPILE
+AS
+SELECT @a + @b AS s

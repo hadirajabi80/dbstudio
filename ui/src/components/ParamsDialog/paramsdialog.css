@@ -1,0 +1,71 @@
+/* Parameters dialog (WP-G) */
+.pd-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pd-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.pd-head,
+.pd-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 26%) 150px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.pd-head {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted, var(--text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 2px 2px;
+}
+.pd-row {
+  min-height: 30px;
+}
+.pd-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-row select {
+  width: 100%;
+}
+.pd-value {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pd-value .input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+.pd-mru-icon {
+  color: var(--fg-muted, var(--text-muted));
+  flex-shrink: 0;
+}
+.pd-error {
+  color: var(--danger);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.pd-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--fg-muted, var(--text-muted));
+}
+.pd-skip input {
+  accent-color: var(--accent);
+}

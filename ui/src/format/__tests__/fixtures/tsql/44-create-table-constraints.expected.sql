@@ -1,0 +1,9 @@
+CREATE TABLE dbo.OrderLines (
+    Id INT IDENTITY(1, 1) NOT NULL,
+    OrderId INT NOT NULL,
+    Qty INT NOT NULL CHECK (Qty > 0),
+    Price MONEY NOT NULL,
+    Total AS (Qty * Price) PERSISTED,
+    CONSTRAINT PK_OrderLines PRIMARY KEY CLUSTERED (Id),
+    CONSTRAINT FK_OrderLines_Orders FOREIGN KEY (OrderId) REFERENCES dbo.Orders (Id) ON DELETE CASCADE ON UPDATE NO ACTION
+)

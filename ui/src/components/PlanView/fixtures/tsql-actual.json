@@ -1,0 +1,40 @@
+{
+  "type": "exec.plan",
+  "executionId": "x_tsql_plan",
+  "dialect": "tsql",
+  "mode": "actual",
+  "rawFormat": "xml",
+  "raw": "<ShowPlanXML xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/showplan\" Version=\"1.564\"><BatchSequence><Batch><Statements><StmtSimple StatementText=\"SELECT c.Name, SUM(o.Total) FROM dbo.Customers c JOIN dbo.Orders o ON o.CustomerId = c.Id WHERE o.Status = 'paid' GROUP BY c.Name ORDER BY 2 DESC\" StatementSubTreeCost=\"1.2843\"><QueryPlan><RelOp NodeId=\"0\" PhysicalOp=\"Sort\" LogicalOp=\"Sort\" EstimateRows=\"812\" EstimatedTotalSubtreeCost=\"1.2843\"/></QueryPlan></StmtSimple></Statements></Batch></BatchSequence></ShowPlanXML>",
+  "warnings": [],
+  "root": {
+    "id": 0, "op": "Sort", "logicalOp": "Sort", "object": null, "estRows": 812, "actualRows": 790,
+    "cost": 1.2843, "costPct": 12.4, "predicate": "ORDER BY: [Expr1002] DESC", "warnings": [],
+    "props": { "EstimateIO": "0.0112613", "EstimateCPU": "0.144", "Memory grant": "1 MB" },
+    "children": [
+      {
+        "id": 1, "op": "Hash Match", "logicalOp": "Aggregate", "object": null, "estRows": 812, "actualRows": 790,
+        "cost": 1.1251, "costPct": 18.9, "predicate": "HASH:([c].[Name])", "warnings": [],
+        "children": [
+          {
+            "id": 2, "op": "Hash Match", "logicalOp": "Inner Join", "object": null, "estRows": 14520, "actualRows": 152330,
+            "cost": 0.9123, "costPct": 21.7, "predicate": "HASH:([c].[Id])=([o].[CustomerId])",
+            "warnings": ["Operator used tempdb to spill data during execution with spill level 1"],
+            "children": [
+              {
+                "id": 3, "op": "Clustered Index Scan", "logicalOp": "Clustered Index Scan", "object": "[dbo].[Customers].[PK_Customers] [c]",
+                "estRows": 9200, "actualRows": 9200, "cost": 0.0682, "costPct": 5.3, "predicate": null, "warnings": [], "children": []
+              },
+              {
+                "id": 4, "op": "Clustered Index Scan", "logicalOp": "Clustered Index Scan", "object": "[dbo].[Orders].[PK_Orders] [o]",
+                "estRows": 14520, "actualRows": 152330, "cost": 0.5653, "costPct": 41.7, "predicate": "[o].[Status]='paid'",
+                "warnings": ["Missing index: CREATE INDEX [IX_Orders_Status] ON [dbo].[Orders] ([Status]) INCLUDE ([CustomerId], [Total]) (impact 87.3 %)"],
+                "props": { "Ordered": "False", "Storage": "RowStore" },
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

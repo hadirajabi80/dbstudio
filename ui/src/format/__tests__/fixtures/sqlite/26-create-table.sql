@@ -1,0 +1,1 @@
+create table if not exists orders (id integer primary key autoincrement, customer_id integer not null references customers(id) on delete cascade, total real not null default 0 check (total >= 0), note text collate nocase, created_at text default (datetime('now')), unique (customer_id, created_at)) strict;

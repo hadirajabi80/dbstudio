@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConnections } from '../../store/connections';
 import { useMockEngine } from '../../test/mockServer';
+import { CONNECTION_PALETTE } from '../../theme/connColors';
 import { ConnectionDialog } from './ConnectionDialog';
 
 const mock = useMockEngine();
@@ -65,21 +66,21 @@ describe('ConnectionDialog', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<ConnectionDialog state={{ mode: 'new', providerId: 'sqlite' }} onClose={onClose} />);
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Database file is required')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText(/Database file/), 'C:\\data\\inventory.db');
     // name is suggested from the file name
     expect(screen.getByLabelText('Name')).toHaveValue('inventory');
-    await user.click(screen.getByRole('radio', { name: '#0090ff' }));
+    await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await user.type(screen.getByLabelText('Folder'), 'Local');
     await user.click(screen.getByRole('checkbox', { name: /Read-only/ }));
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const saved = mock.ctx.engine.connections.find((c) => c.name === 'inventory');
-    expect(saved).toMatchObject({ providerId: 'sqlite', color: '#0090ff', folder: 'Local', readOnly: true, props: { path: 'C:\\data\\inventory.db' } });
+    expect(saved).toMatchObject({ providerId: 'sqlite', color: CONNECTION_PALETTE.find((p) => p.id === 'blue')!.hex, folder: 'Local', readOnly: true, props: { path: 'C:\\data\\inventory.db' } });
     expect(useConnections.getState().connections.some((c) => c.name === 'inventory')).toBe(true);
   });
 

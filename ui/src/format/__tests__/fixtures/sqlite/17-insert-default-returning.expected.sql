@@ -1,0 +1,2 @@
+INSERT INTO log DEFAULT VALUES
+RETURNING id, created_at;

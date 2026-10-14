@@ -1,0 +1,1 @@
+select id, row_number() over (partition by customer_id order by created_at desc) as rn, sum(total) over w as running from orders window w as (partition by customer_id order by created_at rows between unbounded preceding and current row);

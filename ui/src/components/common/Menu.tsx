@@ -13,6 +13,8 @@ export interface MenuItem {
   checked?: boolean;
   separator?: boolean;
   submenu?: MenuItem[];
+  /** Keep the menu open after clicking (multi-select checklists). */
+  keepOpen?: boolean;
 }
 
 interface MenuState {
@@ -70,13 +72,31 @@ function MenuList({ items, x, y, onClose, depth }: { items: MenuItem[]; x: numbe
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setActive((a) => enabled[(enabled.indexOf(a) - 1 + enabled.length) % enabled.length] ?? -1);
-      } else if (e.key === 'Enter' && active >= 0) {
+      } else if (e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        setActive(e.key === 'Home' ? enabled[0] ?? -1 : enabled[enabled.length - 1] ?? -1);
+      } else if ((e.key === 'Enter' || e.key === ' ') && active >= 0) {
         e.preventDefault();
         const it = items[active];
         if (it && !it.submenu) {
-          onClose();
+          if (!it.keepOpen) onClose();
           it.onClick?.();
         }
+      } else if (e.key.length === 1 && e.key.trim() !== "" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Typeahead: jump to the next item whose label starts with the typed character.
+        e.preventDefault();
+        const ch = e.key.toLowerCase();
+        const start = enabled.indexOf(active);
+        for (let k = 1; k <= enabled.length; k++) {
+          const i = enabled[(start + k + enabled.length) % enabled.length];
+          if (items[i]?.label?.toLowerCase().startsWith(ch)) {
+            setActive(i);
+            break;
+          }
+        }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        onClose();
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -92,7 +112,8 @@ function MenuList({ items, x, y, onClose, depth }: { items: MenuItem[]; x: numbe
           ) : (
             <div
               key={it.id ?? i}
-              role="menuitem"
+              role={it.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
+              aria-checked={it.checked !== undefined ? !!it.checked : undefined}
               aria-disabled={it.disabled || undefined}
               className={`menu-item${it.disabled ? ' disabled' : ''}${it.danger ? ' danger' : ''}${active === i ? ' active' : ''}`}
               onMouseEnter={(e) => {
@@ -105,7 +126,7 @@ function MenuList({ items, x, y, onClose, depth }: { items: MenuItem[]; x: numbe
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 if (it.disabled || it.submenu) return;
-                onClose();
+                if (!it.keepOpen) onClose();
                 it.onClick?.();
               }}
             >

@@ -1,0 +1,47 @@
+{
+  "type": "exec.plan",
+  "executionId": "x_plsql_plan",
+  "dialect": "plsql",
+  "mode": "estimated",
+  "rawFormat": "text",
+  "raw": "Plan hash value: 2342356891\n\n--------------------------------------------------------------------------------------------\n| Id  | Operation                     | Name               | Rows  | Bytes | Cost (%CPU)| Time     |\n--------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT              |                    |    25 |  1100 |    41   (5)| 00:00:01 |\n|   1 |  SORT ORDER BY                |                    |    25 |  1100 |    41   (5)| 00:00:01 |\n|   2 |   HASH GROUP BY               |                    |    25 |  1100 |    40   (3)| 00:00:01 |\n|*  3 |    HASH JOIN                  |                    |  4210 |   180K|    39   (0)| 00:00:01 |\n|   4 |     TABLE ACCESS FULL         | CUSTOMERS          |   500 |  9000 |     5   (0)| 00:00:01 |\n|*  5 |     TABLE ACCESS BY INDEX ROWID BATCHED| ORDERS    |  4210 |   106K|    33   (0)| 00:00:01 |\n|*  6 |      INDEX RANGE SCAN         | IX_ORDERS_STATUS   |  4210 |       |     9   (0)| 00:00:01 |\n--------------------------------------------------------------------------------------------\n\nPredicate Information (identified by operation id):\n---------------------------------------------------\n   3 - access(\"O\".\"CUSTOMER_ID\"=\"C\".\"ID\")\n   6 - access(\"O\".\"STATUS\"='paid')\n",
+  "warnings": [],
+  "root": {
+    "id": 0, "op": "SELECT STATEMENT", "logicalOp": null, "object": null, "estRows": 25, "actualRows": null,
+    "cost": 41, "costPct": null, "predicate": null, "warnings": [],
+    "children": [
+      {
+        "id": 1, "op": "SORT ORDER BY", "logicalOp": null, "object": null, "estRows": 25, "actualRows": null,
+        "cost": 41, "costPct": null, "predicate": null, "warnings": [], "props": { "Bytes": "1100", "CPU cost %": "5" },
+        "children": [
+          {
+            "id": 2, "op": "HASH GROUP BY", "logicalOp": null, "object": null, "estRows": 25, "actualRows": null,
+            "cost": 40, "costPct": null, "predicate": null, "warnings": [],
+            "children": [
+              {
+                "id": 3, "op": "HASH JOIN", "logicalOp": null, "object": null, "estRows": 4210, "actualRows": null,
+                "cost": 39, "costPct": null, "predicate": "access(\"O\".\"CUSTOMER_ID\"=\"C\".\"ID\")", "warnings": [],
+                "children": [
+                  {
+                    "id": 4, "op": "TABLE ACCESS FULL", "logicalOp": null, "object": "SHOP.CUSTOMERS", "estRows": 500, "actualRows": null,
+                    "cost": 5, "costPct": null, "predicate": null, "warnings": [], "children": []
+                  },
+                  {
+                    "id": 5, "op": "TABLE ACCESS BY INDEX ROWID BATCHED", "logicalOp": null, "object": "SHOP.ORDERS", "estRows": 4210, "actualRows": null,
+                    "cost": 33, "costPct": null, "predicate": null, "warnings": [],
+                    "children": [
+                      {
+                        "id": 6, "op": "INDEX RANGE SCAN", "logicalOp": null, "object": "SHOP.IX_ORDERS_STATUS", "estRows": 4210, "actualRows": null,
+                        "cost": 9, "costPct": null, "predicate": "access(\"O\".\"STATUS\"='paid')", "warnings": [], "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

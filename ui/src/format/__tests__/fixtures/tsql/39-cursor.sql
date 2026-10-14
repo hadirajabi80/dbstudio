@@ -1,0 +1,1 @@
+declare c cursor local fast_forward for select Id, Name from Customers where Active = 1 open c fetch next from c into @id, @name while @@fetch_status = 0 begin print @name fetch next from c into @id, @name end close c deallocate c

@@ -7,6 +7,9 @@ import { getSpec, type CompletionItem, type CompletionKind, type LexState } from
 import { tokenizeLine } from './tokens-core';
 import { bindingByUri, bindingFor, bindingForEditor } from './registry';
 import { objectUri, parseObjectUri, objectSummary } from './object-uri';
+import { formatRange, formatSql } from '../format';
+import { snippetPickerItems } from '../snippets';
+import { getEditorConfig } from './config';
 
 export const LANGUAGE_IDS: Record<Dialect, string> = {
   tsql: 'dbstudio-tsql',
@@ -62,6 +65,7 @@ function installStyles(): void {
 .dbstudio-run-flash { background: rgba(255, 196, 0, 0.28); transition: background 0.4s ease-out; }
 .vs-dark .dbstudio-run-flash, .monaco-editor.vs-dark .dbstudio-run-flash { background: rgba(255, 196, 0, 0.18); }
 .dbstudio-run-flash-off { background: transparent; transition: background 0.5s ease-out; }
+.dbstudio-param-hint { color: var(--fg-muted, currentColor); opacity: 0.8; font-style: italic; }
 `;
   document.head.appendChild(st);
 }
@@ -185,6 +189,15 @@ function registerLanguage(dialect: Dialect): void {
         if (!SPACE_TRIGGER_AFTER.test(before)) return { suggestions: [] };
       }
       const offset = model.getOffsetAt(position);
+      if (b.snippetPicker) {
+        // Ctrl+J "Insert snippet…": snippets only, anywhere
+        b.snippetPicker = false;
+        const w = model.getWordUntilPosition(position);
+        const from = offset - (position.column - w.startColumn);
+        const insert = new monaco.Range(position.lineNumber, w.startColumn, position.lineNumber, position.column);
+        const items = snippetPickerItems(dialect, b.snippets?.() ?? getEditorConfig().snippets, w.word, [from, offset]);
+        return { suggestions: items.map((it) => toSuggestion(it, model, b.uri, w.word, false, insert, insert)), incomplete: false };
+      }
       const res = b.intel.complete(b.uri, offset, context.triggerCharacter);
       const start = model.getPositionAt(Math.min(res.replaceRange[0], offset));
       const startPos = start.lineNumber === position.lineNumber ? start : new monaco.Position(position.lineNumber, 1);
@@ -195,7 +208,29 @@ function registerLanguage(dialect: Dialect): void {
       const typed = model.getValueInRange(insert);
       const typedHasSpace = /\s/.test(typed);
       const suggestions = res.items.map((it) => toSuggestion(it, model, b.uri, typed, typedHasSpace, insert, replace));
-      return { suggestions, incomplete: res.isIncomplete };
+      return { suggestions, incomplete: !!res.isIncomplete };
+    },
+  });
+
+  // Formatting (WP-H): Shift+Alt+F / Ctrl+K Ctrl+F and the context menu. The SqlEditor actions bound to the same
+  // keys add cursor preservation and warnings; these providers make Monaco's own Format commands work too.
+  const fmtOptions = (model: monaco.editor.ITextModel) => bindingFor(model)?.formatOptions?.() ?? getEditorConfig().format;
+  monaco.languages.registerDocumentFormattingEditProvider(id, {
+    displayName: 'DbStudio SQL formatter',
+    provideDocumentFormattingEdits(model) {
+      const text = model.getValue();
+      const r = formatSql(text, dialect, fmtOptions(model));
+      return r.text === text ? [] : [{ range: model.getFullModelRange(), text: r.text }];
+    },
+  });
+  monaco.languages.registerDocumentRangeFormattingEditProvider(id, {
+    displayName: 'DbStudio SQL formatter',
+    provideDocumentRangeFormattingEdits(model, range) {
+      const r = formatRange(model.getValue(), dialect, [model.getOffsetAt(range.getStartPosition()), model.getOffsetAt(range.getEndPosition())], fmtOptions(model));
+      if (!r) return [];
+      const a = model.getPositionAt(r.range[0]), z = model.getPositionAt(r.range[1]);
+      const rng = new monaco.Range(a.lineNumber, a.column, z.lineNumber, z.column);
+      return model.getValueInRange(rng) === r.text ? [] : [{ range: rng, text: r.text }];
     },
   });
 

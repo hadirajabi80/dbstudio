@@ -1,0 +1,1 @@
+create trigger trg_orders_ins after insert on orders for each row when new.total > 1000 begin insert into audit (msg) values ('big ' || new.id); update customers set last_order = new.id where id = new.customer_id; end;

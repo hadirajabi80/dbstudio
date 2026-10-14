@@ -2,7 +2,7 @@
 // WP-D implements `SqlEditor` in ./SqlEditor.tsx with exactly these props and handle.
 
 import type {
-  CatalogSnapshot, CatalogObject, Dialect, ObjectRef, RunLabel, ServerDiagnostic, Settings, SqlBatch,
+  CatalogSnapshot, CatalogObject, Dialect, ExplainMode, FormatOptions, ObjectRef, RunLabel, ServerDiagnostic, Settings, Snippet, SqlBatch,
 } from '../api/types';
 
 export interface SqlEditorProps {
@@ -41,6 +41,15 @@ export interface SqlEditorProps {
   onUsageChange?: (usage: Record<string, number>) => void;
   /** Cursor moved: 1-based line/col, for the status bar. */
   onCursorChange?: (line: number, col: number) => void;
+  // ---- M1.5 (WP-H), all optional ----
+  /** Formatter options (Settings.format). Default: the app-wide editor config (editor/config.ts), then built-in defaults. */
+  formatOptions?: Partial<FormatOptions> | null;
+  /** User snippets (Settings.snippets). Default: the app-wide editor config. */
+  snippets?: readonly Snippet[];
+  /** Ctrl+L / Ctrl+Shift+L: explain the statement at the cursor. Default: the app-wide explain handler. */
+  onExplain?: (mode: ExplainMode, batch: SqlBatch) => void;
+  /** Parameter hint ("2 parameters · Ctrl+Alt+P to edit") after the statement at the cursor. Default true. */
+  parameterHint?: boolean;
 }
 
 export interface SqlEditorHandle {
@@ -50,4 +59,13 @@ export interface SqlEditorHandle {
   insertText(text: string): void;
   revealLine(line: number, col?: number): void;
   getValue(): string;
+  // ---- M1.5 (WP-H) ----
+  /** Shift+Alt+F. Returns the number of statements left unformatted. */
+  formatDocument?(): number;
+  /** Ctrl+K Ctrl+F: the statements intersecting the selection (or the statement at the cursor). */
+  formatSelection?(): number;
+  /** Ctrl+J: snippet picker. */
+  openSnippetPicker?(): void;
+  /** Ctrl+L / Ctrl+Shift+L. False when there is no statement at the cursor or no handler. */
+  explain?(mode: ExplainMode): boolean;
 }

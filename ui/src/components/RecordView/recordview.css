@@ -1,0 +1,174 @@
+/* Record view (WP-G) */
+.rv {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+}
+.rv-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-muted, var(--text-muted));
+  flex-shrink: 0;
+}
+.rv-title {
+  font-weight: 600;
+  color: var(--fg, var(--text));
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-search {
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+.rv-search .input {
+  width: 100%;
+}
+.rv-empty {
+  padding: 16px;
+  color: var(--fg-muted, var(--text-muted));
+  font-size: var(--fs-sm);
+}
+.rv-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 4px 8px;
+}
+.rv-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 38%) 1fr;
+  gap: 6px;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+}
+.rv-row:nth-child(even) {
+  background: var(--bg-grid-alt, var(--bg-sunken));
+}
+.rv-row.edited {
+  border-left-color: var(--warning);
+  background: var(--cell-edited, var(--warning-soft));
+}
+.rv-name {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+.rv-name .n {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-name .t {
+  color: var(--fg-muted, var(--text-muted));
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-key {
+  color: var(--warning);
+  flex-shrink: 0;
+  align-self: center;
+}
+.rv-fk {
+  color: var(--accent);
+  flex-shrink: 0;
+  align-self: center;
+}
+.rv-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.rv-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+textarea.rv-input {
+  resize: vertical;
+  height: auto;
+  padding: 4px 6px;
+}
+.rv-ro {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+}
+.rv-ro.num {
+  font-variant-numeric: tabular-nums;
+}
+.rv-ro.null,
+.rv-input::placeholder {
+  font-style: italic;
+  color: var(--fg-muted, var(--text-muted));
+}
+.rv-bool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+}
+.rv-bool input {
+  accent-color: var(--accent);
+}
+.rv-refs {
+  border-top: 1px solid var(--border);
+  padding: 6px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  max-height: 30%;
+  overflow: auto;
+}
+.rv-refs-title {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted, var(--text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 0 4px;
+}
+.rv-ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+.rv-ref:hover {
+  background: var(--bg-hover);
+}
+.rv-ref:focus-visible,
+.rv-input:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--border-focus));
+  outline-offset: 1px;
+}

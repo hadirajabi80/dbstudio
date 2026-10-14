@@ -1,8 +1,12 @@
-import { Copy, KeyRound, LoaderCircle, Play, RefreshCw, SquareTerminal } from 'lucide-react';
+import { Code2, Copy, KeyRound, LoaderCircle, PencilRuler, Play, RefreshCw, SquareTerminal } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import type { DdlResponse, ObjectDetails } from '../../api/types';
 import { copyText, newConsole, selectTop } from '../../app/actions';
+import { runCommand } from '../../commands/registry';
+import type { ObjectTarget } from '../../commands/types';
+import { FormattedToggle } from '../../editor/FormattedDdl';
+import { useFormattedDdl } from '../../editor/formatted-ddl';
 import { SqlEditor } from '../../editor/SqlEditor';
 import { formatCount } from '../../lib/format';
 import { isTabular, OBJECT_TYPE_SINGULAR, qualifiedName } from '../../lib/sql';
@@ -15,6 +19,10 @@ import { ObjectIcon } from '../common/icons';
 type Section = 'ddl' | 'columns' | 'indexes' | 'fks' | 'refs' | 'params';
 
 const noop = () => {};
+
+/** Types with a designer (tables, views) or an editable script (F4). */
+const DESIGNABLE = new Set(['table', 'view', 'mview', 'proc', 'func', 'tablefunc', 'package', 'trigger', 'type']);
+const CODEGEN_TYPES = new Set(['table', 'view', 'mview', 'proc', 'func', 'tablefunc', 'package']);
 
 /** Read-only object view: DDL (Monaco via WP-D's SqlEditor) plus columns/indexes/FKs from /catalog/object. */
 export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme: EffectiveTheme; visible: boolean }) {
@@ -52,6 +60,11 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
   }, [tab.column]);
 
   const qualified = qualifiedName(ref, dialect, { always: true });
+  // Non-destructive formatted view of the DDL (WP-H); "DDL in console" and Copy keep the stored text.
+  const formatted = useFormattedDdl(ddl?.ddl ?? null, dialect);
+  const target: ObjectTarget = { kind: 'object', connectionId: tab.connectionId, database: tab.database, ref };
+  const designable = DESIGNABLE.has(ref.type);
+  const codegenable = CODEGEN_TYPES.has(ref.type);
   const sections: { id: Section; label: string; count?: number; show: boolean }[] = [
     { id: 'ddl', label: 'DDL', show: true },
     { id: 'columns', label: 'Columns', count: details?.columns.length, show: !!details?.columns.length },
@@ -80,8 +93,18 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
             <Play size={12} /> Select top 1000
           </button>
         )}
-        <button className="btn btn-xs" onClick={() => newConsole(tab.connectionId, tab.database, ddl?.ddl ?? '')} disabled={!ddl} title="Open the DDL in a new console">
-          <SquareTerminal size={12} /> Edit in console
+        {designable && (
+          <button className="btn btn-xs" onClick={() => runCommand('designer.edit', target)} title={ref.type === 'table' ? 'Open the table designer (F4)' : 'Edit the definition (F4)'}>
+            <PencilRuler size={12} /> {ref.type === 'table' ? 'Design' : 'Edit'}
+          </button>
+        )}
+        {codegenable && (
+          <button className="btn btn-xs" onClick={() => runCommand('codegen.open', target)} title="Generate C#, Go, TypeScript, Java or Python code (Ctrl+Alt+G)">
+            <Code2 size={12} /> Generate code
+          </button>
+        )}
+        <button className="btn btn-xs" onClick={() => newConsole(tab.connectionId, tab.database, ddl?.ddl ?? '')} disabled={!ddl} title="Open the DDL as it is stored in a new console">
+          <SquareTerminal size={12} /> DDL in console
         </button>
         <button className="icon-btn" title="Copy DDL" onClick={() => ddl && void copyText(ddl.ddl, 'DDL copied')} disabled={!ddl}>
           <Copy size={14} />
@@ -100,6 +123,7 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
             </button>
           ))}
         {ddl && section === 'ddl' && <span className="muted object-ddl-source">{ddl.source === 'generated' ? 'generated from catalog' : 'stored definition'}</span>}
+        {ddl && section === 'ddl' && <FormattedToggle {...formatted.toggle} />}
       </div>
       <div className="object-body">
         {section === 'ddl' ? (
@@ -110,7 +134,7 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
               tabId={`${tab.id}-ddl`}
               dialect={dialect}
               catalog={null}
-              value={ddl.ddl}
+              value={formatted.text}
               onChange={noop}
               onRun={noop}
               readOnly

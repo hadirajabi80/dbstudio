@@ -1,0 +1,1 @@
+create table dbo.OrderLines (Id int identity(1, 1) not null, OrderId int not null, Qty int not null check (Qty > 0), Price money not null, Total as (Qty * Price) persisted, constraint PK_OrderLines primary key clustered (Id), constraint FK_OrderLines_Orders foreign key (OrderId) references dbo.Orders (Id) on delete cascade on update no action)

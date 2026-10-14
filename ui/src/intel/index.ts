@@ -13,7 +13,7 @@ import type { StatementModel, TempTableDef, VarDef } from './parse/statement-mod
 import { CatalogIndex } from './catalog/index';
 import { Binder, type DocSymbols } from './catalog/binder';
 import { detectContext, findCall } from './context/context';
-import { complete as runComplete } from './complete/completer';
+import { complete as runComplete, type ExtraCompletionSource } from './complete/completer';
 import { UsageStore } from './complete/ranker';
 import { signatureHelp as runSignature } from './signature/signature';
 import { symbolAt } from './hover/symbol';
@@ -27,7 +27,9 @@ export { getSpec } from './dialect';
 export { tokenize, lexLine, type LexState, type LineToken } from './lexer/lexer';
 export { isDestructive } from './split/classify';
 export { needsQuoting, quoteIdent } from './complete/format';
-export { matchScore } from './complete/ranker';
+export { matchScore, sortTextFor } from './complete/ranker';
+export type { ExtraCompletionSource, CompleteEnv } from './complete/completer';
+export type { CursorContext } from './context/context';
 
 export interface Intel {
   readonly dialect: Dialect;
@@ -59,6 +61,8 @@ export interface Intel {
   setSchemaRequester(fn: ((schema: string) => void) | null): void;
   /** Catalog-derived state changed asynchronously (e.g. a PUBLIC synonym resolved). */
   onDidChange(fn: () => void): () => void;
+  /** Extra completion sources (WP-H snippets / postfix templates), consulted on every completion. */
+  setExtraCompletionSources(sources: readonly ExtraCompletionSource[]): void;
   /** Statement model (exposed for tests and tooling). */
   modelAt(uri: string, offset: number): StatementModel | null;
 }
@@ -96,6 +100,7 @@ class IntelImpl implements Intel {
   private readonly index: CatalogIndex;
   private readonly usage = new UsageStore();
   private readonly listeners = new Set<() => void>();
+  private extraSources: readonly ExtraCompletionSource[] = [];
 
   constructor(dialect: Dialect, opts?: Partial<IntelOptions>) {
     this.dialect = dialect;
@@ -120,6 +125,7 @@ class IntelImpl implements Intel {
   }
   getOptions(): IntelOptions { return { ...this.opts }; }
   setUsage(usage: Record<string, number> | undefined): void { this.usage.set(usage); }
+  setExtraCompletionSources(sources: readonly ExtraCompletionSource[]): void { this.extraSources = sources; }
   getUsage(): Record<string, number> { return this.usage.toRecord(); }
   setPublicSynonymResolver(fn: ((name: string) => Promise<CatalogObject | null>) | null): void { this.index.publicResolver = fn; }
   setSchemaRequester(fn: ((schema: string) => void) | null): void { this.index.schemaRequester = fn; }
@@ -350,7 +356,7 @@ class IntelImpl implements Intel {
     const model = st ? this.model(d, st) : buildModel([], this.spec, offset, offset);
     const binder = this.binderFor(d, st);
     const ctx = detectContext(model, offset, this.spec, d.text);
-    return runComplete(ctx, { spec: this.spec, index: this.index, binder, opts: this.opts, usage: this.usage, text: d.text, statementEnd: st?.end ?? offset });
+    return runComplete(ctx, { spec: this.spec, index: this.index, binder, opts: this.opts, usage: this.usage, text: d.text, statementEnd: st?.end ?? offset, extraSources: this.extraSources });
   }
 
   resolveItem(item: CompletionItem): CompletionItem { return item; }

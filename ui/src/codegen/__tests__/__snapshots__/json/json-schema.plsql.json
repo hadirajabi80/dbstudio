@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Customer": {
+      "type": "object",
+      "title": "Customer",
+      "description": "Registered customers",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "countryId": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Order": {
+      "type": "object",
+      "title": "Order",
+      "description": "Row of SHOP.ORDERS",
+      "properties": {
+        "id": {
+          "type": "number",
+          "readOnly": true
+        },
+        "customerId": {
+          "type": "number"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "OrderLine": {
+      "type": "object",
+      "title": "OrderLine",
+      "description": "Row of SHOP.ORDER_LINES",
+      "properties": {
+        "orderId": {
+          "type": "number"
+        },
+        "productId": {
+          "type": "number"
+        },
+        "qty": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "orderId",
+        "productId",
+        "qty"
+      ],
+      "additionalProperties": false
+    },
+    "Product": {
+      "type": "object",
+      "title": "Product",
+      "description": "Row of SHOP.PRODUCTS",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "price": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "price"
+      ],
+      "additionalProperties": false
+    },
+    "Country": {
+      "type": "object",
+      "title": "Country",
+      "description": "Row of SHOP.COUNTRIES",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "MixedCase": {
+      "type": "object",
+      "title": "MixedCase",
+      "description": "Row of SHOP.MixedCase",
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 10
+        },
+        "id": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "VOrderTotal": {
+      "type": "object",
+      "title": "VOrderTotal",
+      "description": "Row of SHOP.V_ORDER_TOTALS",
+      "properties": {
+        "customerId": {
+          "type": "number"
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "customerId"
+      ],
+      "additionalProperties": false
+    },
+    "Invoice": {
+      "type": "object",
+      "title": "Invoice",
+      "description": "Issued invoices",
+      "properties": {
+        "invoiceId": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "customerId": {
+          "type": "integer"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "paid": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pdf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "contentEncoding": "base64"
+        },
+        "dueIn": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "duration"
+        }
+      },
+      "required": [
+        "invoiceId",
+        "customerId",
+        "issuedAt",
+        "amount",
+        "paid"
+      ],
+      "additionalProperties": false
+    },
+    "CustomerOrdersRow": {
+      "type": "object",
+      "title": "CustomerOrdersRow",
+      "description": "Row of CustomerOrders",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "total": {
+          "type": "number"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "total"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

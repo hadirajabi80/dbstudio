@@ -1,0 +1,45 @@
+/* Settings → Snippets (WP-H). Theme tokens only. */
+.snip { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg-panel); color: var(--fg); }
+.snip-toolbar {
+  display: flex; align-items: center; gap: var(--space-2);
+  min-height: 36px; padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+}
+.snip-icon { color: var(--accent); flex-shrink: 0; }
+.snip-title { font-weight: 600; }
+.snip-hint { color: var(--fg-muted); font-size: var(--text-sm); white-space: nowrap; }
+.snip-search { width: 180px; }
+.snip-dialect { width: 130px; }
+.snip-body { flex: 1; display: flex; min-height: 0; }
+.snip-list { width: 320px; flex-shrink: 0; overflow: auto; border-right: 1px solid var(--border); padding: var(--space-1) 0; }
+.snip-group { padding: var(--space-2) var(--space-3) var(--space-1); color: var(--fg-muted); font-size: var(--text-sm); font-weight: 600; }
+.snip-empty { padding: var(--space-1) var(--space-3); color: var(--fg-muted); font-size: var(--text-sm); }
+.snip-item {
+  display: grid; grid-template-columns: 72px 1fr; grid-template-rows: auto auto; column-gap: var(--space-2);
+  padding: 4px var(--space-3); cursor: default; min-height: 24px;
+}
+.snip-item:hover { background: var(--bg-hover); }
+.snip-item.selected { background: var(--bg-selected); }
+.snip-item:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
+.snip-item.overridden .snip-prefix { text-decoration: line-through; color: var(--fg-muted); }
+.snip-prefix { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent); grid-row: span 2; align-self: center; overflow: hidden; text-overflow: ellipsis; }
+.snip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snip-tag { color: var(--fg-muted); font-size: var(--text-xs); }
+.snip-editor { flex: 1; overflow: auto; padding: var(--space-4); min-width: 0; }
+.snip-form { display: flex; flex-direction: column; gap: var(--space-3); max-width: 760px; }
+.snip-row { display: flex; gap: var(--space-3); }
+.snip-field { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.snip-field-prefix { flex: 0 0 180px; }
+.snip-dialects { display: flex; gap: var(--space-4); border: 0; padding: 0; margin: 0; align-items: center; }
+.snip-dialects legend { float: left; margin-right: var(--space-3); padding: 0; }
+.snip-textarea { min-height: 140px; resize: vertical; font-family: var(--font-mono); padding: var(--space-2); }
+.snip-code {
+  margin: 0; padding: var(--space-2); white-space: pre-wrap; word-break: break-word;
+  font-family: var(--font-mono); font-size: var(--text-sm);
+  background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+}
+.snip-preview { color: var(--fg-muted); }
+.snip-actions { display: flex; gap: var(--space-2); align-items: center; }
+.snip-ro-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-3); }
+.snip-ro-name { font-weight: 600; font-size: var(--text-lg); }
+.snip-empty-editor { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-8); color: var(--fg-muted); }

@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Customer": {
+      "type": "object",
+      "title": "Customer",
+      "description": "Row of main.customers",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "countryId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Order": {
+      "type": "object",
+      "title": "Order",
+      "description": "Row of main.orders",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "customerId": {
+          "type": "integer"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "OrderLine": {
+      "type": "object",
+      "title": "OrderLine",
+      "description": "Row of main.order_lines",
+      "properties": {
+        "orderId": {
+          "type": "integer"
+        },
+        "productId": {
+          "type": "integer"
+        },
+        "qty": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "orderId",
+        "productId",
+        "qty"
+      ],
+      "additionalProperties": false
+    },
+    "Product": {
+      "type": "object",
+      "title": "Product",
+      "description": "Row of main.products",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "price": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "price"
+      ],
+      "additionalProperties": false
+    },
+    "Country": {
+      "type": "object",
+      "title": "Country",
+      "description": "Row of main.countries",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "CustomerTotal": {
+      "type": "object",
+      "title": "CustomerTotal",
+      "description": "Row of main.customer_totals",
+      "properties": {
+        "customerId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "CustomerOrdersRow": {
+      "type": "object",
+      "title": "CustomerOrdersRow",
+      "description": "Row of CustomerOrders",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "total": {
+          "type": "number"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "total"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

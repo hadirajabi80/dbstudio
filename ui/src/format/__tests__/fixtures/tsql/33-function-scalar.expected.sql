@@ -1,0 +1,8 @@
+CREATE FUNCTION dbo.fnTax (@amount DECIMAL(18, 2), @rate DECIMAL(5, 4))
+RETURNS DECIMAL(18, 2)
+WITH SCHEMABINDING
+AS
+BEGIN
+    DECLARE @r DECIMAL(18, 2) = @amount * @rate;
+    RETURN @r;
+END

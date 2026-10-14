@@ -168,7 +168,14 @@ export function createHandlers(engine: MockEngine) {
       const url = new URL(request.url);
       const q = url.searchParams.get('q')?.toLowerCase();
       const cid = url.searchParams.get('connectionId');
-      return ok(engine.history.filter((h) => (!q || h.sql.toLowerCase().includes(q)) && (!cid || h.connectionId === cid)).slice(0, Number(url.searchParams.get('limit') ?? 200)));
+      // M1.5 filters (3.7)
+      const status = url.searchParams.get('status')?.split(',').filter(Boolean);
+      const from = url.searchParams.get('from');
+      const to = url.searchParams.get('to');
+      const pinned = url.searchParams.get('pinned') === 'true';
+      return ok(engine.history.filter((h) => (!q || h.sql.toLowerCase().includes(q)) && (!cid || h.connectionId === cid)
+        && (!status?.length || status.includes(h.status)) && (!from || h.startedAt >= from) && (!to || h.startedAt <= to) && (!pinned || h.pinned))
+        .slice(0, Number(url.searchParams.get('limit') ?? 200)));
     }),
     http.put(`${P}/history/:id`, async ({ params, request }) => {
       const h = engine.history.find((x) => x.id === Number(params.id));
@@ -184,6 +191,14 @@ export function createHandlers(engine: MockEngine) {
       const cid = new URL(request.url).searchParams.get('connectionId');
       engine.history = engine.history.filter((x) => x.pinned || (cid && x.connectionId !== cid));
       return new HttpResponse(null, { status: 204 });
+    }),
+
+    // M1.5: sample database (3.8)
+    http.post(`${P}/sample-db`, () => {
+      const path = String.raw`C:\Users\me\AppData\Roaming\DbStudio\sample\shop.sqlite`;
+      const existing = engine.connections.find((c) => c.name === 'Sample: Shop');
+      const profile = existing ?? engine.createConnection({ name: 'Sample: Shop', providerId: 'sqlite', color: null, folder: null, readOnly: false, props: { path }, savePassword: false, password: null });
+      return ok({ path, connectionId: profile.id, profile, created: !existing });
     }),
 
     // sql services

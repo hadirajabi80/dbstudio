@@ -180,11 +180,4 @@ describe('window chrome and lifecycle', () => {
     assert.equal(pf.htmlPlatformVars('win32')['--titlebar-inset-left'], '0px');
   });
 
-  it('drag-region CSS only on macOS, with interactive controls excluded', () => {
-    assert.equal(pf.chromeCss('win32'), null);
-    const css = pf.chromeCss('darwin');
-    assert.match(css, /html\.titlebar-inset \.topbar \{ -webkit-app-region: drag/);
-    assert.match(css, /button[^}]*-webkit-app-region: no-drag/);
-    assert.match(css, /padding-left: calc\(var\(--titlebar-inset-left/);
-  });
 });

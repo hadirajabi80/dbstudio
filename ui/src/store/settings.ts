@@ -1,8 +1,37 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
-import type { Settings } from '../api/types';
+import type { ConnectionsSettings, FormatOptions, GridSettings, Settings, Snippet } from '../api/types';
 
-export const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_FORMAT: FormatOptions = {
+  keywordCase: 'upper',
+  identifierCase: 'asIs',
+  indent: 4,
+  useTabs: false,
+  commaStyle: 'trailing',
+  lineWidth: 120,
+  clauseKeywordsOnOwnLine: true,
+  andOrOnNewLine: true,
+  alignAliases: false,
+  blankLineBetweenStatements: 1,
+  maxConsecutiveBlankLines: 1,
+  functionCase: 'upper',
+  datatypeCase: 'upper',
+  formatDdlOnOpen: true,
+};
+
+export const DEFAULT_GRID: GridSettings = { density: 'comfortable', pageSize: 1000, verifyUnchanged: false };
+export const DEFAULT_CONNECTIONS: ConnectionsSettings = { maxSessionsPerProfile: 8 };
+
+/** Settings with every M1.5 key present (the engine always returns them; the defaults cover older engines). */
+export type FullSettings = Settings & {
+  format: FormatOptions;
+  snippets: Snippet[];
+  grid: GridSettings;
+  connections: ConnectionsSettings;
+  ui: Record<string, unknown>;
+};
+
+export const DEFAULT_SETTINGS: FullSettings = {
   theme: 'system',
   editor: {
     fontSize: 14,
@@ -16,6 +45,10 @@ export const DEFAULT_SETTINGS: Settings = {
   results: { maxRows: 10000, nullText: 'NULL', dateFormat: 'iso' },
   confirmDestructive: true,
   ui: {},
+  format: DEFAULT_FORMAT,
+  snippets: [],
+  grid: DEFAULT_GRID,
+  connections: DEFAULT_CONNECTIONS,
 };
 
 export type SettingsPatch = {
@@ -24,21 +57,34 @@ export type SettingsPatch = {
   results?: Partial<Settings['results']>;
   confirmDestructive?: boolean;
   ui?: Record<string, unknown>;
+  format?: Partial<FormatOptions>;
+  /** Replaces the whole list. */
+  snippets?: Snippet[];
+  grid?: Partial<GridSettings>;
+  connections?: Partial<ConnectionsSettings>;
 };
 
-function merge(s: Settings, p: SettingsPatch): Settings {
+const THEMES = new Set(['system', 'light', 'dark']);
+
+/** Partial merge with the engine's semantics: objects merge one level deep, arrays and scalars replace. */
+export function mergeSettings(s: FullSettings, p: SettingsPatch | Partial<Settings> | null | undefined): FullSettings {
+  if (!p) return s;
   return {
     ...s,
-    ...(p.theme ? { theme: p.theme } : {}),
+    ...(p.theme && THEMES.has(p.theme) ? { theme: p.theme } : {}),
     ...(p.confirmDestructive !== undefined ? { confirmDestructive: p.confirmDestructive } : {}),
     editor: { ...s.editor, ...p.editor },
     results: { ...s.results, ...p.results },
     ui: { ...s.ui, ...p.ui },
+    format: { ...s.format, ...p.format },
+    snippets: Array.isArray(p.snippets) ? p.snippets : s.snippets,
+    grid: { ...s.grid, ...p.grid },
+    connections: { ...s.connections, ...p.connections },
   };
 }
 
 interface SettingsState {
-  settings: Settings;
+  settings: FullSettings;
   loaded: boolean;
   load(): Promise<void>;
   /** Optimistic update; the engine receives a debounced partial merge. */
@@ -48,14 +94,22 @@ interface SettingsState {
 let pending: SettingsPatch = {};
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+function mergeObj<T extends object>(a: T | undefined, b: T | undefined): T | undefined {
+  return a || b ? ({ ...a, ...b } as T) : undefined;
+}
+
 function queuePut(patch: SettingsPatch) {
   pending = {
     ...pending,
     ...patch,
-    editor: patch.editor || pending.editor ? { ...pending.editor, ...patch.editor } : undefined,
-    results: patch.results || pending.results ? { ...pending.results, ...patch.results } : undefined,
-    ui: patch.ui || pending.ui ? { ...pending.ui, ...patch.ui } : undefined,
+    editor: mergeObj(pending.editor, patch.editor),
+    results: mergeObj(pending.results, patch.results),
+    ui: mergeObj(pending.ui, patch.ui),
+    format: mergeObj(pending.format, patch.format),
+    grid: mergeObj(pending.grid, patch.grid),
+    connections: mergeObj(pending.connections, patch.connections),
   };
+  for (const k of Object.keys(pending) as (keyof SettingsPatch)[]) if (pending[k] === undefined) delete pending[k];
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     const body = pending;
@@ -65,20 +119,35 @@ function queuePut(patch: SettingsPatch) {
   }, 600);
 }
 
+let loading: Promise<void> | null = null;
+
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   loaded: false,
-  async load() {
-    try {
-      const s = await api.getSettings();
-      set({ settings: merge(DEFAULT_SETTINGS, s as SettingsPatch), loaded: true });
-    } catch (e) {
-      console.warn('[settings] load failed, using defaults', e);
-      set({ loaded: true });
-    }
+  load() {
+    // Concurrent callers share one request.
+    if (loading) return loading;
+    loading = (async () => {
+      try {
+        const s = await api.getSettings();
+        set({ settings: mergeSettings(DEFAULT_SETTINGS, s), loaded: true });
+      } catch (e) {
+        console.warn('[settings] load failed, using defaults', e);
+        set({ loaded: true });
+      } finally {
+        loading = null;
+      }
+    })();
+    return loading;
   },
   update(patch) {
-    set({ settings: merge(get().settings, patch) });
+    set({ settings: mergeSettings(get().settings, patch) });
     queuePut(patch);
   },
 }));
+
+/** Typed read of a free-form `settings.ui` key. */
+export function uiSetting<T>(key: string, fallback: T): T {
+  const v = useSettings.getState().settings.ui[key];
+  return v === undefined ? fallback : (v as T);
+}

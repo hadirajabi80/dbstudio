@@ -1,0 +1,6 @@
+CREATE TRIGGER trg_v
+INSTEAD OF DELETE ON v_big
+BEGIN
+    DELETE FROM orders
+    WHERE id = old.id;
+END;

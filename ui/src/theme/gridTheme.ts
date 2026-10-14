@@ -1,47 +1,67 @@
 import type { Theme } from '@glideapps/glide-data-grid';
 import type { EffectiveTheme } from './useTheme';
 
-function v(name: string, fallback: string): string {
+/** Current value of a CSS custom property on <html> (theme tokens). */
+export function cssVar(name: string, fallback = ''): string {
+  if (typeof document === 'undefined') return fallback;
   const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return s || fallback;
 }
 
-/** glide-data-grid theme derived from the CSS tokens; regenerate after a theme switch. */
+/** Grid row height for the density setting (section 3: 28 px comfortable, 24 px compact). */
+export function gridRowHeight(density: 'comfortable' | 'compact' | undefined): number {
+  return density === 'compact' ? 24 : 28;
+}
+
+/** "#rrggbb" + alpha → "rgba(r, g, b, a)" (glide needs concrete colours, not CSS variables). */
+export function withAlpha(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+/** glide-data-grid theme derived from the CSS tokens; regenerate after a theme switch (pass the theme as a dep). */
 export function makeGridTheme(theme: EffectiveTheme): Partial<Theme> {
   const dark = theme === 'dark';
+  const accent = cssVar('--accent', dark ? '#5b9cff' : '#2563eb');
+  const fg = cssVar('--fg', dark ? '#e6e8eb' : '#1c1f24');
+  const muted = cssVar('--fg-muted', dark ? '#9aa1ab' : '#5f6673');
+  const panel = cssVar('--bg-panel', dark ? '#24272d' : '#ffffff');
+  const border = cssVar('--border', dark ? '#3a3f48' : '#d9dde3');
   return {
-    accentColor: v('--accent', '#3574f0'),
-    accentFg: '#ffffff',
-    accentLight: dark ? 'rgba(53, 116, 240, 0.22)' : 'rgba(53, 116, 240, 0.12)',
-    textDark: v('--text', dark ? '#dfe1e5' : '#1e1f22'),
-    textMedium: v('--text-muted', '#9da0a8'),
-    textLight: v('--text-faint', '#a8adbd'),
-    textBubble: v('--text', '#1e1f22'),
-    bgIconHeader: v('--text-muted', '#6c707e'),
-    fgIconHeader: v('--bg-panel', '#ffffff'),
-    textHeader: v('--text', '#1e1f22'),
-    textHeaderSelected: '#ffffff',
-    bgCell: v('--bg-editor', dark ? '#1e1f22' : '#ffffff'),
-    bgCellMedium: v('--bg-sunken', '#f2f3f5'),
-    bgHeader: v('--bg-panel', dark ? '#2b2d30' : '#f7f8fa'),
-    bgHeaderHasFocus: v('--bg-active', '#dfe1e5'),
-    bgHeaderHovered: v('--bg-hover', '#ebecf0'),
-    bgBubble: v('--bg-sunken', '#f2f3f5'),
-    bgBubbleSelected: v('--bg-panel', '#ffffff'),
-    bgSearchResult: dark ? '#5a4a1e' : '#fff2b3',
-    borderColor: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
-    horizontalBorderColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-    headerBottomBorderColor: v('--border-strong', '#d3d5db'),
+    accentColor: accent,
+    accentFg: cssVar('--accent-fg', dark ? '#0b1220' : '#ffffff'),
+    accentLight: withAlpha(accent, dark ? 0.22 : 0.12),
+    textDark: fg,
+    textMedium: muted,
+    textLight: muted,
+    textBubble: fg,
+    bgIconHeader: muted,
+    fgIconHeader: panel,
+    textHeader: fg,
+    textHeaderSelected: cssVar('--accent-fg', '#ffffff'),
+    bgCell: panel,
+    bgCellMedium: cssVar('--bg-grid-alt', dark ? '#22252a' : '#fafbfc'),
+    bgHeader: cssVar('--bg-app', dark ? '#1b1d21' : '#f5f6f8'),
+    bgHeaderHasFocus: cssVar('--bg-selected', dark ? '#2e4466' : '#dde8fb'),
+    bgHeaderHovered: cssVar('--bg-hover', dark ? '#30343c' : '#eceef2'),
+    bgBubble: cssVar('--bg-hover', '#eceef2'),
+    bgBubbleSelected: panel,
+    bgSearchResult: withAlpha(dark ? '#facc15' : '#fde68a', dark ? 0.3 : 0.7),
+    borderColor: withAlpha(border, dark ? 0.7 : 0.8),
+    horizontalBorderColor: withAlpha(border, dark ? 0.45 : 0.55),
+    headerBottomBorderColor: cssVar('--border-strong', dark ? '#4d535e' : '#b9bfc9'),
     drilldownBorder: 'rgba(0,0,0,0)',
-    linkColor: v('--accent', '#3574f0'),
+    linkColor: accent,
     cellHorizontalPadding: 8,
     cellVerticalPadding: 3,
     headerFontStyle: '600 12px',
     headerIconSize: 16,
-    baseFontStyle: '12.5px',
+    baseFontStyle: '13px',
     markerFontStyle: '11px',
-    fontFamily: v('--font-ui', 'Segoe UI, sans-serif'),
-    editorFontSize: '12.5px',
+    fontFamily: cssVar('--font-mono', 'Cascadia Code, Consolas, monospace'),
+    editorFontSize: '13px',
     lineHeight: 1.4,
     roundingRadius: 3,
   };

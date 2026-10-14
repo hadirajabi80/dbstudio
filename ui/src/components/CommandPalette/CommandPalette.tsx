@@ -1,38 +1,107 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CatalogObjectType, ObjectRef } from '../../api/types';
-import { openObject, selectTop } from '../../app/actions';
-import { COMMANDS } from '../../app/commands';
-import { fuzzyMatch, type FuzzyResult } from '../../lib/fuzzy';
-import { isTabular, OBJECT_TYPE_SINGULAR } from '../../lib/sql';
-import { useCatalog } from '../../store/catalog';
-import { useConnections } from '../../store/connections';
-import { useUi } from '../../store/ui';
-import { ObjectIcon } from '../common/icons';
+import { Command as CommandIcon, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { insertIntoActiveEditor, openObject, selectTop } from '../../app/actions';
+import { getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
+import type { ObjectTarget } from '../../commands/types';
+import { useCommandsVersion } from '../../commands/useCommands';
+import { fuzzyMatchLower, type FuzzyResult } from '../../lib/fuzzy';
+import { isTabular, OBJECT_TYPE_SINGULAR, qualifiedName } from '../../lib/sql';
+import { dbKey, useCatalog } from '../../store/catalog';
+import { dialectOf, useConnections } from '../../store/connections';
+import { getActiveConsole } from '../../store/tabs';
+import { toast, useUi } from '../../store/ui';
+import { ColumnIcon, ObjectIcon } from '../common/icons';
+import { ColorDot } from '../common/ConnectionBadge';
+import { useExplorer } from '../Explorer/explorerStore';
+import { Kbd } from '../Shortcuts/Kbd';
+import { commandIcon } from '../layout/commandMenu';
+import { collectEntries, parseObjectQuery, searchObjects, type IndexEntry } from './objectIndex';
 
-interface Item {
-  key: string;
-  label: string;
-  detail?: string;
-  keys?: string;
-  type?: CatalogObjectType;
-  match: FuzzyResult;
-  run: (alt: boolean) => void;
+const MRU_KEY = 'dbstudio.palette.mru.v1';
+
+function loadMru(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(MRU_KEY) ?? '[]') as string[];
+  } catch {
+    return [];
+  }
+}
+function pushMru(id: string) {
+  try {
+    localStorage.setItem(MRU_KEY, JSON.stringify([id, ...loadMru().filter((x) => x !== id)].slice(0, 12)));
+  } catch {
+    /* ignore */
+  }
 }
 
 function Hl({ text, positions }: { text: string; positions: number[] }) {
   if (!positions.length) return <>{text}</>;
   const set = new Set(positions);
-  return (
-    <>
-      {[...text].map((ch, i) => (set.has(i) ? <mark key={i}>{ch}</mark> : <span key={i}>{ch}</span>))}
-    </>
-  );
+  const parts: { s: string; hit: boolean }[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const hit = set.has(i);
+    const last = parts[parts.length - 1];
+    if (last && last.hit === hit) last.s += text[i];
+    else parts.push({ s: text[i], hit });
+  }
+  return <>{parts.map((p, i) => (p.hit ? <mark key={i}>{p.s}</mark> : <span key={i}>{p.s}</span>))}</>;
 }
 
-/** Ctrl+Shift+P commands; Ctrl+P (or a leading "@") jumps to any loaded database object across connections. */
+interface CmdItem {
+  kind: 'command';
+  key: string;
+  id: string;
+  title: string;
+  category: string;
+  shortcut?: string;
+  icon?: string;
+  recent: boolean;
+  match: FuzzyResult;
+}
+interface ObjItem {
+  kind: 'object';
+  key: string;
+  entry: IndexEntry;
+  match: FuzzyResult;
+}
+type Item = CmdItem | ObjItem;
+
+function targetOf(e: IndexEntry): ObjectTarget {
+  return { kind: 'object', connectionId: e.connectionId, database: e.database, ref: e.ref };
+}
+
+/** Run an object hit: Enter opens, Mod+Enter data, Shift+Enter inserts the name, Alt+Enter reveals in the explorer. */
+export function runObjectHit(e: IndexEntry, how: 'open' | 'data' | 'insert' | 'reveal'): void {
+  const t = targetOf(e);
+  if (how === 'data') {
+    if (!isTabular(e.ref.type)) return openObject(e.connectionId, e.database, e.ref, e.column);
+    if (hasCommand('data.open') && runCommand('data.open', t)) return;
+    selectTop(e.connectionId, e.database, e.ref, 1000);
+  } else if (how === 'insert') {
+    if (!getActiveConsole()) {
+      toast('info', 'Open a console to insert the name');
+      return;
+    }
+    const def = useCatalog.getState().dbs[dbKey(e.connectionId, e.database)]?.defaultSchema ?? null;
+    const name = qualifiedName(e.ref, dialectOf(e.connectionId), { defaultSchema: def });
+    insertIntoActiveEditor(e.column ? `${name}.${e.column}` : name);
+    const active = getActiveConsole();
+    if (active?.connectionId && active.connectionId !== e.connectionId) {
+      const from = useConnections.getState().connections.find((c) => c.id === e.connectionId)?.name;
+      const to = useConnections.getState().connections.find((c) => c.id === active.connectionId)?.name;
+      toast('info', `Inserted ${e.ref.name} from ${from ?? 'another connection'}`, `This console runs on ${to ?? 'another connection'}.`);
+    }
+  } else if (how === 'reveal') {
+    useUi.getState().showDock('explorer');
+    useExplorer.getState().reveal(t);
+  } else openObject(e.connectionId, e.database, e.ref, e.column);
+}
+
+/** Ctrl+Shift+P commands; Ctrl+P (or "@" in the command box) goes to any loaded object across connections. */
 export function CommandPalette() {
   const open = useUi((s) => s.paletteOpen);
   const mode = useUi((s) => s.paletteMode);
+  const initial = useUi((s) => s.paletteQuery);
   const close = useUi((s) => s.closePalette);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -40,114 +109,204 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const dbs = useCatalog((s) => s.dbs);
   const connections = useConnections((s) => s.connections);
+  const version = useCommandsVersion();
 
   useEffect(() => {
     if (open) {
-      setQ(mode === 'objects' ? '@' : '');
+      setQ(mode === 'objects' ? initial : initial ? `>${initial}` : '');
       setSel(0);
-      inputRef.current?.focus();
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [open, mode]);
+  }, [open, mode, initial]);
 
-  const objectMode = q.startsWith('@');
-  const pattern = objectMode ? q.slice(1).trim() : q.trim();
+  // Objects mode unless the text starts with ">" (commands) — commands mode is entered with ">" prefix shown.
+  const objectMode = mode === 'objects' ? !q.startsWith('>') : q.startsWith('@');
+  const text = objectMode ? (q.startsWith('@') ? q.slice(1) : q) : q.startsWith('>') ? q.slice(1) : q;
+  const parsed = parseObjectQuery(text);
+  const groups = useMemo(() => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c') : []), [open, objectMode, dbs, parsed.prefix]);
+  const connName = useMemo(() => new Map(connections.map((c) => [c.id, c])), [connections]);
+  const loadedCount = useMemo(() => groups.reduce((n, g) => n + g.length, 0), [groups]);
 
   const items = useMemo<Item[]>(() => {
     if (!open) return [];
-    if (!objectMode) {
-      const out: Item[] = [];
-      for (const c of COMMANDS) {
-        if (c.enabled && !c.enabled()) continue;
-        const label = `${c.category}: ${c.title}`;
-        const m = fuzzyMatch(pattern, label);
-        if (m) out.push({ key: c.id, label, keys: c.keys, match: m, run: () => c.run() });
-      }
-      if (pattern) out.sort((a, b) => b.match.score - a.match.score);
-      return out.slice(0, 200);
+    if (objectMode) {
+      return searchObjects(groups, text, 200).map((h) => ({
+        kind: 'object', key: `${h.entry.connectionId}|${h.entry.database}|${h.entry.schema}|${h.entry.type}|${h.entry.name}`, entry: h.entry, match: h.match,
+      }));
     }
-    const names = new Map(connections.map((c) => [c.id, c.name]));
-    const out: Item[] = [];
-    for (const d of Object.values(dbs)) {
-      for (const s of Object.values(d.loaded)) {
-        for (const o of s.objects) {
-          const m = fuzzyMatch(pattern, o.n);
-          if (!m) continue;
-          const ref: ObjectRef = { database: d.database, schema: s.name, name: o.n, type: o.t };
-          out.push({
-            key: `${d.connectionId}|${d.database}|${s.name}|${o.t}|${o.n}`,
-            label: o.n,
-            detail: `${OBJECT_TYPE_SINGULAR[o.t]} · ${s.name}${d.database && d.database !== s.name ? ` · ${d.database}` : ''} · ${names.get(d.connectionId) ?? ''}`,
-            type: o.t,
-            match: m,
-            run: (alt) => (alt && isTabular(o.t) ? selectTop(d.connectionId, d.database, ref) : openObject(d.connectionId, d.database, ref)),
-          });
-        }
+    const p = text.trim().toLowerCase();
+    const mru = loadMru();
+    const out: CmdItem[] = [];
+    for (const c of listCommands()) {
+      if (c.palette === false) continue;
+      if (!isEnabled(c.id)) continue;
+      const label = `${c.category}: ${c.title}`;
+      let m = fuzzyMatchLower(p, label, label.toLowerCase());
+      if (!m && c.keywords && p) {
+        const kw = fuzzyMatchLower(p, c.keywords, c.keywords.toLowerCase());
+        if (kw) m = { score: kw.score - 200, positions: [] };
       }
+      if (!m) continue;
+      const recent = mru.indexOf(c.id);
+      out.push({
+        kind: 'command', key: c.id, id: c.id, title: c.title, category: c.category, shortcut: c.shortcut, icon: c.icon,
+        recent: recent >= 0, match: { score: m.score + (recent >= 0 ? (p ? 30 : 1000 - recent) : 0), positions: m.positions.map((i) => i - c.category.length - 2) },
+      });
     }
-    out.sort((a, b) => b.match.score - a.match.score || a.label.localeCompare(b.label));
-    return out.slice(0, 300);
-  }, [open, objectMode, pattern, dbs, connections]);
+    out.sort((a, b) => b.match.score - a.match.score || a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, objectMode, text, groups, version]);
 
   useEffect(() => {
     listRef.current?.querySelector('.palette-item.selected')?.scrollIntoView?.({ block: 'nearest' });
   }, [sel]);
 
   if (!open) return null;
-  const choose = (i: number, alt = false) => {
+
+  const choose = (i: number, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }) => {
     const it = items[i];
     if (!it) return;
     close();
-    it.run(alt);
+    if (it.kind === 'command') {
+      pushMru(it.id);
+      setTimeout(() => runCommand(it.id), 0);
+    } else {
+      const how = e?.altKey ? 'reveal' : e?.shiftKey ? 'insert' : e?.ctrlKey || e?.metaKey ? 'data' : 'open';
+      runObjectHit(it.entry, how);
+    }
   };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(items.length - 1, s + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); }
+    else if (e.key === 'PageDown') { e.preventDefault(); setSel((s) => Math.min(items.length - 1, s + 10)); }
+    else if (e.key === 'PageUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 10)); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(sel, e); }
+  };
+
+  const noCatalog = objectMode && loadedCount === 0;
+  const placeholder = objectMode
+    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · > commands'
+    : 'Type a command…  @ to go to an object';
 
   return (
     <div className="overlay palette-overlay" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="palette" role="dialog" aria-label="Command palette">
-        <input
-          ref={inputRef}
-          className="palette-input"
-          autoFocus
-          value={q}
-          placeholder={objectMode ? 'Go to object… (Alt+Enter: select top 1000)' : 'Type a command, or @ to go to an object'}
-          aria-label="Command"
-          spellCheck={false}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setSel(0);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { e.preventDefault(); close(); }
-            else if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(items.length - 1, s + 1)); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); }
-            else if (e.key === 'PageDown') { e.preventDefault(); setSel((s) => Math.min(items.length - 1, s + 10)); }
-            else if (e.key === 'PageUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 10)); }
-            else if (e.key === 'Enter') { e.preventDefault(); choose(sel, e.altKey); }
-          }}
-        />
-        <div className="palette-list" ref={listRef} role="listbox">
-          {items.length === 0 && <div className="palette-empty">{objectMode ? 'No matching objects in loaded schemas' : 'No matching commands'}</div>}
-          {items.map((it, i) => (
-            <div
-              key={it.key}
-              role="option"
-              aria-selected={i === sel}
-              className={`palette-item${i === sel ? ' selected' : ''}`}
-              onMouseMove={() => i !== sel && setSel(i)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                choose(i, e.altKey);
-              }}
-            >
-              {it.type && <ObjectIcon type={it.type} />}
-              <span className="palette-label">
-                <Hl text={it.label} positions={it.match.positions} />
-              </span>
-              {it.detail && <span className="palette-detail">{it.detail}</span>}
-              {it.keys && <kbd className="palette-keys">{it.keys}</kbd>}
+      <div className="palette" role="dialog" aria-modal="true" aria-label={objectMode ? 'Go to object' : 'Command palette'}>
+        <div className="palette-input-row">
+          {objectMode ? <Search size={16} className="palette-input-icon" /> : <CommandIcon size={16} className="palette-input-icon" />}
+          <input
+            ref={inputRef}
+            className="palette-input"
+            value={q}
+            placeholder={placeholder}
+            aria-label={objectMode ? 'Object name' : 'Command'}
+            aria-controls="palette-list"
+            aria-activedescendant={items[sel] ? `palette-opt-${sel}` : undefined}
+            role="combobox"
+            aria-expanded="true"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              setQ(e.target.value);
+              setSel(0);
+            }}
+            onKeyDown={onKeyDown}
+          />
+          <span className="palette-mode-chip">{objectMode ? 'Objects' : 'Commands'}</span>
+        </div>
+        <div className="palette-list" id="palette-list" ref={listRef} role="listbox">
+          {items.length === 0 && (
+            <div className="palette-empty">
+              {noCatalog
+                ? 'No objects loaded yet. Expand a connection in the explorer (or open a console on it) to search its objects.'
+                : objectMode
+                  ? 'No matching objects in the loaded schemas'
+                  : 'No matching commands'}
             </div>
-          ))}
+          )}
+          {items.map((it, i) =>
+            it.kind === 'command' ? (
+              <div
+                key={it.key}
+                id={`palette-opt-${i}`}
+                role="option"
+                aria-selected={i === sel}
+                className={`palette-item${i === sel ? ' selected' : ''}`}
+                onMouseMove={() => i !== sel && setSel(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(i, e);
+                }}
+              >
+                <span className="palette-icon">{commandIcon(it.icon) ?? <span className="palette-icon-blank" />}</span>
+                <span className="palette-label">
+                  <span className="palette-category">{it.category}: </span>
+                  <Hl text={it.title} positions={it.match.positions.filter((p) => p >= 0)} />
+                </span>
+                {it.recent && !text && <span className="palette-detail">recently used</span>}
+                {it.shortcut && <Kbd shortcut={it.shortcut} className="palette-keys" />}
+              </div>
+            ) : (
+              <ObjectRow key={it.key} it={it} i={i} sel={sel} setSel={setSel} choose={choose} connName={connName} />
+            ),
+          )}
+        </div>
+        <div className="palette-footer" aria-hidden="true">
+          {objectMode ? (
+            <>
+              <span><Kbd shortcut="Enter" /> open</span>
+              <span><Kbd shortcut="Mod+Enter" /> {hasCommand('data.open') ? 'data' : 'select top 1000'}</span>
+              <span><Kbd shortcut="Shift+Enter" /> insert name</span>
+              <span><Kbd shortcut="Alt+Enter" /> reveal</span>
+              <span className="flex-1" />
+              <span className="muted">{loadedCount.toLocaleString()} objects indexed</span>
+            </>
+          ) : (
+            <>
+              <span><Kbd shortcut="Enter" /> run</span>
+              <span><Kbd shortcut="ArrowUp" /><Kbd shortcut="ArrowDown" /> select</span>
+              <span className="flex-1" />
+              <span>{getCommand('view.shortcuts') ? <>All shortcuts <Kbd shortcut={getCommand('view.shortcuts')!.shortcut} /></> : null}</span>
+            </>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ObjectRow({ it, i, sel, setSel, choose, connName }: {
+  it: ObjItem; i: number; sel: number; setSel: (n: number) => void;
+  choose: (i: number, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }) => void;
+  connName: Map<string, { name: string; color: string | null }>;
+}) {
+  const e = it.entry;
+  const conn = connName.get(e.connectionId);
+  const where = [e.schema, e.database && e.database !== e.schema ? e.database : null].filter(Boolean).join(' · ');
+  return (
+    <div
+      id={`palette-opt-${i}`}
+      role="option"
+      aria-selected={i === sel}
+      className={`palette-item${i === sel ? ' selected' : ''}`}
+      onMouseMove={() => i !== sel && setSel(i)}
+      onMouseDown={(ev) => {
+        ev.preventDefault();
+        choose(i, ev);
+      }}
+      title={`${e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type]} ${e.name} — ${conn?.name ?? ''}`}
+    >
+      <span className="palette-icon">{e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type} />}</span>
+      <span className="palette-label">
+        <Hl text={e.name} positions={it.match.positions} />
+      </span>
+      <span className="palette-detail">{where}</span>
+      <span className="palette-conn">
+        <ColorDot color={conn?.color} size={7} />
+        {conn?.name ?? ''}
+      </span>
     </div>
   );
 }

@@ -7,11 +7,14 @@ import { registerEditor } from '../../app/editors';
 import { SqlEditor } from '../../editor/SqlEditor';
 import type { SqlEditorHandle } from '../../editor/SqlEditor.types';
 import { useCatalog, useSnapshot } from '../../store/catalog';
-import { useConnection, useDialect } from '../../store/connections';
+import { getConnection, useConnection, useDialect } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { useSettings } from '../../store/settings';
 import { useTabs, type ConsoleTab } from '../../store/tabs';
-import { useUi } from '../../store/ui';
+import { toast, useUi } from '../../store/ui';
+import { TipStrip } from '../Onboarding/TipStrip';
+import { Kbd } from '../Shortcuts/Kbd';
+import { runCommand } from '../../commands/registry';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { Splitter } from '../common/Splitter';
 import { ResultsPane } from '../ResultsPane/ResultsPane';
@@ -30,6 +33,7 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
   const usage = (tab.connectionId && usageAll?.[tab.connectionId]) || EMPTY_USAGE;
   const updateText = useTabs((s) => s.updateText);
   const resultsVisible = useUi((s) => s.resultsVisible);
+  const maximized = useUi((s) => s.resultsMaximized);
   const fraction = useUi((s) => s.resultsFraction);
   const setLayout = useUi((s) => s.setLayout);
   const setCursor = useUi((s) => s.setCursor);
@@ -90,8 +94,25 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
   return (
     <div className="console" style={{ display: visible ? undefined : 'none' }} data-tab={tab.id}>
       <Toolbar tab={tab} />
-      <div className="console-split" ref={containerRef}>
-        <div className="editor-host" style={{ flexBasis: resultsVisible ? `${(1 - fraction) * 100}%` : '100%' }}>
+      <TipStrip />
+      <div className={`console-split${maximized && resultsVisible ? ' results-maximized' : ''}`} ref={containerRef}>
+        <div
+          className="editor-host"
+          style={{ flexBasis: resultsVisible ? `${(1 - fraction) * 100}%` : '100%' }}
+          onDropCapture={(e) => {
+            const raw = e.dataTransfer.getData('application/x-dbstudio-object');
+            if (!raw) return;
+            try {
+              const o = JSON.parse(raw) as { connectionId: string; name: string };
+              if (o.connectionId && o.connectionId !== tab.connectionId) {
+                const from = getConnection(o.connectionId)?.name ?? 'another connection';
+                toast('info', `Inserted ${o.name} from ${from}`, conn ? `This console runs on ${conn.name}.` : 'This console has no connection yet.');
+              }
+            } catch {
+              /* ignore */
+            }
+          }}
+        >
           <SqlEditor
             ref={editorRef}
             tabId={tab.id}
@@ -113,7 +134,10 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
           />
           {!conn && (
             <div className="editor-hint">
-              <Plug size={14} /> Pick a connection in the toolbar to run queries.
+              <Plug size={16} strokeWidth={1.5} /> This console has no connection.
+              <button className="btn btn-xs btn-primary" onClick={() => runCommand('connections.change')}>
+                Choose connection <Kbd shortcut="Mod+Shift+K" className="on-accent" />
+              </button>
             </div>
           )}
         </div>

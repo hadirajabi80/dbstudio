@@ -1,8 +1,17 @@
 import type { ConnectionProfile } from '../../api/types';
+import { CONNECTION_PALETTE, connColorCss, connColorName } from '../../theme/connColors';
 import { ProviderIcon } from './icons';
 
 export function ColorDot({ color, size = 8 }: { color: string | null | undefined; size?: number }) {
-  return <span className={`color-dot${color ? '' : ' empty'}`} style={{ width: size, height: size, background: color ?? undefined }} aria-hidden="true" />;
+  const css = connColorCss(color);
+  return (
+    <span
+      className={`color-dot${css ? '' : ' empty'}`}
+      style={{ width: size, height: size, background: css }}
+      aria-hidden="true"
+      title={connColorName(color) ?? undefined}
+    />
+  );
 }
 
 /** Connection colour tag + provider + name, used on tabs, the toolbar and the status bar. */
@@ -17,4 +26,5 @@ export function ConnectionBadge({ conn }: { conn: ConnectionProfile | undefined 
   );
 }
 
-export const CONNECTION_COLORS = ['#e5484d', '#f76b15', '#ffc53d', '#46a758', '#12a594', '#0090ff', '#8e4ec6', '#d6409f', '#8d8d8d'];
+/** Stored values of the connection colour palette (theme/connColors.ts). */
+export const CONNECTION_COLORS = CONNECTION_PALETTE.map((p) => p.hex);

@@ -7,12 +7,23 @@ import { engineSocket } from '../api/ws';
 import { MockEngine } from './engine';
 import { FakeSocket } from './fakeSocket';
 import { createHandlers } from './handlers';
+import { createGridHandlers, FilterStoreMock } from './m15/grid';
 
 export const MOCK_PREFIX = '/__mock/';
 
 export async function startBrowserMocks(): Promise<MockEngine> {
   const engine = new MockEngine({ latency: 60, frameRows: 500, frameDelay: 4 });
-  const handlers = createHandlers(engine) as RequestHandler[];
+  // ?fresh: first-launch experience (no saved connections, empty workspace).
+  if (new URLSearchParams(location.search).has('fresh')) {
+    engine.connections = [];
+    try {
+      localStorage.removeItem('dbstudio.workspace.v1');
+    } catch {
+      /* ignore */
+    }
+  }
+  // Grid/filter handlers (saved filters) first; they fall through to the generic engine handlers otherwise.
+  const handlers = [...createGridHandlers(new FilterStoreMock()), ...createHandlers(engine)] as RequestHandler[];
   engineSocket.setSocketFactory(() => new FakeSocket(engine, 'mock-token'));
 
   const realFetch = window.fetch.bind(window);

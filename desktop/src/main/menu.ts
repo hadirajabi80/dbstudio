@@ -97,7 +97,7 @@ export function buildMenu(o: MenuOptions): Menu {
     const items = tidy(m.items.map((it) => entry(it, o)).filter((x): x is MenuItemConstructorOptions => x !== null));
     if (!items.length) continue;
     // macOS: the first menu is the application menu (titled with the app name); the Window menu gets its role.
-    if (m.id === 'app') template.push({ label: app.name, submenu: items });
+    if (m.id === 'app') template.push({ role: 'appMenu', label: app.name, submenu: items });
     else if (m.id === 'window') template.push({ role: 'windowMenu', label: m.label, submenu: items });
     else template.push({ label: PLATFORM === 'darwin' ? m.label.replace('&', '') : m.label, submenu: items });
   }

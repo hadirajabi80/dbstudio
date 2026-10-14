@@ -1,0 +1,1 @@
+;with tree (Id, ParentId, Lvl) as (select Id, ParentId, 0 from Nodes where ParentId is null union all select n.Id, n.ParentId, t.Lvl + 1 from Nodes n join tree t on t.Id = n.ParentId) select * from tree option (maxrecursion 100)

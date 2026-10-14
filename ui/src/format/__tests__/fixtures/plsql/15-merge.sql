@@ -1,0 +1,1 @@
+merge into target t using (select id, name from source) s on (t.id = s.id) when matched then update set t.name = s.name where t.name <> s.name delete where s.name is null when not matched then insert (id, name) values (s.id, s.name);

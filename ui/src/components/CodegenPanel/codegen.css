@@ -1,0 +1,90 @@
+/* Generate code panel. Theme tokens only. */
+.cg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  color: var(--fg);
+  min-height: 0;
+}
+.cg-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.cg-options,
+.cg-params,
+.cg-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.cg-params,
+.cg-notes {
+  background: var(--bg-sunken);
+}
+.cg-param-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.cg-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--fg-muted);
+}
+.cg-field strong {
+  color: var(--fg);
+}
+.cg-field .input {
+  width: auto;
+}
+.cg-field .mono,
+.cg .input.mono {
+  font-family: var(--font-mono);
+}
+.cg-error {
+  color: var(--danger);
+}
+.cg-files {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.cg-output {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.cg-code {
+  position: absolute;
+  inset: 0;
+}
+.cg-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--fg-muted);
+  padding: var(--space-6);
+  text-align: center;
+}
+.cg-empty-title {
+  color: var(--fg);
+  font-size: var(--text-lg);
+}

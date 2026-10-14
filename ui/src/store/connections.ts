@@ -15,18 +15,27 @@ interface ConnectionsState {
   touch(id: string): void;
 }
 
+let loading: Promise<void> | null = null;
+
 export const useConnections = create<ConnectionsState>((set, get) => ({
   providers: [],
   connections: [],
   loaded: false,
   error: null,
-  async load() {
-    try {
-      const [providers, connections] = await Promise.all([api.providers(), api.listConnections()]);
-      set({ providers, connections, loaded: true, error: null });
-    } catch (e) {
-      set({ loaded: true, error: e instanceof Error ? e.message : String(e) });
-    }
+  load() {
+    // Concurrent callers share one request pair (boot + retry banner, StrictMode).
+    if (loading) return loading;
+    loading = (async () => {
+      try {
+        const [providers, connections] = await Promise.all([api.providers(), api.listConnections()]);
+        set({ providers, connections, loaded: true, error: null });
+      } catch (e) {
+        set({ loaded: true, error: e instanceof Error ? e.message : String(e) });
+      } finally {
+        loading = null;
+      }
+    })();
+    return loading;
   },
   async save(input, id) {
     const saved = id ? await api.updateConnection(id, input) : await api.createConnection(input);

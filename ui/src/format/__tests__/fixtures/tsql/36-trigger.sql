@@ -1,0 +1,1 @@
+create trigger dbo.trgOrders on dbo.Orders after insert, update as begin set nocount on; if update(Total) insert into Audit (OrderId, Total) select i.Id, i.Total from inserted i join deleted d on d.Id = i.Id where i.Total <> d.Total end

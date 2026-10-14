@@ -1,0 +1,1 @@
+create function dbo.fnSplit (@s nvarchar(max), @d nchar(1)) returns @r table (Item nvarchar(4000), Pos int) as begin insert into @r (Item, Pos) select value, ordinal from string_split(@s, @d, 1) return end

@@ -24,6 +24,10 @@ export function wireSocket(): void {
   engineSocket.on('exec.done', (ev) => {
     useSessions.getState().applyDone(ev);
     useHistory.getState().reloadSoon();
+    announceDone(ev.executionId, ev.status, ev.elapsedMs);
+    if (ev.status === 'ok' && !useSettings.getState().settings.ui.firstRunAt && useSettings.getState().loaded) {
+      useSettings.getState().update({ ui: { firstRunAt: new Date().toISOString() } });
+    }
   });
   engineSocket.on('session.changed', (ev) => useSessions.getState().applyChanged(ev));
   engineSocket.on('catalog.changed', (ev) => useCatalog.getState().applyChanged(ev));
@@ -34,6 +38,21 @@ export function wireSocket(): void {
   engineSocket.on('engine.log', (ev) => {
     if (ev.level === 'error') toast('error', ev.message);
   });
+}
+
+/** aria-live announcement for the active tab's run ("12 rows, 15 ms" / "Query failed"). */
+function announceDone(executionId: string, status: string, elapsedMs: number) {
+  const r = useResults.getState();
+  const exec = Object.values(r.executions).find((e) => e.executionId === executionId);
+  if (!exec || exec.tabId !== useTabs.getState().activeId) return;
+  const rows = exec.resultSets.reduce((n, s) => n + s.rowCount, 0);
+  const text =
+    status === 'ok'
+      ? exec.resultSets.length
+        ? `${rows.toLocaleString()} row${rows === 1 ? '' : 's'}, ${elapsedMs} ms`
+        : `Done${exec.rowsAffected ? `, ${exec.rowsAffected.toLocaleString()} rows affected` : ''}, ${elapsedMs} ms`
+      : status === 'cancelled' ? 'Query cancelled' : 'Query failed';
+  useUi.getState().announce(text);
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,5 +119,5 @@ export async function boot(): Promise<void> {
     void preloadCatalog(t.connectionId, t.database);
   }
   startWorkspaceAutosave();
-  void useHistory.getState().load();
+  // History loads when its panel mounts (and after each run); no request here.
 }

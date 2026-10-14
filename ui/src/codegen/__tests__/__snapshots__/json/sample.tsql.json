@@ -1,0 +1,70 @@
+{
+  "Customer": {
+    "id": 1,
+    "name": "text",
+    "email": "text",
+    "countryId": 1
+  },
+  "Order": {
+    "id": 1,
+    "customerId": 1,
+    "orderDate": "2026-01-31T12:00:00",
+    "total": 1.5
+  },
+  "OrderLine": {
+    "orderId": 1,
+    "productId": 1,
+    "qty": 1
+  },
+  "Product": {
+    "id": 1,
+    "name": "text",
+    "price": 1.5
+  },
+  "Country": {
+    "id": 1,
+    "name": "text"
+  },
+  "VActiveCustomer": {
+    "id": 1,
+    "name": "text",
+    "orderCount": 1
+  },
+  "Invoice": {
+    "id": 1,
+    "orderId": 1,
+    "amount": 1.5,
+    "issuedAt": "2026-01-31T12:00:00"
+  },
+  "Event": {
+    "eventId": "00000000-0000-0000-0000-000000000000",
+    "occurredAt": "2026-01-31T12:00:00+00:00",
+    "day": "2026-01-31",
+    "at": "12:00:00",
+    "kind": "text",
+    "payload": "text",
+    "snapshot": "AAECAw==",
+    "spec": "<root />",
+    "score": 1.5,
+    "ratio": 1.5,
+    "flags": 1,
+    "big": 1,
+    "price": 1,
+    "isActive": true,
+    "rowVer": "AAECAw==",
+    "location": null
+  },
+  "Keyword": {
+    "id": 1,
+    "class_": "text",
+    "type": 1,
+    "select": true,
+    "keyword": "text"
+  },
+  "CustomerOrdersRow": {
+    "id": 1,
+    "name": "text",
+    "total": 1.5,
+    "orderDate": "2026-01-31T12:00:00"
+  }
+}

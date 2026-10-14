@@ -1,0 +1,1 @@
+select * from Orders o inner join Customers c on c.Id = o.CustomerId left outer join Countries co on co.Id = c.CountryId and co.Active = 1 cross apply (select top 1 * from OrderLines ol where ol.OrderId = o.Id order by ol.Qty desc) x outer apply dbo.fnTax(o.Id) t

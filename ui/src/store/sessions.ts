@@ -20,6 +20,14 @@ interface SessionsState {
   applyChanged(ev: WsEventOf<'session.changed'>): void;
   applyDone(ev: WsEventOf<'exec.done'>): void;
   upsert(info: SessionInfo, tabId?: string): void;
+  /** GET /sessions: refresh every known session (state, executingSince); drops sessions the engine forgot. */
+  refreshAll(): Promise<void>;
+  /** Close one session by id (active-connections panel). */
+  closeSession(sessionId: string, force?: boolean): Promise<void>;
+  /** Close every session of a connection (explorer "Disconnect"). Returns the number closed. */
+  closeConnection(connectionId: string, force?: boolean): Promise<number>;
+  /** Tab that owns a session, if any. */
+  tabOf(sessionId: string): string | undefined;
 }
 
 const creating = new Map<string, Promise<SessionInfo>>();
@@ -107,6 +115,50 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const nextByTab = { ...byTab };
     delete nextByTab[tabId];
     set({ sessions: nextSessions, byTab: nextByTab });
+  },
+
+  async refreshAll() {
+    let list: SessionInfo[];
+    try {
+      list = await api.listSessions();
+    } catch {
+      return;
+    }
+    const known = new Map(list.map((x) => [x.sessionId, x]));
+    const { sessions, byTab } = get();
+    const nextSessions: Record<string, SessionInfo> = {};
+    for (const [sid, cur] of Object.entries(sessions)) {
+      const fresh = known.get(sid);
+      if (fresh) nextSessions[sid] = { ...cur, ...fresh };
+    }
+    // Sessions opened elsewhere (another window, multi-run) are listed too, without a tab.
+    for (const x of list) if (!nextSessions[x.sessionId]) nextSessions[x.sessionId] = x;
+    const nextByTab: Record<string, string> = {};
+    for (const [tab, sid] of Object.entries(byTab)) if (nextSessions[sid]) nextByTab[tab] = sid;
+    set({ sessions: nextSessions, byTab: nextByTab });
+  },
+
+  async closeSession(sessionId, force = true) {
+    try {
+      await api.closeSession(sessionId, force);
+    } catch (e) {
+      if (!isApiError(e, 'NOT_FOUND')) throw e;
+    }
+    const { sessions, byTab } = get();
+    const nextSessions = { ...sessions };
+    delete nextSessions[sessionId];
+    const nextByTab = Object.fromEntries(Object.entries(byTab).filter(([, sid]) => sid !== sessionId));
+    set({ sessions: nextSessions, byTab: nextByTab });
+  },
+
+  async closeConnection(connectionId, force = true) {
+    const ids = Object.values(get().sessions).filter((x) => x.connectionId === connectionId).map((x) => x.sessionId);
+    await Promise.all(ids.map((sid) => get().closeSession(sid, force).catch((e) => console.warn('[sessions] close failed', e))));
+    return ids.length;
+  },
+
+  tabOf(sessionId) {
+    return Object.entries(get().byTab).find(([, sid]) => sid === sessionId)?.[0];
   },
 
   applyChanged(ev) {

@@ -1,0 +1,1 @@
+begin try begin tran update Accounts set Balance = Balance - 100 where Id = 1 update Accounts set Balance = Balance + 100 where Id = 2 commit tran end try begin catch if @@trancount > 0 rollback tran; throw; end catch

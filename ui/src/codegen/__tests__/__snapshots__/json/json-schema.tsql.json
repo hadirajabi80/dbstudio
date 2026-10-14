@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Customer": {
+      "type": "object",
+      "title": "Customer",
+      "description": "Registered customers",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "countryId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Order": {
+      "type": "object",
+      "title": "Order",
+      "description": "Row of dbo.Orders",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "customerId": {
+          "type": "integer"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "OrderLine": {
+      "type": "object",
+      "title": "OrderLine",
+      "description": "Row of dbo.OrderLines",
+      "properties": {
+        "orderId": {
+          "type": "integer"
+        },
+        "productId": {
+          "type": "integer"
+        },
+        "qty": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "orderId",
+        "productId",
+        "qty"
+      ],
+      "additionalProperties": false
+    },
+    "Product": {
+      "type": "object",
+      "title": "Product",
+      "description": "Row of dbo.Products",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "price": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "price"
+      ],
+      "additionalProperties": false
+    },
+    "Country": {
+      "type": "object",
+      "title": "Country",
+      "description": "Row of dbo.Countries",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "VActiveCustomer": {
+      "type": "object",
+      "title": "VActiveCustomer",
+      "description": "Customers with at least one order",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "orderCount": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Invoice": {
+      "type": "object",
+      "title": "Invoice",
+      "description": "Row of Sales.Invoices",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "orderId": {
+          "type": "integer"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "orderId",
+        "amount",
+        "issuedAt"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "type": "object",
+      "title": "Event",
+      "description": "Audit trail of things that happened",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When it happened (with offset)"
+        },
+        "day": {
+          "type": "string",
+          "format": "date"
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "time"
+        },
+        "kind": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "payload": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "JSON document"
+        },
+        "snapshot": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "contentEncoding": "base64"
+        },
+        "spec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "flags": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "big": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "price": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "rowVer": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "readOnly": true
+        },
+        "location": {}
+      },
+      "required": [
+        "eventId",
+        "occurredAt",
+        "day",
+        "kind",
+        "flags",
+        "isActive",
+        "rowVer"
+      ],
+      "additionalProperties": false
+    },
+    "Keyword": {
+      "type": "object",
+      "title": "Keyword",
+      "description": "Row of dbo.Keywords",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "class_": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "type": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "select": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "keyword": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 50,
+          "description": "Same name as the singular type"
+        }
+      },
+      "required": [
+        "id",
+        "class_"
+      ],
+      "additionalProperties": false
+    },
+    "CustomerOrdersRow": {
+      "type": "object",
+      "title": "CustomerOrdersRow",
+      "description": "Row of CustomerOrders",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "total": {
+          "type": "number"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "total"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

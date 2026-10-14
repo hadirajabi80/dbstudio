@@ -1,0 +1,1 @@
+merge into dbo.Target as t using dbo.Source as s on t.Id = s.Id when matched and s.Deleted = 1 then delete when matched then update set t.Name = s.Name, t.Total = s.Total when not matched by target then insert (Id, Name, Total) values (s.Id, s.Name, s.Total) output $action, inserted.Id;

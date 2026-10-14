@@ -1,0 +1,8 @@
+DECLARE @t TABLE (
+    Id INT NOT NULL PRIMARY KEY,
+    Name NVARCHAR(100) NULL,
+    Total DECIMAL(18, 2) DEFAULT 0
+)
+
+INSERT INTO @t (Id, Name)
+VALUES (1, 'a')

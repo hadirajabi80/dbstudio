@@ -1,7 +1,8 @@
 import type { CatalogObject, CatalogObjectType, ConnectionProfile, ObjectRef } from '../../api/types';
-import { fuzzyMatch } from '../../lib/fuzzy';
+import { fuzzyMatchLower } from '../../lib/fuzzy';
 import { isTabular, OBJECT_TYPE_LABELS, OBJECT_TYPE_ORDER } from '../../lib/sql';
 import { dbKey, type ConnCatalog, type DbCatalog } from '../../store/catalog';
+import type { TypeChip } from './explorerStore';
 
 export type NodeKind = 'cfolder' | 'connection' | 'database' | 'schema' | 'folder' | 'object' | 'column' | 'status';
 
@@ -18,11 +19,15 @@ export interface TreeRow {
   schema?: string;
   objectType?: CatalogObjectType;
   object?: CatalogObject;
-  column?: { name: string; type: string; nullable: boolean; pk: boolean };
-  status?: 'loading' | 'error' | 'empty' | 'hint';
+  column?: { name: string; type: string; nullable: boolean; pk: boolean; fk?: boolean };
+  status?: 'loading' | 'error' | 'empty' | 'hint' | 'load';
   /** Highlighted label positions when filtering. */
   match?: number[];
   count?: number;
+  /** Connection root: catalog is loading (per-root spinner). */
+  busy?: boolean;
+  /** status 'load': the schema to load when activated. */
+  loadSchema?: string;
 }
 
 export const nodeId = {
@@ -34,6 +39,20 @@ export const nodeId = {
   object: (cid: string, db: string | null, s: string, t: CatalogObjectType, n: string) => `o:${cid}:${db ?? ''}:${s}:${t}:${n}`,
 };
 
+/** Chip → object types (1.1.2). */
+export const CHIP_TYPES: Record<TypeChip, CatalogObjectType[]> = {
+  tables: ['table'],
+  views: ['view', 'mview'],
+  procs: ['proc', 'package'],
+  funcs: ['func', 'tablefunc'],
+  other: ['synonym', 'sequence', 'type', 'trigger'],
+};
+
+export function typesOfChips(chips: readonly TypeChip[]): Set<CatalogObjectType> | null {
+  if (!chips.length) return null;
+  return new Set(chips.flatMap((c) => CHIP_TYPES[c]));
+}
+
 export interface TreeInput {
   connections: ConnectionProfile[];
   conns: Record<string, ConnCatalog>;
@@ -42,6 +61,10 @@ export interface TreeInput {
   /** Folders of connections that are collapsed (they default to expanded). */
   collapsedFolders: ReadonlySet<string>;
   filter: string;
+  /** Allowed object types per connection (null = all). */
+  typesFor?: (connectionId: string) => Set<CatalogObjectType> | null;
+  /** Also match column names ("Customers · Email"). */
+  searchColumns?: boolean;
 }
 
 /** Databases shown under a connection; `[null]` when the provider has no database level (Oracle) or none were returned. */
@@ -57,9 +80,10 @@ export function singleSchema(d: DbCatalog | undefined): string | null {
   return list && list.length === 1 ? list[0].name : null;
 }
 
-function groupObjects(objects: CatalogObject[]): Map<CatalogObjectType, CatalogObject[]> {
+function groupObjects(objects: CatalogObject[], types: Set<CatalogObjectType> | null): Map<CatalogObjectType, CatalogObject[]> {
   const m = new Map<CatalogObjectType, CatalogObject[]>();
   for (const o of objects) {
+    if (types && !types.has(o.t)) continue;
     let l = m.get(o.t);
     if (!l) m.set(o.t, (l = []));
     l.push(o);
@@ -74,6 +98,16 @@ export function buildTree(input: TreeInput): TreeRow[] {
 
 function sortedConnections(list: ConnectionProfile[]) {
   return [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function isBusy(input: TreeInput, cid: string): boolean {
+  if (input.conns[cid]?.status === 'loading') return true;
+  for (const d of Object.values(input.dbs)) {
+    if (d.connectionId !== cid) continue;
+    if (d.schemasStatus === 'loading') return true;
+    for (const st of Object.values(d.schemaStatus)) if (st === 'loading') return true;
+  }
+  return false;
 }
 
 function buildFull(input: TreeInput): TreeRow[] {
@@ -98,8 +132,8 @@ function buildFull(input: TreeInput): TreeRow[] {
   return rows;
 }
 
-function status(rows: TreeRow[], parent: string, depth: number, s: TreeRow['status'], label: string) {
-  rows.push({ id: `${parent}#${s}`, kind: 'status', depth, label, expandable: false, expanded: false, status: s });
+function status(rows: TreeRow[], parent: string, depth: number, s: TreeRow['status'], label: string, extra: Partial<TreeRow> = {}) {
+  rows.push({ id: `${parent}#${s}${extra.loadSchema ? `:${extra.loadSchema}` : ''}`, kind: 'status', depth, label, expandable: false, expanded: false, status: s, ...extra });
 }
 
 function addConnection(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, depth: number) {
@@ -107,14 +141,15 @@ function addConnection(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, 
   const open = input.expanded.has(id);
   const cat = input.conns[c.id];
   rows.push({
-    id, kind: 'connection', depth, label: c.name, expandable: true, expanded: open, connectionId: c.id,
+    id, kind: 'connection', depth, label: c.name, expandable: true, expanded: open, connectionId: c.id, busy: isBusy(input, c.id),
   });
   if (!open) return;
   if (!cat || cat.status === 'loading' || cat.status === 'idle') return status(rows, id, depth + 1, 'loading', 'Connecting…');
   if (cat.status === 'error') return status(rows, id, depth + 1, 'error', cat.error ?? 'Failed to connect');
   const dbs = databasesOf(c, cat) ?? [];
-  if (dbs.length === 1 && dbs[0] === null) {
-    addSchemas(rows, input, c.id, null, depth + 1, id);
+  if (dbs.length === 1 && (dbs[0] === null || c.providerId === 'sqlite')) {
+    // No database level (Oracle), or SQLite's lone "main": show its schemas/objects directly.
+    addSchemas(rows, input, c.id, dbs[0], depth + 1, id);
     return;
   }
   const current = cat.databases?.current ?? null;
@@ -161,8 +196,9 @@ function addFolders(rows: TreeRow[], input: TreeInput, cid: string, db: string |
     if (st === 'error') return status(rows, parent, depth, 'error', d?.schemaError[schema] ?? 'Failed to load objects');
     return status(rows, parent, depth, 'loading', 'Loading objects…');
   }
-  const groups = groupObjects(loaded.objects);
-  if (groups.size === 0) return status(rows, parent, depth, 'empty', 'No objects');
+  const types = input.typesFor?.(cid) ?? null;
+  const groups = groupObjects(loaded.objects, types);
+  if (groups.size === 0) return status(rows, parent, depth, 'empty', types ? 'No objects of the selected types' : 'No objects');
   for (const t of OBJECT_TYPE_ORDER) {
     const objs = groups.get(t);
     if (!objs) continue;
@@ -177,47 +213,96 @@ function addFolders(rows: TreeRow[], input: TreeInput, cid: string, db: string |
   }
 }
 
-function addObject(rows: TreeRow[], input: TreeInput, cid: string, db: string | null, schema: string, o: CatalogObject, depth: number, match?: number[]) {
+function fkColumns(o: CatalogObject): Set<string> {
+  const s = new Set<string>();
+  for (const fk of o.fk ?? []) for (const c of fk.cols) s.add(c);
+  return s;
+}
+
+function addObject(
+  rows: TreeRow[], input: TreeInput, cid: string, db: string | null, schema: string, o: CatalogObject, depth: number,
+  match?: number[], opts: { forceOpen?: boolean; onlyColumns?: Map<string, number[]> } = {},
+) {
   const oid = nodeId.object(cid, db, schema, o.t, o.n);
   const hasCols = !!o.c && o.c.length > 0 && (isTabular(o.t) || o.t === 'type');
-  const open = hasCols && input.expanded.has(oid);
+  const open = hasCols && (opts.forceOpen || input.expanded.has(oid));
   rows.push({
     id: oid, kind: 'object', depth, label: o.n, expandable: hasCols, expanded: open, connectionId: cid, database: db, schema,
     objectType: o.t, object: o, match,
     detail: o.t === 'synonym' && o.target ? `→ ${o.target.s ? `${o.target.s}.` : ''}${o.target.n}` : o.st === 'INVALID' ? 'invalid' : undefined,
   });
   if (!open) return;
+  const fks = fkColumns(o);
   for (const c of o.c!) {
     if (c[4] & 4) continue; // hidden
+    const cm = opts.onlyColumns?.get(c[0]);
+    if (opts.onlyColumns && !cm) continue;
     rows.push({
       id: `${oid}:${c[0]}`, kind: 'column', depth: depth + 1, label: c[0], detail: `${c[1]}${c[2] ? '' : ' not null'}`, expandable: false,
-      expanded: false, connectionId: cid, database: db, schema, objectType: o.t, object: o,
-      column: { name: c[0], type: c[1], nullable: c[2] === 1, pk: c[3] === 1 },
+      expanded: false, connectionId: cid, database: db, schema, objectType: o.t, object: o, match: cm,
+      column: { name: c[0], type: c[1], nullable: c[2] === 1, pk: c[3] === 1, fk: fks.has(c[0]) },
     });
   }
 }
 
+interface Hit {
+  db: string | null;
+  schema: string;
+  o: CatalogObject;
+  m: number[] | undefined;
+  score: number;
+  cols?: Map<string, number[]>;
+}
+
+const MAX_HITS_PER_CONNECTION = 500;
+const MAX_LOAD_HINTS = 4;
+
 /** Filter mode: matching loaded objects (and connections) with their ancestors, all expanded. */
 function buildFiltered(input: TreeInput): TreeRow[] {
   const rows: TreeRow[] = [];
-  const pattern = input.filter.trim();
+  const pattern = input.filter.trim().toLowerCase();
   for (const c of sortedConnections(input.connections)) {
-    const connMatch = fuzzyMatch(pattern, c.name);
-    const hits: { db: string | null; schema: string; o: CatalogObject; m: number[]; score: number }[] = [];
+    const connMatch = fuzzyMatchLower(pattern, c.name, c.name.toLowerCase());
+    const types = input.typesFor?.(c.id) ?? null;
+    const hits: Hit[] = [];
+    const unloaded: { db: string | null; schema: string }[] = [];
     for (const d of Object.values(input.dbs)) {
       if (d.connectionId !== c.id) continue;
+      for (const s of d.schemasResp?.schemas ?? []) {
+        if (!d.loaded[s.name] && d.schemaStatus[s.name] !== 'loading') unloaded.push({ db: d.database, schema: s.name });
+      }
       for (const s of Object.values(d.loaded)) {
         for (const o of s.objects) {
-          const m = fuzzyMatch(pattern, o.n);
-          if (m && m.score > 0) hits.push({ db: d.database, schema: s.name, o, m: m.positions, score: m.score });
+          if (types && !types.has(o.t)) continue;
+          const m = fuzzyMatchLower(pattern, o.n, o.n.toLowerCase());
+          let cols: Map<string, number[]> | undefined;
+          let colScore = 0;
+          if (input.searchColumns && o.c) {
+            for (const col of o.c) {
+              if (col[4] & 4) continue;
+              const cm = fuzzyMatchLower(pattern, col[0], col[0].toLowerCase());
+              if (cm && cm.score > 0) {
+                (cols ??= new Map()).set(col[0], cm.positions);
+                colScore = Math.max(colScore, cm.score - 50);
+              }
+            }
+          }
+          if ((m && m.score > 0) || cols) {
+            hits.push({ db: d.database, schema: s.name, o, m: m && m.score > 0 ? m.positions : undefined, score: Math.max(m?.score ?? 0, colScore), cols: m && m.score > 0 ? undefined : cols });
+          }
         }
       }
     }
-    if (!connMatch && hits.length === 0) continue;
-    rows.push({ id: nodeId.conn(c.id), kind: 'connection', depth: 0, label: c.name, expandable: true, expanded: hits.length > 0, connectionId: c.id, match: connMatch?.positions });
+    const hintsNeeded = unloaded.length > 0 && !!input.conns[c.id];
+    if (!connMatch && hits.length === 0 && !hintsNeeded) continue;
+    if (!connMatch && hits.length === 0 && hintsNeeded && !input.expanded.has(nodeId.conn(c.id))) continue;
+    rows.push({
+      id: nodeId.conn(c.id), kind: 'connection', depth: 0, label: c.name, expandable: true, expanded: hits.length > 0 || hintsNeeded,
+      connectionId: c.id, match: connMatch?.positions, busy: isBusy(input, c.id), count: hits.length || undefined,
+    });
     hits.sort((a, b) => b.score - a.score || a.o.n.localeCompare(b.o.n));
-    const groups = new Map<string, typeof hits>();
-    for (const h of hits.slice(0, 500)) {
+    const groups = new Map<string, Hit[]>();
+    for (const h of hits.slice(0, MAX_HITS_PER_CONNECTION)) {
       const k = `${h.db ?? ''}\u0001${h.schema}`;
       let g = groups.get(k);
       if (!g) groups.set(k, (g = []));
@@ -230,7 +315,20 @@ function buildFiltered(input: TreeInput): TreeRow[] {
         id: sid, kind: 'schema', depth: 1, label: db && db !== schema ? `${db} · ${schema}` : schema, expandable: true, expanded: true,
         connectionId: c.id, database: db, schema, count: g.length,
       });
-      for (const h of g) addObject(rows, input, c.id, db, schema, h.o, 2, h.m);
+      for (const h of g) {
+        addObject(rows, input, c.id, db, schema, h.o, 2, h.m, h.cols ? { forceOpen: true, onlyColumns: h.cols } : {});
+      }
+    }
+    if (hits.length > MAX_HITS_PER_CONNECTION) {
+      status(rows, nodeId.conn(c.id), 1, 'hint', `${(hits.length - MAX_HITS_PER_CONNECTION).toLocaleString()} more — refine the filter`);
+    }
+    for (const u of unloaded.slice(0, MAX_LOAD_HINTS)) {
+      status(rows, nodeId.schema(c.id, u.db, u.schema), 1, 'load', `Load schema ${u.db && u.db !== u.schema ? `${u.db}.` : ''}${u.schema} to search it`, {
+        connectionId: c.id, database: u.db, loadSchema: u.schema,
+      });
+    }
+    if (unloaded.length > MAX_LOAD_HINTS) {
+      status(rows, nodeId.conn(c.id), 1, 'hint', `${unloaded.length - MAX_LOAD_HINTS} more schemas are not loaded`);
     }
   }
   if (rows.length === 0) {

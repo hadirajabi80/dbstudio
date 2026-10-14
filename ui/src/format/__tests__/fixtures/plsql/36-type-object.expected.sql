@@ -1,0 +1,14 @@
+CREATE OR REPLACE TYPE t_point AS OBJECT (
+    x NUMBER,
+    y NUMBER,
+    MEMBER FUNCTION dist RETURN NUMBER
+);
+/
+
+CREATE OR REPLACE TYPE BODY t_point AS
+    MEMBER FUNCTION dist RETURN NUMBER IS
+    BEGIN
+        RETURN SQRT(x * x + y * y);
+    END;
+END;
+/

@@ -1,96 +1,283 @@
-/* DbStudio design tokens. Dense, JetBrains New UI–inspired. Switched by [data-theme] on <html>. */
+/*
+ * DbStudio design tokens (docs/PLAN-M1.5.md section 3). The single place where colours are written down:
+ * every component uses these variables (QA lint: no hex colours outside src/theme/).
+ * Theme is switched by [data-theme] on <html>; settings.theme 'system' follows the OS live (theme/useTheme.ts).
+ *
+ * Spec tokens (exact values from the token table) come first, then derived tokens, then the M1 names, which are
+ * kept as aliases so older CSS keeps working. New CSS should use the spec names (--fg, --fg-muted, --bg-panel, ...).
+ */
+
+/* ------------------------------------------------------------------ light */
 :root,
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg-app: #f7f8fa;
+
+  /* spec table */
+  --bg-app: #f5f6f8;
   --bg-panel: #ffffff;
-  --bg-sunken: #f2f3f5;
-  --bg-editor: #ffffff;
-  --bg-hover: #ebecf0;
-  --bg-active: #dfe1e5;
-  --bg-selected: #d4e2ff;
-  --bg-selected-inactive: #e6e9ef;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eceef2;
+  --bg-selected: #dde8fb;
+  --bg-grid-alt: #fafbfc;
+  --border: #d9dde3;
+  --border-strong: #b9bfc9;
+  --fg: #1c1f24;
+  --fg-muted: #5f6673;
+  --fg-disabled: #a0a6b0;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --focus-ring: #2563eb;
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #0e7490;
+  --cell-edited: rgb(253 230 138 / 35%);      /* #fde68a 35% */
+  --cell-inserted: rgb(187 247 208 / 40%);    /* #bbf7d0 40% */
+  --cell-deleted: rgb(254 202 202 / 40%);     /* #fecaca 40% */
+
+  /* connection colour palette (profiles store the light hex; ui maps it to these) */
+  --conn-red: #dc2626;
+  --conn-orange: #ea580c;
+  --conn-yellow: #ca8a04;
+  --conn-green: #16a34a;
+  --conn-blue: #2563eb;
+  --conn-purple: #7c3aed;
+  --conn-grey: #6b7280;
+
+  /* derived */
+  --bg-sunken: #eef0f3;
+  --bg-active: #e2e5ea;
   --bg-input: #ffffff;
-  --bg-tooltip: #ffffff;
-  --bg-overlay: rgba(25, 27, 32, 0.32);
-  --border: #ebecf0;
-  --border-strong: #d3d5db;
-  --border-focus: #3574f0;
-  --text: #1e1f22;
-  --text-muted: #6c707e;
-  --text-faint: #a8adbd;
-  --text-on-accent: #ffffff;
-  --accent: #3574f0;
-  --accent-hover: #2f66d8;
-  --accent-soft: #edf3ff;
-  --success: #208a3c;
-  --success-soft: #e7f5ea;
-  --warning: #c27d04;
-  --warning-soft: #fdf4e3;
-  --danger: #db3b4b;
-  --danger-soft: #fdecee;
-  --info: #3574f0;
-  --null: #a8adbd;
-  --num: #1750eb;
-  --string: #067d17;
-  --date: #871094;
-  --bool: #0033b3;
-  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06);
-  --scrollbar: rgba(0, 0, 0, 0.18);
-  --scrollbar-hover: rgba(0, 0, 0, 0.32);
+  --bg-overlay: rgb(17 20 26 / 32%);
+  --bg-selected-inactive: #e7eaef;
+  --border-subtle: #e8ebef;
+  --border-control: #8a919c;   /* form-control boundaries: >= 3:1 on --bg-panel */
+  --accent-hover: #1d4ed8;
+  --accent-soft: #e8effd;
+  --accent-soft-strong: #d3e1fb;
+  --success-soft: #e7f5ec;
+  --warning-soft: #fdf3e6;
+  --danger-soft: #fcebeb;
+  --info-soft: #e5f4f7;
+  --mark-bg: rgb(250 204 21 / 35%);
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-popup: 0 8px 28px rgb(16 24 40 / 14%), 0 0 0 1px rgb(16 24 40 / 6%);
+  --shadow-dialog: 0 24px 64px rgb(16 24 40 / 22%), 0 0 0 1px rgb(16 24 40 / 6%);
+  --scrollbar: rgb(0 0 0 / 18%);
+  --scrollbar-hover: rgb(0 0 0 / 32%);
+
+  /* data kinds in the grid / cell viewer */
+  --null: var(--fg-muted);
+  --num: #1d4ed8;
+  --string: #047857;
+  --date: #7e22ce;
+  --bool: #9a3412;
+
+  /* provider marks (connection icons) */
+  --provider-sqlserver: #b91c4a;
+  --provider-oracle: #c2410c;
+  --provider-sqlite: #1d6fb8;
+  --provider-fg: #ffffff;
+
+  /* foregrounds on solid status colours */
+  --danger-fg: #ffffff;
+  --success-fg: #ffffff;
+  --warning-fg: #ffffff;
+  --bg-overlay-soft: rgb(17 20 26 / 12%);
+
+  /* object-type icon tints */
+  --obj-table: #2563eb;
+  --obj-view: #7c3aed;
+  --obj-routine: #0f766e;
+  --obj-package: #b45309;
+  --obj-trigger: #b91c1c;
+  --obj-key: #a16207;
+  --obj-fk: #0e7490;
+  --obj-db: #2563eb;
+  --obj-other: #5f6673;
+
+  /* brand */
+  --brand: #2563eb;
+  --brand-fg: #ffffff;
+
+  /* Monaco (editor themes read these) */
+  --syn-keyword: #2563eb;
+  --syn-string: #047857;
+  --syn-comment: #5f6673;
+  --syn-number: #9a3412;
+  --syn-function: #7c3aed;
+  --syn-variable: #b45309;
+  --syn-operator: #374151;
+  --syn-type: #0e7490;
 }
 
+/* ------------------------------------------------------------------- dark */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg-app: #1e1f22;
-  --bg-panel: #2b2d30;
-  --bg-sunken: #232427;
-  --bg-editor: #1e1f22;
-  --bg-hover: #393b40;
-  --bg-active: #43454a;
-  --bg-selected: #2e436e;
-  --bg-selected-inactive: #393b40;
-  --bg-input: #1e1f22;
-  --bg-tooltip: #2b2d30;
-  --bg-overlay: rgba(0, 0, 0, 0.5);
-  --border: #393b40;
-  --border-strong: #4e5157;
-  --border-focus: #3574f0;
-  --text: #dfe1e5;
-  --text-muted: #9da0a8;
-  --text-faint: #6f737a;
-  --text-on-accent: #ffffff;
-  --accent: #3574f0;
-  --accent-hover: #4682fa;
-  --accent-soft: #25324d;
-  --success: #57965c;
-  --success-soft: #253627;
-  --warning: #d6ae58;
-  --warning-soft: #3d3223;
-  --danger: #e55765;
-  --danger-soft: #402929;
-  --info: #548af7;
-  --null: #6f737a;
-  --num: #2aacb8;
-  --string: #6aab73;
-  --date: #c77dbb;
-  --bool: #cf8e6d;
-  --shadow-popup: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --scrollbar: rgba(255, 255, 255, 0.16);
-  --scrollbar-hover: rgba(255, 255, 255, 0.3);
+
+  --bg-app: #1b1d21;
+  --bg-panel: #24272d;
+  --bg-elevated: #2c3038;
+  --bg-hover: #30343c;
+  --bg-selected: #2e4466;
+  --bg-grid-alt: #22252a;
+  --border: #3a3f48;
+  --border-strong: #4d535e;
+  --fg: #e6e8eb;
+  --fg-muted: #9aa1ab;
+  --fg-disabled: #646a74;
+  --accent: #5b9cff;
+  --accent-fg: #0b1220;
+  --focus-ring: #8ab4ff;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #67e8f9;
+  --cell-edited: rgb(250 204 21 / 25%);       /* #facc15 25% */
+  --cell-inserted: rgb(34 197 94 / 22%);      /* #22c55e 22% */
+  --cell-deleted: rgb(239 68 68 / 22%);       /* #ef4444 22% */
+
+  /* same hues at +15% lightness */
+  --conn-red: #e76868;
+  --conn-orange: #f6874d;
+  --conn-yellow: #fbb420;
+  --conn-green: #24e16a;
+  --conn-blue: #6b95f1;
+  --conn-purple: #ab80f3;
+  --conn-grey: #9399a5;
+
+  --bg-sunken: #1f2125;
+  --bg-active: #383d46;
+  --bg-input: #1f2125;
+  --bg-overlay: rgb(0 0 0 / 55%);
+  --bg-selected-inactive: #30343c;
+  --border-subtle: #30343c;
+  --border-control: #6f7682;
+  --accent-hover: #7cb0ff;
+  --accent-soft: #233148;
+  --accent-soft-strong: #2b3f5f;
+  --success-soft: #1d3326;
+  --warning-soft: #3a3020;
+  --danger-soft: #3d2526;
+  --info-soft: #1b3439;
+  --mark-bg: rgb(250 204 21 / 28%);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-popup: 0 10px 32px rgb(0 0 0 / 50%), 0 0 0 1px rgb(255 255 255 / 6%);
+  --shadow-dialog: 0 24px 72px rgb(0 0 0 / 60%), 0 0 0 1px rgb(255 255 255 / 7%);
+  --scrollbar: rgb(255 255 255 / 16%);
+  --scrollbar-hover: rgb(255 255 255 / 30%);
+
+  --null: var(--fg-muted);
+  --num: #7cc4ff;
+  --string: #6ee7b7;
+  --date: #d8b4fe;
+  --bool: #fdba74;
+
+  --provider-sqlserver: #e0607e;
+  --provider-oracle: #f0874f;
+  --provider-sqlite: #5aa5e8;
+  --provider-fg: #0b1220;
+
+  --brand: #5b9cff;
+  --brand-fg: #0b1220;
+
+  --danger-fg: #1b1d21;
+  --success-fg: #0b1220;
+  --warning-fg: #1b1d21;
+  --bg-overlay-soft: rgb(0 0 0 / 30%);
+
+  --obj-table: #5b9cff;
+  --obj-view: #b794f6;
+  --obj-routine: #2dd4bf;
+  --obj-package: #fbbf24;
+  --obj-trigger: #f87171;
+  --obj-key: #facc15;
+  --obj-fk: #67e8f9;
+  --obj-db: #5b9cff;
+  --obj-other: #9aa1ab;
+
+  --syn-keyword: #5b9cff;
+  --syn-string: #6ee7b7;
+  --syn-comment: #9aa1ab;
+  --syn-number: #fdba74;
+  --syn-function: #c4b5fd;
+  --syn-variable: #fbbf24;
+  --syn-operator: #cbd5e1;
+  --syn-type: #67e8f9;
 }
 
+/* ------------------------------------------------- theme-independent scale */
 :root {
-  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
-  --fs: 13px;
-  --fs-sm: 12px;
-  --fs-xs: 11px;
-  --radius: 6px;
-  --radius-sm: 4px;
-  --row-h: 24px;
+  /* typography */
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --line-height: 1.4;
+  --weight-regular: 400;
+  --weight-strong: 600;
+  --grid-font-size: 13px;
+
+  /* 4 px spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  /* sizes */
+  --grid-row-h: 28px;
+  --grid-row-h-compact: 24px;
+  --explorer-row-h: 24px;
   --toolbar-h: 36px;
   --tabbar-h: 34px;
   --statusbar-h: 24px;
   --topbar-h: 40px;
+  --input-h: 28px;
+  --input-h-sm: 24px;
+  --hit-min: 24px;
+  --dialog-pad: 20px;
+  --panel-pad: 12px;
+  --icon-size: 16px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 90ms;
+  --dur: 160ms;
+
+  /* ---- M1 names (aliases; prefer the spec names above) ---- */
+  --text: var(--fg);
+  --text-muted: var(--fg-muted);
+  --text-faint: var(--fg-disabled);
+  --text-on-accent: var(--accent-fg);
+  --border-focus: var(--focus-ring);
+  --bg-editor: var(--bg-panel);
+  --bg-tooltip: var(--bg-elevated);
+  --fs: var(--text-md);
+  --fs-sm: var(--text-sm);
+  --fs-xs: var(--text-xs);
+  --row-h: var(--explorer-row-h);
+}
+
+[data-density='compact'] {
+  --grid-row-h: var(--grid-row-h-compact);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+  }
 }

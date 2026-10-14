@@ -1,6 +1,7 @@
 // App-level commands that coordinate several stores (run, transactions, tabs, export).
 import { api, errorMessage, isApiError } from '../api/client';
-import type { ExportFormat, ObjectRef, RunLabel, SqlBatch, TxMode } from '../api/types';
+import type { ExportFormat, ObjectRef, QueryParam, RunLabel, SqlBatch, TxMode } from '../api/types';
+import { resolveParams } from '../components/ParamsDialog/ParamsDialog';
 import { findDestructive } from '../lib/classify';
 import { serializeRows, type CopyFormat } from '../lib/serialize';
 import { computeView } from '../lib/filter';
@@ -15,6 +16,8 @@ import { useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
 import { useTabs, type ConsoleTab } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
+import { displayShortcut } from '../commands/keys';
+import { getTabView } from '../components/layout/tabViews';
 import { getEditor } from './editors';
 
 let localSeq = 0;
@@ -50,6 +53,8 @@ export function effectiveMaxRows(tab: ConsoleTab): number {
 export interface RunOptions {
   maxRows?: number;
   confirmedDestructive?: boolean;
+  /** Bind values already collected (e.g. on a retry); skips the parameters dialog. */
+  params?: QueryParam[];
 }
 
 export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch[], opts: RunOptions = {}): Promise<void> {
@@ -89,6 +94,10 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
     }
   }
 
+  // Statements with bind parameters (@id, :id, ?, $1) ask for values first; null = the user cancelled.
+  const params = opts.params ?? await resolveParams(tabId, conn.id, dialect, batches);
+  if (params === null) return;
+
   const maxRows = opts.maxRows ?? effectiveMaxRows(tab);
   const localId = `l${++localSeq}`;
   useResults.getState().begin(createExecution({
@@ -103,6 +112,7 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
     const res = await api.execute(session.sessionId, {
       batches, maxRows, stopOnError: true, label, source: { tabId, title: tab.title },
       ...(confirmed ? { confirmedDestructive: true } : {}),
+      ...(params?.length ? { params } : {}),
     });
     useResults.getState().attach(localId, res.executionId);
   } catch (e) {
@@ -115,7 +125,12 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
         confirmLabel: 'Run anyway',
         danger: true,
       });
-      if (ok) await runInTab(tabId, label, batches, { ...opts, confirmedDestructive: true });
+      if (ok) await runInTab(tabId, label, batches, { ...opts, confirmedDestructive: true, params: params ?? [] });
+      return;
+    }
+    if (isApiError(e, 'SESSION_LIMIT')) {
+      useResults.getState().fail(localId, `${errorMessage(e)} Close idle consoles on “${conn.name}” and run again.`, 'SESSION_LIMIT');
+      offerCloseIdle(conn.id);
       return;
     }
     const hint = isApiError(e, 'SESSION_BUSY') ? 'The session is busy with another statement.' : undefined;
@@ -257,8 +272,22 @@ export async function closeTab(tabId: string): Promise<void> {
       danger: true,
     });
     if (!ok) return;
+  } else if (tab.kind === 'view') {
+    const def = getTabView(tab.view);
+    if (def?.beforeClose) {
+      if (!(await def.beforeClose(tab))) return;
+    } else if (tab.dirty) {
+      const ok = await useUi.getState().askConfirm({
+        title: 'Discard changes?',
+        message: `“${tab.title}” has changes that were not applied.`,
+        confirmLabel: 'Discard and close',
+        danger: true,
+      });
+      if (!ok) return;
+    }
   }
   useTabs.getState().close(tabId);
+  if (tab.kind === 'view') getTabView(tab.view)?.onClosed?.(tab);
   useResults.getState().clearTab(tabId);
   if (s) {
     try {
@@ -395,4 +424,142 @@ export async function saveActiveFile(saveAs = false): Promise<void> {
 
 export function refreshHistorySoon(): void {
   useHistory.getState().reloadSoon();
+}
+
+// ---------------- M1.5: connections, onboarding ----------------
+
+/** Idle consoles (no running query, no open transaction) holding a session on the connection. */
+export function idleSessionTabs(connectionId: string): string[] {
+  const { sessions, byTab } = useSessions.getState();
+  const active = useTabs.getState().activeId;
+  return Object.entries(byTab)
+    .filter(([tabId, sid]) => {
+      const s = sessions[sid];
+      if (!s || s.connectionId !== connectionId || s.txOpen || s.state === 'executing' || tabId === active) return false;
+      return !isRunning(useResults.getState().executions[useResults.getState().byTab[tabId]]);
+    })
+    .map(([tabId]) => tabId);
+}
+
+/** SESSION_LIMIT: offer to release the sessions of idle consoles on that connection. */
+export function offerCloseIdle(connectionId: string): void {
+  const idle = idleSessionTabs(connectionId);
+  const limit = useSettings.getState().settings.connections.maxSessionsPerProfile;
+  toast('warning', `Session limit reached (${limit} per connection)`, idle.length ? `${idle.length} idle console(s) hold a session.` : 'Close a console on this connection first.',
+    idle.length
+      ? {
+          label: `Release ${idle.length} idle`,
+          run: () => {
+            void Promise.all(idle.map((t) => useSessions.getState().close(t, true).catch(() => undefined))).then(() =>
+              toast('success', `Released ${idle.length} idle session(s)`, 'Run the statement again.'),
+            );
+          },
+        }
+      : undefined);
+}
+
+/** Explorer "Disconnect": closes every session of the connection and drops its cached catalog. */
+export async function disconnectConnection(connectionId: string): Promise<void> {
+  const conn = getConnection(connectionId);
+  const { sessions, byTab } = useSessions.getState();
+  const tabsWithTx = Object.entries(byTab).filter(([, sid]) => sessions[sid]?.connectionId === connectionId && sessions[sid]?.txOpen);
+  if (tabsWithTx.length) {
+    const ok = await useUi.getState().askConfirm({
+      title: 'Open transactions',
+      message: `${tabsWithTx.length} console(s) on “${conn?.name ?? 'this connection'}” have uncommitted transactions. Disconnecting rolls them back.`,
+      confirmLabel: 'Roll back and disconnect',
+      danger: true,
+    });
+    if (!ok) return;
+  }
+  const n = await useSessions.getState().closeConnection(connectionId, true);
+  useCatalog.getState().forget(connectionId);
+  toast('info', `Disconnected ${conn?.name ?? ''}`.trim(), n ? `${n} session(s) closed` : undefined);
+}
+
+export async function disconnectAll(): Promise<void> {
+  const ids = [...new Set(Object.values(useSessions.getState().sessions).map((s) => s.connectionId))];
+  const cached = Object.keys(useCatalog.getState().conns);
+  const all = [...new Set([...ids, ...cached])];
+  if (!all.length) return;
+  const anyTx = Object.values(useSessions.getState().sessions).some((s) => s.txOpen);
+  if (anyTx) {
+    const ok = await useUi.getState().askConfirm({
+      title: 'Disconnect all',
+      message: 'Some consoles have uncommitted transactions. Disconnecting rolls them back.',
+      confirmLabel: 'Roll back and disconnect',
+      danger: true,
+    });
+    if (!ok) return;
+  }
+  await Promise.all(ids.map((cid) => useSessions.getState().closeConnection(cid, true)));
+  for (const cid of all) useCatalog.getState().forget(cid);
+  toast('info', `Disconnected ${all.length} connection(s)`);
+}
+
+/** Explorer folder "Connect all": loads every connection of the folder in parallel (per-root spinners). */
+export function connectAllInFolder(folder: string): string[] {
+  const list = useConnections.getState().connections.filter((c) => (c.folder ?? '') === folder);
+  for (const c of list) void preloadCatalog(c.id, null);
+  return list.map((c) => c.id);
+}
+
+/** Onboarding: "Try the sample database" (POST /sample-db) → console with a runnable query. */
+export async function openSampleDatabase(): Promise<void> {
+  try {
+    const r = await api.createSampleDb({});
+    await useConnections.getState().load();
+    const cid = r.connectionId ?? r.profile?.id;
+    if (!cid) throw new Error('The engine did not return the sample connection');
+    const sql = [
+      'SELECT c.FirstName, c.LastName, c.City, COUNT(o.Id) AS Orders, SUM(o.Total) AS Revenue',
+      'FROM Customers c',
+      'LEFT JOIN Orders o ON o.CustomerId = c.Id',
+      'GROUP BY c.Id, c.FirstName, c.LastName, c.City',
+      'ORDER BY Revenue DESC;',
+      '',
+      `-- Sample "Shop" database: Customers, Orders, OrderLines, Products, Countries.`,
+      `-- ${displayShortcut('Mod+Enter')} runs the statement under the cursor, ${displayShortcut('Mod+P')} jumps to a table.`,
+      '',
+    ].join('\n');
+    const id = useTabs.getState().newConsole({ connectionId: cid, database: null, text: sql, title: 'Sample: Shop' });
+    void preloadCatalog(cid, null);
+    useUi.getState().showDock('explorer');
+    setTimeout(() => getEditor(id)?.focus(), 80);
+    toast('success', r.created === false ? 'Opened the sample database' : 'Created the sample database', r.path);
+  } catch (e) {
+    toast('error', 'Could not create the sample database', errorMessage(e));
+  }
+}
+
+/** Onboarding: "Open a SQLite file" — native picker in Electron, connection dialog with SQLite preselected in the browser. */
+export async function openSqliteFile(): Promise<void> {
+  const p = getPlatform();
+  if (!p.hasFileSystem) {
+    useUi.getState().openConnectionDialog({ mode: 'new', providerId: 'sqlite', connectAfter: true });
+    return;
+  }
+  const path = await p.showOpenDialog({
+    title: 'Open a SQLite database',
+    filters: [{ name: 'SQLite databases', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }, { name: 'All files', extensions: ['*'] }],
+  });
+  if (!path) return;
+  const existing = useConnections.getState().connections.find((c) => c.providerId === 'sqlite' && c.props.path === path);
+  try {
+    const conn = existing ?? (await useConnections.getState().save({
+      name: path.split(/[\\/]/).pop()!.replace(/\.(db|sqlite3?|db3)$/i, '') || 'SQLite',
+      providerId: 'sqlite', color: null, folder: null, readOnly: false, props: { path }, savePassword: false, password: null,
+    }));
+    newConsole(conn.id, null);
+    useUi.getState().showDock('explorer');
+  } catch (e) {
+    toast('error', 'Could not open the SQLite file', errorMessage(e));
+  }
+}
+
+/** Open a console on a connection (welcome screen, explorer, connection dialog "Connect"). */
+export function connectAndOpen(connectionId: string): string {
+  const id = newConsole(connectionId, null);
+  useUi.getState().showDock('explorer');
+  return id;
 }

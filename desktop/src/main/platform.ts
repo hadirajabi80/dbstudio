@@ -41,28 +41,12 @@ export function htmlPlatformClasses(os: DesktopOs): string[] {
   return os === 'darwin' ? ['platform-darwin', 'titlebar-inset'] : [`platform-${os}`];
 }
 
-/** CSS custom properties the preload sets on <html> (used by the UI and by chromeCss below). */
+/** CSS custom properties the preload sets on <html> (used by the UI: ui/src/theme/shell.css styles html.titlebar-inset .topbar). */
 export function htmlPlatformVars(os: DesktopOs): Record<string, string> {
   return {
     '--titlebar-inset-left': os === 'darwin' ? `${TRAFFIC_LIGHT_INSET_PX}px` : '0px',
     '--titlebar-drag': os === 'darwin' ? 'drag' : 'no-drag',
   };
-}
-
-/**
- * Stylesheet main injects (webContents.insertCSS, which is not subject to the page CSP) on macOS, so the hidden
- * title bar is usable even before the UI ships its own rules: the top bar (`header.topbar`) drags the window,
- * its controls stay clickable, and its content clears the traffic lights. Once the UI styles
- * `html.titlebar-inset .topbar` itself (ui/src/theme/app.css), this can be deleted.
- */
-export function chromeCss(os: DesktopOs): string | null {
-  if (os !== 'darwin') return null;
-  return [
-    'html.titlebar-inset .topbar { -webkit-app-region: drag; -webkit-user-select: none; user-select: none;',
-    '  padding-left: calc(var(--titlebar-inset-left, 78px) + 4px); }',
-    'html.titlebar-inset .topbar :is(button, a, input, select, textarea, kbd, [role="button"], [tabindex]) {',
-    '  -webkit-app-region: no-drag; }',
-  ].join('\n');
 }
 
 /** Exposed by the preload as `window.dbstudioPlatform` (outside the frozen DbStudioBridge contract). */
