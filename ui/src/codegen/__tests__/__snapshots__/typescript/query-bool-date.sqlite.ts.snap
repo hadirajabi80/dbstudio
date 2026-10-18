@@ -2,9 +2,10 @@
 
 import type { Database } from 'better-sqlite3';
 
-/** SQLite timestamp text ('YYYY-MM-DD HH:MM:SS', UTC) as a Date; ISO text with 'T', 'Z' or an offset is read as written. */
-function fromSqliteDateTime(s: string): Date {
-  const iso = s.length === 10 ? `${s}T00:00:00` : s.replace(' ', 'T');
+/** A SQLite timestamp as a Date: text 'YYYY-MM-DD HH:MM:SS[.SSS]' is UTC (ISO text with 'T', 'Z' or an offset is read as written); a number is unix seconds (> 1e8) or a julian day. */
+function fromSqliteDateTime(v: string | number): Date {
+  if (typeof v === 'number') return new Date(v > 1e8 ? v * 1000 : (v - 2440587.5) * 86400000);
+  const iso = v.length === 10 ? `${v}T00:00:00` : v.replace(' ', 'T');
   return new Date(/(Z|[+-]\d\d:?\d\d)$/i.test(iso) ? iso : `${iso}Z`);
 }
 
@@ -13,9 +14,9 @@ function toSqliteDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** A Date as SQLite's UTC timestamp text 'YYYY-MM-DD HH:MM:SS' (the format CURRENT_TIMESTAMP writes). */
+/** A Date as SQLite's UTC timestamp text 'YYYY-MM-DD HH:MM:SS' (CURRENT_TIMESTAMP's format), with '.SSS' when it has milliseconds. */
 function toSqliteDateTime(d: Date): string {
-  return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+  return d.toISOString().replace('T', ' ').replace(/\.000Z$/, '').replace(/Z$/, '');
 }
 
 /** Row of the ActiveSince query. */
@@ -26,11 +27,11 @@ export interface ActiveSinceRow {
   total: number;
 }
 
-const activeSinceSql = `SELECT Id, IsActive, CreatedAt, Total FROM Orders WHERE IsActive = :active AND CreatedAt > :since AND OrderDate = :day AND Total > :min`;
+const getActiveSinceSql = `SELECT Id, IsActive, CreatedAt, Total FROM Orders WHERE IsActive = :active AND CreatedAt > :since AND OrderDate = :day AND Total > :min`;
 
 // Rows arrive keyed by column name; Id -> id, IsActive -> isActive, CreatedAt -> createdAt, Total -> total are mapped below.
 /** Runs the ActiveSince query. */
-export function activeSince(db: Database, active: boolean, since: Date, day: Date, min: number): ActiveSinceRow[] {
-  const rows = db.prepare<unknown[], Record<string, unknown>>(activeSinceSql).all({ active: Number(active), since: toSqliteDateTime(since), day: toSqliteDate(day), min });
-  return rows.map((r) => ({ id: r["Id"] as number, isActive: r["IsActive"] === 1, createdAt: r["CreatedAt"] == null ? null : fromSqliteDateTime(r["CreatedAt"] as string), total: r["Total"] as number }));
+export function getActiveSince(db: Database, active: boolean, since: Date, day: Date, min: number): ActiveSinceRow[] {
+  const rows = db.prepare<unknown[], Record<string, unknown>>(getActiveSinceSql).all({ active: Number(active), since: toSqliteDateTime(since), day: toSqliteDate(day), min });
+  return rows.map((r) => ({ id: r["Id"] as number, isActive: r["IsActive"] === 1, createdAt: r["CreatedAt"] == null ? null : fromSqliteDateTime(r["CreatedAt"] as string | number), total: r["Total"] as number }));
 }

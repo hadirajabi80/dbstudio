@@ -152,7 +152,8 @@ describe('pending changes: preview → submit in a transaction → refetch', () 
       const r = await submitChanges(ctx(), { verifyUnchanged: false });
       expect(r.ok).toBe(false);
       expect(r.error).toMatch(/affected 0 rows.*earlier uncommitted changes/);
-      expect(seen).toEqual(['SAVEPOINT dbs_edit', 'UPDATE people SET Name = @p1 WHERE Id = @p2', 'ROLLBACK TO SAVEPOINT dbs_edit']);
+      // SQLite keeps a savepoint after ROLLBACK TO: it is released so failed saves do not nest (features-r2-01).
+      expect(seen).toEqual(['SAVEPOINT dbs_edit', 'UPDATE people SET Name = @p1 WHERE Id = @p2', 'ROLLBACK TO SAVEPOINT dbs_edit', 'RELEASE SAVEPOINT dbs_edit']);
       // No full ROLLBACK and no tx-mode switch: the user's own uncommitted UPDATE survives in the open transaction.
       expect(mock.hits('/rollback', 'POST')).toHaveLength(0);
       expect(mock.hits('/tx-mode', 'POST')).toHaveLength(0);

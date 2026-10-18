@@ -70,6 +70,26 @@ const ORDERS_DDL = `CREATE TABLE Orders (
   CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );`;
 
+/**
+ * SQLite Events for the runtime smoke test (features-r2-03): a timestamp with milliseconds written by SQLite itself
+ * (strftime('%f') default) and a DATETIME column that may hold a number (unix seconds or a julian day).
+ */
+const events: CgTable = {
+  kind: 'table', schema: 'main', name: 'Events', primaryKey: ['Id'], foreignKeys: [],
+  columns: [
+    col('Id', 'INTEGER', { pk: true, identity: true }),
+    col('Name', 'TEXT'),
+    col('UpdatedAt', 'DATETIME', { hasDefault: true }),
+    col('HappenedAt', 'DATETIME', { nullable: true }),
+  ],
+};
+const EVENTS_DDL = `CREATE TABLE Events (
+  Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  Name TEXT NOT NULL,
+  UpdatedAt DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
+  HappenedAt DATETIME
+);`;
+
 /** A query with bool, datetime, date and decimal parameters (types given, as the Parameters strip would). */
 const activeSince = queryObject(
   'ActiveSince',
@@ -195,13 +215,16 @@ describe('server-defaulted columns are left to the database on INSERT (logic-22)
 describe('TypeScript better-sqlite3 queries bind and map like the CRUD code (features-08)', () => {
   it('bool → Number(), Date → SQLite text (UTC timestamp, local calendar DATE), rows 0/1 → boolean and text → Date', async () => {
     const out = text({ dialect: 'sqlite', objects: [activeSince] }, { language: 'typescript', flavor: 'driver', tsDate: 'Date' });
-    expect(out).toContain('activeSince(db: Database, active: boolean, since: Date, day: Date, min: number)');
+    expect(out).toContain('getActiveSince(db: Database, active: boolean, since: Date, day: Date, min: number)');
     expect(out).toContain('.all({ active: Number(active), since: toSqliteDateTime(since), day: toSqliteDate(day), min })');
     expect(out).toContain('isActive: r["IsActive"] === 1');
-    expect(out).toContain('createdAt: r["CreatedAt"] == null ? null : fromSqliteDateTime(r["CreatedAt"] as string)');
+    // SQLite returns a number for a date stored as unix seconds / julian day: the helper takes both (features-r2-03).
+    expect(out).toContain('createdAt: r["CreatedAt"] == null ? null : fromSqliteDateTime(r["CreatedAt"] as string | number)');
+    expect(out).toContain('function fromSqliteDateTime(v: string | number): Date {');
     // the helpers are emitted once, after the imports, and only the ones the file uses
     expect(out.match(/^function toSqliteDateTime\(/gm)).toHaveLength(1);
-    expect(out).toContain("return d.toISOString().replace('T', ' ').replace(/\\.\\d{3}Z$/, '');");
+    // milliseconds are kept when there are any (a strftime('%f') value round-trips unchanged), dropped when zero
+    expect(out).toContain("return d.toISOString().replace('T', ' ').replace(/\\.000Z$/, '').replace(/Z$/, '');");
     expect(out).not.toContain('function fromSqliteDate(');
     await expect(out).toMatchFileSnapshot('./__snapshots__/typescript/query-bool-date.sqlite.ts.snap');
   });
@@ -285,10 +308,45 @@ describe('query parameter types follow the compared columns (logic-22)', () => {
 const tmp = node.mkdtempSync(join(node.tmpdir(), 'dbstudio-codegen-'));
 afterAll(() => node.rmSync(tmp, { recursive: true, force: true }));
 
+describe('TypeScript better-sqlite3 date helpers (features-r2-03)', () => {
+  /** The emitted helpers, compiled to plain functions. */
+  const helpers = (() => {
+    const src = text({ dialect: 'sqlite', objects: [orders, events, activeSince] }, { language: 'typescript', flavor: 'driver', tsDate: 'Date' });
+    const body = [...src.matchAll(/^function (?:to|from)Sqlite\w+\([\s\S]*?^\}$/gm)].map((m) => m[0]).join('\n');
+    const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    return new Function(`${js}\nreturn { toSqliteDateTime, fromSqliteDateTime, toSqliteDate, fromSqliteDate };`)() as {
+      toSqliteDateTime(d: Date): string;
+      fromSqliteDateTime(v: string | number): Date;
+      toSqliteDate(d: Date): string;
+      fromSqliteDate(v: string | number): Date;
+    };
+  })();
+
+  it('writes milliseconds only when there are any', () => {
+    expect(helpers.toSqliteDateTime(new Date('2026-10-18T09:42:57.207Z'))).toBe('2026-10-18 09:42:57.207');
+    expect(helpers.toSqliteDateTime(new Date('2026-10-18T09:42:57.000Z'))).toBe('2026-10-18 09:42:57');
+    expect(helpers.toSqliteDateTime(helpers.fromSqliteDateTime('2026-10-18 09:42:57.207'))).toBe('2026-10-18 09:42:57.207');
+    expect(helpers.toSqliteDateTime(helpers.fromSqliteDateTime('2026-10-18 09:42:57'))).toBe('2026-10-18 09:42:57');
+  });
+
+  it('reads text, unix seconds and julian day numbers', () => {
+    expect(helpers.fromSqliteDateTime('2026-10-18 09:42:57').toISOString()).toBe('2026-10-18T09:42:57.000Z');
+    expect(helpers.fromSqliteDateTime('2026-10-18T09:42:57+02:00').toISOString()).toBe('2026-10-18T07:42:57.000Z');
+    expect(helpers.fromSqliteDateTime(1792316577).toISOString()).toBe('2026-10-18T09:42:57.000Z');
+    // julianday('2026-10-18 12:00:00') = 2461332.0; julian day 2440587.5 is the unix epoch
+    expect(helpers.fromSqliteDateTime(2461332).toISOString()).toBe('2026-10-18T12:00:00.000Z');
+    expect(helpers.fromSqliteDateTime(2440587.5).toISOString()).toBe('1970-01-01T00:00:00.000Z');
+    const d = helpers.fromSqliteDate(2461332);
+    expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 9, 18, 0]);
+    const u = helpers.fromSqliteDate(1792316577);
+    expect([u.getFullYear(), u.getMonth(), u.getDate()]).toEqual([2026, 9, 18]);
+  });
+});
+
 describe('TypeScript better-sqlite3 output runs (node:sqlite stand-in)', () => {
   for (const tsDate of ['Date', 'string'] as const) {
     it(`CRUD and query round-trip, tsDate=${tsDate}`, () => {
-      const src = text(sqliteInput, { language: 'typescript', flavor: 'driver', tsDate });
+      const src = text({ dialect: 'sqlite', objects: [orders, events, activeSince] }, { language: 'typescript', flavor: 'driver', tsDate });
       const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
       writeFileSync(join(tmp, `gen-${tsDate}.mjs`), js);
       // A local calendar day (new Date(y, m, d)): stored as that day in every time zone.
@@ -331,11 +389,36 @@ assert.equal(o2.isActive, false);
 assert.equal(raw(id).ShippedAt, '2026-10-19 08:30:00');
 ${tsDate === 'Date' ? "assert.equal(o2.shippedAt.toISOString(), '2026-10-19T08:30:00.000Z');" : "assert.equal(o2.shippedAt, '2026-10-19 08:30:00');"}
 assert.deepEqual(raw(id).CreatedAt, raw0.CreatedAt);
-const rows = g.activeSince(db, false, ${since}, ${day}, 1);
+const rows = g.getActiveSince(db, false, ${since}, ${day}, 1);
 assert.equal(rows.length, 1, 'CreatedAt > :since with a same-day value finds the row');
 assert.equal(rows[0].isActive, false);
 assert.equal(g.listOrders(db).length, 1);
 assert.equal(g.deleteOrder(db, id), true);
+
+// features-r2-03: a timestamp SQLite wrote with milliseconds survives get → update unchanged.
+db.exec(${JSON.stringify(EVENTS_DDL)});
+const rawEvent = (eid) => ({ ...db.prepare('SELECT UpdatedAt, HappenedAt FROM Events WHERE Id = ?').get(eid) });
+const eid = g.insertEvent(db, { name: 'deploy', happenedAt: null });
+assert.match(rawEvent(eid).UpdatedAt, /^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d{3}$/, 'the %f default writes milliseconds');
+// A default that happened to land on .000 would not show the difference: make the milliseconds non-zero.
+db.prepare("UPDATE Events SET UpdatedAt = substr(UpdatedAt, 1, 20) || '207' WHERE Id = ?").run(eid);
+const ev0 = rawEvent(eid);
+assert.equal(g.updateEvent(db, g.getEvent(db, eid)), true);
+assert.deepEqual(rawEvent(eid), ev0, 'get → update leaves the stored text unchanged');
+${tsDate === 'Date'
+  ? 'assert.equal(g.getEvent(db, eid).updatedAt.getUTCMilliseconds(), 207);'
+  : 'assert.equal(g.getEvent(db, eid).updatedAt, ev0.UpdatedAt);'}
+// SQLite may store a datetime as INTEGER unix seconds or REAL julian day: reading it must not throw.
+const sqliteUtc = (sql, v) => db.prepare(sql).get(v).t;
+for (const [v, asText] of [
+  [1792316577, "SELECT strftime('%Y-%m-%dT%H:%M:%fZ', ?, 'unixepoch') AS t"],
+  [2461332.25, "SELECT strftime('%Y-%m-%dT%H:%M:%fZ', ?) AS t"],
+]) {
+  db.prepare('UPDATE Events SET HappenedAt = ? WHERE Id = ?').run(v, eid);
+  const e = g.getEvent(db, eid);
+  ${tsDate === 'Date' ? 'assert.equal(e.happenedAt.toISOString(), new Date(sqliteUtc(asText, v)).toISOString());' : 'assert.equal(e.happenedAt, v);'}
+  assert.equal(g.listEvents(db).length, 1);
+}
 console.log('ok');
 `);
       const r = spawnSync(node.execPath, [join(tmp, `run-${tsDate}.mjs`)], { encoding: 'utf8', timeout: 30000, env: { ...node.env, TZ: 'Asia/Tehran' } });
@@ -403,7 +486,7 @@ assert repo.update(o)
 o2 = repo.get(new_id)
 assert o2.shipped_at == datetime(2026, 10, 19, 8, 30), o2.shipped_at
 assert o2.is_active is False
-rows = g.active_since(conn, active=False, since=datetime(1999, 1, 1), day=date(2026, 10, 18), min=Decimal("1"))
+rows = g.get_active_since(conn, active=False, since=datetime(1999, 1, 1), day=date(2026, 10, 18), min=Decimal("1"))
 assert len(rows) == 1 and rows[0].total == Decimal("19.99"), rows
 assert len(repo.list_all()) == 1
 assert repo.delete(new_id)

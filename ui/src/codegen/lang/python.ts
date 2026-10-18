@@ -3,7 +3,7 @@
 import type { Dialect } from '../../api/types';
 import type { CgInput, CgPackage, CgQuery, CgRoutine, CgTable, GeneratedFile } from '../model';
 import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../model';
-import { NameScope, pascal, snake } from '../naming';
+import { NameScope, pascal, queryFnBase, snake, withSuffix } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
 import { crudSql, defaultsNote, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
@@ -493,7 +493,7 @@ function queryFn(w: Writer, q: CgQuery, ctx: Ctx, rowType: string, members: Memb
   const constName = `_${snake(q.name).toUpperCase()}_SQL`;
   w.line(`${constName} = ${q3(sql)}`);
   w.blanks(2);
-  const fn = snake(q.name);
+  const fn = snake(queryFnBase(q.name));
   w.line(`def ${fn}(${[`conn: ${drv.conn}`, ...args.map((a) => `${a.local}: ${a.type}`)].join(', ')}) -> list[${rowType}]:`);
   w.indent();
   docstring(w, `Run the ${q.name} query.`);
@@ -562,7 +562,7 @@ export function generatePython(input: CgInput, o: CodegenOptions): GeneratedFile
         }
       });
     } else if (obj.kind === 'query') {
-      const rowType = typeNameOf(`${obj.name}_row`, o, false);
+      const rowType = typeNameOf(withSuffix(obj.name, 'row'), o, false);
       const members = membersOf(obj.columns, d, o, rowType);
       unitFor(snake(obj.name), obj.name, (w, ctx) => {
         if (o.flavor === 'pydantic') pydanticModel(w, rowType, members, `Row of the ${obj.name} query.`, ctx);

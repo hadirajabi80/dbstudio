@@ -153,7 +153,9 @@ function sameTokens(a: Token[], b: Token[]): boolean {
 }
 
 const ROUTINE_KINDS = new Set(['PROCEDURE', 'PROC', 'FUNCTION', 'TRIGGER', 'PACKAGE', 'TYPE']);
-const ROUTINE_MODIFIERS = new Set(['OR', 'ALTER', 'REPLACE', 'EDITIONABLE', 'NONEDITIONABLE', 'TEMP', 'TEMPORARY', 'DEFINER', 'NO', 'FORCE']);
+/** T-SQL ALTER statements that restate a whole routine definition (header and body). */
+const TSQL_ALTER_ROUTINE_KINDS = new Set(['PROCEDURE', 'PROC', 'FUNCTION', 'TRIGGER']);
+const ROUTINE_MODIFIERS =new Set(['OR', 'ALTER', 'REPLACE', 'EDITIONABLE', 'NONEDITIONABLE', 'TEMP', 'TEMPORARY', 'DEFINER', 'NO', 'FORCE']);
 /** `END IF`, `END LOOP` … close a PL/SQL control structure that was not opened by BEGIN/CASE. */
 const END_SUFFIX_NOT_BLOCK = new Set(['IF', 'LOOP', 'WHILE', 'REPEAT']);
 
@@ -162,7 +164,7 @@ const word = (t: Token | undefined): string | null => (t && (t.kind === 'keyword
 /**
  * Context of every token of a chunk (index i - c.a): `nested` inside parentheses opened in the chunk, `body` inside
  * the body of a routine the chunk creates (CREATE [OR ALTER | OR REPLACE] PROCEDURE | FUNCTION | TRIGGER | PACKAGE |
- * TYPE BODY … after its AS / IS / BEGIN). T-SQL routine bodies run to the end of the batch; PL/SQL and SQLite bodies
+ * TYPE BODY, or T-SQL ALTER PROCEDURE | FUNCTION | TRIGGER … after its AS / IS / BEGIN). T-SQL routine bodies run to the end of the batch; PL/SQL and SQLite bodies
  * end at the END that closes their outermost block.
  */
 function tokenContext(tokens: Token[], c: Chunk, dialect: Dialect): { nested: boolean[]; body: boolean[] } {
@@ -189,6 +191,13 @@ function tokenContext(tokens: Token[], c: Chunk, dialect: Dialect): { nested: bo
     const w = word(t);
     if (!w || depth > 0) continue;
     if (skipNext) { skipNext = false; continue; }
+    if (routine === 0 && w === 'ALTER' && dialect === 'tsql') {
+      // T-SQL ALTER PROCEDURE | PROC | FUNCTION | TRIGGER restates the whole routine ("Script as ALTER" / "Modify"),
+      // so its body is guarded like a CREATE's. (A PL/SQL ALTER … COMPILE has no body.)
+      const kind = word(next(i));
+      if (kind && TSQL_ALTER_ROUTINE_KINDS.has(kind)) routine = 1;
+      continue;
+    }
     if (routine === 0 && w === 'CREATE') {
       // CREATE [OR ALTER | OR REPLACE] [EDITIONABLE …] PROCEDURE | FUNCTION | TRIGGER | PACKAGE [BODY] | TYPE BODY
       let k = i + 1;

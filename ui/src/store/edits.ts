@@ -31,6 +31,18 @@ export interface RowIssue {
   message: string;
 }
 
+/** Rows a grid saved into a transaction that is still open (manual mode): they wait for the user's Commit. */
+export interface SavedInTx {
+  sessionId: string;
+  rows: number;
+}
+
+/** How a session's transaction ended (useSessions().lastTxEnd). */
+export interface TxEndEvent {
+  sessionId: string;
+  kind: 'commit' | 'rollback';
+}
+
 export interface EditBuffer {
   pending: Pending;
   committed: Committed;
@@ -39,6 +51,13 @@ export interface EditBuffer {
   status: 'idle' | 'submitting';
   error: string | null;
   issues: RowIssue[];
+  /** Saved rows that wait in an open transaction (features-r2-01); cleared when it commits. */
+  savedInTx: SavedInTx | null;
+  /**
+   * The transaction holding this grid's saved rows was rolled back: the grid still shows the saved values, which the
+   * database no longer has (a banner offers Re-run). Cleared by re-running (a new grid) or dismissing.
+   */
+  rolledBack: { rows: number } | null;
 }
 
 export const EMPTY_PENDING: Pending = { updates: {}, inserts: [], deletes: {} };
@@ -46,7 +65,7 @@ const EMPTY_COMMITTED: Committed = { patched: {}, hidden: {}, appended: [] };
 const UNDO_LIMIT = 200;
 
 export function emptyBuffer(): EditBuffer {
-  return { pending: EMPTY_PENDING, committed: EMPTY_COMMITTED, undo: [], redo: [], status: 'idle', error: null, issues: [] };
+  return { pending: EMPTY_PENDING, committed: EMPTY_COMMITTED, undo: [], redo: [], status: 'idle', error: null, issues: [], savedInTx: null, rolledBack: null };
 }
 
 export function pendingCount(p: Pending): number {
@@ -73,6 +92,8 @@ interface EditsState {
   setActiveGrid(key: string | null): void;
   /** Set a cell; `original` is the committed value (an edit back to it removes the pending edit). */
   setCell(key: string, row: number, col: number, value: CellValue, original: CellValue): void;
+  /** Several cells (source-row edits and insert cells) as one undoable change, e.g. "Set selected cells to NULL". */
+  setCells(key: string, cells: CellEdit[]): void;
   setInsertCell(key: string, id: string, col: number, value: CellValue): void;
   addInsert(key: string, columnCount: number, defaults?: Record<number, CellValue>): string;
   removeInsert(key: string, id: string): void;
@@ -86,7 +107,21 @@ interface EditsState {
   commit(key: string, result: { patched?: Record<number, CellValue[]>; hidden?: number[]; appended?: CellValue[][]; keepInserts?: string[] }): void;
   /** Drop a buffer (grid closed, rows reloaded). */
   reset(key: string): void;
+  /** After a save that left its rows in the session's open transaction (manual mode): remember them until it ends. */
+  noteSavedInTx(key: string, sessionId: string, rows: number): void;
+  /**
+   * A session's transaction ended: a commit makes the saved rows permanent; a rollback undid them, so every grid that
+   * saved rows into it is marked `rolledBack`.
+   */
+  applyTxEnd(ev: TxEndEvent): void;
+  /** Hide the "Rolled back" notice of a grid. */
+  dismissRolledBack(key: string): void;
 }
+
+/** One cell of a batch edit: a source row (with its committed value) or a pending insert. */
+export type CellEdit =
+  | { row: number; col: number; value: CellValue; original: CellValue; insertId?: undefined }
+  | { insertId: string; col: number; value: CellValue };
 
 export const useEdits = create<EditsState>((set, get) => {
   const write = (key: string, fn: (b: EditBuffer) => EditBuffer) => {
@@ -115,26 +150,16 @@ export const useEdits = create<EditsState>((set, get) => {
     },
 
     setCell(key, row, col, value, original) {
-      change(key, (p) => {
-        const cur = p.updates[row];
-        const had = !!cur && col in cur;
-        const revert = sameValue(value, original);
-        if (revert ? !had : had && sameValue(cur![col], value)) return p;
-        const rowEdits = { ...(cur ?? {}) };
-        if (revert) delete rowEdits[col];
-        else rowEdits[col] = value;
-        const updates = { ...p.updates };
-        if (Object.keys(rowEdits).length) updates[row] = rowEdits;
-        else delete updates[row];
-        return { ...p, updates };
-      });
+      change(key, (p) => withCell(p, row, col, value, original));
+    },
+
+    setCells(key, cells) {
+      if (!cells.length) return;
+      change(key, (p) => cells.reduce((acc, c) => (c.insertId !== undefined ? withInsertCell(acc, c.insertId, c.col, c.value) : withCell(acc, c.row, c.col, c.value, c.original)), p));
     },
 
     setInsertCell(key, id, col, value) {
-      change(key, (p) => ({
-        ...p,
-        inserts: p.inserts.map((r) => (r.id === id ? { ...r, values: r.values.map((v, i) => (i === col ? value : v)), touched: { ...r.touched, [col]: true } } : r)),
-      }));
+      change(key, (p) => withInsertCell(p, id, col, value));
     },
 
     addInsert(key, columnCount, defaults = {}) {
@@ -227,8 +252,56 @@ export const useEdits = create<EditsState>((set, get) => {
       delete buffers[key];
       set({ buffers, activeGrid: get().activeGrid === key ? null : get().activeGrid });
     },
+
+    noteSavedInTx(key, sessionId, rows) {
+      if (rows <= 0) return;
+      write(key, (b) => {
+        // Rows saved earlier into the same transaction add up; another session's (stale) note is replaced.
+        const prev = b.savedInTx?.sessionId === sessionId ? b.savedInTx.rows : 0;
+        return { ...b, savedInTx: { sessionId, rows: prev + rows } };
+      });
+    },
+
+    applyTxEnd(ev) {
+      const cur = get().buffers;
+      let next: Record<string, EditBuffer> | null = null;
+      for (const [key, b] of Object.entries(cur)) {
+        if (b.savedInTx?.sessionId !== ev.sessionId) continue;
+        next ??= { ...cur };
+        next[key] = ev.kind === 'rollback'
+          ? { ...b, savedInTx: null, rolledBack: { rows: (b.rolledBack?.rows ?? 0) + b.savedInTx.rows } }
+          : { ...b, savedInTx: null };
+      }
+      if (next) set({ buffers: next });
+    },
+
+    dismissRolledBack(key) {
+      write(key, (b) => (b.rolledBack ? { ...b, rolledBack: null } : b));
+    },
   };
 });
+
+/** `p` with one source-row cell set (an edit back to `original` removes the pending edit); `p` itself when nothing changes. */
+function withCell(p: Pending, row: number, col: number, value: CellValue, original: CellValue): Pending {
+  const cur = p.updates[row];
+  const had = !!cur && col in cur;
+  const revert = sameValue(value, original);
+  if (revert ? !had : had && sameValue(cur![col], value)) return p;
+  const rowEdits = { ...(cur ?? {}) };
+  if (revert) delete rowEdits[col];
+  else rowEdits[col] = value;
+  const updates = { ...p.updates };
+  if (Object.keys(rowEdits).length) updates[row] = rowEdits;
+  else delete updates[row];
+  return { ...p, updates };
+}
+
+function withInsertCell(p: Pending, id: string, col: number, value: CellValue): Pending {
+  return {
+    ...p,
+    inserts: p.inserts.map((r) => (r.id === id ? { ...r, values: r.values.map((v, i) => (i === col ? value : v)), touched: { ...r.touched, [col]: true } } : r)),
+  };
+}
 
 export function sameValue(a: CellValue | undefined, b: CellValue | undefined): boolean {
   if (a === b) return true;

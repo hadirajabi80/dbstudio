@@ -704,8 +704,8 @@ JOIN dbo.Orders o ON o.CustomerId = c.Id
 WHERE c.Id = @customerId AND o.Total > @minTotal
 ORDER BY o.OrderDate DESC`
 
-// CustomerOrders runs the CustomerOrders query.
-func CustomerOrders(ctx context.Context, db DBTX, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
+// GetCustomerOrders runs the CustomerOrders query.
+func GetCustomerOrders(ctx context.Context, db DBTX, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
 	rows, err := db.QueryContext(ctx, customerOrdersSQL, sql.Named("customerId", customerID), sql.Named("minTotal", minTotal))
 	if err != nil {
 		return nil, err

@@ -606,8 +606,8 @@ JOIN dbo.Orders o ON o.CustomerId = c.Id
 WHERE c.Id = ? AND o.Total > ?
 ORDER BY o.OrderDate DESC`
 
-// CustomerOrders runs the CustomerOrders query.
-func CustomerOrders(ctx context.Context, db sqlx.ExtContext, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
+// GetCustomerOrders runs the CustomerOrders query.
+func GetCustomerOrders(ctx context.Context, db sqlx.ExtContext, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
 	var items []CustomerOrdersRow
 	err := sqlx.SelectContext(ctx, db, &items, db.Rebind(customerOrdersSQL), customerID, minTotal)
 	return items, err

@@ -33,6 +33,7 @@ import type { TabViewProps } from '../layout/tabViews';
 import { commandMenuItems } from '../layout/commandMenu';
 import { showMenuBelow } from '../common/Menu';
 import { Splitter } from '../common/Splitter';
+import { DeferredNotice } from '../FilterBar/DeferredNotice';
 import { DistinctValuesPopover } from '../FilterBar/DistinctValues';
 import { FilterBar, type FilterBarCloseReason } from '../FilterBar/FilterBar';
 import type { SelectionAggregates } from '../Grid/aggregate';
@@ -70,16 +71,22 @@ interface Loaded {
   /** Server-side predicate in effect (for count and paging). */
   where: string | null;
   sql: string | null;
-  /** Keyless object paged without ORDER BY (large or not counted yet): later pages may repeat or skip rows. */
+  /** Keyless object paged without ORDER BY (large or not counted): later pages may repeat or skip rows. */
   unordered: boolean;
+  /** Predicate the loaded rows were read with (what the grid applies while a newer filter is deferred). */
+  applied: PredicateResult | null;
 }
 
 const EMPTY: Loaded = {
-  columns: null, rows: new ChunkedList(), rev: 0, hasMore: false, pageable: true, loading: true, error: null, errorCode: null, elapsedMs: null, where: null, sql: null, unordered: false,
+  columns: null, rows: new ChunkedList(), rev: 0, hasMore: false, pageable: true, loading: true, error: null, errorCode: null, elapsedMs: null, where: null, sql: null, unordered: false, applied: null,
 };
 
-/** Re-reading the loaded rows in key order (keyless paging switching to ORDER BY) is done up to this many rows. */
-const REORDER_MAX_ROWS = 20_000;
+/**
+ * A keyless object is counted before its first page so that its paging order is decided once, before the user sees
+ * any row (features-r2-02). A COUNT slower than this is cancelled: the pages are then read without ORDER BY and the
+ * count runs again, in the background, after the first page.
+ */
+export const PRE_COUNT_TIMEOUT_MS = 3000;
 
 /** Rows of one page and the execution that holds their full values. */
 interface PageRef {
@@ -87,9 +94,6 @@ interface PageRef {
   start: number;
   count: number;
 }
-
-const sameOrder = (a: readonly string[] | null, b: readonly string[] | null) =>
-  a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]));
 
 const specFor = (sort: readonly SortByName[], cols: readonly ColumnInfo[]): SortSpec[] =>
   sort.filter((s) => cols.some((c) => c.name === s.column)).map((s) => ({ column: s.column, dir: s.dir }));
@@ -212,8 +216,13 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   // Null until the columns are known: the first load computes the same signature itself (no double page 0 / COUNT).
   const sigNow = data.columns && predicate ? querySig(connectionId, predicate, specFor(sortNames, data.columns)) : null;
   const loadedSig = useRef<string | null>(null);
-  /** COUNT(*) of a query signature (decides whether a keyless object may be sorted for paging). */
-  const knownCount = useRef<{ sig: string; value: number } | null>(null);
+  const pending = pendingCount(buffer.pending);
+  /**
+   * A filter / search / sort change that would reload the rows while edits are pending is shown but not run
+   * (design-r2-01): the bar keeps what the user typed, the notice offers Save / Discard, and the query runs on its
+   * own once nothing is pending.
+   */
+  const deferred = pending > 0 && sigNow !== null && loadedSig.current !== null && sigNow !== loadedSig.current;
   /** Unique index/constraint of a table without a primary key (undefined = not looked up yet). */
   const uniqueKey = useRef<string[] | null | undefined>(undefined);
   /** ORDER BY fallback the loaded rows were read with (keyless objects; null = no ORDER BY). */
@@ -233,7 +242,6 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
       if (res.status === 'cancelled') return setCount({ value: null, loading: false, error: null });
       const v = res.resultSets[0]?.rows[0]?.[0];
       const value = v === null || v === undefined ? null : Number(v);
-      if (value !== null && Number.isFinite(value) && loadedSig.current) knownCount.current = { sig: loadedSig.current, value };
       setCount({ value, loading: false, error: res.error?.message ?? null });
     } catch (e) {
       if (seq === loadSeq.current) setCount({ value: null, loading: false, error: e instanceof Error ? e.message : String(e) });
@@ -247,6 +255,51 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
     if (s && countRunning.current) await api.cancel(s.sessionId).catch(() => undefined);
     setCount((c) => ({ ...c, loading: false }));
   }, [tab.id]);
+
+  /**
+   * COUNT(*) before the first page of a keyless object (features-r2-02), run inside the page's own `exclusive` turn.
+   * `value` is null when the count is unknown: it failed (`retry` false: counting again would fail too), the user
+   * cancelled it, or it ran longer than PRE_COUNT_TIMEOUT_MS (`retry` true: it is cancelled so that the page does not
+   * wait behind it, and runs again in the background after the page). The page is never started while the COUNT is
+   * still running on the session, so the cancel cannot hit the page.
+   */
+  const preCount = async (sessionId: string, where: string | null, params: ExecParam[], t: TableTarget): Promise<{ value: number | null; retry: boolean }> => {
+    setCount({ value: null, loading: true, error: null });
+    countRunning.current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const running = getSqlRunner()(sessionId, countSql(t, dialect, where), params, {
+        label: 'data', maxRows: 1, source: { tabId: tab.id, title: tab.title }, skipHistory: true,
+      });
+      const timedOut = new Promise<'timeout'>((r) => (timer = setTimeout(() => r('timeout'), PRE_COUNT_TIMEOUT_MS)));
+      let res = await Promise.race([running, timedOut]);
+      let retry = false;
+      if (res === 'timeout') {
+        retry = true;
+        await api.cancel(sessionId).catch(() => undefined);
+        res = await running; // wait until the session is free again (a count that just finished is still used)
+      }
+      const v = res.status === 'ok' ? res.resultSets[0]?.rows[0]?.[0] : null;
+      const value = v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v);
+      if (value !== null) {
+        setCount({ value, loading: false, error: null });
+        return { value, retry: false };
+      }
+      if (res.status === 'error' && !retry) {
+        setCount({ value: null, loading: false, error: res.error?.message ?? 'The count failed' });
+        return { value: null, retry: false };
+      }
+      // Cancelled (by the user, or by the timeout above: then the engine may report the cancel as an error).
+      setCount({ value: null, loading: false, error: null });
+      return { value: null, retry };
+    } catch (e) {
+      setCount({ value: null, loading: false, error: e instanceof Error ? e.message : String(e) });
+      return { value: null, retry: false };
+    } finally {
+      clearTimeout(timer);
+      countRunning.current = false;
+    }
+  };
 
   /** Load page 0 (replaces rows and recounts) or the next page. */
   const load = useCallback((req: 0 | 'next') => {
@@ -280,8 +333,8 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
 
   const loadNow = async (req: 0 | 'next') => {
     if (req === 'next' && !hasMoreRef.current) return;
-    let offset = req === 'next' ? rowsRef.current.length : 0;
-    let limit = pageSize;
+    const offset = req === 'next' ? rowsRef.current.length : 0;
+    const limit = pageSize;
     const seq = ++loadSeq.current;
     setData((d) => ({ ...d, loading: true, error: null, errorCode: null }));
     const run = getSqlRunner();
@@ -303,15 +356,22 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
       let keys = found?.obj.pk?.length ? found.obj.pk : cols.filter((c) => c.isKey).map((c) => c.name);
       if (!keys.length) keys = (await uniqueKeyFor(cols)) ?? [];
       let fallback: string[] | null = null;
+      /** COUNT(*) done before the page: 'known' / 'failed' (shown, not repeated) or 'retry' (count after the page). */
+      let counted: 'known' | 'failed' | 'retry' | null = null;
       if (!keys.length) {
-        const rowCount = knownCount.current?.sig === sig ? knownCount.current.value : null;
-        fallback = keylessOrder(dialect, cols, isView, rowCount);
-        if (req === 'next' && !sameOrder(fallback, loadedFallback.current)) {
-          // The loaded rows were read in another order: re-read them in the new one, or keep the old order.
-          if (fallback && offset + pageSize <= REORDER_MAX_ROWS) {
-            limit = offset + pageSize;
-            offset = 0;
-          } else fallback = loadedFallback.current;
+        if (req === 'next') {
+          // Later pages keep the order the first page was read with: the rows on screen are never re-read or
+          // re-ordered under the user's selection (features-r2-02).
+          fallback = loadedFallback.current;
+        } else {
+          fallback = keylessOrder(dialect, cols, isView, null);
+          // The fallback costs a full sort: count first and decide once, so that a small object is ordered from page 1.
+          if (!fallback && keylessOrder(dialect, cols, isView, 0)) {
+            const c = await preCount(s.sessionId, pred.where, pred.params, { ...target, keyColumns: [] });
+            if (seq !== loadSeq.current) return;
+            fallback = keylessOrder(dialect, cols, isView, c.value);
+            counted = c.value !== null ? 'known' : c.retry ? 'retry' : 'failed';
+          }
         }
       }
       const replace = offset === 0;
@@ -336,17 +396,17 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
       colsRef.current = set?.columns ?? cols;
       hasMoreRef.current = page.pageable && fetched.length >= limit;
       loadedFallback.current = fallback;
+      // The next page is read with the same fallback: the hint shows only while that order is "none" (pages may then
+      // repeat or skip rows), and stays once unordered pages were appended.
       const unordered = !keys.length && !fallback && (hasMoreRef.current || offset > 0);
       const next: Omit<Loaded, 'rev'> = {
         columns: colsRef.current, rows: rowsRef.current, hasMore: hasMoreRef.current, pageable: page.pageable, loading: false, error: null, errorCode: null,
-        elapsedMs: res.elapsedMs, where: pred.where, sql: inlineParams(page.sql, pred.params, dialect), unordered,
+        elapsedMs: res.elapsedMs, where: pred.where, sql: inlineParams(page.sql, pred.params, dialect), unordered, applied: pred,
       };
       setData((d) => ({ ...next, rev: d.rev + 1 }));
       if (req === 0) {
-        if (fetched.length < limit) {
-          knownCount.current = { sig, value: fetched.length };
-          setCount({ value: fetched.length, loading: false, error: null });
-        } else void exclusive(() => runCountNow(pred.where, pred.params, seq, t));
+        if (fetched.length < limit) setCount({ value: fetched.length, loading: false, error: null });
+        else if (counted !== 'known' && counted !== 'failed') void exclusive(() => runCountNow(pred.where, pred.params, seq, t));
       }
     } catch (e) {
       if (seq !== loadSeq.current) return;
@@ -360,7 +420,10 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   loadNowRef.current = loadNow;
 
   // First load once; afterwards reload when the server-side query changes (debounced for typing in the filter bar).
+  // While edits are pending the change is deferred (design-r2-01); it runs as soon as nothing is pending any more,
+  // whatever cleared the edits (save, undo, discard).
   const started = useRef(false);
+  const anyPending = pending > 0;
   useEffect(() => {
     if (!connectionId) return;
     if (!started.current) {
@@ -368,13 +431,14 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
       void load(0);
       return;
     }
-    if (sigNow === null || sigNow === loadedSig.current) return;
+    if (sigNow === null || sigNow === loadedSig.current || anyPending) return;
     const t = setTimeout(() => {
+      if (hasPending(useEdits.getState().get(gridKey))) return;
       useEdits.getState().reset(gridKey);
       void load(0);
     }, 350);
     return () => clearTimeout(t);
-  }, [sigNow, connectionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sigNow, connectionId, anyPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Release the session when idle (auto mode, nothing pending); the next load opens a new one.
   useEffect(() => {
@@ -412,40 +476,34 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
     void load(0);
   }, [gridKey, load]);
 
-  // Guard filter/sort changes while edits are pending.
+  /**
+   * Actions that cannot be deferred (the empty-result "Clear filter"): ask before discarding pending edits. On
+   * confirm the edits are dropped first, so the reload is not held back as a deferred change.
+   */
   const guarded = async (fn: () => void) => {
     if (hasPending(useEdits.getState().get(gridKey))) {
       const ok = await useUi.getState().askConfirm({
-        title: 'Discard pending changes?', message: 'Changing the filter or sort reloads the rows and discards the changes that are not submitted yet.',
+        title: 'Discard pending changes?', message: 'Clearing the filter reloads the rows and discards the changes that are not submitted yet.',
         confirmLabel: 'Discard changes', danger: true,
       });
       if (!ok) return;
+      useEdits.getState().reset(gridKey);
     }
     fn();
   };
 
-  /**
-   * Would this filter / search / sort reload the rows? Only complete, enabled conditions reach the server (an empty
-   * draft condition or a switched-off one does not), so the server query signature is the normalised applied filter.
-   */
-  const wouldReload = (f: FilterGroup | null, q: string, sort: readonly SortByName[]): boolean => {
-    const cols = data.columns;
-    if (!cols) return true;
-    const pred = buildPredicate(f, cols, dialect, { alias: null, quick: q });
-    return querySig(connectionId, pred, specFor(sort, cols)) !== (loadedSig.current ?? sigNow);
-  };
-  /** Edits that do not change the query (drafts, disabled conditions, client-only parts) never ask (design-r1-02). */
-  const changeFilter = (f: FilterGroup | null) => {
-    if (wouldReload(f, quick, sortNames)) void guarded(() => setFilter(f));
-    else setFilter(f);
-  };
-  const changeSort = (next: SortByName[]) => {
-    if (wouldReload(filter, quick, next)) void guarded(() => setSortNames(next));
-    else setSortNames(next);
-  };
-  const changeQuick = (q: string) => {
-    if (wouldReload(filter, q, sortNames)) void guarded(() => setQuick(q));
-    else setQuick(q);
+  // Filter / search / sort changes are always taken as typed (the bar shows exactly what the state holds). With edits
+  // pending, one that would reload the rows is deferred rather than guarded: no dialog opens while typing and focus
+  // stays where it is (design-r2-01).
+  const changeFilter = (f: FilterGroup | null) => setFilter(f);
+  const changeSort = (next: SortByName[]) => setSortNames(next);
+  const changeQuick = (q: string) => setQuick(q);
+
+  /** Enter in a value / Ctrl+Shift+Enter: run the query now, unless edits are pending (the change is then deferred). */
+  const applyNow = () => {
+    if (hasPending(useEdits.getState().get(gridKey))) return;
+    useEdits.getState().reset(gridKey);
+    void load(0);
   };
 
   /** The filter bar closed from Esc or its ✕ (focus was inside it): give focus back to the grid (design-r1-01). */
@@ -477,7 +535,8 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
 
   const view: GridViewModel = useMemo(() => ({ quickFilter: quick, filter, sort: [] }), [quick, filter]);
   const n = countActiveConditions(filter, columns);
-  const pending = pendingCount(buffer.pending);
+  /** The predicate the rows on screen follow: the deferred one is not applied yet, not even its client-only part. */
+  const shownPred = deferred ? data.applied : predicate;
   const signature = useMemo(() => columnSignature(columns), [columns]);
   const editCtx: EditContext | null = editability?.editable && editability.target ? {
     gridKey, tabId: tab.id, connectionId, database: session?.database ?? database, dialect, target: editability.target, columns,
@@ -613,8 +672,16 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
           focusedColumn={sel ? columns[sel.col]?.name ?? null : null}
           saved={{ connectionId, signature }}
           serverAlways
-          server={{ available: true, active: true, busy: data.loading, onApply: () => void load(0) }}
-          status={predicate?.where ? `Server · ${total !== null ? formatCount(total) : '…'} row${total === 1 ? '' : 's'}` : null}
+          server={{ available: true, active: true, busy: data.loading, onApply: applyNow }}
+          status={shownPred?.where ? `Server · ${total !== null ? formatCount(total) : '…'} row${total === 1 ? '' : 's'}` : null}
+        />
+      )}
+      {deferred && (
+        <DeferredNotice
+          pending={pending}
+          busy={buffer.status === 'submitting'}
+          onSave={pendingActions.save}
+          onDiscard={pendingActions.discard}
         />
       )}
       {data.error && (
@@ -650,7 +717,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
                 done={!data.loading}
                 view={view}
                 serverFiltered
-                extraFilter={predicate?.clientOnly ?? null}
+                extraFilter={shownPred?.clientOnly ?? null}
                 onViewChange={(v) => {
                   if (v.filter !== undefined) changeFilter(v.filter ?? null);
                   if (v.quickFilter !== undefined) changeQuick(v.quickFilter);
@@ -768,7 +835,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
           load={() => exclusive(async () => {
             const s = await ensureSession();
             const res = await getSqlRunner()(
-              s.sessionId, distinctSql(target, dialect, columns[distinct.col].name, predicate?.where ?? null, 500, s.serverInfo.productVersion), predicate?.params ?? [],
+              s.sessionId, distinctSql(target, dialect, columns[distinct.col].name, shownPred?.where ?? null, 500, s.serverInfo.productVersion), shownPred?.params ?? [],
               { label: 'data', maxRows: 501, skipHistory: true },
             );
             if (res.error) throw new Error(res.error.message);

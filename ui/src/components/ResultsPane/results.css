@@ -24,3 +24,33 @@
 .resultset-toolbar .rs-quick {
   width: clamp(120px, 22vw, 220px);
 }
+
+/* "Rolled back" notice above the grid (features-r2-01): rows this grid saved into a transaction that was rolled back
+   are still shown with the saved values; Re-run shows what the database holds. */
+.rs-rolledback {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 3px var(--space-2) 3px var(--space-3);
+  background: var(--warning-soft);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.rs-rolledback > svg {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+.rs-rolledback-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rs-rolledback .link-btn,
+.rs-rolledback .icon-btn {
+  flex-shrink: 0;
+}

@@ -2,6 +2,7 @@
 import type { CgColumn, CgInput, CgObject, GeneratedFile } from '../model';
 import { isTable } from '../model';
 import type { CodegenOptions } from '../options';
+import { withSuffix } from '../naming';
 import { membersOf, objectLabel, typeNameOf, type Member } from '../shape';
 import type { ResolvedType } from '../types';
 import { commentText } from '../writer';
@@ -103,7 +104,7 @@ function schemaFor(m: Member): Record<string, unknown> {
 
 function columnsOf(obj: CgObject): { name: string; label: string; columns: CgColumn[]; comment?: string | null; singular: boolean } | null {
   if (isTable(obj)) return { name: obj.name, label: objectLabel(obj), columns: obj.columns, comment: obj.comment, singular: true };
-  if (obj.kind === 'query') return { name: `${obj.name}_row`, label: obj.name, columns: obj.columns, singular: false };
+  if (obj.kind === 'query') return { name: withSuffix(obj.name, 'row'), label: obj.name, columns: obj.columns, singular: false };
   if ((obj.kind === 'proc' || obj.kind === 'func') && obj.resultColumns) return { name: `${obj.name}_row`, label: objectLabel(obj), columns: obj.resultColumns, singular: false };
   return null;
 }

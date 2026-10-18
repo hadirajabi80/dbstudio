@@ -60,7 +60,7 @@ export function commandMenuItems(entries: readonly ContextEntry[], args?: unknow
       shortcut: c.shortcut,
       ...(v.shortcuts.length > 1 ? { extraShortcuts: v.shortcuts.slice(1) } : {}),
       disabled: !v.enabled,
-      danger: /delete|remove|\.drop$|\.truncate$/i.test(e.command),
+      danger: !!c.danger,
       onClick: v.run,
     });
   }

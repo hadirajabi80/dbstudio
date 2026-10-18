@@ -2,7 +2,7 @@
 import type { Dialect } from '../../api/types';
 import type { CgColumn, CgInput, CgObject, CgPackage, CgParam, CgQuery, CgRoutine, CgTable, GeneratedFile } from '../model';
 import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../model';
-import { NameScope, pascal } from '../naming';
+import { NameScope, pascal, queryFnBase, withSuffix } from '../naming';
 import type { CodegenOptions } from '../options';
 import {
   bindNameOf, friendlyParam, DIALECT_LABEL, localName, membersOf, objectLabel, pkMembers, proceduresClassName, routineFnName, routineSqlName,
@@ -797,16 +797,16 @@ function efRoutine(w: Writer, r: CgRoutine, ctx: Ctx, decls: Writer) {
 
 function queryUnit(q: CgQuery, ctx: Ctx, w: Writer, flavor: string) {
   const { d, o } = ctx;
-  const rowType = typeNameOf(`${q.name}_row`, o, false);
+  const rowType = typeNameOf(withSuffix(q.name, 'row'), o, false);
   const members = membersOf(q.columns, d, o, rowType);
   modelType(w, rowType, members, null, ctx, { annotations: false });
   w.blank();
-  const fn = routineFnName(q.name, o);
+  const fn = routineFnName(queryFnBase(q.name), o);
   const style: ParamStyle = d === 'plsql' ? 'colon' : 'at';
   const { sql } = rewriteQuery(trimStatement(q.sql), d, style);
   const args = q.params.map((p) => ({ p, local: localName(p.name, o), type: queryParamType(p.type, o) }));
   const argText = args.map((a) => `${a.type} ${a.local}`).join(', ');
-  const cls = typeNameOf(`${q.name}_query`, o, false);
+  const cls = typeNameOf(withSuffix(q.name, 'query'), o, false);
   const underscores = members.some((m) => bindOf(m).toLowerCase() !== m.col.name.toLowerCase() && bindOf(m).toLowerCase() === m.col.name.replace(/_/g, '').toLowerCase());
   w.allman(`public static class ${cls}`, () => {
     sqlConst(w, 'Sql', sql, 'public const string');

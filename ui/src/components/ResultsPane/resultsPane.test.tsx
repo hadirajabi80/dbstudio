@@ -82,7 +82,7 @@ describe('result-set toolbar', () => {
     expect(tab).toBeDefined();
     const st = tab!.state as CodegenTabState;
     expect(st.connectionId).toBe('c_shop');
-    expect(st.targets).toEqual([{ kind: 'query', name: 'CustomersQuery', sql: 'SELECT * FROM customers', columns: COLUMNS }]);
+    expect(st.targets).toEqual([{ kind: 'query', name: 'Customers', sql: 'SELECT * FROM customers', columns: COLUMNS }]);
   });
 
   it('Code ▾ is hidden when the result has no originating SELECT', () => {

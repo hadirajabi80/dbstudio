@@ -14,12 +14,13 @@ import { compileFilter, computeView } from '../../filter/evaluate';
 import { appendAnd, type FilterGroup, type GridViewModel, type SortKey } from '../../filter/model';
 import { base64ToHex, formatCell, isBinary, isNumericKind, isPartial, isTruncated, rawText } from '../../lib/format';
 import { COPY_FORMAT_LABELS, serializeComplete, type CellFetcher, type CellLocator, type CopyFormat } from '../../lib/serialize';
-import { editedValue, sameValue, useEditBuffer, useEdits, type PendingInsert } from '../../store/edits';
+import { editedValue, sameValue, useEditBuffer, useEdits, type CellEdit, type PendingInsert } from '../../store/edits';
 import { useSettings } from '../../store/settings';
 import { toast } from '../../store/ui';
 import { makeGridTheme } from '../../theme/gridTheme';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { isHidden } from '../common/focus';
+import { pluralize } from '../common/text';
 import { showContextMenu, type MenuItem } from '../common/Menu';
 import { commandMenuItems } from '../layout/commandMenu';
 import { GRID_CELL_EDIT_MENU, GRID_CELL_PENDING_MENU, GRID_COPY_AS_MENU, GRID_EXPORT_MENU } from '../ResultsPane/toolbarModel';
@@ -616,19 +617,62 @@ export function DataGrid(p: DataGridProps) {
     return parseEdit(nv.data, columns[col], dialect).ok;
   };
 
-  const setNullOnSelection = () => {
-    if (!editable) return;
-    const range = selection.current?.range;
-    if (!range) return;
-    for (let y = range.y; y < range.y + range.height; y++) {
+  /**
+   * What "Set selected cells to NULL" would do with a selection (design-r2-04): the editable cells that can take NULL
+   * (a nullable column, or any column of a new row, whose INSERT may still get a default), how many editable cells a
+   * NOT NULL column skips, and why nothing can be set (null when something can). Selected rows cover every column,
+   * selected columns every row, as Copy does.
+   */
+  const nullTargets = (sel: GridSelection): { cells: CellEdit[]; skipped: number; skippedColumns: number; reason: string | null } => {
+    let visRows: number[] = [];
+    let cols: number[] = [];
+    if (sel.rows.length > 0) {
+      visRows = sel.rows.toArray();
+      cols = columns.map((_, i) => i);
+    } else if (sel.columns.length > 0) {
+      visRows = Array.from({ length: rowCount }, (_, i) => i);
+      cols = sel.columns.toArray();
+    } else if (sel.current) {
+      const r = sel.current.range;
+      visRows = Array.from({ length: r.height }, (_, i) => r.y + i);
+      cols = Array.from({ length: r.width }, (_, i) => r.x + i);
+    }
+    const cells: CellEdit[] = [];
+    let skipped = 0;
+    const notNull = new Set<number>();
+    for (const y of visRows) {
       const r = rowRef(y);
       if (!r) continue;
-      for (let x = range.x; x < range.x + range.width; x++) {
-        if (!canEditCell(r, x)) continue;
-        if (!columns[x].nullable && !r.ins) continue;
-        setValue(r, x, null);
+      for (const x of cols) {
+        if (!columns[x] || !canEditCell(r, x)) continue;
+        if (r.ins) cells.push({ insertId: r.ins.id, col: x, value: null });
+        else if (columns[x].nullable) cells.push({ row: r.src, col: x, value: null, original: overlay.get(r.src)?.[x] ?? null });
+        else {
+          skipped++;
+          notNull.add(x);
+        }
       }
     }
+    let reason: string | null = null;
+    if (!cells.length) {
+      if (notNull.size === 1) reason = `${columns[[...notNull][0]].name} is NOT NULL`;
+      else if (notNull.size > 1) reason = 'Selected columns are NOT NULL';
+      else reason = visRows.length && cols.length ? 'The selected cells cannot be edited' : 'Select the cells to set to NULL';
+    }
+    return { cells, skipped, skippedColumns: notNull.size, reason };
+  };
+
+  const setNullOnSelection = () => {
+    if (!editable) return;
+    const t = nullTargets(selection);
+    if (!t.cells.length) {
+      // Ctrl+Alt+N on NOT NULL cells: say why nothing happened instead of silently ignoring the key.
+      toast('info', 'Cannot set to NULL', t.reason ?? undefined);
+      return;
+    }
+    // One undoable change for the whole selection.
+    edits.getState().setCells(gridKey, t.cells);
+    if (t.skipped) toast('info', `${pluralize(t.skipped, 'cell')} skipped: ${t.skippedColumns === 1 ? 'column is' : 'columns are'} NOT NULL`);
   };
 
   const insertRow = () => {
@@ -677,7 +721,8 @@ export function DataGrid(p: DataGridProps) {
     { label: 'Clear filter', disabled: !view.filter && !view.quickFilter, onClick: () => setView({ filter: null, quickFilter: '' }) },
   ];
 
-  const cellMenu = (col: number, row: number, pos: { clientX: number; clientY: number }) => {
+  /** `sel`: the selection the menu acts on (a right-click outside the selection selects that cell first). */
+  const cellMenu = (col: number, row: number, pos: { clientX: number; clientY: number }, sel: GridSelection = selection) => {
     const r = rowRef(row);
     if (!r) return;
     const v = valueAt(r, col);
@@ -694,7 +739,13 @@ export function DataGrid(p: DataGridProps) {
       items.push({ label: `Go to referenced row (${fk.refTable})`, shortcut: displayShortcut('Mod+Click'), onClick: () => p.onNavigateFk!(fk, fk.ordinals.map((o) => valueAt(r, o))) });
     }
     if (editable) {
-      items.push({ separator: true }, ...commandMenuItems(GRID_CELL_EDIT_MENU, args), {
+      // "Set selected cells to NULL" is disabled, with the reason, when no selected cell can take NULL (design-r2-04).
+      const editItems = commandMenuItems(GRID_CELL_EDIT_MENU, args).map((it) => {
+        if (it.id !== 'grid.setNull' || it.disabled) return it;
+        const reason = nullTargets(sel).reason;
+        return reason ? { ...it, label: `${it.label} (${reason})`, disabled: true } : it;
+      });
+      items.push({ separator: true }, ...editItems, {
         label: 'Revert row', disabled: r.ins !== undefined || !(r.src !== undefined && (pending.updates[r.src] || pending.deletes[r.src])),
         onClick: () => r.src !== undefined && edits.getState().revertRow(gridKey, r.src),
       });
@@ -751,8 +802,9 @@ export function DataGrid(p: DataGridProps) {
     const firstRow = selection.rows.first() ?? (rowCount > 0 ? 0 : undefined);
     if (firstRow !== undefined && rowRef(firstRow)) {
       // Nothing focused yet: the first cell of the (selected) row becomes the focused cell.
-      setSelection((s) => ({ ...s, current: { cell: [0, firstRow], range: { x: 0, y: firstRow, width: 1, height: 1 }, rangeStack: [] } }));
-      cellMenu(0, firstRow, at(0, firstRow));
+      const next: GridSelection = { ...selection, current: { cell: [0, firstRow], range: { x: 0, y: firstRow, width: 1, height: 1 }, rangeStack: [] } };
+      setSelection(next);
+      cellMenu(0, firstRow, at(0, firstRow), next);
     } else if (columns.length) headerMenu(0, at(0, -1));
   };
 
@@ -931,10 +983,12 @@ export function DataGrid(p: DataGridProps) {
           ev.preventDefault();
           const inRange = selection.current?.range;
           const inside = inRange && col >= inRange.x && col < inRange.x + inRange.width && row >= inRange.y && row < inRange.y + inRange.height;
+          let sel = selection;
           if (!inside && !selection.rows.hasIndex(row)) {
-            setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] } });
+            sel = { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] } };
+            setSelection(sel);
           }
-          cellMenu(col, row, { clientX: ev.bounds.x + ev.localEventX, clientY: ev.bounds.y + ev.localEventY });
+          cellMenu(col, row, { clientX: ev.bounds.x + ev.localEventX, clientY: ev.bounds.y + ev.localEventY }, sel);
         }}
         onCellClicked={([col, row], ev) => {
           const r = rowRef(row);

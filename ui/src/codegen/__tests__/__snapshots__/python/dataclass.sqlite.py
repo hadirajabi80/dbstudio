@@ -434,7 +434,7 @@ ORDER BY o.order_date DESC
 """
 
 
-def customer_orders(conn: sqlite3.Connection, p1: int, p2: float) -> list[CustomerOrdersRow]:
+def get_customer_orders(conn: sqlite3.Connection, p1: int, p2: float) -> list[CustomerOrdersRow]:
     """Run the CustomerOrders query."""
     rows = conn.cursor().execute(_CUSTOMER_ORDERS_SQL, (p1, p2)).fetchall()
     return [CustomerOrdersRow(id=r[0], name=r[1], total=r[2], order_date=r[3]) for r in rows]

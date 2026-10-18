@@ -1,5 +1,5 @@
 import { Keyboard, Menu as MenuIcon, Moon, PanelLeft, Plus, Search, Settings, SquareTerminal, Sun, SunMoon } from 'lucide-react';
-import { isMac } from '../../commands/keys';
+import { ariaKeyShortcuts, isMac } from '../../commands/keys';
 import { menuCommandIds, MENUS, type MenuEntry } from '../../commands/menuModel';
 import { getCommand } from '../../commands/registry';
 import { useCommandContext } from '../../commands/useCommands';
@@ -8,7 +8,7 @@ import { useSettings } from '../../store/settings';
 import { useUi } from '../../store/ui';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { showMenuBelow, type MenuItem } from '../common/Menu';
-import { Kbd } from '../Shortcuts/Kbd';
+import { Kbd, withShortcut } from '../Shortcuts/Kbd';
 import { CommandButton } from './CommandButton';
 import { commandMenuItems } from './commandMenu';
 
@@ -57,10 +57,19 @@ export function TopBar({ theme }: { theme: EffectiveTheme }) {
       )}
       <CommandButton command="view.toggleSidebar" icon={<PanelLeft size={16} strokeWidth={1.5} />} className={explorerVisible ? 'on' : ''} />
       <div className="topbar-sep" />
-      <CommandButton command="file.newConsole" icon={<SquareTerminal size={16} strokeWidth={1.5} />} label="Console" variant="ghost" />
-      <CommandButton command="file.newConnection" icon={<Plus size={16} strokeWidth={1.5} />} label="Connection" variant="ghost" />
+      {/* On a narrow bar (high zoom, small window) these become icon buttons; the label stays their accessible name
+          (shell.css, styles-r2-01). */}
+      <CommandButton command="file.newConsole" icon={<SquareTerminal size={16} strokeWidth={1.5} />} label="Console" variant="ghost" className="topbar-text-btn" />
+      <CommandButton command="file.newConnection" icon={<Plus size={16} strokeWidth={1.5} />} label="Connection" variant="ghost" className="topbar-text-btn" />
       <div className="flex-1 topbar-drag" />
-      <button className="palette-trigger" onClick={() => useUi.getState().openPalette('objects')} title="Go to object, or type > for commands">
+      <button
+        type="button"
+        className="palette-trigger"
+        onClick={() => useUi.getState().openPalette('objects')}
+        title={withShortcut('Go to object, or type > for commands', gotoShortcut)}
+        aria-label="Go to object or command"
+        aria-keyshortcuts={ariaKeyShortcuts(gotoShortcut)}
+      >
         <Search size={14} strokeWidth={1.5} />
         <span className="palette-trigger-text">Go to object or command</span>
         <Kbd shortcut={gotoShortcut} />

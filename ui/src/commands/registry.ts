@@ -53,6 +53,12 @@ export interface Command<A = unknown> {
   keywords?: string;
   /** Optional lucide icon name for menus/toolbars that render it (e.g. "Play"). */
   icon?: string;
+  /**
+   * The command changes data or deletes something (Drop…, Truncate…, Delete connection…, Delete selected rows): menus
+   * draw it in the danger colour. Commands that only insert text (Generate DELETE statement) or open a dialog that
+   * confirms on its own terms are not dangerous by themselves.
+   */
+  danger?: boolean;
 }
 
 export interface ShortcutBinding {

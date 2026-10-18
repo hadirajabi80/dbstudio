@@ -136,6 +136,38 @@ describe('grid submit: manual mode with no open transaction (code-r1-01)', () =>
     }
   });
 
+  it('rows left in the open transaction are remembered for a later Rollback (features-r2-01)', async () => {
+    setSqlRunner(recordRunner([]));
+    try {
+      const s = await manualIdleSession();
+      useEdits.getState().setCell(KEY, 0, 1, 'Ada L.', 'Ada');
+      useEdits.getState().setCell(KEY, 1, 1, 'Grace H.', 'Grace');
+      const r = await submitChanges(ctx(), { verifyUnchanged: false });
+      expect(r).toMatchObject({ ok: true, leftOpen: true });
+      expect(useEdits.getState().get(KEY).savedInTx).toEqual({ sessionId: s.sessionId, rows: 2 });
+      await until(() => useSessions.getState().forTab(TAB)?.txOpen === true);
+      await useSessions.getState().rollback(TAB);
+      expect(useSessions.getState().lastTxEnd).toMatchObject({ sessionId: s.sessionId, kind: 'rollback' });
+      useEdits.getState().applyTxEnd(useSessions.getState().lastTxEnd!);
+      expect(useEdits.getState().get(KEY)).toMatchObject({ savedInTx: null, rolledBack: { rows: 2 } });
+    } finally {
+      setSqlRunner(null);
+    }
+  });
+
+  it('auto mode commits at once: nothing is remembered', async () => {
+    setSqlRunner(recordRunner([]));
+    try {
+      await useSessions.getState().ensure(TAB, 'c_shop', null, 'auto');
+      useEdits.getState().setCell(KEY, 0, 1, 'Ada L.', 'Ada');
+      const r = await submitChanges(ctx(), { verifyUnchanged: false });
+      expect(r).toMatchObject({ ok: true, leftOpen: false });
+      expect(useEdits.getState().get(KEY).savedInTx).toBeNull();
+    } finally {
+      setSqlRunner(null);
+    }
+  });
+
   it('"the transaction is still open" only when the engine says so', async () => {
     // An engine that ended the transaction (e.g. an older engine whose RELEASE committed it): txOpen false.
     const seen: string[] = [];
@@ -180,6 +212,65 @@ describe('grid submit: manual mode with no open transaction (code-r1-01)', () =>
       expect(r.leftOpen).toBe(false);
     } finally {
       setSqlRunner(null);
+    }
+  });
+
+  /** Savepoint statements answered here (the mock engine has none); `rollbackTo` overrides the ROLLBACK TO outcome. */
+  function savepointRunner(seen: string[], rollbackTo: Partial<QueryOutcome> = {}): SqlRunner {
+    return async (sid, sql, params, opts) => {
+      seen.push(sql);
+      if (SAVEPOINT_SQL.test(sql)) {
+        return {
+          executionId: null, status: 'ok', resultSets: [], affected: 0, affectedReported: false, error: null, messages: [], outParams: [], elapsedMs: 0,
+          txOpen: true, ...(/^ROLLBACK TO/.test(sql) ? rollbackTo : {}),
+        };
+      }
+      return runSql(sid, sql, params, opts);
+    };
+  }
+
+  async function openTransaction() {
+    const s = await useSessions.getState().ensure(TAB, 'c_shop', null, 'manual');
+    await runSql(s.sessionId, 'UPDATE people SET Name = @p1 WHERE Id = @p2', [{ name: 'p1', kind: 'string', value: 'mine' }, { name: 'p2', kind: 'int', value: 3 }]);
+    await until(() => useSessions.getState().forTab(TAB)?.txOpen === true);
+    return s.sessionId;
+  }
+
+  it('a failure inside the open transaction rolls back to the savepoint and releases it on SQLite (features-r2-01)', async () => {
+    const seen: string[] = [];
+    setSqlRunner(savepointRunner(seen));
+    try {
+      await openTransaction();
+      seen.length = 0;
+      const id = useEdits.getState().addInsert(KEY, 3);
+      useEdits.getState().setInsertCell(KEY, id, 1, 'fail');
+      const r = await submitChanges(ctx(), { verifyUnchanged: false });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/the open transaction keeps your earlier uncommitted changes/);
+      const sp = seen.filter((x) => SAVEPOINT_SQL.test(x));
+      // Released after ROLLBACK TO, so repeated failures do not nest savepoints.
+      expect(sp).toEqual(['SAVEPOINT dbs_edit', 'ROLLBACK TO SAVEPOINT dbs_edit', 'RELEASE SAVEPOINT dbs_edit']);
+      expect(mock.hits('/rollback', 'POST')).toHaveLength(0);
+    } finally {
+      setSqlRunner(null);
+    }
+  });
+
+  it('a server that ended the whole transaction instead flags the rows other grids saved into it', async () => {
+    const seen: string[] = [];
+    setSqlRunner(savepointRunner(seen, { status: 'error', error: { code: 'SQL_ERROR', message: 'no such savepoint' }, txOpen: false } as Partial<QueryOutcome>));
+    try {
+      const sid = await openTransaction();
+      useEdits.getState().noteSavedInTx('other-grid', sid, 3);
+      const id = useEdits.getState().addInsert(KEY, 3);
+      useEdits.getState().setInsertCell(KEY, id, 1, 'fail');
+      const r = await submitChanges(ctx(), { verifyUnchanged: false });
+      expect(r.error).toMatch(/rolled back the whole open transaction/);
+      expect(seen).not.toContain('RELEASE SAVEPOINT dbs_edit');
+      expect(useEdits.getState().get('other-grid')).toMatchObject({ savedInTx: null, rolledBack: { rows: 3 } });
+    } finally {
+      setSqlRunner(null);
+      useEdits.getState().reset('other-grid');
     }
   });
 });

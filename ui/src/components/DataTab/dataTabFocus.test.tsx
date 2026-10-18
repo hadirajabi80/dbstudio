@@ -1,6 +1,6 @@
 // Data tab: primary focus after opening (design-15), no discard prompt for edits that do not reload (design-r1-02),
 // and keyless paging order (features-r1-04). The canvas grid is replaced by a probe.
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api/client';
 import type { CellValue, ColumnInfo, ColumnKind, ObjectDetails } from '../../api/types';
@@ -81,6 +81,10 @@ beforeAll(async () => {
 });
 afterAll(() => setSqlRunner(null));
 beforeEach(() => {
+  // A previous test's Shell must not survive into the next one, and neither may its tabs: a stale Data tab would be
+  // mounted again by the next <Shell/> and render a second grid canvas next to the new one (code-r2-01).
+  cleanup();
+  useTabs.setState({ tabs: [], activeId: null, mru: [], closed: [], focusRequest: null });
   calls.length = 0;
   gridProps = null;
   columns = KEYED;
@@ -89,6 +93,13 @@ beforeEach(() => {
   useSessions.setState({ sessions: {}, byTab: {} });
 });
 afterEach(() => vi.restoreAllMocks());
+
+/** The DOM container of the visible view tab: a hidden tab can neither break a query nor satisfy it. */
+function activeHost(): HTMLElement {
+  const host = document.querySelector<HTMLElement>('[data-tab-host]:not([aria-hidden="true"])');
+  if (!host) throw new Error('no visible view tab host');
+  return host;
+}
 
 /** The shell around the workspace tabs: focus requests + view hosts, and an explorer-like tree that had focus. */
 function Shell() {
@@ -110,13 +121,18 @@ describe('Data tab primary focus (design-15)', () => {
     const tree = screen.getByRole('tree');
     tree.focus();
     const focused: string[] = [];
-    document.addEventListener('focusin', (e) => focused.push((e.target as HTMLElement).getAttribute('aria-label') ?? (e.target as HTMLElement).tagName));
-    act(() => {
-      openDataTab({ connectionId: 'c_shop', database: null, schema: 'main', name: 'customers', type: 'table' });
-    });
-    await until(() => document.activeElement?.tagName === 'CANVAS', 5000);
-    expect(document.activeElement).toBe(screen.getByTestId('data-grid-canvas'));
-    expect(focused).not.toContain('Search text columns');
+    const onFocusIn = (e: FocusEvent) => focused.push((e.target as HTMLElement).getAttribute('aria-label') ?? (e.target as HTMLElement).tagName);
+    document.addEventListener('focusin', onFocusIn);
+    try {
+      act(() => {
+        openDataTab({ connectionId: 'c_shop', database: null, schema: 'main', name: 'customers', type: 'table' });
+      });
+      await until(() => document.activeElement?.tagName === 'CANVAS', 5000);
+      expect(document.activeElement).toBe(within(activeHost()).getByTestId('data-grid-canvas'));
+      expect(focused).not.toContain('Search text columns');
+    } finally {
+      document.removeEventListener('focusin', onFocusIn);
+    }
   });
 
   it('the user moving focus while the rows load cancels the request', async () => {
@@ -126,9 +142,12 @@ describe('Data tab primary focus (design-15)', () => {
     act(() => {
       openDataTab({ connectionId: 'c_shop', database: null, schema: 'main', name: 'orders', type: 'table' });
     });
-    const search = await screen.findByRole('textbox', { name: 'Search text columns' });
+    const host = activeHost();
+    expect(host.getAttribute('data-tab-host')).toBe(useTabs.getState().activeId);
+    expect(document.querySelectorAll('[data-tab-host]')).toHaveLength(1);
+    const search = await within(host).findByRole('textbox', { name: 'Search text columns' });
     search.focus();
-    await screen.findByTestId('data-grid-canvas');
+    await within(host).findByTestId('data-grid-canvas');
     await act(async () => {
       await new Promise((r) => setTimeout(r, 200));
     });
@@ -136,8 +155,10 @@ describe('Data tab primary focus (design-15)', () => {
   });
 });
 
+// What a complete condition does with pending edits (deferred behind a Save / Discard notice, design-r2-01) is
+// covered in dataTabFilterDraft.test.tsx.
 describe('Data tab pending edits and the filter bar (design-r1-02)', () => {
-  it('adding an empty (draft) condition does not ask to discard; a complete one does', async () => {
+  it('adding an empty (draft) condition does not ask to discard', async () => {
     const ask = vi.fn(async () => false);
     const orig = useUi.getState().askConfirm;
     useUi.setState({ askConfirm: ask });
@@ -150,9 +171,6 @@ describe('Data tab pending edits and the filter bar (design-r1-02)', () => {
       await screen.findByRole('group', { name: /Condition on/ });
       expect(ask).not.toHaveBeenCalled();
       expect(screen.queryByRole('dialog')).toBeNull();
-      // A value makes the condition complete: it would reload the rows, so now it asks (and Cancel keeps the edit).
-      fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), { target: { value: '7' } });
-      await until(() => ask.mock.calls.length === 1);
       expect(Object.keys(useEdits.getState().get(dataGridKey(tab.id)).pending.updates)).toHaveLength(1);
     } finally {
       useUi.setState({ askConfirm: orig });
@@ -160,28 +178,10 @@ describe('Data tab pending edits and the filter bar (design-r1-02)', () => {
   });
 });
 
+// A small keyless object is now counted before its first page and ordered from page 1 (features-r2-02): see
+// dataTabKeyless.test.tsx.
 describe('keyless paging order (features-r1-04)', () => {
   const pages = () => calls.filter((c) => c.includes('LIMIT'));
-
-  it('a view pages without ORDER BY until counted, then re-reads the loaded rows in column order (small)', async () => {
-    columns = KEYLESS;
-    total = 2500;
-    render(<DataTabView tab={tabState('dt-view', 'view')} theme="light" visible />);
-    await until(() => gridProps?.rows.length === 1000);
-    expect(pages()[0]).toBe('SELECT *\nFROM customers\nLIMIT 1000 OFFSET 0');
-    await screen.findByText(/1,000 of 2,500 rows/);
-    await act(async () => {
-      gridProps!.onReachEnd!();
-    });
-    await until(() => gridProps!.rows.length === 2000);
-    expect(pages().at(-1)).toBe('SELECT *\nFROM customers\nORDER BY id, name, email\nLIMIT 2000 OFFSET 0');
-    await act(async () => {
-      gridProps!.onReachEnd!();
-    });
-    await until(() => gridProps!.rows.length === 2500);
-    expect(pages().at(-1)).toBe('SELECT *\nFROM customers\nORDER BY id, name, email\nLIMIT 1000 OFFSET 2000');
-    expect(screen.queryByText(/No key column/)).toBeNull();
-  });
 
   it('a large keyless object pages unordered and says so', async () => {
     columns = KEYLESS;

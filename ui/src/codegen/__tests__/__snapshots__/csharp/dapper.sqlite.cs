@@ -414,6 +414,6 @@ public static class CustomerOrdersQuery
         """;
 
     // Column names use snake_case: enable Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true once at startup.
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this IDbConnection db, int p1, double p2, CancellationToken ct = default) =>
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this IDbConnection db, int p1, double p2, CancellationToken ct = default) =>
         (await db.QueryAsync<CustomerOrdersRow>(new CommandDefinition(Sql, new { p1, p2 }, cancellationToken: ct))).AsList();
 }

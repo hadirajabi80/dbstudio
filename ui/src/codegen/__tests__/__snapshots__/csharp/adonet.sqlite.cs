@@ -633,7 +633,7 @@ public static class CustomerOrdersQuery
         ORDER BY o.order_date DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this SqliteConnection db, int p1, double p2, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this SqliteConnection db, int p1, double p2, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = Sql;

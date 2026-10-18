@@ -234,3 +234,25 @@ export class NameScope {
     return n;
   }
 }
+
+/**
+ * `name` with a `_suffix` word, unless its last word already is that suffix: ("Customers", "query") → "Customers_query"
+ * (CustomersQuery once styled), but "CustomersQuery" stays as it is instead of becoming CustomersQueryQuery
+ * (design-r2-03: a query name that already carries the suffix, e.g. from a tab saved by an older version).
+ */
+export function withSuffix(name: string, suffix: string): string {
+  const words = splitWords(name);
+  return words[words.length - 1]?.toLowerCase() === suffix.toLowerCase() ? name : `${name}_${suffix}`;
+}
+
+/** Leading words that already make a query name a verb phrase ("ListOrders", "FindCustomer"): no "Get" is added. */
+const QUERY_VERBS = new Set(['get', 'list', 'find', 'fetch', 'load', 'read', 'search', 'select', 'query', 'count', 'lookup', 'check', 'calc', 'compute']);
+
+/**
+ * Base of a query's function name: "Get" + the query name ("Customers" → GetCustomers → GetCustomersAsync /
+ * getCustomers / get_customers), unless the name already starts with a verb ("ListOrders", "GetOrders").
+ */
+export function queryFnBase(name: string): string {
+  const first = splitWords(name)[0]?.toLowerCase() ?? '';
+  return QUERY_VERBS.has(first) ? name : `get_${name}`;
+}

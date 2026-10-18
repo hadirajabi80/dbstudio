@@ -1,6 +1,6 @@
 // App-level commands that coordinate several stores (run, transactions, tabs, export).
 import { api, errorMessage, isApiError } from '../api/client';
-import type { ExportFormat, ObjectRef, QueryParam, RunLabel, SqlBatch, TxMode } from '../api/types';
+import type { ExportFormat, ObjectRef, QueryParam, RunLabel, SessionInfo, SqlBatch, TxMode } from '../api/types';
 import { resolveParams } from '../components/ParamsDialog/ParamsDialog';
 import { findDestructive } from '../lib/classify';
 import { serializeRows, type CopyFormat } from '../lib/serialize';
@@ -13,7 +13,7 @@ import { dialectOf, getConnection, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
 import { useResults, viewKey } from '../store/results';
 import { createExecution, isRunning, type ExecutionState, type ResultSetState } from '../store/resultsReducer';
-import { useSessions } from '../store/sessions';
+import { isForeignSession, useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
 import { useTabs, type ConsoleTab } from '../store/tabs';
 import { SHORT_WINDOW, toast, useUi } from '../store/ui';
@@ -538,15 +538,33 @@ function noteFirstRun(tabId: string): void {
   if (ui.tabSplits[tabId] === undefined) ui.setTabSplit(tabId, 0.6);
 }
 
-/** Explorer "Disconnect": closes every session of the connection and drops its cached catalog. */
+/**
+ * Sessions this window may close: everything except those another live window uses (isForeignSession). Disconnect
+ * and Disconnect all only ever close these (useSessions.closeConnection), so they alone count for the
+ * open-transaction prompt, the enablement of the commands and the toast.
+ */
+export function ownSessions(connectionId?: string): SessionInfo[] {
+  return Object.values(useSessions.getState().sessions).filter(
+    (s) => !isForeignSession(s) && (!connectionId || s.connectionId === connectionId),
+  );
+}
+
+/** "1 console has an uncommitted transaction" / "2 sessions have uncommitted transactions" (consoles when all are). */
+function uncommittedText(withTx: SessionInfo[]): string {
+  const owned = new Set(Object.values(useSessions.getState().byTab));
+  const n = withTx.length;
+  const noun = withTx.every((s) => owned.has(s.sessionId)) ? 'console' : 'session';
+  return n === 1 ? `1 ${noun} has an uncommitted transaction` : `${pluralize(n, noun)} have uncommitted transactions`;
+}
+
+/** Explorer "Disconnect": closes this window's sessions of the connection and drops its cached catalog. */
 export async function disconnectConnection(connectionId: string): Promise<void> {
   const conn = getConnection(connectionId);
-  const { sessions, byTab } = useSessions.getState();
-  const tabsWithTx = Object.entries(byTab).filter(([, sid]) => sessions[sid]?.connectionId === connectionId && sessions[sid]?.txOpen);
-  if (tabsWithTx.length) {
+  const withTx = ownSessions(connectionId).filter((s) => s.txOpen);
+  if (withTx.length) {
     const ok = await useUi.getState().askConfirm({
       title: 'Open transactions',
-      message: `${tabsWithTx.length} console(s) on “${conn?.name ?? 'this connection'}” have uncommitted transactions. Disconnecting rolls them back.`,
+      message: `${uncommittedText(withTx)} on “${conn?.name ?? 'this connection'}”. Disconnecting rolls ${withTx.length === 1 ? 'it' : 'them'} back.`,
       confirmLabel: 'Roll back and disconnect',
       danger: true,
     });
@@ -554,27 +572,30 @@ export async function disconnectConnection(connectionId: string): Promise<void> 
   }
   const n = await useSessions.getState().closeConnection(connectionId, true);
   useCatalog.getState().forget(connectionId);
-  toast('info', `Disconnected ${conn?.name ?? ''}`.trim(), n ? `${n} session(s) closed` : undefined);
+  toast('info', `Disconnected ${conn?.name ?? ''}`.trim(), n ? `${pluralize(n, 'session')} closed` : undefined);
 }
 
+/** Connections ▸ Disconnect all: this window's sessions and cached catalogs (another window's sessions stay open). */
 export async function disconnectAll(): Promise<void> {
-  const ids = [...new Set(Object.values(useSessions.getState().sessions).map((s) => s.connectionId))];
+  const mine = ownSessions();
+  const ids = [...new Set(mine.map((s) => s.connectionId))];
   const cached = Object.keys(useCatalog.getState().conns);
   const all = [...new Set([...ids, ...cached])];
   if (!all.length) return;
-  const anyTx = Object.values(useSessions.getState().sessions).some((s) => s.txOpen);
-  if (anyTx) {
+  const withTx = mine.filter((s) => s.txOpen);
+  if (withTx.length) {
     const ok = await useUi.getState().askConfirm({
       title: 'Disconnect all',
-      message: 'Some consoles have uncommitted transactions. Disconnecting rolls them back.',
+      message: `${uncommittedText(withTx)}. Disconnecting rolls ${withTx.length === 1 ? 'it' : 'them'} back.`,
       confirmLabel: 'Roll back and disconnect',
       danger: true,
     });
     if (!ok) return;
   }
-  await Promise.all(ids.map((cid) => useSessions.getState().closeConnection(cid, true)));
+  const closed = await Promise.all(ids.map((cid) => useSessions.getState().closeConnection(cid, true)));
   for (const cid of all) useCatalog.getState().forget(cid);
-  toast('info', `Disconnected ${all.length} connection(s)`);
+  const nSessions = closed.reduce((a, b) => a + b, 0);
+  toast('info', `Disconnected ${pluralize(all.length, 'connection')}`, nSessions ? `${pluralize(nSessions, 'session')} closed` : undefined);
 }
 
 /** Explorer folder "Connect all": loads every connection of the folder in parallel (per-root spinners). */

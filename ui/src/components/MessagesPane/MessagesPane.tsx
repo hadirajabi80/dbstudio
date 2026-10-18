@@ -29,6 +29,29 @@ export function summaryMessage(exec: ExecutionState): ExecMessage | null {
   return null;
 }
 
+/** What a run executed, as the object of "Ran …" / "Running …" (the internal ExecLabel is not user text). */
+const RUN_KIND: Record<string, string> = {
+  statement: 'statement',
+  selection: 'selection',
+  script: 'script',
+  explain: 'explain plan',
+  data: 'data tab query',
+  filter: 'filter',
+  multi: 'on several connections',
+  designer: 'designer change',
+};
+
+/**
+ * The run details of the Messages header: "Ran script · 2 batches" ("Running …" while it runs). An unknown label is
+ * left out rather than shown raw.
+ */
+export function runDetails(exec: Pick<ExecutionState, 'status' | 'label' | 'batches'>): string {
+  const kind = RUN_KIND[exec.label];
+  const verb = exec.status === 'starting' || exec.status === 'running' ? 'Running' : 'Ran';
+  const batches = pluralize(exec.batches.length, 'batch', 'batches');
+  return kind ? `${verb} ${kind} · ${batches}` : batches;
+}
+
 /**
  * PRINT/RAISERROR/DBMS_OUTPUT/engine messages; lines with a document position are clickable (revealLine). The run
  * summary is shown once, in the header. Errors get a plain sentence and an action, and an unknown table or column a
@@ -79,14 +102,16 @@ export function MessagesPane({ exec }: { exec: ExecutionState }) {
     <div className="messages" role="log" aria-label="Messages">
       <div className="messages-toolbar">
         {summary ? (
-          <span className={`messages-summary sev-${summary.severity}`} title={summary.text}>
-            <SummaryIcon size={13} aria-hidden="true" /> {summary.text}
-          </span>
+          <>
+            <span className={`messages-summary sev-${summary.severity}`} title={summary.text}>
+              <SummaryIcon size={13} aria-hidden="true" /> {summary.text}
+            </span>
+            {/* Its own item with a margin: a leading space in a flex item collapses ("18 ms· 2 batches"). */}
+            <span className="muted messages-sep" aria-hidden="true" style={{ marginInline: 'var(--space-1)' }}>·</span>
+            <span className="sr-only">, </span>
+          </>
         ) : null}
-        <span className="muted">
-          {summary ? ' · ' : ''}
-          {pluralize(exec.batches.length, 'batch', 'batches')} · {exec.label}
-        </span>
+        <span className="muted">{runDetails(exec)}</span>
         <div className="flex-1" />
         <button
           className="icon-btn sm"

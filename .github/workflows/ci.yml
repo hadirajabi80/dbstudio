@@ -75,6 +75,11 @@ jobs:
       - name: UI tests
         working-directory: ui
         run: npm test
+      # vitest.config.ts leaves src/editor and src/intel out (they run in a node environment with their own config,
+      # vitest.intel.config.ts): the IntelliSense and editor tests only run in this step.
+      - name: UI editor/IntelliSense tests
+        working-directory: ui
+        run: npm run test:intel
       # (the UI production build runs inside scripts/build.ps1 below; its size is checked after it)
 
       # ---- desktop ----------------------------------------------------------------------------
@@ -149,7 +154,8 @@ jobs:
       - name: UI install
         working-directory: ui
         run: npm ci
-      # (UI tests are platform independent and run in the Windows job; the production build runs in build.sh.)
+      # (UI tests, including `npm run test:intel`, are platform independent and run in the Windows job; the production
+      # build runs in build.sh.)
 
       - name: Desktop install
         working-directory: desktop

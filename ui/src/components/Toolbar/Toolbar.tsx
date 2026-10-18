@@ -4,8 +4,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { TxMode } from '../../api/types';
-import { effectiveDatabase, setTxMode } from '../../app/actions';
+import { cancelBlockedReason, effectiveDatabase, setTxMode } from '../../app/actions';
 import { getEditor } from '../../app/editors';
+import { useDesignerUi } from '../../designer/store';
 import { ariaKeyShortcuts, displayShortcut } from '../../commands/keys';
 import type { ContextEntry } from '../../commands/menuModel';
 import { getCommand, hasCommand } from '../../commands/registry';
@@ -49,6 +50,9 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const session = useTabSession(tab.id);
   const exec = useTabExecution(tab.id);
   const running = isRunning(exec);
+  // An "Edit:" console's atomic apply cannot be stopped: Stop is dimmed and says why (features-r1-06).
+  const editRunInFlight = useDesignerUi((s) => !!s.editRunInFlight[tab.id]);
+  const cancelReason = editRunInFlight ? cancelBlockedReason(tab.id) : null;
   const defaultMax = useSettings((s) => s.settings.results.maxRows);
   const setMaxRows = useTabs((s) => s.setMaxRows);
   const connCat = useCatalog((s) => (tab.connectionId ? s.conns[tab.connectionId] : undefined));
@@ -109,7 +113,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
       ),
     },
     { id: 'script', node: <CommandButton command="run.script" icon={<ListEnd size={16} strokeWidth={1.5} />} onRan={refocus} /> },
-    { id: 'cancel', node: <CommandButton command="run.cancel" icon={<CircleStop size={16} strokeWidth={1.5} />} className={running ? 'danger' : ''} onRan={refocus} /> },
+    { id: 'cancel', node: <CommandButton command="run.cancel" icon={<CircleStop size={16} strokeWidth={1.5} />} className={running && !cancelReason ? 'danger' : ''} disabledReason={cancelReason} onRan={refocus} /> },
     {
       id: 'multi', priority: 3, menu: () => commandMenuItems([{ command: 'run.multi' }]),
       node: <CommandButton command="run.multi" icon={<Layers size={16} strokeWidth={1.5} />} label="Run on…" variant="ghost" className="tb-text-btn" />,

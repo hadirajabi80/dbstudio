@@ -402,3 +402,23 @@
   width: var(--input-h-sm);
   height: var(--input-h-sm);
 }
+
+/* data tab: a filter / search / sort change held back by unsaved edits (design-r2-01) */
+.fb-deferred {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--warning-soft, var(--bg-panel));
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+}
+.fb-deferred-icon {
+  color: var(--warning);
+  flex-shrink: 0;
+}
+.fb-deferred-text {
+  min-width: 0;
+}

@@ -2,7 +2,7 @@
 // foreground/background pair the UI paints (selected/hover/soft surfaces, blended --cell-* colours), the Monaco
 // theme (selected rows, widgets, context menu), and the CSS lints: no literal colours outside src/theme/,
 // --fg-disabled only on disabled controls, theme typography on the scale, one rule per selector in app/shell.css.
-import { describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { contrast, parseColor, parseTokenBlocks, resolveTokens, type TokenMap } from './index';
 import { buildMonacoTheme, WIDGET_SURFACE } from './monacoTheme';
 
@@ -208,44 +208,63 @@ describe('Monaco theme (styles-02/12/13)', () => {
 describe('Monaco context view (styles-01)', () => {
   // A context menu inside Monaco's default shadow root gets none of the theme variables and renders transparent.
   // With baseMonacoOptions() it renders in the light DOM, where the injected theme stylesheet colours it.
+  type Monaco = typeof import('../editor/monaco');
+  type MonacoOptions = typeof import('../editor/monacoOptions');
+  let monaco: Monaco;
+  let baseMonacoOptions: MonacoOptions['baseMonacoOptions'];
+  // jsdom has no canvas: Monaco only measures text with it, so a context that answers every call is enough.
+  const canvas = HTMLCanvasElement.prototype as unknown as { getContext: unknown };
+  const getContext = canvas.getContext;
+  let ed: ReturnType<Monaco['editor']['create']> | null = null;
+  let host: HTMLElement | null = null;
+
+  // Loading the whole editor is the slow part (many seconds on a loaded runner): do it once, under its own long
+  // timeout, so each case below only opens the context menu (logic-r2-03).
+  beforeAll(async () => {
+    const noop: ProxyHandler<object> = { get: (_t, p) => (p === 'measureText' ? () => ({ width: 0 }) : p === 'createImageData' ? () => ({ data: new Uint8ClampedArray(4) }) : () => undefined), set: () => true };
+    canvas.getContext = () => new Proxy({}, noop);
+    monaco = await import('../editor/monaco');
+    ({ baseMonacoOptions } = await import('../editor/monacoOptions'));
+  }, 60_000);
+  afterAll(() => {
+    canvas.getContext = getContext;
+  });
+  // Runs even when a case fails or times out, so the next case never sees the previous one's editor or menu.
+  afterEach(() => {
+    ed?.dispose();
+    ed = null;
+    host?.remove();
+    host = null;
+    document.querySelectorAll('.context-view').forEach((n) => n.remove());
+  });
+
   for (const theme of THEMES) {
     it(`renders the editor context menu with an opaque themed background (${theme})`, async () => {
-      const canvas = HTMLCanvasElement.prototype as unknown as { getContext: unknown };
-      const getContext = canvas.getContext;
-      const noop: ProxyHandler<object> = { get: (_t, p) => (p === 'measureText' ? () => ({ width: 0 }) : p === 'createImageData' ? () => ({ data: new Uint8ClampedArray(4) }) : () => undefined), set: () => true };
-      canvas.getContext = () => new Proxy({}, noop);
-      const monaco = await import('../editor/monaco');
-      const { baseMonacoOptions } = await import('../editor/monacoOptions');
       const id = `qa-${theme}`;
       const th = buildMonacoTheme(theme, TOKENS[theme]);
       monaco.editor.defineTheme(id, th as Parameters<typeof monaco.editor.defineTheme>[1]);
-      const host = document.createElement('div');
+      host = document.createElement('div');
       document.body.appendChild(host);
-      const ed = monaco.editor.create(host, { ...baseMonacoOptions(), value: 'SELECT 1', theme: id, fixedOverflowWidgets: true, minimap: { enabled: false } });
-      try {
-        ed.focus();
-        await ed.getAction('editor.action.showContextMenu')!.run();
-        await new Promise((r) => setTimeout(r, 30));
-        expect(document.querySelector('.shadow-root-host'), 'context view inside a shadow root').toBeNull();
-        const view = document.querySelector<HTMLElement>('.context-view');
-        expect(view, 'context view in the light DOM').not.toBeNull();
-        expect(view!.querySelector('.monaco-menu'), 'menu rendered').not.toBeNull();
-        // resolve --vscode-menu-background the way the browser would: the theme stylesheet rule that matches it
-        const sheet = [...document.querySelectorAll('style.monaco-colors')].map((s) => s.textContent ?? '').join('\n');
-        let bg: string | null = null;
-        for (const m of sheet.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-          const v = /--vscode-menu-background:\s*([^;]+);/.exec(m[2]);
-          if (v && view!.closest(m[1].trim())) bg = v[1].trim();
-        }
-        expect(bg, 'menu background variable reaches the context view').not.toBeNull();
-        expect(parseColor(bg!)?.a, `menu background ${bg}`).toBe(1);
-        expect(bg).toBe(TOKENS[theme]['--bg-elevated']);
-      } finally {
-        ed.dispose();
-        host.remove();
-        document.querySelectorAll('.context-view').forEach((n) => n.remove());
-        canvas.getContext = getContext;
+      ed = monaco.editor.create(host, { ...baseMonacoOptions(), value: 'SELECT 1', theme: id, fixedOverflowWidgets: true, minimap: { enabled: false } });
+      ed.focus();
+      await ed.getAction('editor.action.showContextMenu')!.run();
+      const deadline = Date.now() + 5000;
+      while (!document.querySelector('.context-view .monaco-menu') && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+      expect(document.querySelector('.shadow-root-host'), 'context view inside a shadow root').toBeNull();
+      const views = document.querySelectorAll<HTMLElement>('.context-view');
+      expect(views, 'exactly one context view in the light DOM').toHaveLength(1);
+      const view = views[0];
+      expect(view.querySelector('.monaco-menu'), 'menu rendered').not.toBeNull();
+      // resolve --vscode-menu-background the way the browser would: the theme stylesheet rule that matches it
+      const sheet = [...document.querySelectorAll('style.monaco-colors')].map((s) => s.textContent ?? '').join('\n');
+      let bg: string | null = null;
+      for (const m of sheet.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        const v = /--vscode-menu-background:\s*([^;]+);/.exec(m[2]);
+        if (v && view.closest(m[1].trim())) bg = v[1].trim();
       }
+      expect(bg, 'menu background variable reaches the context view').not.toBeNull();
+      expect(parseColor(bg!)?.a, `menu background ${bg}`).toBe(1);
+      expect(bg).toBe(TOKENS[theme]['--bg-elevated']);
     }, 20000);
   }
 });

@@ -448,8 +448,8 @@ JOIN orders o ON o.customer_id = c.id
 WHERE c.id = ? AND o.total > ?
 ORDER BY o.order_date DESC`
 
-// CustomerOrders runs the CustomerOrders query.
-func CustomerOrders(ctx context.Context, db DBTX, p1 int32, p2 float64) ([]CustomerOrdersRow, error) {
+// GetCustomerOrders runs the CustomerOrders query.
+func GetCustomerOrders(ctx context.Context, db DBTX, p1 int32, p2 float64) ([]CustomerOrdersRow, error) {
 	rows, err := db.QueryContext(ctx, customerOrdersSQL, p1, p2)
 	if err != nil {
 		return nil, err

@@ -3,7 +3,7 @@
 import type { Dialect } from '../../api/types';
 import type { CgInput, CgPackage, CgParam, CgQuery, CgRoutine, CgTable, GeneratedFile } from '../model';
 import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../model';
-import { camel, NameScope, pascal } from '../naming';
+import { camel, NameScope, pascal, withSuffix } from '../naming';
 import type { CodegenOptions } from '../options';
 import {
   bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, proceduresClassName, routineSqlName, typeNameOf,
@@ -534,7 +534,7 @@ function queryDao(w: Writer, q: CgQuery, ctx: Ctx, rowType: string, members: Mem
   ctx.imports.add('java.util.List');
   ctx.imports.add('java.util.Objects');
   ctx.imports.add('javax.sql.DataSource');
-  const cls = pascal(`${q.name}_query`);
+  const cls = pascal(withSuffix(q.name, 'query'));
   const { sql, order } = rewriteQuery(trimStatement(q.sql), d, 'q');
   const scope = new NameScope(['c', 'ps', 'rs', 'list', 'dataSource']);
   const args = q.params.map((p) => ({ p, local: scope.take(localName(p.name, o)), ...queryParamJava(p.type, ctx) }));
@@ -623,10 +623,10 @@ export function generateJava(input: CgInput, o: CodegenOptions): GeneratedFile[]
       unitFor(typeName, objectLabel(obj), (w, ctx) => recordOrClass(w, typeName, members, doc, ctx, jpa ? { jpa: obj } : {}));
       if (!jpa && o.include.repository) unitFor(`${typeName}Dao`, objectLabel(obj), (w, ctx) => dao(w, obj, typeName, members, ctx));
     } else if (obj.kind === 'query') {
-      const rowType = typeNameOf(`${obj.name}_row`, o, false);
+      const rowType = typeNameOf(withSuffix(obj.name, 'row'), o, false);
       const members = membersOf(obj.columns, d, o, rowType);
       unitFor(rowType, obj.name, (w, ctx) => recordOrClass(w, rowType, members, `Row of the ${obj.name} query.`, ctx));
-      if (o.include.repository) unitFor(pascal(`${obj.name}_query`), obj.name, (w, ctx) => queryDao(w, obj, ctx, rowType, members));
+      if (o.include.repository) unitFor(pascal(withSuffix(obj.name, 'query')), obj.name, (w, ctx) => queryDao(w, obj, ctx, rowType, members));
     }
   }
   if (o.include.procedures && !jpa) {

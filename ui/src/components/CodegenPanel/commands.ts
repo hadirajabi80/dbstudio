@@ -43,7 +43,7 @@ export const CODEGEN_COMMANDS: Command<never>[] = [
     when: (args?: unknown) => isQueryArgs(args) || !!getActiveConsole()?.connectionId,
     run: (args?: unknown) => {
       if (isQueryArgs(args)) {
-        openCodegen(args.connectionId, args.database, [{ kind: 'query', name: args.name ?? 'Query', sql: args.sql, columns: args.columns ?? null }]);
+        openCodegen(args.connectionId, args.database, [{ kind: 'query', name: args.name ?? 'Result', sql: args.sql, columns: args.columns ?? null }]);
         return;
       }
       const tab = getActiveConsole();
@@ -59,9 +59,14 @@ export const CODEGEN_COMMANDS: Command<never>[] = [
   },
 ];
 
-function queryName(title: string): string {
+/**
+ * Base name of the generated code for a console's statement: "MonthlySales" for "monthly sales.sql", "Result" for an
+ * untitled console. The generators add their own suffixes (MonthlySalesRow, MonthlySalesQuery, GetMonthlySalesAsync),
+ * so no "Query" is appended here (design-r2-03: it gave QueryQuery / CustomersQueryQuery).
+ */
+export function queryName(title: string): string {
   const base = title.replace(/\.sql$/i, '').replace(/^Console\s*\d*$/i, '').replace(/[^A-Za-z0-9]+/g, ' ').trim();
-  return base ? base.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('') + 'Query' : 'Query';
+  return base ? base.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('') : 'Result';
 }
 
 /**

@@ -2,7 +2,7 @@
 import type { Dialect } from '../../api/types';
 import type { CgInput, CgPackage, CgParam, CgQuery, CgRoutine, CgTable, GeneratedFile } from '../model';
 import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../model';
-import { camel, goCamel, goPascal, NameScope } from '../naming';
+import { camel, goCamel, goPascal, NameScope, queryFnBase, withSuffix } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
 import { crudSql, defaultsNote, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
@@ -404,11 +404,11 @@ function routineFn(w: Writer, r: CgRoutine, ctx: Ctx, prefix: string) {
 function queryFn(w: Writer, q: CgQuery, ctx: Ctx) {
   const { d, o } = ctx;
   ctx.imports.add('context');
-  const rowType = goPascal(`${q.name}_row`);
+  const rowType = goPascal(withSuffix(q.name, 'row'));
   const members = membersOf(q.columns, d, o, rowType);
   modelStruct(w, rowType, members, null, null, ctx);
   w.blank();
-  const fn = goPascal(q.name);
+  const fn = goPascal(queryFnBase(q.name));
   const constName = `${goCamel(q.name)}SQL`;
   const sqlText = trimStatement(q.sql);
   const positional = q.params.some((p) => p.positional);

@@ -1,9 +1,9 @@
 // Unit tests of the codegen building blocks: naming, type mapping, parameter detection and the option switches
 // (nullable handling, naming styles, singularisation, reserved words) across languages.
 import { describe, expect, it } from 'vitest';
-import { generate, joinFiles, LANGUAGES } from '..';
+import { generate, joinFiles, LANGUAGES, queryObject } from '..';
 import type { CgInput, CgTable } from '../model';
-import { camel, escapeIdent, goPascal, pascal, singularize, snake, splitWords } from '../naming';
+import { camel, escapeIdent, goPascal, pascal, queryFnBase, singularize, snake, splitWords, withSuffix } from '../naming';
 import { detectQueryParams, rewriteQuery } from '../sqlgen';
 import { resolveType, TYPE_TABLES } from '../types';
 import { shopInput } from './shop';
@@ -235,5 +235,51 @@ describe('options', () => {
     expect(files.every((f) => f.content.includes('namespace App.Data;'))).toBe(true);
     const go = generate(shopInput('tsql', { query: false }), { language: 'go', flavor: 'database-sql', combined: false });
     expect(go.map((f) => f.path)).toContain('db.go');
+  });
+});
+
+describe('query names: one suffix each, added by the generator (design-r2-03)', () => {
+  const cols = [{ name: 'Id', dbType: 'int', nullable: false, pk: false, identity: false, computed: false }, { name: 'Name', dbType: 'nvarchar(50)', nullable: true, pk: false, identity: false, computed: false }];
+  const q = (name: string): CgInput => ({ dialect: 'tsql', objects: [queryObject(name, 'SELECT Id, Name FROM dbo.Customers', 'tsql', cols)] });
+
+  it('helpers', () => {
+    expect(withSuffix('Customers', 'query')).toBe('Customers_query');
+    expect(withSuffix('CustomersQuery', 'query')).toBe('CustomersQuery');
+    expect(withSuffix('customers_row', 'row')).toBe('customers_row');
+    expect(withSuffix('Query', 'query')).toBe('Query');
+    expect(pascal(queryFnBase('Customers'))).toBe('GetCustomers');
+    expect(pascal(queryFnBase('GetOrders'))).toBe('GetOrders');
+    expect(pascal(queryFnBase('ListOrders'))).toBe('ListOrders');
+    expect(snake(queryFnBase('MonthlySales'))).toBe('get_monthly_sales');
+  });
+
+  it('the base name "Customers" gives CustomersRow / CustomersQuery / GetCustomersAsync in every language', () => {
+    const cs = text(q('Customers'), { language: 'csharp', flavor: 'dapper' });
+    expect(cs).toContain('public sealed class CustomersRow');
+    expect(cs).toContain('public static class CustomersQuery');
+    expect(cs).toContain('Task<IReadOnlyList<CustomersRow>> GetCustomersAsync(this IDbConnection db');
+    const go = text(q('Customers'), { language: 'go', flavor: 'database-sql' });
+    expect(go).toContain('type CustomersRow struct');
+    expect(go).toContain('func GetCustomers(ctx context.Context');
+    const ts = text(q('Customers'), { language: 'typescript', flavor: 'driver' });
+    expect(ts).toContain('export interface CustomersRow');
+    expect(ts).toContain('export async function getCustomers(pool');
+    const java = text(q('Customers'), { language: 'java', flavor: 'jdbc' });
+    expect(java).toContain('public record CustomersRow(');
+    expect(java).toContain('public final class CustomersQuery {');
+    expect(text(q('Customers'), { language: 'python', flavor: 'dataclass' })).toContain('def get_customers(conn');
+    expect(text(q('Customers'), { language: 'json', flavor: 'json-schema' })).toContain('"CustomersRow"');
+    for (const [language, flavor] of [['csharp', 'dapper'], ['go', 'database-sql'], ['typescript', 'driver'], ['java', 'jdbc'], ['python', 'dataclass'], ['json', 'json-schema']] as const) {
+      expect(text(q('Customers'), { language, flavor }), `${language}`).not.toMatch(/QueryQuery|RowRow|CustomersQueryRow/);
+    }
+  });
+
+  it('a name that already ends in Query or Row (a tab saved by an older version) is not doubled', () => {
+    const cs = text(q('CustomersQuery'), { language: 'csharp', flavor: 'dapper' });
+    expect(cs).toContain('public static class CustomersQuery');
+    expect(cs).not.toMatch(/CustomersQueryQuery/);
+    const java = text(q('Query'), { language: 'java', flavor: 'jdbc' });
+    expect(java).toContain('public final class Query {');
+    expect(java).toContain('public record QueryRow(');
   });
 });

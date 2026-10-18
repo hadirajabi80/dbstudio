@@ -2,7 +2,10 @@
 // item with aria-activedescendant; Arrow keys / Home / End / typeahead move, Enter / Space / ArrowRight open a
 // submenu and focus its first item, ArrowLeft / Esc close it, and focus returns to the invoker on close.
 import { Check, ChevronRight } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent,
+  type MutableRefObject, type ReactNode,
+} from 'react';
 import { create } from 'zustand';
 import { displayShortcut } from '../../commands/keys';
 
@@ -44,10 +47,25 @@ interface MenuState {
 
 // Input modality: a menu opened right after a key press counts as opened from the keyboard.
 let lastInput: 'keyboard' | 'pointer' = 'pointer';
+/** Last known pointer position (viewport coordinates), null until the pointer has moved over the page. */
+let lastPointer: { x: number; y: number } | null = null;
 let menuSeq = 0;
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', () => { lastInput = 'keyboard'; }, true);
   window.addEventListener('pointerdown', () => { lastInput = 'pointer'; }, true);
+  window.addEventListener('mousemove', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
+}
+
+/**
+ * "Has the pointer moved since the keyboard took over" (design-r2-02). A menu opened from the keyboard often appears
+ * under a pointer that has not moved (Shift+F10 on a grid cell the user just clicked, a menu flipped upwards), and the
+ * browser then fires mouseenter on the item below it: that must not steal the active item or open a submenu. Hover
+ * counts again after the first real mouse move over the menu (one at other coordinates than when the keyboard took
+ * over, since Chromium may also send a mousemove for an element that appears under a still pointer).
+ */
+interface PointerGuard {
+  moved: boolean;
+  at: { x: number; y: number } | null;
 }
 
 export const useMenu = create<MenuState>((set, get) => ({
@@ -104,10 +122,17 @@ interface ListProps {
   /** Submenu only: close this level and focus the parent. */
   onBack?: () => void;
   ariaLabel?: string;
+  /** Root menu: opened from the keyboard, so hover waits for a pointer move (PointerGuard). */
+  fromKeyboard?: boolean;
+  /** Submenus share the root's guard. */
+  pointer?: MutableRefObject<PointerGuard>;
 }
 
-function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabel }: ListProps) {
+function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabel, fromKeyboard = false, pointer }: ListProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // The root list remounts for every open (keyed by its seq), so the guard is reset on each open.
+  const ownGuard = useRef<PointerGuard>({ moved: !fromKeyboard, at: fromKeyboard ? lastPointer : null });
+  const guard = pointer ?? ownGuard;
   const baseId = useId();
   const [pos, setPos] = useState({ x, y });
   const [sub, setSub] = useState<{ idx: number; x: number; y: number; keyboard: boolean } | null>(null);
@@ -138,6 +163,8 @@ function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabe
   const itemId = (i: number) => `${baseId}-item-${i}`;
 
   const openSub = (i: number, keyboard: boolean) => {
+    // A submenu opened from the keyboard may also appear under the still pointer.
+    if (keyboard) guard.current = { moved: false, at: lastPointer };
     const el = ref.current?.querySelector<HTMLElement>(`[data-index="${i}"]`);
     const r = el?.getBoundingClientRect();
     setSub({ idx: i, x: (r?.right ?? pos.x + 200) + 2, y: (r?.top ?? pos.y) - 4, keyboard });
@@ -223,6 +250,21 @@ function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabe
     }
   };
 
+  const hover = (i: number) => {
+    const it = items[i];
+    setActive(i);
+    if (it?.submenu && !it.disabled) openSub(i, false);
+    else setSub(null);
+  };
+
+  const onItemMouseMove = (e: ReactMouseEvent, i: number) => {
+    const g = guard.current;
+    if (g.moved) return;
+    if (g.at && g.at.x === e.clientX && g.at.y === e.clientY) return;
+    g.moved = true;
+    hover(i);
+  };
+
   const subItems = sub ? items[sub.idx]?.submenu : undefined;
 
   return (
@@ -254,10 +296,9 @@ function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabe
               aria-expanded={it.submenu ? sub?.idx === i : undefined}
               className={`menu-item${it.disabled ? ' disabled' : ''}${it.danger ? ' danger' : ''}${active === i ? ' active' : ''}`}
               onMouseEnter={() => {
-                setActive(i);
-                if (it.submenu && !it.disabled) openSub(i, false);
-                else setSub(null);
+                if (guard.current.moved) hover(i);
               }}
+              onMouseMove={(e) => onItemMouseMove(e, i)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => activate(i, false)}
             >
@@ -271,7 +312,8 @@ function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabe
       </div>
       {sub && subItems && (
         <MenuList
-          key={sub.idx}
+          /* ArrowRight on a submenu that hover opened remounts it, so it takes focus and selects its first item */
+          key={`${sub.idx}:${sub.keyboard ? 'k' : 'm'}`}
           items={subItems}
           x={sub.x}
           y={sub.y}
@@ -279,6 +321,7 @@ function MenuList({ items, x, y, depth, initialActive, onClose, onBack, ariaLabe
           ariaLabel={items[sub.idx]?.label}
           initialActive={sub.keyboard ? enabledIndexes(subItems)[0] ?? -1 : -1}
           onClose={onClose}
+          pointer={guard}
           onBack={() => {
             setSub(null);
             ref.current?.focus({ preventScroll: true });
@@ -316,6 +359,7 @@ export function MenuHost() {
       y={open.y}
       depth={0}
       initialActive={open.fromKeyboard ? enabledIndexes(open.items)[0] ?? -1 : -1}
+      fromKeyboard={open.fromKeyboard}
       onClose={(restore) => hide(restore)}
     />
   );

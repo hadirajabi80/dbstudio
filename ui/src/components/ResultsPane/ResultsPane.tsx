@@ -24,6 +24,7 @@ import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { showMenuBelow } from '../common/Menu';
+import { pluralize } from '../common/text';
 import { commandMenuItems } from '../layout/commandMenu';
 import { Splitter } from '../common/Splitter';
 import { openDataTab } from '../DataTab/open';
@@ -119,10 +120,13 @@ export function ResultsPane({ tabId, dialect, theme, onClose }: Props) {
   );
 }
 
-/** "CustomersQuery" for a result of Customers, else undefined ("Query"): name of the generated types. */
-function queryNameFor(table: string | null | undefined): string | undefined {
+/**
+ * Base name of the generated code for a result of `table`: "Customers" (the generators add their own suffixes:
+ * CustomersRow, CustomersQuery, GetCustomersAsync), "Result" when the result has no source table (design-r2-03).
+ */
+function queryNameFor(table: string | null | undefined): string {
   const words = (table ?? '').split(/[^A-Za-z0-9]+/).filter(Boolean);
-  return words.length ? `${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}Query` : undefined;
+  return words.length ? words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('') : 'Result';
 }
 
 function ExecStatus({ exec }: { exec: ExecutionState }) {
@@ -177,6 +181,14 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
 
   // Reset the edit buffer when this result goes away (re-run, tab closed).
   useEffect(() => () => useEdits.getState().reset(key), [key]);
+  // The console's transaction ended: a Commit keeps rows this grid saved into it, a Rollback undid them, and the grid
+  // says so instead of showing them as real (features-r2-01). Every buffer of the session is updated at once.
+  useEffect(
+    () => useSessions.subscribe((s, prev) => {
+      if (s.lastTxEnd && s.lastTxEnd !== prev.lastTxEnd) useEdits.getState().applyTxEnd(s.lastTxEnd);
+    }),
+    [],
+  );
 
   const columns = rs.columns;
   const orig = originalBatch(exec);
@@ -265,6 +277,10 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
     setView({ filter: null, quickFilter: '' });
   };
   const noMatch = hasFilter && shown === 0 && rs.done;
+  const rolledBack = buffer.rolledBack?.rows ?? 0;
+  const rolledBackText = rolledBack
+    ? `Rolled back: ${pluralize(rolledBack, 'saved row')} in this grid no longer match${rolledBack === 1 ? 'es' : ''} the database.`
+    : '';
 
   // "Code ▾" (design-09): code for the SELECT that produced this result, with its columns.
   const codeSql = useMemo(() => originatingSelect(exec, rs, dialect), [exec.batches, exec.resultSets.length, rs.batchIndex, dialect, serverFilter]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -456,6 +472,20 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
             onApply: serverApply, onClear: serverClear,
           }}
         />
+      )}
+      {rolledBack > 0 && (
+        <div className="rs-rolledback" role="status">
+          <TriangleAlert size={13} aria-hidden="true" />
+          <span className="rs-rolledback-text" title={rolledBackText}>
+            {rolledBackText}
+          </span>
+          <button className="link-btn" onClick={() => void rerun(exec.tabId)} disabled={isRunning(exec)} title="Run the query again to show what the database holds now">
+            <RotateCcw size={11} /> Re-run
+          </button>
+          <button className="icon-btn xs" aria-label="Dismiss" title="Dismiss" onClick={() => useEdits.getState().dismissRolledBack(key)}>
+            <X size={12} />
+          </button>
+        </div>
       )}
       <div className="resultset-body">
         <div className="resultset-grid">

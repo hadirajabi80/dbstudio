@@ -580,8 +580,8 @@ JOIN SHOP.ORDERS o ON o.CUSTOMER_ID = c.ID
 WHERE c.ID = :customer_id AND o.TOTAL > :min_total
 ORDER BY o.ORDER_DATE DESC`
 
-// CustomerOrders runs the CustomerOrders query.
-func CustomerOrders(ctx context.Context, db DBTX, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
+// GetCustomerOrders runs the CustomerOrders query.
+func GetCustomerOrders(ctx context.Context, db DBTX, customerID int32, minTotal float64) ([]CustomerOrdersRow, error) {
 	rows, err := db.QueryContext(ctx, customerOrdersSQL, sql.Named("customer_id", customerID), sql.Named("min_total", minTotal))
 	if err != nil {
 		return nil, err

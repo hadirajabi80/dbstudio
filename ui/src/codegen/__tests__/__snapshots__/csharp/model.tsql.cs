@@ -196,6 +196,6 @@ public static class CustomerOrdersQuery
         ORDER BY o.OrderDate DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this IDbConnection db, int customerId, decimal minTotal, CancellationToken ct = default) =>
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this IDbConnection db, int customerId, decimal minTotal, CancellationToken ct = default) =>
         (await db.QueryAsync<CustomerOrdersRow>(new CommandDefinition(Sql, new { customerId, minTotal }, cancellationToken: ct))).AsList();
 }

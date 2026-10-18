@@ -654,7 +654,7 @@ ORDER BY o.ORDER_DATE DESC
 """
 
 
-def customer_orders(conn: oracledb.Connection, customer_id: int, min_total: Decimal) -> list[CustomerOrdersRow]:
+def get_customer_orders(conn: oracledb.Connection, customer_id: int, min_total: Decimal) -> list[CustomerOrdersRow]:
     """Run the CustomerOrders query."""
     rows = conn.cursor().execute(_CUSTOMER_ORDERS_SQL, {"customer_id": customer_id, "min_total": min_total}).fetchall()
     return [CustomerOrdersRow(id=r[0], name=r[1], total=r[2], order_date=r[3]) for r in rows]

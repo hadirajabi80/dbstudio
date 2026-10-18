@@ -3,7 +3,7 @@
 import type { Dialect } from '../../api/types';
 import type { CgInput, CgPackage, CgParam, CgQuery, CgRoutine, CgTable, GeneratedFile } from '../model';
 import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../model';
-import { camel, NameScope, pascal } from '../naming';
+import { camel, NameScope, pascal, queryFnBase, withSuffix } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
 import { crudSql, defaultsNote, qi, rewriteQuery, trimStatement } from '../sqlgen';
@@ -163,22 +163,27 @@ function oracleType(t: ResolvedType): string {
 
 /**
  * Date conversions of the better-sqlite3 flavor, in SQLite's own text formats so stored values sort and compare
- * correctly against what SQLite writes itself (CURRENT_TIMESTAMP, datetime(), date()):
- * - timestamps are UTC 'YYYY-MM-DD HH:MM:SS', read back as UTC (ISO text with 'T', 'Z' or an offset is read as written),
+ * correctly against what SQLite writes itself (CURRENT_TIMESTAMP, datetime(), date(), strftime('%f')):
+ * - timestamps are UTC 'YYYY-MM-DD HH:MM:SS', with '.SSS' when the Date has milliseconds (so a value SQLite wrote with
+ *   strftime('%Y-%m-%d %H:%M:%f') is written back as it was), and read back as UTC (ISO text with 'T', 'Z' or an
+ *   offset is read as written),
  * - DATE columns hold the local calendar day 'YYYY-MM-DD' of the Date and read back as local midnight, so
- *   new Date(1990, 4, 17) is stored as '1990-05-17' in every time zone.
+ *   new Date(1990, 4, 17) is stored as '1990-05-17' in every time zone,
+ * - SQLite may also store a date as a number (INTEGER unix seconds or REAL julian day number): both read as a Date.
+ *   Numbers above 1e8 are unix seconds (1973 onwards), smaller ones julian day numbers (2440587.5 = 1970-01-01).
  */
 const SQLITE_DATE_HELPERS = {
   toSqliteDateTime: [
-    "/** A Date as SQLite's UTC timestamp text 'YYYY-MM-DD HH:MM:SS' (the format CURRENT_TIMESTAMP writes). */",
+    "/** A Date as SQLite's UTC timestamp text 'YYYY-MM-DD HH:MM:SS' (CURRENT_TIMESTAMP's format), with '.SSS' when it has milliseconds. */",
     'function toSqliteDateTime(d: Date): string {',
-    "  return d.toISOString().replace('T', ' ').replace(/\\.\\d{3}Z$/, '');",
+    "  return d.toISOString().replace('T', ' ').replace(/\\.000Z$/, '').replace(/Z$/, '');",
     '}',
   ],
   fromSqliteDateTime: [
-    "/** SQLite timestamp text ('YYYY-MM-DD HH:MM:SS', UTC) as a Date; ISO text with 'T', 'Z' or an offset is read as written. */",
-    'function fromSqliteDateTime(s: string): Date {',
-    "  const iso = s.length === 10 ? `${s}T00:00:00` : s.replace(' ', 'T');",
+    "/** A SQLite timestamp as a Date: text 'YYYY-MM-DD HH:MM:SS[.SSS]' is UTC (ISO text with 'T', 'Z' or an offset is read as written); a number is unix seconds (> 1e8) or a julian day. */",
+    'function fromSqliteDateTime(v: string | number): Date {',
+    "  if (typeof v === 'number') return new Date(v > 1e8 ? v * 1000 : (v - 2440587.5) * 86400000);",
+    "  const iso = v.length === 10 ? `${v}T00:00:00` : v.replace(' ', 'T');",
     '  return new Date(/(Z|[+-]\\d\\d:?\\d\\d)$/i.test(iso) ? iso : `${iso}Z`);',
     '}',
   ],
@@ -189,9 +194,13 @@ const SQLITE_DATE_HELPERS = {
     '}',
   ],
   fromSqliteDate: [
-    "/** SQLite DATE text 'YYYY-MM-DD' as a Date at local midnight of that day. */",
-    'function fromSqliteDate(s: string): Date {',
-    "  const [y, m, d] = s.slice(0, 10).split('-').map(Number);",
+    "/** SQLite DATE text 'YYYY-MM-DD' as a Date at local midnight of that day; a number (unix seconds > 1e8, else a julian day) gives its UTC day. */",
+    'function fromSqliteDate(v: string | number): Date {',
+    "  if (typeof v === 'number') {",
+    '    const t = new Date(v > 1e8 ? v * 1000 : (v - 2440587.5) * 86400000);',
+    '    return new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());',
+    '  }',
+    "  const [y, m, d] = v.slice(0, 10).split('-').map(Number);",
     '  return new Date(y, m - 1, d);',
     '}',
   ],
@@ -226,7 +235,8 @@ function sqliteRead(src: string, m: Member, ctx: Ctx): string {
   if (m.type.logical === 'bool') return m.nullable ? `${src} == null ? null : ${src} === 1` : `${src} === 1`;
   if (baseTs(m.type, o) === 'Date') {
     const fn = helper(ctx, m.type.logical === 'date' ? 'fromSqliteDate' : 'fromSqliteDateTime');
-    return m.nullable ? `${src} == null ? null : ${fn}(${src} as string)` : `${fn}(${src} as string)`;
+    // SQLite returns what is stored: text in its own formats, or a number (unix seconds / julian day) for numeric dates.
+    return m.nullable ? `${src} == null ? null : ${fn}(${src} as string | number)` : `${fn}(${src} as string | number)`;
   }
   return `${src} as ${tsType(m.type, m.nullable, o)}`;
 }
@@ -508,11 +518,11 @@ function queryDriver(w: Writer, q: CgQuery, ctx: Ctx) {
   const { d, o } = ctx;
   const drv = DRIVER[d];
   ctx.imports.set(drv.module, drv.import);
-  const rowType = typeNameOf(`${q.name}_row`, o, false);
+  const rowType = typeNameOf(withSuffix(q.name, 'row'), o, false);
   const members = membersOf(q.columns, d, o, rowType);
   interfaceDecl(w, rowType, members, `Row of the ${q.name} query.`, ctx);
   w.blank();
-  const fn = claim(ctx, camel(q.name), camel(`${q.name}_query`));
+  const fn = claim(ctx, camel(queryFnBase(q.name)), camel(withSuffix(q.name, 'query')));
   const scope = new NameScope(['pool', 'conn', 'db', 'result']);
   const args = q.params.map((p) => {
     const local = scope.take(localName(p.name, o));

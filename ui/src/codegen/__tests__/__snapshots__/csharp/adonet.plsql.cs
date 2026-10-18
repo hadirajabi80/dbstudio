@@ -876,7 +876,7 @@ public static class CustomerOrdersQuery
         ORDER BY o.ORDER_DATE DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this OracleConnection db, int customerId, decimal minTotal, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this OracleConnection db, int customerId, decimal minTotal, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = Sql;

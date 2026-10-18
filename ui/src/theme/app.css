@@ -86,6 +86,8 @@ mark {
 }
 
 /* ---------- icons (section 3 Iconography): lucide, stroke 1.5, 16 px; 14 px only in the dense spots below ----------
+   The results pane passes 10-13 px size props (result-set tabs, quick search, badges, filter chip, Messages summary);
+   the 14 px rule normalises them without touching the components (styles-r2-02, theme/iconSizes.test.ts).
    A CSS stroke-width beats the SVG attribute, so the 1.5 default skips icons that opt out with data-stroke
    (tiny badges and tile glyphs drawn heavier on purpose, styles-r1-02). flex-shrink: 0 keeps an icon at its CSS
    size inside a narrow flex button (styles-10); the icon buttons reset the UA button padding for the same reason. */
@@ -107,7 +109,12 @@ svg.lucide:not([data-stroke]) {
 .tab-close > svg.lucide,
 .dock-tab > svg.lucide,
 .split-caret > svg.lucide,
-.btn-xs > svg.lucide {
+.btn-xs > svg.lucide,
+.results-tab > svg.lucide,
+.rs-quick > svg.lucide,
+.rs-badge > svg.lucide,
+.fb-chip > svg.lucide,
+.messages-summary > svg.lucide {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
 }
@@ -420,6 +427,8 @@ svg.lucide:not([data-stroke]) {
   padding: 0 var(--space-2);
   background: var(--bg-app);
   border-bottom: 1px solid var(--border);
+  /* a size container: the top bar compacts itself on a narrow window or at high zoom (shell.css, styles-r2-01) */
+  container: topbar / inline-size;
 }
 .brand {
   display: flex;
@@ -433,7 +442,11 @@ svg.lucide:not([data-stroke]) {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* shrinks first (the buttons around it keep their content width), down to its search icon */
+  flex: 0 1 auto;
   width: min(460px, 38vw);
+  min-width: 0;
+  overflow: hidden;
   height: var(--input-h);
   padding: 0 var(--space-1) 0 var(--space-2);
   border: 1px solid var(--border-strong);
@@ -749,9 +762,11 @@ body.resizing-row .splitter-horizontal {
   align-items: center;
   gap: 6px;
   padding: 0 var(--space-1) 0 var(--space-3);
-  /* past ~10 tabs the strip scrolls (overflow-x: auto) instead of crushing titles to one letter (features-r1-05) */
-  min-width: 120px;
-  max-width: 260px;
+  /* Natural width up to 220 px (longer titles ellipsize); tabs never shrink below their content, so once they no longer
+     fit the strip scrolls (overflow-x: auto) and "Console 10" stays readable at any tab count (features-r1-05, -r2-04). */
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 220px;
   border-right: 1px solid var(--border);
   cursor: pointer;
   color: var(--text-muted);

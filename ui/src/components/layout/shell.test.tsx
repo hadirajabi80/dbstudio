@@ -265,12 +265,16 @@ describe('tab strip (features-r1-05)', () => {
     }
   });
 
-  it('gives the title priority: tabs scroll at 120 px, the name shrinks first and wraps out of sight', async () => {
+  it('gives the title priority: tabs never shrink (the strip scrolls), the name shrinks first and wraps out of sight', async () => {
     // Node API, typed locally (the app tsconfig has no Node types; vitest runs on Node)
     const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync(p: string, e: 'utf8'): string };
     const css = fs.readFileSync(`${(globalThis as unknown as { process: { cwd(): string } }).process.cwd()}/src/theme/app.css`, 'utf8');
     const rule = (sel: string) => new RegExp(`(?:^|\n)${sel.replace(/[.]/g, '\.')} \{([^}]*)\}`).exec(css)?.[1] ?? '';
-    expect(rule('.tab')).toMatch(/min-width: 120px;/);
+    // features-r2-04: a tab keeps its natural width (capped at 220 px) and never shrinks below its content, so a full
+    // strip scrolls instead of crushing "Console 10"; the strip itself is the scroll container.
+    expect(rule('.tab')).toMatch(/flex: 0 0 auto;/);
+    expect(rule('.tab')).toMatch(/max-width: 220px;/);
+    expect(rule('.tabbar-scroll')).toMatch(/overflow-x: auto;/);
     expect(rule('.tab-title')).toMatch(/flex: 1 1 auto;[\s\S]*min-width: 6ch;/);
     expect(rule('.tab-conn')).toMatch(/flex: 0 10 auto;/);
     expect(rule('.tab-label')).toMatch(/flex-wrap: wrap;[\s\S]*overflow: hidden;/);

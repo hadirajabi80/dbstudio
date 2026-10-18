@@ -515,7 +515,7 @@ export interface CustomerOrdersRow {
   orderDate: string | null;
 }
 
-const customerOrdersSql = `SELECT c.ID, c.NAME, o.TOTAL, o.ORDER_DATE
+const customerOrdersQuerySql = `SELECT c.ID, c.NAME, o.TOTAL, o.ORDER_DATE
 FROM SHOP.CUSTOMERS c
 JOIN SHOP.ORDERS o ON o.CUSTOMER_ID = c.ID
 WHERE c.ID = :customer_id AND o.TOTAL > :min_total
@@ -523,7 +523,7 @@ ORDER BY o.ORDER_DATE DESC`;
 
 // Rows arrive keyed by column name; ID -> id, NAME -> name, TOTAL -> total, ORDER_DATE -> orderDate are mapped below.
 /** Runs the CustomerOrders query. */
-export async function customerOrders(conn: oracledb.Connection, customerId: number, minTotal: number): Promise<CustomerOrdersRow[]> {
-  const result = await conn.execute<Record<string, unknown>>(customerOrdersSql, { customer_id: customerId, min_total: minTotal }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+export async function customerOrdersQuery(conn: oracledb.Connection, customerId: number, minTotal: number): Promise<CustomerOrdersRow[]> {
+  const result = await conn.execute<Record<string, unknown>>(customerOrdersQuerySql, { customer_id: customerId, min_total: minTotal }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
   return (result.rows ?? []).map((r) => ({ id: r["ID"] as number, name: r["NAME"] as string, total: r["TOTAL"] as number, orderDate: r["ORDER_DATE"] as string | null }));
 }

@@ -5,8 +5,10 @@ import type { ForwardedRef } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { CellValue, ColumnInfo, ColumnKind } from '../../api/types';
 import { resolveKey } from '../../commands/dispatcher';
+import { runCommand } from '../../commands/registry';
 import { EMPTY_VIEW } from '../../filter/model';
 import { useEdits } from '../../store/edits';
+import { useUi } from '../../store/ui';
 import { MenuHost, useMenu } from '../common/Menu';
 import { registerGridCommands } from '../DataTab/commands';
 import { DataGrid, type DataGridProps } from './DataGrid';
@@ -140,5 +142,86 @@ describe('DataGrid', () => {
     expect(document.activeElement).toBe(canvas());
     const sel = probe.props!.gridSelection as { current?: { cell: number[] } };
     expect(sel.current?.cell).toEqual([2, 3]);
+  });
+
+  describe('Set selected cells to NULL on NOT NULL columns (design-r2-04)', () => {
+    // FirstName and LastName are NOT NULL, Email is nullable; all three are editable.
+    const NN_COLUMNS = [
+      col('Id', 'int', 0, { isKey: true, nullable: false }), col('FirstName', 'string', 1, { nullable: false }),
+      col('LastName', 'string', 2, { nullable: false }), col('Email', 'string', 3),
+    ];
+    const NN_ROWS: CellValue[][] = [[1, 'Sophia', 'Muller', 's@x.io'], [2, 'Liam', 'Smith', 'l@x.io']];
+    const NN_EDITABLE: Editability = { ...EDITABLE, editableColumns: new Set([1, 2, 3]) };
+    const nnProps = () => props({ columns: NN_COLUMNS, rows: list(NN_ROWS), editability: NN_EDITABLE });
+    const selectRange = (x: number, y: number, width: number, height: number) =>
+      act(() => {
+        const onChange = probe.props!.onGridSelectionChange as (s: unknown) => void;
+        onChange({ columns: emptySel(), rows: emptySel(), current: { cell: [x, y], range: { x, y, width, height }, rangeStack: [] } });
+      });
+    const setNullItem = () => screen.getAllByRole('menuitem').find((m) => m.textContent?.includes('Set selected cells to NULL'))!;
+    const openMenu = () => {
+      act(() => canvas().focus());
+      fireEvent.keyDown(canvas(), { key: 'F10', code: 'F10', shiftKey: true });
+    };
+    const toasts = () => useUi.getState().toasts;
+
+    afterEach(() => useUi.setState({ toasts: [] }));
+
+    it('a NOT NULL cell: the menu item is disabled with the reason, and Ctrl+Alt+N says why nothing changed', () => {
+      render(<><DataGrid {...nnProps()} /><MenuHost /></>);
+      selectCell(1, 0);
+      openMenu();
+      expect(setNullItem()).toHaveAttribute('aria-disabled', 'true');
+      expect(setNullItem()).toHaveTextContent('Set selected cells to NULL (FirstName is NOT NULL)');
+      act(() => useMenu.getState().hide(false));
+      act(() => runCommand('grid.setNull', { gridKey: 'g1' }));
+      expect(useEdits.getState().get('g1').pending.updates).toEqual({});
+      expect(toasts()).toHaveLength(1);
+      expect(toasts()[0]).toMatchObject({ kind: 'info', text: 'Cannot set to NULL', detail: 'FirstName is NOT NULL' });
+    });
+
+    it('several NOT NULL columns give one reason for all of them', () => {
+      render(<><DataGrid {...nnProps()} /><MenuHost /></>);
+      selectRange(1, 0, 2, 2);
+      openMenu();
+      expect(setNullItem()).toHaveAttribute('aria-disabled', 'true');
+      expect(setNullItem()).toHaveTextContent('(Selected columns are NOT NULL)');
+    });
+
+    it('a nullable cell keeps the item enabled', () => {
+      render(<><DataGrid {...nnProps()} /><MenuHost /></>);
+      selectCell(3, 1);
+      openMenu();
+      expect(setNullItem()).not.toHaveAttribute('aria-disabled');
+      expect(setNullItem().textContent).not.toMatch(/NOT NULL/);
+    });
+
+    it('a mixed range sets the nullable cells in one undo step and reports the skipped ones once', () => {
+      render(<><DataGrid {...nnProps()} /><MenuHost /></>);
+      selectRange(1, 0, 3, 2); // FirstName, LastName, Email of both rows
+      openMenu();
+      expect(setNullItem()).not.toHaveAttribute('aria-disabled');
+      act(() => fireEvent.click(setNullItem()));
+      const b = useEdits.getState().get('g1');
+      expect(b.pending.updates).toEqual({ 0: { 3: null }, 1: { 3: null } });
+      expect(b.undo).toHaveLength(1);
+      expect(toasts()).toEqual([expect.objectContaining({ kind: 'info', text: '4 cells skipped: columns are NOT NULL' })]);
+      act(() => useEdits.getState().undo('g1'));
+      expect(useEdits.getState().get('g1').pending.updates).toEqual({});
+    });
+
+    it('one skipped column reads "column is"; cells of a new row take NULL whatever the column', () => {
+      render(<><DataGrid {...nnProps()} /><MenuHost /></>);
+      act(() => {
+        useEdits.getState().addInsert('g1', 4, { 1: 'New' });
+      });
+      selectRange(1, 1, 1, 2); // FirstName of row 2 (stored) and of the new row
+      act(() => runCommand('grid.setNull', { gridKey: 'g1' }));
+      const b = useEdits.getState().get('g1');
+      expect(b.pending.inserts[0].values[1]).toBeNull();
+      expect(b.pending.inserts[0].touched).toEqual({ 1: true });
+      expect(b.pending.updates).toEqual({});
+      expect(toasts()).toEqual([expect.objectContaining({ text: '1 cell skipped: column is NOT NULL' })]);
+    });
   });
 });

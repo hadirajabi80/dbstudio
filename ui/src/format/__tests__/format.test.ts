@@ -134,6 +134,34 @@ describe('safety', () => {
     expect(o.warnings).toHaveLength(1);
   });
 
+  it('guards a T-SQL ALTER PROCEDURE / TRIGGER body like a CREATE one (logic-r2-02)', () => {
+    // what "Script as ALTER" / "Modify" emits: no blank line between AS and BEGIN, the body is not split
+    const proc = 'ALTER PROCEDURE p AS\nBEGIN\n  SELECT (1 FROM t;\n  SELECT 2;\nEND';
+    const p = formatSql(proc, 'tsql');
+    expect(p.text).toBe(proc);
+    expect(p.warnings).toHaveLength(1);
+    expect(p.warnings[0].line).toBe(1);
+    expect(formatSql(proc.replace('PROCEDURE', 'PROC'), 'tsql').text).toBe(proc.replace('PROCEDURE', 'PROC'));
+    // a column-1 statement keyword inside the body is not a cut point: SELECT 2; stays in the trigger
+    const trig = 'ALTER TRIGGER trg AFTER INSERT ON t AS\nBEGIN\n  SELECT (1 FROM t;\nSELECT 2;\nEND';
+    const t = formatSql(trig, 'tsql');
+    expect(t.text).toBe(trig);
+    expect(t.warnings).toHaveLength(1);
+    expect(t.warnings[0].line).toBe(1);
+    const fn = 'ALTER FUNCTION /* c */ dbo.f() RETURNS INT AS\nBEGIN\n  RETURN (1;\nEND';
+    expect(formatSql(fn, 'tsql').text).toBe(fn);
+    // the guard ends at the batch: what follows GO is formatted again
+    const b = formatSql(`${proc}\nGO\nselect a from t`, 'tsql');
+    expect(b.text).toBe(`${proc}\nGO\n\nSELECT a\nFROM t`);
+    expect(b.warnings).toHaveLength(1);
+    // other ALTER statements are not routines: a broken one is resynchronised as before
+    const tbl = formatSql('alter table t add c int default case when 1\nselect a from u', 'tsql');
+    expect(tbl.text).toBe('alter table t add c int default case when 1\nSELECT a\nFROM u');
+    // PL/SQL ALTER PROCEDURE … COMPILE has no body: nothing after it is guarded
+    const ora = formatSql('alter procedure p compile;\nselect case when a then 1 from t\nselect b from dual', 'plsql');
+    expect(ora.text).toBe('ALTER PROCEDURE p compile;\nselect case when a then 1 from t\nSELECT b\nFROM dual');
+  });
+
   it('warns about CASE without END and keeps the statement verbatim', () => {
     const r = formatSql('SELECT CASE WHEN a THEN 1 FROM t', 'sqlite');
     expect(r.text).toBe('SELECT CASE WHEN a THEN 1 FROM t');

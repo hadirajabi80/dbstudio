@@ -89,6 +89,7 @@
   stroke: var(--brand-fg);
 }
 .topbar-sep {
+  flex-shrink: 0;
   width: 1px;
   height: 18px;
   background: var(--border);
@@ -105,6 +106,54 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* Adaptive top bar (styles-r2-01). The window minimum is 800 px, so 125 % zoom and up, or the macOS traffic-light
+   inset (which narrows the container's content box), squeezes the bar. The right-hand icon cluster never shrinks
+   and the palette trigger is the item that shrinks first (app.css: its text ellipsizes); past that, in this order:
+   < 700 px  Console and Connection become icon buttons (the visually hidden label stays their accessible name, the
+             tooltip names the command and shortcut) and the trigger drops its key caps (aria-keyshortcuts keeps them);
+   < 560 px  the brand keeps only its mark;
+   < 420 px  the trigger becomes a search icon button (aria-label and tooltip unchanged).
+   The search field keeps its text as long as it is readable: it is how the palette is discovered. 700 px keeps the
+   labels in an 800 px macOS window at 100 % (710 px content box after the inset); 683 px (1024 px window at 150 %),
+   533 px (800 px at 150 %) and 400 px (800 px at 200 %) all fit with the Settings button fully visible. */
+@container topbar (max-width: 699px) {
+  .topbar .topbar-text-btn {
+    position: relative;
+    width: var(--input-h);
+    padding: 0;
+    justify-content: center;
+  }
+  .topbar .topbar-text-btn > .btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .topbar .palette-trigger .kbd-group {
+    display: none;
+  }
+}
+@container topbar (max-width: 559px) {
+  .topbar .brand-name {
+    display: none;
+  }
+  .topbar .brand {
+    padding: 0 var(--space-1);
+  }
+}
+@container topbar (max-width: 419px) {
+  .topbar .palette-trigger {
+    flex: none;
+    width: var(--input-h);
+    padding: 0;
+    justify-content: center;
+  }
+  .topbar .palette-trigger-text {
+    display: none;
+  }
 }
 /* macOS hiddenInset title bar (Electron sets html.platform-darwin.titlebar-inset and --titlebar-inset-left):
    the header is the window's drag region and clears the traffic lights; its controls stay clickable. */
@@ -201,6 +250,9 @@ html.titlebar-inset .topbar :is(button, a, input, select, textarea, kbd, [role='
 .search-box .input {
   height: 100%;
   flex: 1;
+  /* Chromium ellipsizes the placeholder too: a narrow panel shows "Filter objects (Ctrl+…" instead of a cut
+     "(Ctrl+I" that reads as the wrong shortcut (styles-r2-05) */
+  text-overflow: ellipsis;
 }
 .explorer-filter .search-box,
 .history-filters .search-box,

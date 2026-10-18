@@ -5,7 +5,7 @@ import type { HistoryEntry, SessionInfo } from '../api/types';
 import {
   cancelTab, catalogDatabase, closeTab, commitTab, connectAllInFolder, copyText, disconnectAll, disconnectConnection,
   insertIntoActiveEditor, newConsole, openObject, openSampleDatabase, openSqlFile, openSqliteFile, reopenSql, rerun, rollbackTab,
-  runActive, saveActiveFile, selectTop, setTxMode,
+  ownSessions, runActive, saveActiveFile, selectTop, setTxMode,
 } from '../app/actions';
 import { canDrop, copyDdl, dropObject, generateSqlInto, truncateTable, type SqlTemplate } from '../app/objectActions';
 import { currentZoom, setZoom } from '../app/zoom';
@@ -234,13 +234,14 @@ export const CORE_COMMANDS: Command<never>[] = [
     id: 'connections.disconnect', title: 'Disconnect', category: 'Connections', icon: 'Unplug',
     when: (a?: unknown) => {
       const cid = connectionIdOf(a);
-      return !!cid && (!!useCatalog.getState().conns[cid] || Object.values(useSessions.getState().sessions).some((s) => s.connectionId === cid));
+      // Only what Disconnect closes: the cached catalog and this window's sessions (not another window's).
+      return !!cid && (!!useCatalog.getState().conns[cid] || ownSessions(cid).length > 0);
     },
     run: (a?: unknown) => void disconnectConnection(connectionIdOf(a)!),
   },
   {
     id: 'connections.disconnectAll', title: 'Disconnect all', category: 'Connections', icon: 'Unplug',
-    when: () => Object.keys(useSessions.getState().sessions).length > 0 || Object.keys(useCatalog.getState().conns).length > 0,
+    when: () => ownSessions().length > 0 || Object.keys(useCatalog.getState().conns).length > 0,
     run: () => void disconnectAll(),
   },
   {
@@ -256,11 +257,11 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: (a?: unknown) => useUi.getState().openConnectionDialog({ mode: 'new', folder: (a as { folder?: string } | undefined)?.folder ?? null, connectAfter: true }),
   },
   {
-    id: 'connections.delete', title: 'Delete connection…', category: 'Connections', icon: 'Trash2', when: (a?: unknown) => !!connectionIdOf(a),
+    id: 'connections.delete', title: 'Delete connection…', category: 'Connections', icon: 'Trash2', danger: true, when: (a?: unknown) => !!connectionIdOf(a),
     run: async (a?: unknown) => {
       const cid = connectionIdOf(a)!;
       const c = getConnection(cid);
-      // Engine-wide list (sessions of reloaded windows included), like Disconnect.
+      // Engine-wide list: sessions of reloaded windows and of other open windows are rolled back too (force delete).
       await useSessions.getState().refreshAll();
       const { sessions, byTab } = useSessions.getState();
       const tabs = useTabs.getState().tabs.filter((t) => t.connectionId === cid);
@@ -271,11 +272,14 @@ export const CORE_COMMANDS: Command<never>[] = [
       const nTx = consoles.filter((t) => txOf(t.id)).length + strayTx.length;
       const items = [
         ...consoles.map((t) => `Console “${t.title}”${txOf(t.id) ? ' — uncommitted transaction, rolled back' : ''}`),
-        ...strayTx.map((s) => `Session ${s.label ?? s.sessionId} — uncommitted transaction, rolled back`),
+        ...strayTx.map((s) => (isForeignSession(s)
+          ? `Session ${s.label ?? s.sessionId} in another window — its uncommitted transaction will be rolled back`
+          : `Session ${s.label ?? s.sessionId} — uncommitted transaction, rolled back`)),
         ...tabs.filter((t) => t.kind !== 'console').map((t) => `Tab “${t.title}” (closed)`),
       ];
       const parts = [`Delete “${c?.name ?? cid}”? Its saved password is removed too.`];
-      if (consoles.length) parts.push(`${pluralize(consoles.length, 'console')} use it and stay open without a connection.`);
+      const n = consoles.length;
+      if (n) parts.push(`${n === 1 ? '1 console uses' : `${n.toLocaleString()} consoles use`} it and ${n === 1 ? 'stays' : 'stay'} open without a connection.`);
       if (nTx) parts.push(`${pluralize(nTx, 'open transaction')} will be rolled back.`);
       const ok = await useUi.getState().askConfirm({
         title: 'Delete connection', message: parts.join(' '), items: items.length ? items : undefined,
@@ -356,12 +360,12 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: (a?: unknown) => { const t = objectTargetOf(a)!; generateSqlInto(k, t.connectionId, t.database, t.ref); },
   })),
   {
-    id: 'explorer.truncate', title: 'Truncate table…', category: 'Database', icon: 'Eraser', keywords: 'empty delete all rows',
+    id: 'explorer.truncate', title: 'Truncate table…', category: 'Database', icon: 'Eraser', keywords: 'empty delete all rows', danger: true,
     when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && t.ref.type === 'table' && !getConnection(t.connectionId)?.readOnly; },
     run: (a?: unknown) => { const t = objectTargetOf(a)!; void truncateTable(t.connectionId, t.database, t.ref); },
   },
   {
-    id: 'explorer.drop', title: 'Drop…', category: 'Database', icon: 'Trash2', keywords: 'delete remove object table view',
+    id: 'explorer.drop', title: 'Drop…', category: 'Database', icon: 'Trash2', keywords: 'delete remove object table view', danger: true,
     when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && canDrop(t.ref.type, dialectOf(t.connectionId)) && !getConnection(t.connectionId)?.readOnly; },
     run: (a?: unknown) => { const t = objectTargetOf(a)!; void dropObject(t.connectionId, t.database, t.ref); },
   },
@@ -373,7 +377,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'history.focusFilter', title: 'Search query history', category: 'History', icon: 'Search', shortcut: 'Mod+F', scope: 'history', run: () => useHistory.getState().requestFocus() },
   { id: 'history.reload', title: 'Reload query history', category: 'History', icon: 'RefreshCw', run: () => void useHistory.getState().load() },
   {
-    id: 'history.clear', title: 'Clear query history…', category: 'History', icon: 'Trash',
+    id: 'history.clear', title: 'Clear query history…', category: 'History', icon: 'Trash', danger: true,
     run: async () => {
       const ok = await useUi.getState().askConfirm({ title: 'Clear history', message: 'Delete all unpinned history entries?', confirmLabel: 'Clear', danger: true });
       if (ok) void useHistory.getState().clear();
@@ -385,7 +389,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'history.insertEntry', title: 'Insert into current editor', category: 'History', icon: 'TextCursorInput', palette: false, when: (a?: unknown) => isEntry(a) && !!getActiveConsole(), run: (a?: unknown) => insertIntoActiveEditor((a as HistoryEntry).sql) },
   { id: 'history.copyEntry', title: 'Copy SQL', category: 'History', icon: 'Copy', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void copyText((a as HistoryEntry).sql) },
   { id: 'history.togglePin', title: 'Pin / unpin', category: 'History', icon: 'Pin', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().togglePin((a as HistoryEntry).id).catch(() => toast('error', 'Pin failed')) },
-  { id: 'history.deleteEntry', title: 'Delete entry', category: 'History', icon: 'Trash2', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().remove((a as HistoryEntry).id).catch(() => toast('error', 'Delete failed')) },
+  { id: 'history.deleteEntry', title: 'Delete entry', category: 'History', icon: 'Trash2', palette: false, danger: true, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().remove((a as HistoryEntry).id).catch(() => toast('error', 'Delete failed')) },
 
   // Sessions (active connections panel; args: { sessionId })
   {
@@ -408,7 +412,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   },
   {
     // Unused sessions left by a reload or crash (Connections panel): roll their transaction back and close them.
-    id: 'sessions.rollbackClose', title: 'Roll back and close session', category: 'Connections', icon: 'RotateCcw', palette: false,
+    id: 'sessions.rollbackClose', title: 'Roll back and close session', category: 'Connections', icon: 'RotateCcw', palette: false, danger: true,
     when: (a?: unknown) => !!sessionOf(a)?.txOpen,
     run: async (a?: unknown) => {
       const s = sessionOf(a)!;

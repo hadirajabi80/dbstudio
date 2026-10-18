@@ -1039,7 +1039,7 @@ public static class CustomerOrdersQuery
         ORDER BY o.OrderDate DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this SqlConnection db, int customerId, decimal minTotal, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this SqlConnection db, int customerId, decimal minTotal, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = Sql;

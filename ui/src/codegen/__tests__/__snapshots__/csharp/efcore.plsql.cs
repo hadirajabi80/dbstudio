@@ -223,7 +223,7 @@ public static class CustomerOrdersQuery
         ORDER BY o.ORDER_DATE DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this DbContext context, int customerId, decimal minTotal, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this DbContext context, int customerId, decimal minTotal, CancellationToken ct = default)
     {
         var db = (OracleConnection)context.Database.GetDbConnection();
         await using var cmd = db.CreateCommand();

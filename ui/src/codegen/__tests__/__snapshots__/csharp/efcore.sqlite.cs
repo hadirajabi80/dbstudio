@@ -162,7 +162,7 @@ public static class CustomerOrdersQuery
         ORDER BY o.order_date DESC
         """;
 
-    public static async Task<IReadOnlyList<CustomerOrdersRow>> CustomerOrdersAsync(this DbContext context, int p1, double p2, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<CustomerOrdersRow>> GetCustomerOrdersAsync(this DbContext context, int p1, double p2, CancellationToken ct = default)
     {
         var db = (SqliteConnection)context.Database.GetDbConnection();
         await using var cmd = db.CreateCommand();

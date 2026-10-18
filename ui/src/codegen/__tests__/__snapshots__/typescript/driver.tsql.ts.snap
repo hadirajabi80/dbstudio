@@ -705,7 +705,7 @@ export interface CustomerOrdersRow {
   orderDate: string | null;
 }
 
-const customerOrdersSql = `SELECT c.Id, c.Name, o.Total, o.OrderDate
+const getCustomerOrdersSql = `SELECT c.Id, c.Name, o.Total, o.OrderDate
 FROM dbo.Customers c
 JOIN dbo.Orders o ON o.CustomerId = c.Id
 WHERE c.Id = @customerId AND o.Total > @minTotal
@@ -713,11 +713,11 @@ ORDER BY o.OrderDate DESC`;
 
 // Rows arrive keyed by column name; Id -> id, Name -> name, Total -> total, OrderDate -> orderDate are mapped below.
 /** Runs the CustomerOrders query. */
-export async function customerOrders(pool: sql.ConnectionPool | sql.Transaction, customerId: number, minTotal: number): Promise<CustomerOrdersRow[]> {
+export async function getCustomerOrders(pool: sql.ConnectionPool | sql.Transaction, customerId: number, minTotal: number): Promise<CustomerOrdersRow[]> {
   const result = await pool
     .request()
     .input('customerId', sql.Int, customerId)
     .input('minTotal', sql.Decimal(38, 10), minTotal)
-    .query(customerOrdersSql);
+    .query(getCustomerOrdersSql);
   return result.recordset.map((r) => ({ id: r["Id"] as number, name: r["Name"] as string, total: r["Total"] as number, orderDate: r["OrderDate"] as string | null }));
 }

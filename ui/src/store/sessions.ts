@@ -6,9 +6,18 @@ import type { SessionInfo, TxMode, WsEventOf } from '../api/types';
  * Engine sessions, keyed by sessionId; each editor tab owns at most one (created lazily on first run,
  * closed with the tab or when the tab switches connection). Several connections can be in use at once.
  */
+/**
+ * The last transaction this window ended: a Commit or Roll back of a console, or the implicit rollback when this window
+ * closed (tab closed, connection switched, Disconnect, Delete connection) a session that had an open transaction.
+ * `seq` increases on every end, so a subscriber can tell two ends of the same session apart.
+ */
+export type TxEnd = { sessionId: string; kind: 'commit' | 'rollback'; seq: number };
+
 interface SessionsState {
   sessions: Record<string, SessionInfo>;
   byTab: Record<string, string>;
+  /** See TxEnd; null until this window ends a transaction. */
+  lastTxEnd: TxEnd | null;
   /** Ensure the tab has a session on this connection/database; replaces a session on another connection. */
   ensure(tabId: string, connectionId: string, database: string | null, txMode: TxMode): Promise<SessionInfo>;
   forTab(tabId: string): SessionInfo | undefined;
@@ -46,6 +55,11 @@ interface SessionsState {
 }
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let txEndSeq = 0;
+
+function txEnd(sessionId: string, kind: TxEnd['kind']): { lastTxEnd: TxEnd } {
+  return { lastTxEnd: { sessionId, kind, seq: ++txEndSeq } };
+}
 
 const creating = new Map<string, Promise<SessionInfo>>();
 
@@ -108,6 +122,7 @@ export function resetOwnSessionsForTests(ids: string[] = []): void {
 export const useSessions = create<SessionsState>((set, get) => ({
   sessions: {},
   byTab: {},
+  lastTxEnd: null,
 
   upsert(info, tabId) {
     const s = get();
@@ -161,12 +176,14 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const s = get().forTab(tabId);
     if (!s) return;
     get().upsert(await api.commit(s.sessionId), tabId);
+    set(txEnd(s.sessionId, 'commit'));
   },
 
   async rollback(tabId) {
     const s = get().forTab(tabId);
     if (!s) return;
     get().upsert(await api.rollback(s.sessionId), tabId);
+    set(txEnd(s.sessionId, 'rollback'));
   },
 
   async changeDatabase(tabId, database) {
@@ -189,7 +206,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const nextByTab = { ...byTab };
     delete nextByTab[tabId];
     forgetOwn([sid]);
-    set({ sessions: nextSessions, byTab: nextByTab });
+    // The engine rolls back an open transaction of a session it closes.
+    set({ sessions: nextSessions, byTab: nextByTab, ...(sessions[sid]?.txOpen ? txEnd(sid, 'rollback') : {}) });
   },
 
   async refreshAll() {
@@ -225,7 +243,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     delete nextSessions[sessionId];
     const nextByTab = Object.fromEntries(Object.entries(byTab).filter(([, sid]) => sid !== sessionId));
     forgetOwn([sessionId]);
-    set({ sessions: nextSessions, byTab: nextByTab });
+    set({ sessions: nextSessions, byTab: nextByTab, ...(sessions[sessionId]?.txOpen ? txEnd(sessionId, 'rollback') : {}) });
   },
 
   async closeConnection(connectionId, force = true) {
@@ -298,8 +316,10 @@ export const useSessions = create<SessionsState>((set, get) => ({
 }));
 
 /**
- * One definition of "connected" for the status bar, the dock badge and the explorer dot: the connection has an open
- * engine session, or its catalog is loaded (browsing the explorer opens a connection without a console session).
+ * One definition of "connected" for the status bar, the dock badge and the explorer dot: this window has an open
+ * engine session on the connection, or its catalog is loaded (browsing the explorer opens a connection without a
+ * console session). Sessions another live window uses (isForeignSession) never make this window connected; the
+ * Connections panel lists them apart, under "In use by another window".
  */
 export type ConnectionActivity = { kind: 'session'; sessions: number } | { kind: 'catalog' } | null;
 
@@ -307,14 +327,17 @@ export function connectionActivity(
   connectionId: string, sessions: Record<string, SessionInfo>, catalogStatus: (connectionId: string) => string | undefined,
 ): ConnectionActivity {
   let n = 0;
-  for (const s of Object.values(sessions)) if (s.connectionId === connectionId && s.state !== 'closed') n++;
+  for (const s of Object.values(sessions)) if (s.connectionId === connectionId && s.state !== 'closed' && !isForeignSession(s)) n++;
   if (n) return { kind: 'session', sessions: n };
   return catalogStatus(connectionId) === 'ready' ? { kind: 'catalog' } : null;
 }
 
-/** Engine-wide counts: connections that are connected (sessions or loaded catalog) and open sessions. */
+/**
+ * Counts for this window: connections that are connected (this window's sessions or a loaded catalog) and open
+ * sessions. Sessions another live window uses are left out, as in connectionActivity.
+ */
 export function activityCounts(sessions: Record<string, SessionInfo>, catalogConns: Record<string, { status: string }>): { connections: number; sessions: number } {
-  const live = Object.values(sessions).filter((s) => s.state !== 'closed');
+  const live = Object.values(sessions).filter((s) => s.state !== 'closed' && !isForeignSession(s));
   const ids = new Set(live.map((s) => s.connectionId));
   for (const [cid, c] of Object.entries(catalogConns)) if (c.status === 'ready') ids.add(cid);
   return { connections: ids.size, sessions: live.length };

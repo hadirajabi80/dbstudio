@@ -12,7 +12,7 @@ import { isEnabled } from '../commands/registry';
 import { ConnectionsPanel } from '../components/ConnectionsPanel/ConnectionsPanel';
 import { installMockEngine } from '../test/mockServer';
 import { useConnections } from './connections';
-import { isForeignSession, resetOwnSessionsForTests, useSessions } from './sessions';
+import { activityCounts, connectionActivity, isForeignSession, resetOwnSessionsForTests, useSessions } from './sessions';
 import { useTabs, type ConsoleTab } from './tabs';
 import { useUi } from './ui';
 
@@ -126,5 +126,80 @@ describe('session ownership (logic-r1-03)', () => {
     const foreign = screen.getByRole('region', { name: 'In use by another window' });
     expect(within(foreign).getByText('Live window console')).toBeInTheDocument();
     expect(within(foreign).queryAllByRole('button')).toEqual([]);
+    // the header counts this window's sessions only (logic-r2-01): mine + 2 unused, not the 2 of the other window
+    expect(document.querySelector('.connections-panel .panel-count')).toHaveTextContent('1 · 3 sessions');
+  });
+});
+
+// logic-r2-01: one rule for "this window is connected": another window's sessions never count here (status bar,
+// dock badge, explorer dot); the Connections panel lists them apart.
+describe('connected indicators leave out other windows (logic-r2-01)', () => {
+  beforeEach(() => {
+    resetOwnSessionsForTests();
+    useSessions.setState({ sessions: { live: info('live', { orphan: false }), liveTx: info('liveTx', { orphan: false, txOpen: true }) }, byTab: {} });
+  });
+
+  it('a connection used only by another window is not connected in this one', () => {
+    const { sessions } = useSessions.getState();
+    expect(connectionActivity('c_shop', sessions, () => undefined)).toBeNull();
+    expect(connectionActivity('c_shop', sessions, () => 'ready')).toEqual({ kind: 'catalog' });
+    expect(activityCounts(sessions, {})).toEqual({ connections: 0, sessions: 0 });
+  });
+
+  it('counts this window\'s own and unused sessions', () => {
+    useSessions.getState().upsert(info('mine', { tabId: 't_a' }), 't_a');
+    useSessions.setState({ sessions: { ...useSessions.getState().sessions, gone: info('gone', { orphan: true, connectionId: 'c_prod' }) } });
+    const { sessions } = useSessions.getState();
+    expect(connectionActivity('c_shop', sessions, () => undefined)).toEqual({ kind: 'session', sessions: 1 });
+    expect(activityCounts(sessions, { c_ora: { status: 'ready' } })).toEqual({ connections: 3, sessions: 2 });
+  });
+});
+
+// Cross-batch contract (B3): lastTxEnd records every transaction this window ends.
+describe('lastTxEnd', () => {
+  beforeEach(async () => {
+    mock.ctx.engine.sessions.clear();
+    resetOwnSessionsForTests();
+    await useConnections.getState().load();
+    useSessions.setState({ sessions: {}, byTab: {}, lastTxEnd: null });
+  });
+
+  async function manualSession(tabId: string): Promise<SessionInfo> {
+    const s = await useSessions.getState().ensure(tabId, 'c_shop', null, 'manual');
+    // as if a statement had opened a transaction
+    useSessions.setState({ sessions: { ...useSessions.getState().sessions, [s.sessionId]: { ...s, txOpen: true } } });
+    return s;
+  }
+
+  it('is set by Commit and Roll back, with an increasing seq', async () => {
+    const s = await manualSession('t_a');
+    await useSessions.getState().commit('t_a');
+    const first = useSessions.getState().lastTxEnd!;
+    expect(first).toMatchObject({ sessionId: s.sessionId, kind: 'commit' });
+    await useSessions.getState().rollback('t_a');
+    const second = useSessions.getState().lastTxEnd!;
+    expect(second).toMatchObject({ sessionId: s.sessionId, kind: 'rollback' });
+    expect(second.seq).toBeGreaterThan(first.seq);
+  });
+
+  it('closing a session with an open transaction records a rollback; one without does not', async () => {
+    const s = await manualSession('t_a');
+    await useSessions.getState().close('t_a', true);
+    expect(useSessions.getState().lastTxEnd).toMatchObject({ sessionId: s.sessionId, kind: 'rollback' });
+
+    const before = useSessions.getState().lastTxEnd;
+    const idle = await useSessions.getState().ensure('t_b', 'c_shop', null, 'manual');
+    await useSessions.getState().closeSession(idle.sessionId, true);
+    expect(useSessions.getState().lastTxEnd).toBe(before);
+
+    const viaDisconnect = await manualSession('t_b');
+    await useSessions.getState().closeConnection('c_shop', true);
+    expect(useSessions.getState().lastTxEnd).toMatchObject({ sessionId: viaDisconnect.sessionId, kind: 'rollback' });
+  });
+
+  it('another window\'s transaction is never recorded (Disconnect leaves it open)', async () => {
+    useSessions.setState({ sessions: { liveTx: info('liveTx', { orphan: false, txOpen: true }) } });
+    await useSessions.getState().closeConnection('c_shop', true);
+    expect(useSessions.getState().lastTxEnd).toBeNull();
   });
 });

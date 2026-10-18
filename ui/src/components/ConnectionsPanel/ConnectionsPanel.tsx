@@ -55,7 +55,9 @@ export function ConnectionsPanel() {
   }, [sessions, tabOf]);
 
   const groups = useMemo(() => {
-    // "Connected" = an open session or a loaded catalog (the explorer dot and the status bar use the same rule).
+    // "Connected" = a session of this window or a loaded catalog, as for the explorer dot and the status bar
+    // (connectionActivity / activityCounts). Groups list the sessions of open tabs; unused ones are listed apart, and
+    // another window's sessions only in their own group below: they never make this window connected (logic-r2-01).
     const ready = Object.entries(catalogConns).filter(([, c]) => c.status === 'ready').map(([cid]) => cid);
     const ids = new Set<string>([...Object.values(sessions).filter((s) => tabOf.has(s.sessionId)).map((s) => s.connectionId), ...ready]);
     return [...ids]
@@ -64,7 +66,8 @@ export function ConnectionsPanel() {
       .sort((a, b) => a.conn!.name.localeCompare(b.conn!.name));
   }, [sessions, catalogConns, connections, tabOf]);
 
-  const total = Object.keys(sessions).length;
+  // This window's sessions (its tabs' and the unused ones it may close); another window's have their own count.
+  const total = Object.values(sessions).filter((s) => s.state !== 'closed' && !isForeignSession(s)).length;
   const disconnectAll = commandView('connections.disconnectAll');
   const closeOrphans = commandView('sessions.closeOrphans');
 

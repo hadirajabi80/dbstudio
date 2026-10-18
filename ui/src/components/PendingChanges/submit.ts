@@ -234,6 +234,8 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
     // Inserts we could not identify are still saved; show them as typed.
     for (const ins of p.inserts) if (!fetchKeys.some((k) => k.ref === ins.id)) appended.push(ins.values);
     useEdits.getState().commit(ctx.gridKey, { patched, hidden: Object.keys(p.deletes).map(Number), appended });
+    // Saved rows that wait for the user's Commit: a Rollback of that transaction must flag this grid (features-r2-01).
+    if (leftOpen) useEdits.getState().noteSavedInTx(ctx.gridKey, sid, new Set(stmts.map((st) => st.ref)).size);
     return { ok: true, executed, error: null, issues: [], leftOpen };
   } catch (e) {
     const tail = await undo().catch(() => '');
@@ -247,9 +249,24 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
 async function rollbackToSavepoint(run: SqlRunner, sid: string, ctx: EditContext, source: { tabId: string; title: string }): Promise<string | null> {
   try {
     const r = await run(sid, rollbackToSavepointSql(ctx.dialect), [], { label: 'data', source, confirmedDestructive: true, skipHistory: true });
-    if (r.status === 'ok' && !r.error) return null;
-    // e.g. SQL Server ended the whole transaction on a severe error (XACT_ABORT, deadlock): there is nothing to restore.
-    if (r.txOpen === false) return 'The server rolled back the whole open transaction, including earlier uncommitted changes.';
+    if (r.status === 'ok' && !r.error) {
+      // SQLite keeps the savepoint on the stack after ROLLBACK TO: release it, or every failed save nests one more.
+      const release = releaseSavepointSql(ctx.dialect);
+      if (release) {
+        try {
+          await run(sid, release, [], { label: 'data', source, skipHistory: true });
+        } catch {
+          /* the savepoint is restored; a leftover savepoint is harmless */
+        }
+      }
+      return null;
+    }
+    // e.g. SQL Server ended the whole transaction on a severe error (XACT_ABORT, deadlock): there is nothing to restore,
+    // and rows other grids saved into that transaction are gone too.
+    if (r.txOpen === false) {
+      useEdits.getState().applyTxEnd({ sessionId: sid, kind: 'rollback' });
+      return 'The server rolled back the whole open transaction, including earlier uncommitted changes.';
+    }
     return `Could not roll back to the savepoint (${r.error?.message ?? r.status}): check the open transaction before committing.`;
   } catch (e) {
     return `Could not roll back to the savepoint (${e instanceof Error ? e.message : String(e)}): check the open transaction before committing.`;
