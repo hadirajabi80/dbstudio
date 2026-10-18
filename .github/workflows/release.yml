@@ -1,0 +1,122 @@
+name: Release
+
+# Push a tag like v0.1.0 (matching version.json) to build the Windows installer and the macOS DMGs/ZIPs on
+# their native runners and publish them as a GitHub Release. Tests run in ci.yml on every push to main.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)publish, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            desktop/package-lock.json
+      - name: Check tag matches version.json
+        run: |
+          $v = (Get-Content -Raw version.json | ConvertFrom-Json).version
+          if ("v$v" -ne $env:TAG) { throw "Tag $env:TAG does not match version.json ($v)" }
+      - name: Install
+        run: |
+          npm ci --prefix ui
+          npm ci --prefix desktop
+      - name: Build installer
+        run: ./scripts/build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: desktop/dist/DbStudio-Setup-*.exe
+          if-no-files-found: error
+
+  macos:
+    name: macOS DMG (arm64 + x64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            desktop/package-lock.json
+      - name: Install
+        run: |
+          npm ci --prefix ui
+          npm ci --prefix desktop
+      # Ad-hoc signed unless the repository defines these secrets (Developer ID .p12 as base64, plus notarization).
+      - name: Build DMG + ZIP
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: |
+            desktop/dist/DbStudio-*-mac-*.dmg
+            desktop/dist/DbStudio-*-mac-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: ls -la artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: DbStudio ${{ env.TAG }}
+          body_path: docs/release-notes/${{ env.TAG }}.md
+          files: artifacts/*
+          fail_on_unmatched_files: true
