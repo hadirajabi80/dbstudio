@@ -324,8 +324,10 @@ describe('large inputs', () => {
     const median = times.sort((a, b) => a - b)[2];
     // The 150 ms budget (PLAN-M1.5 1.2) is enforced by `npm run test:intel` (node environment). The app suite
     // (`npm test`, jsdom, every package in parallel) also picks this file up; there it only guards against
-    // pathological regressions.
-    const budget = typeof document === 'undefined' ? 150 : 1000;
+    // pathological regressions. Shared CI runners are 2-4x slower than a developer machine and their timing is
+    // noisy, so CI only fails on a clear (4x) regression; the 150 ms budget is checked locally.
+    const onCi = typeof process !== 'undefined' && !!process.env.CI;
+    const budget = typeof document === 'undefined' ? (onCi ? 600 : 150) : 1000;
     expect(median).toBeLessThan(budget);
   });
 });

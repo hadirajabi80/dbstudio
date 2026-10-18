@@ -160,9 +160,17 @@ jobs:
       - name: Desktop install
         working-directory: desktop
         run: npm ci
+      # On failure, the last lines of the output also become annotations (readable without downloading logs).
       - name: Desktop tests (type-check, lifecycle, platform, Electron smoke)
         working-directory: desktop
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee desktop-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "not ok|Error|error|failed|✖|expected|actual" desktop-test.log | tail -n 10 | while IFS= read -r line; do echo "::error title=desktop test::$line"; done
+          fi
+          exit "$status"
 
       # ---- package ----------------------------------------------------------------------------
       # Ad-hoc signed unless the repository defines these secrets (Developer ID .p12 as base64, plus notarization).
