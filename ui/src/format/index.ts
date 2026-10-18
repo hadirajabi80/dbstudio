@@ -2,9 +2,13 @@
 // the intel lexer. Pure TypeScript: no React, Monaco or DOM.
 //
 // Safety: the document is cut into top-level chunks (statements with their terminators, GO / `/` lines). Each chunk
-// is laid out and then re-lexed; unless the token sequence is identical (letter case of words aside) and every
-// comment is unchanged, the chunk is emitted verbatim and a warning is returned. Chunks with unterminated strings,
-// comments or quoted identifiers, unbalanced parentheses or unclosed blocks are emitted verbatim as well.
+// is laid out and then re-lexed; unless the token sequence is identical (letter case of words aside, a `;` may move
+// before the comments right in front of it, block comment continuation lines may be re-indented) and every comment
+// is otherwise unchanged, the chunk is emitted verbatim and a warning is returned. Chunks with unterminated strings,
+// comments or quoted identifiers, unbalanced parentheses, CASE without END or unclosed blocks are emitted verbatim
+// as well, but only up to the next statement the formatter can resynchronise on (a `;` or a statement keyword
+// starting a line outside the statement's open parentheses, never inside a routine body), so one broken statement
+// does not leave the rest of the document unformatted.
 import type { Dialect, Token } from '../intel/types';
 import { getSpec } from '../intel/dialect';
 import { tokenize } from '../intel/lexer/lexer';
@@ -12,6 +16,10 @@ import { splitStatements } from '../intel/split/splitter';
 import { countNewlines, prepareTokens } from './comments';
 import { Layout } from './layout';
 import { applyCase, resolveFormatOptions, type FormatOptions } from './options';
+import type { FormatRules } from './rules/common';
+import { plsqlRules } from './rules/plsql';
+import { sqliteRules } from './rules/sqlite';
+import { tsqlRules } from './rules/tsql';
 
 export { DEFAULT_FORMAT_OPTIONS, resolveFormatOptions, applyCase } from './options';
 export type { FormatOptions, CaseStyle } from './options';
@@ -101,17 +109,148 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
   return chunks;
 }
 
+const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules };
+
+/**
+ * Tokens in the order the safety check compares them: `eof` dropped and every `;` moved before the comments right in
+ * front of it (the layout writes `t; -- note` for `t -- note⏎;`).
+ */
+export function canonicalTokens(tokens: readonly Token[]): Token[] {
+  const out: Token[] = [];
+  for (const t of tokens) {
+    if (t.kind === 'eof') continue;
+    if (t.kind === 'punct' && t.text === ';') {
+      let i = out.length;
+      while (i > 0 && out[i - 1].kind === 'comment') i--;
+      if (i > 0 && i < out.length) {
+        out.splice(i, 0, t);
+        continue;
+      }
+    }
+    out.push(t);
+  }
+  return out;
+}
+
+/** Comment text as compared by the safety check: block comment continuation lines without their indentation. */
+export function commentKey(text: string): string {
+  return text.indexOf('\n') < 0 ? text : text.split('\n').map((l, i) => (i ? l.replace(/^[ \t]+/, '') : l)).join('\n');
+}
+
 function sameTokens(a: Token[], b: Token[]): boolean {
-  const x = a.filter((t) => t.kind !== 'eof'), y = b.filter((t) => t.kind !== 'eof');
+  const x = canonicalTokens(a), y = canonicalTokens(b);
   if (x.length !== y.length) return false;
   for (let i = 0; i < x.length; i++) {
     const p = x[i], q = y[i];
     if (p.kind !== q.kind) return false;
     if (p.kind === 'keyword' || p.kind === 'ident' || p.kind === 'batchSep' || p.kind === 'op') {
       if (p.upper !== q.upper) return false;
+    } else if (p.kind === 'comment') {
+      if (commentKey(p.text) !== commentKey(q.text)) return false;
     } else if (p.text !== q.text) return false;
   }
   return true;
+}
+
+const ROUTINE_KINDS = new Set(['PROCEDURE', 'PROC', 'FUNCTION', 'TRIGGER', 'PACKAGE', 'TYPE']);
+const ROUTINE_MODIFIERS = new Set(['OR', 'ALTER', 'REPLACE', 'EDITIONABLE', 'NONEDITIONABLE', 'TEMP', 'TEMPORARY', 'DEFINER', 'NO', 'FORCE']);
+/** `END IF`, `END LOOP` … close a PL/SQL control structure that was not opened by BEGIN/CASE. */
+const END_SUFFIX_NOT_BLOCK = new Set(['IF', 'LOOP', 'WHILE', 'REPEAT']);
+
+const word = (t: Token | undefined): string | null => (t && (t.kind === 'keyword' || t.kind === 'ident') ? t.upper : null);
+
+/**
+ * Context of every token of a chunk (index i - c.a): `nested` inside parentheses opened in the chunk, `body` inside
+ * the body of a routine the chunk creates (CREATE [OR ALTER | OR REPLACE] PROCEDURE | FUNCTION | TRIGGER | PACKAGE |
+ * TYPE BODY … after its AS / IS / BEGIN). T-SQL routine bodies run to the end of the batch; PL/SQL and SQLite bodies
+ * end at the END that closes their outermost block.
+ */
+function tokenContext(tokens: Token[], c: Chunk, dialect: Dialect): { nested: boolean[]; body: boolean[] } {
+  const nested: boolean[] = [];
+  const body: boolean[] = [];
+  let depth = 0;
+  /** 0 = no routine, 1 = routine header seen (waiting for AS/IS/BEGIN), 2 = in its body. */
+  let routine = 0;
+  let blocks = 0;
+  let opened = false;
+  let skipNext = false;
+  const next = (i: number): Token | undefined => {
+    for (let k = i + 1; k < c.b; k++) if (tokens[k].kind !== 'comment') return tokens[k];
+    return undefined;
+  };
+  for (let i = c.a; i < c.b; i++) {
+    const t = tokens[i];
+    nested.push(depth > 0);
+    // The header (CREATE … up to AS/IS/BEGIN) is part of the routine too: a cut there would split its definition.
+    body.push(routine !== 0);
+    if (t.kind === 'comment') continue;
+    if (t.kind === 'punct' && t.text === '(') { depth++; continue; }
+    if (t.kind === 'punct' && t.text === ')') { depth--; continue; }
+    const w = word(t);
+    if (!w || depth > 0) continue;
+    if (skipNext) { skipNext = false; continue; }
+    if (routine === 0 && w === 'CREATE') {
+      // CREATE [OR ALTER | OR REPLACE] [EDITIONABLE …] PROCEDURE | FUNCTION | TRIGGER | PACKAGE [BODY] | TYPE BODY
+      let k = i + 1;
+      while (k < c.b && (tokens[k].kind === 'comment' || ROUTINE_MODIFIERS.has(word(tokens[k]) ?? ''))) k++;
+      const kind = word(tokens[k]);
+      if (kind && ROUTINE_KINDS.has(kind) && (kind !== 'TYPE' || word(next(k)) === 'BODY')) routine = 1;
+      continue;
+    }
+    if (routine === 1 && (w === 'AS' || w === 'IS' || w === 'BEGIN')) {
+      routine = 2;
+      // A package (spec or body) is closed by its own END; a procedure by the END of its BEGIN block.
+      opened = w === 'BEGIN';
+      blocks = w === 'BEGIN' ? 1 : 0;
+      continue;
+    }
+    if (routine !== 2 || dialect === 'tsql') continue;
+    if (w === 'BEGIN' || w === 'CASE') {
+      blocks++;
+      opened = true;
+    } else if (w === 'END') {
+      const after = word(next(i));
+      if (after && END_SUFFIX_NOT_BLOCK.has(after)) { skipNext = true; continue; }
+      if (after === 'CASE') skipNext = true; // END CASE closes one CASE
+      blocks--;
+      if (opened && blocks <= 0) routine = 0;
+    }
+  }
+  return { nested, body };
+}
+
+/**
+ * Where a chunk the layout could not handle may be cut so the rest is formatted on its own: after a `;`, or before a
+ * statement keyword at the start of a line (with the comments on the lines just above it). The piece after the cut
+ * must start with a statement keyword that is either on the `;`'s line or in column 1, so the indented statements of
+ * a broken block are not pulled out of it. A line-start keyword only counts outside the parentheses opened in the
+ * chunk, and nothing inside a routine body is a cut point: an unbalanced subquery or a broken statement of a
+ * procedure keeps the whole statement verbatim up to the next top-level `;` (or the batch end). Returns the token
+ * index of the cut, or null.
+ */
+function resyncPoint(tokens: Token[], text: string, c: Chunk, dialect: Dialect): number | null {
+  const starts = STATEMENT_RULES[dialect].statementStarts;
+  const isStart = (t: Token | undefined) => !!t && (t.kind === 'keyword' || t.kind === 'ident') && starts.has(t.upper);
+  const ctx = tokenContext(tokens, c, dialect);
+  for (let j = c.a + 1; j < c.b; j++) {
+    const prev = tokens[j - 1], t = tokens[j];
+    if (ctx.body[j - c.a]) continue;
+    if (prev.kind === 'punct' && prev.text === ';') {
+      let k = j;
+      while (k < c.b && tokens[k].kind === 'comment' && countNewlines(text, tokens[k - 1].end, tokens[k].start) === 0) k++;
+      if (k >= c.b) return null;
+      let s = k;
+      while (s < c.b && tokens[s].kind === 'comment') s++;
+      const first = tokens[s];
+      if (isStart(first) && (countNewlines(text, prev.end, first.start) === 0 || first.col === 1)) return k;
+      continue;
+    }
+    if (t.kind === 'comment' || ctx.nested[j - c.a] || !isStart(t) || t.col !== 1 || countNewlines(text, prev.end, t.start) === 0) continue;
+    let k = j;
+    while (k - 1 > c.a && tokens[k - 1].kind === 'comment' && countNewlines(text, tokens[k - 2].end, tokens[k - 1].start) > 0) k--;
+    return k;
+  }
+  return null;
 }
 
 function eolOf(text: string): string {
@@ -152,22 +291,36 @@ export function formatSql(text: string, dialect: Dialect, options?: Partial<Form
     if (!sameTokens(tokenize(r.text, spec), tokens.slice(c.a, c.b))) return { out: src, problem: 'layout check failed' };
     return { out: r.text, problem: null };
   };
+  const warn = (c: Chunk, problem: string) => warnings.push({ line: tokens[c.a].line, message: `Statement at line ${tokens[c.a].line} left unformatted: ${problem}.` });
+  /** Lay out a chunk; when it fails, keep the broken statement verbatim and resynchronise on what follows it. */
+  const format = (c: Chunk): void => {
+    const r = layout(c);
+    if (!r.problem) {
+      emit(c, r.out);
+      return;
+    }
+    if (c.sub && c.sub.length >= 2) {
+      for (const s2 of c.sub) format(s2);
+      return;
+    }
+    const cut = resyncPoint(tokens, text, c, dialect);
+    if (cut === null) {
+      warn(c, r.problem);
+      emit(c, r.out);
+      return;
+    }
+    const head: Chunk = { a: c.a, b: cut, sep: false };
+    const h = layout(head);
+    if (h.problem) warn(head, h.problem);
+    emit(head, h.out);
+    format({ a: cut, b: c.b, sep: false });
+  };
   for (const c of chunks) {
     if (c.sep) {
       emit(c, tokens.slice(c.a, c.b).map((t, i) => (i === 0 ? applyCase(t.text, opts.keywordCase) : ' ' + t.text)).join(''));
       continue;
     }
-    const r = layout(c);
-    if (!r.problem || !c.sub || c.sub.length < 2) {
-      if (r.problem) warnings.push({ line: tokens[c.a].line, message: `Statement at line ${tokens[c.a].line} left unformatted: ${r.problem}.` });
-      emit(c, r.out);
-      continue;
-    }
-    for (const s2 of c.sub) {
-      const r2 = layout(s2);
-      if (r2.problem) warnings.push({ line: tokens[s2.a].line, message: `Statement at line ${tokens[s2.a].line} left unformatted: ${r2.problem}.` });
-      emit(s2, r2.out);
-    }
+    format(c);
   }
   let result = parts.join('');
   if (result && /\r?\n[ \t]*$/.test(text) && !/\n$/.test(result)) result += eol;
@@ -183,14 +336,13 @@ export function formatSql(text: string, dialect: Dialect, options?: Partial<Form
 }
 
 function mapTokens(a: Token[], b: Token[]): { from: number[]; to: number[] } {
-  const from: number[] = [], to: number[] = [];
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    if (a[i].kind === 'eof') break;
-    from.push(a[i].start);
-    to.push(b[i].start);
-  }
-  return { from, to };
+  // Pair tokens in compare order (a `;` may have moved before a comment), then sort by input offset.
+  const x = canonicalTokens(a), y = canonicalTokens(b);
+  const n = Math.min(x.length, y.length);
+  const pairs: [number, number][] = [];
+  for (let i = 0; i < n; i++) pairs.push([x[i].start, y[i].start]);
+  pairs.sort((p, q) => p[0] - q[0]);
+  return { from: pairs.map((p) => p[0]), to: pairs.map((p) => p[1]) };
 }
 
 /** Map an offset in the input to the corresponding offset in the formatted text (cursor preservation). */

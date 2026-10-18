@@ -8,6 +8,7 @@ import { isRunning, type ExecutionState } from '../../store/resultsReducer';
 import { useTabs } from '../../store/tabs';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { ProviderIcon } from '../common/icons';
+import { pluralWord } from '../common/text';
 import { ResultsPane } from '../ResultsPane/ResultsPane';
 import type { TabViewProps } from '../layout/tabViews';
 
@@ -18,7 +19,7 @@ function summaryOf(e: ExecutionState | undefined): { status: 'running' | 'ok' | 
   if (e.status === 'cancelled') return { status: 'cancelled', text: 'cancelled' };
   const rows = e.resultSets.reduce((n, r) => n + r.rowCount, 0);
   const parts = [];
-  if (e.resultSets.length) parts.push(`${formatCount(rows)} row${rows === 1 ? '' : 's'}`);
+  if (e.resultSets.length) parts.push(`${formatCount(rows)} ${pluralWord(rows, 'row')}`);
   if (e.rowsAffected) parts.push(`${formatCount(e.rowsAffected)} affected`);
   if (e.elapsedMs !== null) parts.push(formatDuration(e.elapsedMs));
   return { status: 'ok', text: parts.join(' · ') || 'ok' };

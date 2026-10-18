@@ -2,11 +2,11 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConnections } from '../../store/connections';
-import { useMockEngine } from '../../test/mockServer';
+import { installMockEngine } from '../../test/mockServer';
 import { CONNECTION_PALETTE } from '../../theme/connColors';
 import { ConnectionDialog } from './ConnectionDialog';
 
-const mock = useMockEngine();
+const mock = installMockEngine();
 
 async function loadStores() {
   useConnections.setState({ providers: [], connections: [], loaded: false, error: null });
@@ -26,7 +26,10 @@ describe('ConnectionDialog', () => {
     expect(screen.getByLabelText('User')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText('Authentication'), 'windows');
+    // the styled Select (user-04): open it, then pick the option like a user does
+    await user.click(screen.getByLabelText('Authentication'));
+    await user.click(screen.getAllByRole('option').find((o) => o.getAttribute('data-value') === 'windows')!);
+    expect(screen.getByLabelText('Authentication')).toHaveAttribute('data-value', 'windows');
     expect(screen.queryByLabelText('User')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
     // bool field rendered as a checkbox with its label, default from the spec
@@ -75,13 +78,33 @@ describe('ConnectionDialog', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('inventory');
     await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await user.type(screen.getByLabelText('Folder'), 'Local');
-    await user.click(screen.getByRole('checkbox', { name: /Read-only/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Read-only \(DbStudio blocks statements that change data\)$/ }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const saved = mock.ctx.engine.connections.find((c) => c.name === 'inventory');
     expect(saved).toMatchObject({ providerId: 'sqlite', color: CONNECTION_PALETTE.find((p) => p.id === 'blue')!.hex, folder: 'Local', readOnly: true, props: { path: 'C:\\data\\inventory.db' } });
     expect(useConnections.getState().connections.some((c) => c.name === 'inventory')).toBe(true);
+  });
+
+  it('validates required fields before Test (no engine call) and marks them for assistive tech', async () => {
+    const user = userEvent.setup();
+    render(<ConnectionDialog state={{ mode: 'new', providerId: 'sqlite' }} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /Test connection/ }));
+    const field = screen.getByLabelText(/Database file/);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveAccessibleDescription('Database file is required');
+    expect(mock.hits('/connections/test', 'POST')).toHaveLength(0);
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it('uses one provider naming set and keeps the two SQLite read-only options apart', () => {
+    render(<ConnectionDialog state={{ mode: 'new', providerId: 'sqlite' }} onClose={() => {}} />);
+    expect(screen.getByRole('option', { name: 'SQL Server' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Oracle' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Open file read-only' })).toBeInTheDocument();
+    // design-r1-05: the engine guard has the one "Read-only" label every provider shows; the SQLite file mode is its own field
+    expect(screen.getByRole('checkbox', { name: /^Read-only \(DbStudio blocks statements that change data\)$/ })).toBeInTheDocument();
   });
 
   it('edits an existing connection keeping the stored password', async () => {

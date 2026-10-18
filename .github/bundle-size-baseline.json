@@ -1,0 +1,6 @@
+{
+  "gzipBytes": 1426124,
+  "rawBytes": 5528394,
+  "files": 7,
+  "note": "Measured from the M1 UI build at commit bfaac37; PLAN-M1.5 5.5 allows +600 KB gzipped over this. Re-measure only from that commit (see .github/scripts/bundle-size.mjs), never from the current tree."
+}

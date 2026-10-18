@@ -90,13 +90,47 @@ public sealed class SqliteScripterGoldenTests
     }
 
     [Fact]
+    public void Rebuild_OfAutoincrementTable_KeepsTheSequence_Golden()
+    {
+        var t = new TableModel
+        {
+            Name = "Customers",
+            Columns = [new TableColumnModel { Id = "Id", Name = "Id", Type = "INTEGER", Nullable = false, Autoincrement = true }, new TableColumnModel { Id = "Phone", Name = "Phone", Type = "TEXT" }],
+            PrimaryKey = new PrimaryKeyModel { Name = "PK_Customers", Columns = ["Id"] },
+        };
+        var desired = t with { Columns = t.Columns.Select(c => c.Name == "Phone" ? c with { Type = "VARCHAR(40)" } : c).ToList() };
+        var script = Scripter.ScriptTable(t, desired, new DdlScriptContext("3.46.1", "main", []));
+        Assert.True(script.RebuildRequired);
+        var sql = script.Statements.Select(s => s.Sql).ToList();
+        var keep = sql.FindIndex(s => s.StartsWith("UPDATE \"sqlite_sequence\" SET seq = MAX(seq, COALESCE((SELECT seq FROM \"sqlite_sequence\" WHERE name = 'Customers'), 0))", StringComparison.Ordinal));
+        var insert = sql.FindIndex(s => s.StartsWith("INSERT INTO \"sqlite_sequence\"", StringComparison.Ordinal));
+        var drop = sql.IndexOf("DROP TABLE \"Customers\"");
+        Assert.True(insert >= 0 && insert < keep && keep < drop, string.Join("\n", sql)); // read while the old table still exists
+        Golden.Match("sqlite_rebuild_autoincrement.sql", Golden.Render(script));
+
+        // No AUTOINCREMENT, no sequence handling.
+        var plain = t with { Columns = t.Columns.Select(c => c with { Autoincrement = false }).ToList() };
+        var plainScript = Scripter.ScriptTable(plain, plain with { Columns = desired.Columns.Select(c => c with { Autoincrement = false }).ToList() }, DdlScriptContext.Default);
+        Assert.DoesNotContain(plainScript.Statements, s => s.Sql.Contains("sqlite_sequence", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Views_DropAndCreate()
     {
+        // Renamed: CREATE under the new name (never dropped first, so an existing object of that name fails), then drop the old.
         var s = Scripter.ScriptView(new ViewDefinition(null, "V2", "V1", "SELECT 1 AS a;", new ViewOptions(CheckOption: true)), DdlScriptContext.Default);
         Assert.True(s.Transactional);
-        Assert.Equal(["DROP VIEW IF EXISTS \"V1\"", "DROP VIEW IF EXISTS \"V2\"", "CREATE VIEW \"V2\" AS\nSELECT 1 AS a"], s.Statements.Select(x => x.Sql));
+        Assert.Equal(["CREATE VIEW \"V2\" AS\nSELECT 1 AS a", "DROP VIEW IF EXISTS \"V1\""], s.Statements.Select(x => x.Sql));
         Assert.Single(s.Warnings);
         Golden.Match("sqlite_view_rename.sql", Golden.Render(s));
+
+        // New view: a plain CREATE.
+        var created = Scripter.ScriptView(new ViewDefinition(null, "V2", null, "SELECT 1 AS a", new ViewOptions()), DdlScriptContext.Default);
+        Assert.Equal(["CREATE VIEW \"V2\" AS\nSELECT 1 AS a"], created.Statements.Select(x => x.Sql));
+
+        // Editing the same view (case-insensitive): SQLite has no OR REPLACE, so it is dropped and recreated.
+        var edited = Scripter.ScriptView(new ViewDefinition(null, "V1", "v1", "SELECT 2 AS a", new ViewOptions()), DdlScriptContext.Default);
+        Assert.Equal(["DROP VIEW IF EXISTS \"v1\"", "CREATE VIEW \"V1\" AS\nSELECT 2 AS a"], edited.Statements.Select(x => x.Sql));
     }
 
     [Theory]
@@ -273,6 +307,36 @@ public sealed class SqliteDesignerRoundTripTests : IAsyncLifetime
         await ApplyAsync(customers, desired, expectRebuild: true);
         Assert.Equal(SampleDatabase.OrderCount, await ScalarAsync("SELECT count(*) FROM Orders o JOIN Customers c ON c.Id = o.CustomerId"));
         Assert.Equal(SampleDatabase.CustomerCount + 1, await ScalarAsync("INSERT INTO Customers (FirstName, LastName, Email, CountryId) VALUES ('a', 'b', 'new@example.com', 1); SELECT max(Id) FROM Customers"));
+    }
+
+    [Fact]
+    public async Task Rebuild_OfAutoincrementTable_KeepsTheCounter_SoDeletedIdsAreNotReused()
+    {
+        // Ids above max(Id) were handed out and deleted: AUTOINCREMENT must never hand them out again.
+        var top = await ScalarAsync("SELECT max(Id) FROM Customers");
+        await ScalarAsync("DELETE FROM OrderLines WHERE OrderId IN (SELECT Id FROM Orders WHERE CustomerId = (SELECT max(Id) FROM Customers)); DELETE FROM Orders WHERE CustomerId = (SELECT max(Id) FROM Customers); UPDATE sqlite_sequence SET seq = seq + 50 WHERE name = 'Customers'; DELETE FROM Customers WHERE Id = (SELECT max(Id) FROM Customers); SELECT 0");
+        var counter = await ScalarAsync("SELECT seq FROM sqlite_sequence WHERE name = 'Customers'");
+        Assert.True(counter >= top + 50);
+
+        var customers = await _db.ReadTableAsync(_profile, null, null, null, "Customers", CancellationToken.None);
+        var desired = customers with { Columns = customers.Columns.Select(c => c.Name == "Phone" ? c with { Type = "VARCHAR(40)" } : c).ToList() };
+        await ApplyAsync(customers, desired, expectRebuild: true);
+
+        Assert.Equal(counter, await ScalarAsync("SELECT seq FROM sqlite_sequence WHERE name = 'Customers'"));
+        Assert.Equal(0, await ScalarAsync("SELECT count(*) FROM sqlite_sequence WHERE name LIKE '%__new'"));
+        Assert.Equal(counter + 1, await ScalarAsync("INSERT INTO Customers (FirstName, LastName, Email, CountryId) VALUES ('a', 'b', 'next@example.com', 1); SELECT max(Id) FROM Customers"));
+    }
+
+    [Fact]
+    public async Task Rebuild_OfEmptyAutoincrementTable_StillKeepsTheCounter()
+    {
+        await ScalarAsync("CREATE TABLE Tickets (Id INTEGER CONSTRAINT PK_Tickets PRIMARY KEY AUTOINCREMENT NOT NULL, Title TEXT); "
+                          + "INSERT INTO Tickets (Title) VALUES ('a'), ('b'), ('c'); DELETE FROM Tickets; SELECT 0");
+        var tickets = await _db.ReadTableAsync(_profile, null, null, null, "Tickets", CancellationToken.None);
+        var desired = tickets with { Columns = tickets.Columns.Select(c => c.Name == "Title" ? c with { Type = "VARCHAR(100)", Nullable = false, Default = "''" } : c).ToList() };
+        await ApplyAsync(tickets, desired, expectRebuild: true);
+        Assert.Equal(3, await ScalarAsync("SELECT seq FROM sqlite_sequence WHERE name = 'Tickets'"));
+        Assert.Equal(4, await ScalarAsync("INSERT INTO Tickets (Title) VALUES ('d'); SELECT max(Id) FROM Tickets"));
     }
 
     [Fact]

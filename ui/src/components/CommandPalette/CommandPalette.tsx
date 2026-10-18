@@ -1,10 +1,11 @@
-import { Command as CommandIcon, Search } from 'lucide-react';
+import { Command as CommandIcon, Database, LoaderCircle, Search, SquareChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { insertIntoActiveEditor, openObject, selectTop } from '../../app/actions';
-import { getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
+import { insertIntoActiveEditor, openObject, preloadCatalog, selectTop } from '../../app/actions';
+import { isMac } from '../../commands/keys';
+import { advertisedShortcuts, getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
 import type { ObjectTarget } from '../../commands/types';
 import { useCommandsVersion } from '../../commands/useCommands';
-import { fuzzyMatchLower, type FuzzyResult } from '../../lib/fuzzy';
+import type { FuzzyResult } from '../../lib/fuzzy';
 import { isTabular, OBJECT_TYPE_SINGULAR, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
 import { dialectOf, useConnections } from '../../store/connections';
@@ -12,10 +13,12 @@ import { getActiveConsole } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
 import { ColumnIcon, ObjectIcon } from '../common/icons';
 import { ColorDot } from '../common/ConnectionBadge';
+import { useRestoreFocus } from '../common/focus';
 import { useExplorer } from '../Explorer/explorerStore';
 import { Kbd } from '../Shortcuts/Kbd';
 import { commandIcon } from '../layout/commandMenu';
 import { collectEntries, parseObjectQuery, searchObjects, type IndexEntry } from './objectIndex';
+import { paletteMatch, rankPalette, type PaletteMatch } from './paletteScore';
 
 const MRU_KEY = 'dbstudio.palette.mru.v1';
 
@@ -54,6 +57,8 @@ interface CmdItem {
   title: string;
   category: string;
   shortcut?: string;
+  /** Advertised alternatives (Format SQL: Ctrl+Alt+L next to Shift+Alt+F). */
+  altShortcuts?: string[];
   icon?: string;
   recent: boolean;
   match: FuzzyResult;
@@ -64,7 +69,16 @@ interface ObjItem {
   entry: IndexEntry;
   match: FuzzyResult;
 }
-type Item = CmdItem | ObjItem;
+/** Go-to mode: a connection whose catalog is not loaded yet (its objects cannot be searched until it is). */
+interface LoadItem {
+  kind: 'load';
+  key: string;
+  connectionId: string;
+  name: string;
+  color: string | null;
+  loading: boolean;
+}
+type Item = CmdItem | ObjItem | LoadItem;
 
 function targetOf(e: IndexEntry): ObjectTarget {
   return { kind: 'object', connectionId: e.connectionId, database: e.database, ref: e.ref };
@@ -108,8 +122,12 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const dbs = useCatalog((s) => s.dbs);
+  const catalogConns = useCatalog((s) => s.conns);
   const connections = useConnections((s) => s.connections);
   const version = useCommandsVersion();
+  const paletteRef = useRef<HTMLDivElement>(null);
+  // Esc / choosing gives the focus back to where the palette was opened from (never to <body>).
+  useRestoreFocus(open, paletteRef);
 
   useEffect(() => {
     if (open) {
@@ -126,37 +144,50 @@ export function CommandPalette() {
   const groups = useMemo(() => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c') : []), [open, objectMode, dbs, parsed.prefix]);
   const connName = useMemo(() => new Map(connections.map((c) => [c.id, c])), [connections]);
   const loadedCount = useMemo(() => groups.reduce((n, g) => n + g.length, 0), [groups]);
+  // Connections the go-to index cannot see yet: offered as "Load catalog of X" rows (logic-24 f).
+  const unloaded = useMemo(() => {
+    if (!open || !objectMode) return [];
+    const loaded = new Set(Object.values(dbs).filter((d) => Object.keys(d.loaded).length > 0).map((d) => d.connectionId));
+    return connections.filter((c) => !loaded.has(c.id));
+  }, [open, objectMode, dbs, connections]);
 
   const items = useMemo<Item[]>(() => {
     if (!open) return [];
     if (objectMode) {
-      return searchObjects(groups, text, 200).map((h) => ({
+      const hits: Item[] = searchObjects(groups, text, 200).map((h) => ({
         kind: 'object', key: `${h.entry.connectionId}|${h.entry.database}|${h.entry.schema}|${h.entry.type}|${h.entry.name}`, entry: h.entry, match: h.match,
       }));
+      const p = parsed.pattern.toLowerCase();
+      // Unloaded connections come last; with a query, those whose name matches first among them.
+      const loads = unloaded
+        .map((c): LoadItem => ({ kind: 'load', key: `load|${c.id}`, connectionId: c.id, name: c.name, color: c.color, loading: catalogConns[c.id]?.status === 'loading' }))
+        .sort((a, b) => Number(!!p && b.name.toLowerCase().includes(p)) - Number(!!p && a.name.toLowerCase().includes(p)) || a.name.localeCompare(b.name));
+      return [...hits, ...loads];
     }
-    const p = text.trim().toLowerCase();
+    const p = text.trim();
     const mru = loadMru();
-    const out: CmdItem[] = [];
+    const hits: { item: CmdItem; match: PaletteMatch }[] = [];
     for (const c of listCommands()) {
       if (c.palette === false) continue;
       if (!isEnabled(c.id)) continue;
-      const label = `${c.category}: ${c.title}`;
-      let m = fuzzyMatchLower(p, label, label.toLowerCase());
-      if (!m && c.keywords && p) {
-        const kw = fuzzyMatchLower(p, c.keywords, c.keywords.toLowerCase());
-        if (kw) m = { score: kw.score - 200, positions: [] };
-      }
+      // Word-start or contiguous matches only; title > keywords > category (design-20).
+      const m = paletteMatch(p, c);
       if (!m) continue;
       const recent = mru.indexOf(c.id);
-      out.push({
-        kind: 'command', key: c.id, id: c.id, title: c.title, category: c.category, shortcut: c.shortcut, icon: c.icon,
-        recent: recent >= 0, match: { score: m.score + (recent >= 0 ? (p ? 30 : 1000 - recent) : 0), positions: m.positions.map((i) => i - c.category.length - 2) },
+      const score = m.score + (recent >= 0 ? (p ? 30 : 1000 - recent) : 0);
+      hits.push({
+        item: {
+          kind: 'command', key: c.id, id: c.id, title: c.title, category: c.category, shortcut: c.shortcut, altShortcuts: advertisedShortcuts(c).slice(1), icon: c.icon,
+          recent: recent >= 0, match: { score, positions: m.positions },
+        },
+        match: { ...m, score },
       });
     }
-    out.sort((a, b) => b.match.score - a.match.score || a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
-    return out;
+    return rankPalette(hits, p)
+      .map((h) => h.item)
+      .sort((a, b) => b.match.score - a.match.score || a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, objectMode, text, groups, version]);
+  }, [open, objectMode, text, groups, version, unloaded, catalogConns]);
 
   useEffect(() => {
     listRef.current?.querySelector('.palette-item.selected')?.scrollIntoView?.({ block: 'nearest' });
@@ -167,6 +198,12 @@ export function CommandPalette() {
   const choose = (i: number, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }) => {
     const it = items[i];
     if (!it) return;
+    if (it.kind === 'load') {
+      // Stay open: the connection's objects join the list as soon as its catalog arrives.
+      if (!it.loading) void preloadCatalog(it.connectionId, null).catch((err) => toast('error', `Could not load the catalog of ${it.name}`, String(err)));
+      inputRef.current?.focus();
+      return;
+    }
     close();
     if (it.kind === 'command') {
       pushMru(it.id);
@@ -186,16 +223,23 @@ export function CommandPalette() {
     else if (e.key === 'Enter') { e.preventDefault(); choose(sel, e); }
   };
 
-  const noCatalog = objectMode && loadedCount === 0;
+  const noCatalog = objectMode && loadedCount === 0 && unloaded.length === 0;
   const placeholder = objectMode
     ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · > commands'
     : 'Type a command…  @ to go to an object';
 
   return (
     <div className="overlay palette-overlay" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={objectMode ? 'Go to object' : 'Command palette'}>
+      <div ref={paletteRef} className="palette" role="dialog" aria-modal="true" aria-label={objectMode ? 'Go to object' : 'Command palette'}>
         <div className="palette-input-row">
-          {objectMode ? <Search size={16} className="palette-input-icon" /> : <CommandIcon size={16} className="palette-input-icon" />}
+          {/* ⌘ means nothing on Windows: a prompt glyph there. */}
+          {objectMode ? (
+            <Search size={16} className="palette-input-icon" />
+          ) : isMac() ? (
+            <CommandIcon size={16} className="palette-input-icon" />
+          ) : (
+            <SquareChevronRight size={16} className="palette-input-icon" />
+          )}
           <input
             ref={inputRef}
             className="palette-input"
@@ -227,7 +271,29 @@ export function CommandPalette() {
             </div>
           )}
           {items.map((it, i) =>
-            it.kind === 'command' ? (
+            it.kind === 'load' ? (
+              <div
+                key={it.key}
+                id={`palette-opt-${i}`}
+                role="option"
+                aria-selected={i === sel}
+                className={`palette-item palette-load${i === sel ? ' selected' : ''}`}
+                onMouseMove={() => i !== sel && setSel(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  choose(i, e);
+                }}
+                title={`Load the catalog of ${it.name} so that its objects can be searched`}
+              >
+                <span className="palette-icon">{it.loading ? <LoaderCircle size={16} className="spin" /> : <Database size={16} strokeWidth={1.5} />}</span>
+                <span className="palette-label">{it.loading ? `Loading the catalog of ${it.name}…` : `Load catalog of ${it.name}`}</span>
+                <span className="palette-detail">not searched yet</span>
+                <span className="palette-conn">
+                  <ColorDot color={it.color} size={7} />
+                  {it.name}
+                </span>
+              </div>
+            ) : it.kind === 'command' ? (
               <div
                 key={it.key}
                 id={`palette-opt-${i}`}
@@ -246,7 +312,12 @@ export function CommandPalette() {
                   <Hl text={it.title} positions={it.match.positions.filter((p) => p >= 0)} />
                 </span>
                 {it.recent && !text && <span className="palette-detail">recently used</span>}
-                {it.shortcut && <Kbd shortcut={it.shortcut} className="palette-keys" />}
+                {it.shortcut && (
+                  <span className="palette-keys">
+                    <Kbd shortcut={it.shortcut} />
+                    {it.altShortcuts?.map((k) => <Kbd key={k} shortcut={k} />)}
+                  </span>
+                )}
               </div>
             ) : (
               <ObjectRow key={it.key} it={it} i={i} sel={sel} setSel={setSel} choose={choose} connName={connName} />

@@ -42,7 +42,7 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
   assert.equal(r.hasBridge, true);
   assert.deepEqual(r.keys, [
     'appVersion', 'getEngineInfo', 'loadWorkspace', 'onEngineRestarted', 'onMenuCommand', 'openExternal', 'platform',
-    'readTextFile', 'saveWorkspace', 'setTitle', 'showOpenDialog', 'showSaveDialog', 'writeTextFile',
+    'readTextFile', 'saveWorkspace', 'setTitle', 'setZoomFactor', 'showOpenDialog', 'showSaveDialog', 'writeTextFile',
   ]);
   assert.equal(r.platform, 'electron');
   // OS info outside the bridge contract (WP-K): window.dbstudioPlatform and <html class="platform-<os>">.

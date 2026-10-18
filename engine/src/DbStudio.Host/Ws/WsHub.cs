@@ -11,9 +11,11 @@ namespace DbStudio.Host.Ws;
 /// <summary>
 /// Single-socket fan-out of engine events (docs/PLAN.md 3.6, D-6). Clients must send <c>{"type":"auth","token":..}</c>
 /// as their first frame within 2 s (else closed with 4401); then they receive every event and may send
-/// <c>{"type":"ping"}</c> (answered with <c>pong</c>). Each client has its own ordered send queue.
+/// <c>{"type":"ping"}</c> (answered with <c>pong</c>). Each client has its own ordered send queue. The auth frame may carry
+/// the UI client id (<c>"clientId"</c>): while one of its sockets is open the client is live in <see cref="ClientPresence"/>,
+/// which decides when sessions it owns become orphaned (logic-08).
 /// </summary>
-public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPublisher
+public sealed class WsHub(EngineOptions options, ILogger<WsHub> log, ClientPresence presence) : IEventPublisher
 {
     public const WebSocketCloseStatus Unauthorized = (WebSocketCloseStatus)4401;
     private const int MaxQueuedFrames = 200_000;
@@ -78,12 +80,14 @@ public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPub
 
         using var socket = await ctx.WebSockets.AcceptWebSocketAsync();
         var ct = ctx.RequestAborted;
-        if (!await AuthenticateAsync(socket, ct)) return;
+        var (authenticated, clientId) = await AuthenticateAsync(socket, ct);
+        if (!authenticated) return;
 
         var client = new Client(Interlocked.Increment(ref _nextId), socket);
         Enqueue(client, Serialize(new AuthOkEvent()));
         _clients[client.Id] = client;
-        log.LogInformation("WebSocket client {Id} connected", client.Id);
+        if (clientId is not null) presence.Connected(clientId);
+        log.LogInformation("WebSocket client {Id} connected (ui client {ClientId})", client.Id, clientId ?? "-");
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var sender = SendLoopAsync(client, cts.Token);
@@ -101,11 +105,13 @@ public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPub
             client.Queue.Writer.TryComplete();
             await cts.CancelAsync();
             try { await sender; } catch { /* ignore */ }
+            if (clientId is not null) presence.Disconnected(clientId);
             log.LogInformation("WebSocket client {Id} disconnected", client.Id);
         }
     }
 
-    private async Task<bool> AuthenticateAsync(WebSocket socket, CancellationToken ct)
+    /// <returns>Whether the token matched, and the normalized UI client id of the auth frame (null when absent).</returns>
+    private async Task<(bool Ok, string? ClientId)> AuthenticateAsync(WebSocket socket, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(2));
@@ -118,7 +124,12 @@ public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPub
                 if (doc.RootElement.TryGetProperty("type", out var t) && t.GetString() == "auth"
                     && doc.RootElement.TryGetProperty("token", out var tok) && tok.ValueKind == JsonValueKind.String
                     && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(tok.GetString()!), _token))
-                    return true;
+                {
+                    var clientId = doc.RootElement.TryGetProperty("clientId", out var cid) && cid.ValueKind == JsonValueKind.String
+                        ? ClientPresence.Normalize(cid.GetString())
+                        : null;
+                    return (true, clientId);
+                }
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException or JsonException or WebSocketException)
@@ -137,7 +148,7 @@ public sealed class WsHub(EngineOptions options, ILogger<WsHub> log) : IEventPub
         {
             socket.Abort();
         }
-        return false;
+        return (false, null);
     }
 
     private async Task ReceiveLoopAsync(Client client, CancellationToken ct)

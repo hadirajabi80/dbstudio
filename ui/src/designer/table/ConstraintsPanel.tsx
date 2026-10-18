@@ -1,10 +1,11 @@
 // Keys & Indexes, Foreign Keys and Checks tabs of the table designer.
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Plus, Trash2 } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
+import { Select } from '../../components/common/Select';
 import type { CatalogSnapshot, DesignerFeatures, Dialect, ForeignKeyModel, ReferentialAction, TableModel } from '../../api/types';
 import { singularize } from '../../codegen/naming';
 import {
-  addCheck, addForeignKey, addIndex, addUnique, defaultConstraintName, referentialActions, removeCheck, removeForeignKey, removeIndex,
+  addCheck, addForeignKey, addIndex, addUnique, defaultConstraintName, defaultPkClustered, referentialActions, removeCheck, removeForeignKey, removeIndex,
   removeUnique, updateCheck, updateForeignKey, updateIndex, updateUnique,
 } from './model';
 
@@ -70,7 +71,7 @@ export function KeysPanel({ table, dialect, features, readOnly, onChange }: Prop
           onChange={(cols) =>
             onChange({
               ...table,
-              primaryKey: cols.length ? { name: pk?.name ?? null, columns: cols, clustered: pk?.clustered ?? dialect === 'tsql' } : null,
+              primaryKey: cols.length ? { name: pk?.name ?? null, columns: cols, clustered: pk?.clustered ?? defaultPkClustered(dialect, table) } : null,
               columns: table.columns.map((c) => (cols.includes(c.name) ? { ...c, nullable: false } : c)),
             })
           }
@@ -224,12 +225,20 @@ export function ForeignKeysPanel({ table, dialect, readOnly, catalog, onChange }
             <ColumnChips label="Foreign key columns" all={names} selected={f.columns} disabled={readOnly} onChange={(cols) => onChange(updateForeignKey(table, i, { columns: cols }))} />
             <label className="dz-field">
               References
-              <select
-                className="input xs"
+              <Select
+                size="xs"
+                mono
                 value={refValue}
                 disabled={readOnly}
-                onChange={(e) => {
-                  const [schema, name] = e.target.value.split('\u0001');
+                placeholder={f.refTable ?? '(choose a table)'}
+                menuMinWidth={200}
+                options={[
+                  { value: '', label: '(choose a table)' },
+                  ...(table.name ? [{ value: `${self.schema}\u0001${self.name}`, label: `${self.name} (this table)` }] : []),
+                  ...refs.map((r) => ({ value: `${r.schema}\u0001${r.name}`, label: `${r.schema && dialect !== 'sqlite' ? `${r.schema}.` : ''}${r.name}` })),
+                ]}
+                onChange={(v) => {
+                  const [schema, name] = v.split('\u0001');
                   const r = name === self.name && schema === self.schema ? self : refs.find((x) => x.schema === schema && x.name === name);
                   if (!r) return;
                   const guessed = f.columns.length ? f.columns : guessColumns(table, r).filter(Boolean);
@@ -239,36 +248,31 @@ export function ForeignKeysPanel({ table, dialect, readOnly, catalog, onChange }
                     name: f.name && !f.name.startsWith(defaultConstraintName(table, dialect, 'FK', [])) ? f.name : defaultConstraintName(table, dialect, 'FK', [r.name]),
                   }));
                 }}
-              >
-                <option value="">(choose a table)</option>
-                {table.name && <option value={`${self.schema}\u0001${self.name}`}>{self.name} (this table)</option>}
-                {refs.map((r) => (
-                  <option key={`${r.schema}.${r.name}`} value={`${r.schema}\u0001${r.name}`}>
-                    {r.schema && dialect !== 'sqlite' ? `${r.schema}.` : ''}
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             {ref && (
               <ColumnChips label="Referenced columns" all={ref.columns} selected={f.refColumns} disabled={readOnly} onChange={(cols) => onChange(updateForeignKey(table, i, { refColumns: cols }))} />
             )}
             <label className="dz-field">
               On delete
-              <select className="input xs" value={f.onDelete} disabled={readOnly} onChange={(e) => onChange(updateForeignKey(table, i, { onDelete: e.target.value as ReferentialAction }))}>
-                {referentialActions(dialect, 'delete').map((a) => (
-                  <option key={a}>{a}</option>
-                ))}
-              </select>
+              <Select<ReferentialAction>
+                size="xs"
+                value={f.onDelete}
+                disabled={readOnly}
+                options={referentialActions(dialect, 'delete').map((a) => ({ value: a, label: a }))}
+                onChange={(onDelete) => onChange(updateForeignKey(table, i, { onDelete }))}
+              />
             </label>
             {dialect !== 'plsql' && (
               <label className="dz-field">
                 On update
-                <select className="input xs" value={f.onUpdate} disabled={readOnly} onChange={(e) => onChange(updateForeignKey(table, i, { onUpdate: e.target.value as ReferentialAction }))}>
-                  {referentialActions(dialect, 'update').map((a) => (
-                    <option key={a}>{a}</option>
-                  ))}
-                </select>
+                <Select<ReferentialAction>
+                  size="xs"
+                  value={f.onUpdate}
+                  disabled={readOnly}
+                  options={referentialActions(dialect, 'update').map((a) => ({ value: a, label: a }))}
+                  onChange={(onUpdate) => onChange(updateForeignKey(table, i, { onUpdate }))}
+                />
               </label>
             )}
             <span className="dz-spacer" />

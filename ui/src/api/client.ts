@@ -12,6 +12,7 @@ import type {
   ExplainRequest, HistoryQuery, SampleDbRequest, SampleDbResponse, SavedFilter, SavedFilterInput, SavedFilterPatch,
   TableModel, TableScriptRequest, TableScriptResponse, ViewModel, ViewScriptRequest,
 } from './types';
+import { CLIENT_ID_HEADER, uiClientId } from './clientId';
 
 export const API_PREFIX = '/api/v1';
 
@@ -90,7 +91,7 @@ function buildUrl(base: string, path: string, query?: Query): string {
 
 async function send(method: string, path: string, opts: RequestOptions = {}): Promise<Response> {
   const c = config ?? (await ready);
-  const headers: Record<string, string> = { Authorization: `Bearer ${c.token}`, ...opts.headers };
+  const headers: Record<string, string> = { Authorization: `Bearer ${c.token}`, [CLIENT_ID_HEADER]: uiClientId(), ...opts.headers };
   let body: BodyInit | undefined;
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -162,7 +163,9 @@ export const api = {
   listConnections: () => json<ConnectionProfile[]>('GET', '/connections'),
   createConnection: (c: ConnectionInput) => json<ConnectionProfile>('POST', '/connections', { body: c }),
   updateConnection: (id: string, c: ConnectionInput) => json<ConnectionProfile>('PUT', `/connections/${enc(id)}`, { body: c }),
-  deleteConnection: (id: string) => json<void>('DELETE', `/connections/${enc(id)}`),
+  /** B1 (logic-21): 409 TX_OPEN (detail.sessions) while a session of the connection has an open transaction, unless `force`. */
+  deleteConnection: (id: string, opts?: { force?: boolean }) =>
+    json<void>('DELETE', `/connections/${enc(id)}`, { query: { force: opts?.force ? 'true' : undefined } }),
   testConnection: (req: TestConnectionRequest, signal?: AbortSignal) =>
     json<TestConnectionResult>('POST', '/connections/test', { body: req, signal }),
 

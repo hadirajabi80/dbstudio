@@ -56,7 +56,7 @@ public sealed class SqliteProvider : IDbProvider
 
     public async Task<IDbSession> OpenSessionAsync(ConnectionProfile profile, string? password, SessionOptions options, CancellationToken ct)
     {
-        var connection = await SqliteConnections.OpenAsync(profile, forceReadOnly: false, ct).ConfigureAwait(false);
+        var connection = await SqliteConnections.OpenAsync(profile, forceReadOnly: false, ct, queryOnlyGuard: true).ConfigureAwait(false);
         try
         {
             var info = await ReadServerInfoAsync(connection, profile, ct).ConfigureAwait(false);
@@ -86,6 +86,8 @@ public sealed class SqliteProvider : IDbProvider
 
     internal static ErrorInfo ToError(Exception ex) => ex switch
     {
+        SqliteException se when SqliteConnections.IsLockError(se) => new ErrorInfo(SqliteNames.CodeName(se.SqliteErrorCode), DbStudio.Core.Services.LockWait.Message + ".",
+            Detail: "SQLite: " + SqliteNames.CleanMessage(se.Message), ProviderCode: se.SqliteErrorCode),
         SqliteException se => new ErrorInfo(SqliteNames.CodeName(se.SqliteErrorCode), SqliteNames.CleanMessage(se.Message), ProviderCode: se.SqliteErrorCode),
         FileNotFoundException fnf => new ErrorInfo("SQLITE_CANTOPEN", fnf.Message, ProviderCode: 14),
         ArgumentException ae => new ErrorInfo("VALIDATION", ae.Message),

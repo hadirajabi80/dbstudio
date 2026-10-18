@@ -70,6 +70,18 @@ public interface IDbSession : IAsyncDisposable
     void Cancel();
 
     Task<bool> PingAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Additive (B1): true once the connection broke while a transaction was open, i.e. the server rolled it back.
+    /// <see cref="TxOpen"/> is already false then; the session manager uses this to report the lost transaction.
+    /// </summary>
+    bool LostTransaction => false;
+
+    /// <summary>
+    /// Additive (B1): pre-flight check of a request's placeholders. Returns a VALIDATION error ("Missing value for
+    /// parameter @id", document line/col) for the first placeholder without a value, or null. Default: no check.
+    /// </summary>
+    ErrorInfo? FindUnboundParameter(IReadOnlyList<SqlBatch> batches, IReadOnlyList<DbStudio.Core.Params.QueryParam>? parameters) => null;
 }
 
 /// <summary>Receives execution events. Implementations forward to the WebSocket. Rows are already wire values (see ValueConverter).</summary>

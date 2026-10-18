@@ -1,87 +1,155 @@
-// Monaco themes `dbstudio-light` / `dbstudio-dark` derived from the CSS tokens (section 3): background from
-// --bg-panel, keywords --syn-keyword (accent family), strings, comments, numbers from the --syn-* tokens.
-// Re-defined on every theme switch so the editor recolours without a reload.
-import { cssVar } from './gridTheme';
+// Monaco themes `dbstudio-light` / `dbstudio-dark`, derived from the CSS tokens (docs/PLAN-M1.5.md section 3):
+// background from --bg-panel, keywords --syn-keyword (accent family), strings, comments, numbers from --syn-*,
+// widgets (suggest, hover, find, context menu, quick input) from the surface/selection tokens.
+//
+// Both themes are built from tokens.css itself (theme/index.ts), not from the live <html> styles, so
+// ensureMonacoSetup() can define both before the first editor paints, and a theme switch only calls setTheme.
+// No literal colours here: every value comes from a token (QA 5.1 lint).
+import { firstColor, parseColor, themeTokens, toHex, type Rgba, type TokenMap } from './index';
 import type { EffectiveTheme } from './useTheme';
 
-const hex = (v: string, fallback: string) => {
-  const s = v.trim();
-  return /^#[0-9a-f]{6}$/i.test(s) ? s : fallback;
-};
-const bare = (v: string) => v.replace('#', '');
-
-export function buildMonacoTheme(theme: EffectiveTheme) {
-  const dark = theme === 'dark';
-  const t = (name: string, light: string, darkFb: string) => hex(cssVar(name), dark ? darkFb : light);
-  const bg = t('--bg-panel', '#ffffff', '#24272d');
-  const fg = t('--fg', '#1c1f24', '#e6e8eb');
-  const muted = t('--fg-muted', '#5f6673', '#9aa1ab');
-  const accent = t('--accent', '#2563eb', '#5b9cff');
-  const border = t('--border', '#d9dde3', '#3a3f48');
-  const elevated = t('--bg-elevated', '#ffffff', '#2c3038');
-  const hover = t('--bg-hover', '#eceef2', '#30343c');
-  const selected = t('--bg-selected', '#dde8fb', '#2e4466');
-  const kw = t('--syn-keyword', '#2563eb', '#5b9cff');
-  const str = t('--syn-string', '#047857', '#6ee7b7');
-  const comment = t('--syn-comment', '#5f6673', '#9aa1ab');
-  const num = t('--syn-number', '#9a3412', '#fdba74');
-  const fn = t('--syn-function', '#7c3aed', '#c4b5fd');
-  const variable = t('--syn-variable', '#b45309', '#fbbf24');
-  const op = t('--syn-operator', '#374151', '#cbd5e1');
-  const type = t('--syn-type', '#0e7490', '#67e8f9');
-  return {
-    base: (dark ? 'vs-dark' : 'vs') as 'vs' | 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: '', foreground: bare(fg) },
-      { token: 'keyword', foreground: bare(kw), fontStyle: 'bold' },
-      { token: 'keyword.contextual', foreground: bare(kw) },
-      { token: 'keyword.batch', foreground: bare(fn), fontStyle: 'bold' },
-      { token: 'type', foreground: bare(type) },
-      { token: 'predefined', foreground: bare(fn) },
-      { token: 'identifier', foreground: bare(fg) },
-      { token: 'identifier.quote', foreground: bare(fg) },
-      { token: 'string', foreground: bare(str) },
-      { token: 'number', foreground: bare(num) },
-      { token: 'comment', foreground: bare(comment), fontStyle: 'italic' },
-      { token: 'variable', foreground: bare(variable) },
-      { token: 'operator', foreground: bare(op) },
-      { token: 'delimiter', foreground: bare(op) },
-      { token: 'delimiter.parenthesis', foreground: bare(op) },
-    ],
-    colors: {
-      'editor.background': bg,
-      'editor.foreground': fg,
-      'editor.lineHighlightBackground': dark ? '#2a2e35' : '#f6f8fc',
-      'editor.lineHighlightBorder': '#00000000',
-      'editor.selectionBackground': `${accent}${dark ? '55' : '40'}`,
-      'editor.inactiveSelectionBackground': `${accent}${dark ? '30' : '22'}`,
-      'editor.findMatchHighlightBackground': dark ? '#facc1540' : '#fde68aa0',
-      'editorLineNumber.foreground': dark ? '#646a74' : '#a0a6b0',
-      'editorLineNumber.activeForeground': muted,
-      'editorCursor.foreground': accent,
-      'editorIndentGuide.background1': dark ? '#30343c' : '#eceef2',
-      'editorWhitespace.foreground': border,
-      'editorBracketMatch.background': `${accent}26`,
-      'editorBracketMatch.border': `${accent}80`,
-      'editorGutter.background': bg,
-      'editorWidget.background': elevated,
-      'editorWidget.border': border,
-      'editorSuggestWidget.background': elevated,
-      'editorSuggestWidget.border': border,
-      'editorSuggestWidget.selectedBackground': selected,
-      'editorSuggestWidget.highlightForeground': accent,
-      'editorHoverWidget.background': elevated,
-      'editorHoverWidget.border': border,
-      'list.hoverBackground': hover,
-      'focusBorder': `${accent}00`,
-      'scrollbarSlider.background': dark ? '#ffffff22' : '#00000022',
-      'scrollbarSlider.hoverBackground': dark ? '#ffffff38' : '#00000038',
-    },
-  };
+/** Structurally identical to monaco.editor.IStandaloneThemeData (kept local so this module stays Monaco-free). */
+export interface MonacoThemeData {
+  base: 'vs' | 'vs-dark';
+  inherit: boolean;
+  rules: { token: string; foreground?: string; fontStyle?: string }[];
+  colors: Record<string, string>;
 }
 
-/** Defines the effective theme from the current tokens and applies it to every editor. */
+/**
+ * Widget backgrounds that Monaco paints list rows on, by colour key prefix. Used by the tests to composite
+ * translucent selection colours and to check every `*selected|Selection|focus|hoverBackground` against its
+ * `*Foreground` counterpart.
+ */
+export const WIDGET_SURFACE: Record<string, string> = {
+  editorSuggestWidget: 'editorSuggestWidget.background',
+  list: 'editorWidget.background',
+  quickInputList: 'quickInput.background',
+  menu: 'menu.background',
+};
+
+export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = themeTokens(theme)): MonacoThemeData {
+  const dark = theme === 'dark';
+  const colorOf = (name: string): Rgba | null => parseColor(tokens[name] ?? '');
+  /** Token as #rrggbb[aa]; '' when the token is missing (then the key is left to Monaco's base theme). */
+  const c = (name: string): string => {
+    const v = colorOf(name);
+    return v ? toHex(v) : '';
+  };
+  /** Token with its alpha replaced (Monaco needs concrete colours, not CSS variables). */
+  const a = (name: string, alpha: number): string => {
+    const v = colorOf(name);
+    return v ? toHex({ ...v, a: alpha }) : '';
+  };
+  const bare = (name: string) => c(name).replace('#', '').slice(0, 6);
+  const shadow = firstColor(tokens['--shadow-popup'] ?? '');
+
+  const rule = (token: string, name: string, fontStyle?: string) => ({ token, foreground: bare(name), ...(fontStyle ? { fontStyle } : {}) });
+  const rules = [
+    rule('', '--fg'),
+    rule('keyword', '--syn-keyword', 'bold'),
+    rule('keyword.contextual', '--syn-keyword'),
+    rule('keyword.batch', '--syn-function', 'bold'),
+    rule('type', '--syn-type'),
+    rule('predefined', '--syn-function'),
+    rule('identifier', '--fg'),
+    rule('identifier.quote', '--fg'),
+    rule('string', '--syn-string'),
+    rule('number', '--syn-number'),
+    rule('comment', '--syn-comment', 'italic'),
+    rule('variable', '--syn-variable'),
+    rule('operator', '--syn-operator'),
+    rule('delimiter', '--syn-operator'),
+    rule('delimiter.parenthesis', '--syn-operator'),
+  ].filter((r) => r.foreground);
+
+  const fg = c('--fg');
+  const colors: Record<string, string> = {
+    // editor surface
+    'editor.background': c('--bg-panel'),
+    'editor.foreground': fg,
+    'editor.lineHighlightBackground': a('--bg-hover', 0.5),
+    'editor.lineHighlightBorder': a('--bg-panel', 0),
+    'editor.selectionBackground': a('--accent', dark ? 0.33 : 0.25),
+    'editor.inactiveSelectionBackground': a('--accent', dark ? 0.19 : 0.13),
+    'editor.findMatchHighlightBackground': c('--mark-bg'),
+    'editorLineNumber.foreground': c('--fg-disabled'),
+    'editorLineNumber.activeForeground': c('--fg-muted'),
+    'editorCursor.foreground': c('--accent'),
+    'editorIndentGuide.background1': c('--border-subtle'),
+    'editorIndentGuide.activeBackground1': c('--border'),
+    'editorWhitespace.foreground': c('--border'),
+    'editorBracketMatch.background': a('--accent', 0.15),
+    'editorBracketMatch.border': a('--accent', 0.5),
+    'editorGutter.background': c('--bg-panel'),
+    'editorError.foreground': c('--danger'),
+    'editorWarning.foreground': c('--warning'),
+    'editorInfo.foreground': c('--info'),
+    'editorLink.activeForeground': c('--accent'),
+    'editorOverviewRuler.border': a('--bg-panel', 0),
+    'scrollbarSlider.background': c('--scrollbar'),
+    'scrollbarSlider.hoverBackground': c('--scrollbar-hover'),
+    'scrollbarSlider.activeBackground': c('--scrollbar-hover'),
+    // keyboard focus inside widgets (find inputs, toggles); the editor's own ring is .editor-host:focus-within
+    'focusBorder': c('--focus-ring'),
+
+    // widgets: find/replace, hover, suggest
+    'widget.shadow': shadow ? toHex(shadow) : '',
+    'editorWidget.background': c('--bg-elevated'),
+    'editorWidget.foreground': fg,
+    'editorWidget.border': c('--border-strong'),
+    'editorHoverWidget.background': c('--bg-elevated'),
+    'editorHoverWidget.foreground': fg,
+    'editorHoverWidget.border': c('--border'),
+    'input.background': c('--bg-input'),
+    'input.foreground': fg,
+    'input.border': c('--border-strong'),
+    'input.placeholderForeground': c('--fg-muted'),
+    'inputOption.activeBorder': c('--accent'),
+    'inputOption.activeBackground': a('--accent', 0.15),
+    'inputOption.activeForeground': fg,
+
+    // IntelliSense: the focused row is --bg-selected with --fg text and icons (never the base theme's white)
+    'editorSuggestWidget.background': c('--bg-elevated'),
+    'editorSuggestWidget.foreground': fg,
+    'editorSuggestWidget.border': c('--border'),
+    'editorSuggestWidget.selectedBackground': c('--bg-selected'),
+    'editorSuggestWidget.selectedForeground': fg,
+    'editorSuggestWidget.selectedIconForeground': fg,
+    'editorSuggestWidget.highlightForeground': c('--accent'),
+    'editorSuggestWidget.focusHighlightForeground': c('--accent-on-selected'),
+
+    // lists (suggest details, reference/peek lists) and the quick input (F1 command palette)
+    'list.hoverBackground': c('--bg-hover'),
+    'list.hoverForeground': fg,
+    'list.activeSelectionBackground': c('--bg-selected'),
+    'list.activeSelectionForeground': fg,
+    'list.activeSelectionIconForeground': fg,
+    'list.inactiveSelectionBackground': c('--bg-selected-inactive'),
+    'list.inactiveSelectionForeground': fg,
+    'list.focusBackground': c('--bg-selected'),
+    'list.focusForeground': fg,
+    'list.highlightForeground': c('--accent'),
+    'list.focusHighlightForeground': c('--accent-on-selected'),
+    'quickInput.background': c('--bg-elevated'),
+    'quickInput.foreground': fg,
+    'quickInputList.focusBackground': c('--bg-selected'),
+    'quickInputList.focusForeground': fg,
+    'quickInputList.focusIconForeground': fg,
+
+    // editor context menu: same look as the app menus (.menu / .menu-item.active)
+    'menu.background': c('--bg-elevated'),
+    'menu.foreground': fg,
+    'menu.border': c('--border'),
+    'menu.selectionBackground': c('--accent'),
+    'menu.selectionForeground': c('--accent-fg'),
+    'menu.separatorBackground': c('--border'),
+  };
+  for (const k of Object.keys(colors)) if (!colors[k]) delete colors[k];
+  return { base: dark ? 'vs-dark' : 'vs', inherit: true, rules, colors };
+}
+
+/** Re-defines the effective theme from the current tokens and applies it to every editor. */
 export async function applyMonacoTheme(theme: EffectiveTheme): Promise<void> {
   try {
     const [{ ensureMonacoSetup, THEME_IDS }, monaco] = await Promise.all([import('../editor/monaco-setup'), import('../editor/monaco')]);

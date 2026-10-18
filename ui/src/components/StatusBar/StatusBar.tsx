@@ -6,7 +6,9 @@ import { formatDuration } from '../../lib/format';
 import { useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
-import { useSessions, useTabSession } from '../../store/sessions';
+import { useCatalog } from '../../store/catalog';
+import { activityCounts, useSessions, useTabSession } from '../../store/sessions';
+import { pluralize } from '../common/text';
 import { useActiveTab } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { connColorName } from '../../theme/connColors';
@@ -17,14 +19,19 @@ const WS_LABEL: Record<string, string> = {
   unauthorized: 'Engine: unauthorized', closed: 'Engine: disconnected',
 };
 
+const START = { line: 1, col: 1 };
+
 export function StatusBar() {
   const tab = useActiveTab();
   const conn = useConnection(tab?.connectionId);
   const session = useTabSession(tab?.id);
   const exec = useTabExecution(tab?.kind === 'console' ? tab.id : null);
-  const cursor = useUi((s) => s.cursor);
+  // Per tab: switching tabs shows that tab's own position (1:1 until its editor reports one).
+  const tabCursor = useUi((s) => (tab?.kind === 'console' ? s.cursors[tab.id] : undefined));
+  const cursor = tab?.kind === 'console' ? tabCursor ?? START : null;
   const ws = useUi((s) => s.wsStatus);
   const sessions = useSessions((s) => s.sessions);
+  const catalogConns = useCatalog((s) => s.conns);
   const running = isRunning(exec);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -33,23 +40,28 @@ export function StatusBar() {
     return () => clearInterval(t);
   }, [running]);
 
-  const { nConn, nSess } = useMemo(() => {
-    const list = Object.values(sessions);
-    return { nConn: new Set(list.map((s) => s.connectionId)).size, nSess: list.length };
-  }, [sessions]);
+  // Engine-wide (GET /sessions, refreshed on session.changed) and the explorer's definition of "connected":
+  // a connection with an open session or a loaded catalog.
+  const counts = useMemo(() => activityCounts(sessions, catalogConns), [sessions, catalogConns]);
+  const orphans = useMemo(() => useSessions.getState().orphans().length, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tx = session ? (session.txMode === 'manual' ? (session.txOpen ? 'Manual tx · pending' : 'Manual tx') : 'Auto-commit') : tab?.kind === 'console' ? (tab.txMode === 'manual' ? 'Manual tx' : 'Auto-commit') : null;
   const server = session?.serverInfo;
   const database = session?.database ?? (tab?.kind === 'console' ? tab.database : null);
 
   return (
-    <footer className="statusbar" aria-label="Status bar">
+    <footer className="statusbar" aria-label="Status bar" data-region="status">
       <span className={`sb-item sb-ws ws-${ws}`} title={WS_LABEL[ws]} role="img" aria-label={WS_LABEL[ws]}>
         {ws === 'open' ? <Wifi size={12} /> : <WifiOff size={12} />}
       </span>
-      <button className="sb-item sb-button" onClick={() => runCommand('connections.showActive')} title="Show active connections">
+      <button
+        className="sb-item sb-button"
+        onClick={() => runCommand('connections.showActive')}
+        title={`Connected: an open session or a loaded catalog. Show active connections${orphans ? ` (${pluralize(orphans, 'unused session')})` : ''}`}
+      >
         <Activity size={12} />
-        {nConn} connection{nConn === 1 ? '' : 's'} · {nSess} session{nSess === 1 ? '' : 's'}
+        {pluralize(counts.connections, 'connection')} · {pluralize(counts.sessions, 'session')}
+        {orphans > 0 && <span className="sb-warn-dot" aria-label={pluralize(orphans, 'unused session')} />}
       </button>
       {conn ? (
         <button className="sb-item sb-button" title={`${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''} — change connection (${displayShortcut('Mod+Shift+K')})`} onClick={() => runCommand('connections.change')}>

@@ -1,23 +1,22 @@
-// Pending-changes preview (PLAN-M1.5 A1): the generated statements for the dialect with parameter values,
-// Copy SQL / Submit / Revert, optional conflict detection, and the outcome of a failed submit.
+// Pending-changes SQL preview (PLAN-M1.5 A1): the generated statements for the dialect with parameter values,
+// Copy SQL / Save / Discard, optional conflict detection, and the outcome of a failed save. Saving normally skips this
+// dialog (save.ts, user-02); it opens from "Preview SQL…", the error toast's "Show SQL", or before every save when
+// settings.grid.showSqlBeforeSave is on.
 import { CircleAlert, Copy, LoaderCircle, PencilLine, Plus, RotateCcw, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { copyText } from '../../app/actions';
 import { previewScript } from '../../data/sqlgen';
 import { inlineParams } from '../../filter/sql';
 import { pendingCount, useEditBuffer, useEdits } from '../../store/edits';
-import { useSettings } from '../../store/settings';
 import { toast } from '../../store/ui';
 import { Dialog } from '../common/Dialog';
+import { verifyDefault } from './save';
 import { buildStatements, submitChanges, type EditContext } from './submit';
 import './pendingchanges.css';
 
 const DIALECT_NAME = { tsql: 'SQL Server', plsql: 'Oracle', sqlite: 'SQLite' } as const;
 
-export function verifyDefault(): boolean {
-  const g = (useSettings.getState().settings as { grid?: { verifyUnchanged?: boolean } }).grid;
-  return !!g?.verifyUnchanged;
-}
+export { verifyDefault } from './save';
 
 export function PendingChangesDialog({ ctx, onClose, onSubmitted }: { ctx: EditContext; onClose(): void; onSubmitted?(): void }) {
   const buf = useEditBuffer(ctx.gridKey);
@@ -57,13 +56,13 @@ export function PendingChangesDialog({ ctx, onClose, onSubmitted }: { ctx: EditC
           </label>
           <div className="flex-1" />
           <button className="btn" disabled={busy || n === 0} onClick={() => (useEdits.getState().revertAll(ctx.gridKey), onClose())}>
-            <RotateCcw size={13} /> Revert all
+            <RotateCcw size={13} /> Discard all
           </button>
           <button className="btn" disabled={n === 0} onClick={() => void copyText(previewScript(stmts, ctx.dialect), 'Copied SQL')}>
             <Copy size={13} /> Copy SQL
           </button>
           <button className="btn btn-primary" disabled={busy || n === 0} onClick={() => void submit()} data-autofocus>
-            {busy ? <LoaderCircle size={13} className="spin" /> : null} Submit {n > 0 ? `(${n})` : ''}
+            {busy ? <LoaderCircle size={13} className="spin" /> : null} Save {n > 0 ? `(${n})` : ''}
           </button>
         </>
       }
@@ -94,7 +93,7 @@ export function PendingChangesDialog({ ctx, onClose, onSubmitted }: { ctx: EditC
                 {conflicts.length > 0 && (
                   <div className="pc-error-actions">
                     <button className="btn btn-xs" disabled={busy} onClick={() => void submit({ verifyUnchanged: false })}>
-                      Overwrite (submit without verification)
+                      Overwrite (save without verification)
                     </button>
                     {conflicts.map((c) => /^\d+$/.test(c.ref) && (
                       <button key={c.ref} className="btn btn-xs" disabled={busy} onClick={() => useEdits.getState().revertRow(ctx.gridKey, Number(c.ref))}>

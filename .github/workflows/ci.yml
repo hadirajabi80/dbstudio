@@ -53,14 +53,29 @@ jobs:
       - name: Engine tests
         run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine" --results-directory TestResults
 
+      # NU1902/NU1903 already fail the restore (engine/Directory.Build.props); this also lists low-severity and
+      # transitive advisories and fails on any of them.
+      - name: Engine vulnerable packages
+        run: |
+          $out = dotnet list engine/DbStudio.slnx package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) { throw "dotnet list package failed ($LASTEXITCODE)" }
+          if ($out -match 'has the following vulnerable packages') { throw 'Vulnerable NuGet packages found (see above). Pin a patched version.' }
+
       # ---- ui ---------------------------------------------------------------------------------
       - name: UI install
         working-directory: ui
         run: npm ci
+      - name: UI lint
+        working-directory: ui
+        run: npm run lint
+      - name: UI type-check
+        working-directory: ui
+        run: npm run typecheck
       - name: UI tests
         working-directory: ui
         run: npm test
-      # (the UI production build runs inside scripts/build.ps1 below)
+      # (the UI production build runs inside scripts/build.ps1 below; its size is checked after it)
 
       # ---- desktop ----------------------------------------------------------------------------
       - name: Desktop install
@@ -73,6 +88,12 @@ jobs:
       # ---- package ----------------------------------------------------------------------------
       - name: Build installer (engine publish + UI build + electron-builder)
         run: ./scripts/build.ps1
+
+      # PLAN-M1.5 5.5: the gzipped ui/dist may grow at most 600 KB over M1. The baseline in
+      # .github/bundle-size-baseline.json is the M1 build (commit bfaac37); never re-baseline it on the
+      # current tree to get past this step (see the header of .github/scripts/bundle-size.mjs).
+      - name: UI bundle size
+        run: node .github/scripts/bundle-size.mjs --dist ui/dist --budget-kb 600
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

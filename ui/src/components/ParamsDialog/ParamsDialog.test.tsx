@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { QueryParam } from '../../api/types';
-import { useGridMockEngine, until } from '../../mocks/m15/testServer';
+import { installGridMockEngine, until } from '../../mocks/m15/testServer';
 import { useParams } from '../../store/params';
 import { useSettings } from '../../store/settings';
+import { chooseOption, optionValues, selectValue } from '../../test/select';
 import { ParamsDialogHost, resolveParams } from './ParamsDialog';
 
-const mock = useGridMockEngine();
+const mock = installGridMockEngine();
 const batch = (sql: string) => [{ sql, line: 1, col: 1 }];
 
 describe('Parameters dialog', () => {
@@ -27,7 +28,7 @@ describe('Parameters dialog', () => {
     let result: QueryParam[] | null | undefined;
     void resolveParams('t1', 'c_prod', 'tsql', batch('SELECT * FROM dbo.customers WHERE id = @id AND name LIKE @name')).then((r) => (result = r));
     const id = await screen.findByLabelText('Value of @id');
-    expect((screen.getByLabelText('Type of @id') as HTMLSelectElement).value).toBe('int');
+    expect(selectValue(screen.getByLabelText('Type of @id'))).toBe('int');
     fireEvent.change(id, { target: { value: '42' } });
     fireEvent.change(screen.getByLabelText('Value of @name'), { target: { value: 'Ac%' } });
     await act(async () => {
@@ -50,11 +51,11 @@ describe('Parameters dialog', () => {
     let result: QueryParam[] | null | undefined = undefined;
     void resolveParams('t2', 'c_ora', 'plsql', batch('BEGIN shop.get_orders(:id, :rc); END;')).then((r) => (result = r));
     await screen.findByLabelText('Value of :id');
-    const kinds = Array.from((screen.getByLabelText('Type of :rc') as HTMLSelectElement).options).map((o) => o.value);
+    const kinds = optionValues(screen.getByLabelText('Type of :rc'));
     expect(kinds).toContain('refcursor');
-    fireEvent.change(screen.getByLabelText('Type of :rc'), { target: { value: 'refcursor' } });
+    chooseOption(screen.getByLabelText('Type of :rc'), { value: 'refcursor' });
     fireEvent.change(screen.getByLabelText('Value of :id'), { target: { value: '7' } });
-    fireEvent.change(screen.getByLabelText('Type of :id'), { target: { value: 'int' } });
+    chooseOption(screen.getByLabelText('Type of :id'), { value: 'int' });
     fireEvent.click(screen.getByRole('button', { name: /Run/ }));
     await until(() => result !== undefined);
     expect(result).toEqual([{ name: 'id', kind: 'int', value: 7 }, { name: 'rc', kind: 'refcursor', value: null, direction: 'out' }]);
@@ -70,7 +71,7 @@ describe('Parameters dialog', () => {
     let result: QueryParam[] | null | undefined;
     void resolveParams('t3', 'c_shop', 'sqlite', batch('SELECT * FROM t WHERE id = :id')).then((r) => (result = r));
     const input = await screen.findByLabelText('Value of :id');
-    fireEvent.change(screen.getByLabelText('Type of :id'), { target: { value: 'int' } });
+    chooseOption(screen.getByLabelText('Type of :id'), { value: 'int' });
     fireEvent.change(input, { target: { value: 'abc' } });
     expect(screen.getByRole('button', { name: /Run/ })).toBeDisabled();
     fireEvent.change(input, { target: { value: '3' } });

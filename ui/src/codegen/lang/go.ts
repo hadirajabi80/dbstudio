@@ -5,7 +5,7 @@ import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../mod
 import { camel, goCamel, goPascal, NameScope } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
-import { crudSql, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
+import { crudSql, defaultsNote, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, Writer } from '../writer';
 
@@ -211,6 +211,8 @@ function store(w: Writer, t: CgTable, typeName: string, members: Member[], ctx: 
     w.blank();
     const idType = identity ? goType(identity.type, false, ctx) : null;
     w.line(identity ? `// Insert adds a row and returns its generated ${identity.col.name}.` : '// Insert adds a row.');
+    const note = defaultsNote(ins, !!crud.update);
+    if (note) w.line(`// ${note}`);
     w.line(`func (s *${storeName}) Insert(ctx context.Context, ${v} *${typeName}) ${identity ? `(${idType}, error)` : 'error'} {`);
     w.indent();
     if (identity && ins.returningKind === 'row') {

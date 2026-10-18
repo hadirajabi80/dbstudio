@@ -181,6 +181,7 @@ export class Layout {
     const k = this.p;
     const t = this.S(k);
     if (!t) return;
+    if (t.kind === 'punct' && t.text === ';' && this.semicolonBeforeTrailing(t)) return;
     this.flushLeading(t, !!o.closer);
     if (this.forceBreak) {
       if (!this.out.atLineStart) this.out.newline(this.out.lineIndent + 1);
@@ -193,6 +194,38 @@ export class Layout {
     this.lastAi = t.ai;
     this.p = k + 1;
     this.flushTrailing();
+  }
+
+  /**
+   * `FROM t -- note⏎;`: the `;` belongs to the statement, not on a line of its own under the comment. When every
+   * token between the previous token and the `;` is a single-line comment already emitted on the current line, the
+   * `;` is written before them (`FROM t; -- note`). index.ts compares token sequences with `;` moved before
+   * adjacent comments, so this reordering passes its safety check.
+   */
+  private semicolonBeforeTrailing(t: FTok): boolean {
+    if (!this.forceBreak || this.lastAi !== t.ai - 1 || this.out.pending !== null || this.out.atLineStart) return false;
+    let first = t.ai - 1;
+    while (first >= 0 && this.toks[first].kind === 'comment') first--;
+    if (first === t.ai - 1 || first < 0) return false;
+    const comments = this.toks.slice(first + 1, t.ai);
+    if (comments.some((c) => c.nl > 0 || c.text.indexOf('\n') >= 0)) return false;
+    // a comment right after the `;` on its line would be merged into the moved `--` comment
+    const after = this.toks[t.ai + 1];
+    if (after && after.kind === 'comment' && after.nl === 0) return false;
+    if (!this.out.insertBeforeTail(';', comments.map((c) => ' ' + c.text).join(''))) return false;
+    this.lastAi = t.ai;
+    this.p++;
+    this.prevUnary = false;
+    return true;
+  }
+
+  /** A comment token; continuation lines of a multi-line block comment keep their indent relative to its first line. */
+  private putComment(c: FTok, space: boolean): void {
+    if (c.text.indexOf('\n') < 0 || !c.text.startsWith('/*') || !this.srcText) {
+      this.out.put(c.text, space);
+      return;
+    }
+    this.out.put(c.text, space, visualColumn(this.srcText, c.t.start, this.o.indent));
   }
 
   private takeKw(n = 1): void {
@@ -221,11 +254,11 @@ export class Layout {
     for (let i = this.lastAi + 1; i < t.ai; i++) {
       const c = this.toks[i];
       if (c.nl === 0 && onLine) {
-        this.out.put(c.text, true);
+        this.putComment(c, true);
       } else {
         this.out.newline(commentIndent);
         this.out.blank(Math.min(Math.max(0, c.nl - 1), this.o.maxConsecutiveBlankLines));
-        this.out.put(c.text, false);
+        this.putComment(c, false);
       }
       onLine = !c.breaksAfter;
       this.lastAi = i;
@@ -239,7 +272,7 @@ export class Layout {
     for (let i = this.lastAi + 1; i < this.toks.length; i++) {
       const c = this.toks[i];
       if (c.kind !== 'comment' || c.nl > 0) break;
-      this.out.put(c.text, true);
+      this.putComment(c, true);
       this.lastAi = i;
       if (c.breaksAfter) this.forceBreak = true;
     }
@@ -251,11 +284,11 @@ export class Layout {
     let onLine = !this.out.atLineStart && !this.forceBreak;
     for (let i = this.lastAi + 1; i < this.toks.length; i++) {
       const c = this.toks[i];
-      if (c.nl === 0 && onLine) this.out.put(c.text, true);
+      if (c.nl === 0 && onLine) this.putComment(c, true);
       else {
         this.out.newline(this.out.isEmpty ? 0 : Math.min(this.out.lineIndent, 0));
         this.out.blank(Math.min(Math.max(0, c.nl - 1), this.o.maxConsecutiveBlankLines));
-        this.out.put(c.text, false);
+        this.putComment(c, false);
       }
       onLine = !c.breaksAfter;
       this.lastAi = i;
@@ -293,6 +326,8 @@ export class Layout {
 
   private spaceBeforeParen(k: number): boolean {
     const a = this.S(k - 1)!;
+    // MERGE … USING (SELECT …) / JOIN t USING (id): a clause keyword, never a function call
+    if (a.word && a.u === 'USING') return true;
     if (a.kind === 'ident' && (a.u === 'APPLY' || a.u === 'OVER' || a.u === 'FILTER' || a.u === 'COLUMNS' || a.u === 'ROW' || (a.u === 'INCLUDE' && this.verbCtx === 'CREATE'))) return true;
     if (a.kind === 'ident' && (a.u === 'RECORD' || a.u === 'OBJECT' || a.u === 'VARRAY') && (this.W(k - 2, 'IS') || this.W(k - 2, 'AS'))) return true;
     if (a.kind === 'ident' || a.kind === 'quotedIdent') {
@@ -1550,7 +1585,11 @@ export class Layout {
   private caseExpr(): void {
     const k = this.p;
     const end = this.caseEnd(k);
-    if (!this.W(end, 'END')) { this.takeKw(); return; }
+    if (!this.W(end, 'END')) {
+      this.problem ??= 'CASE without END';
+      this.takeKw();
+      return;
+    }
     let whens = 0;
     for (let j = k + 1, depth = 0; j < end; j = this.after(j)) {
       if (this.W(j, 'CASE')) depth++;
@@ -1582,4 +1621,11 @@ export class Layout {
     this.out.newline(L);
     this.take({ kw: true, closer: true });
   }
+}
+
+/** Visual column (tabs expanded to `tab` stops) of offset `at` in `text`. */
+function visualColumn(text: string, at: number, tab: number): number {
+  let col = 0;
+  for (let i = text.lastIndexOf('\n', at - 1) + 1; i < at; i++) col = text[i] === '\t' ? col + tab - (col % tab) : col + 1;
+  return col;
 }

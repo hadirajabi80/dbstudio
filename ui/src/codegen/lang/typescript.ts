@@ -6,7 +6,7 @@ import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../mod
 import { camel, NameScope, pascal } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
-import { crudSql, qi, rewriteQuery, trimStatement } from '../sqlgen';
+import { crudSql, defaultsNote, qi, rewriteQuery, trimStatement } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, Writer } from '../writer';
 
@@ -14,6 +14,8 @@ interface Ctx {
   d: Dialect;
   o: CodegenOptions;
   imports: Map<string, string>;
+  /** Private helper functions the unit uses (emitted once per file, after the imports), by name. */
+  helpers: Map<string, string>;
   /** Exported function names of the whole run (one module when combined). */
   exported: Set<string>;
 }
@@ -159,10 +161,56 @@ function oracleType(t: ResolvedType): string {
   }
 }
 
+/**
+ * Date conversions of the better-sqlite3 flavor, in SQLite's own text formats so stored values sort and compare
+ * correctly against what SQLite writes itself (CURRENT_TIMESTAMP, datetime(), date()):
+ * - timestamps are UTC 'YYYY-MM-DD HH:MM:SS', read back as UTC (ISO text with 'T', 'Z' or an offset is read as written),
+ * - DATE columns hold the local calendar day 'YYYY-MM-DD' of the Date and read back as local midnight, so
+ *   new Date(1990, 4, 17) is stored as '1990-05-17' in every time zone.
+ */
+const SQLITE_DATE_HELPERS = {
+  toSqliteDateTime: [
+    "/** A Date as SQLite's UTC timestamp text 'YYYY-MM-DD HH:MM:SS' (the format CURRENT_TIMESTAMP writes). */",
+    'function toSqliteDateTime(d: Date): string {',
+    "  return d.toISOString().replace('T', ' ').replace(/\\.\\d{3}Z$/, '');",
+    '}',
+  ],
+  fromSqliteDateTime: [
+    "/** SQLite timestamp text ('YYYY-MM-DD HH:MM:SS', UTC) as a Date; ISO text with 'T', 'Z' or an offset is read as written. */",
+    'function fromSqliteDateTime(s: string): Date {',
+    "  const iso = s.length === 10 ? `${s}T00:00:00` : s.replace(' ', 'T');",
+    '  return new Date(/(Z|[+-]\\d\\d:?\\d\\d)$/i.test(iso) ? iso : `${iso}Z`);',
+    '}',
+  ],
+  toSqliteDate: [
+    "/** The local calendar day of a Date as SQLite DATE text 'YYYY-MM-DD'. */",
+    'function toSqliteDate(d: Date): string {',
+    "  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;",
+    '}',
+  ],
+  fromSqliteDate: [
+    "/** SQLite DATE text 'YYYY-MM-DD' as a Date at local midnight of that day. */",
+    'function fromSqliteDate(s: string): Date {',
+    "  const [y, m, d] = s.slice(0, 10).split('-').map(Number);",
+    '  return new Date(y, m - 1, d);',
+    '}',
+  ],
+} satisfies Record<string, string[]>;
+
+/** Use one of the date helpers in the current unit (emitted once per file) and return its name. */
+function helper(ctx: Ctx, name: keyof typeof SQLITE_DATE_HELPERS): string {
+  ctx.helpers.set(name, SQLITE_DATE_HELPERS[name].join('\n'));
+  return name;
+}
+
 /** better-sqlite3 cannot bind booleans or Dates: convert at the boundary. */
-function sqliteBind(expr: string, t: ResolvedType, nullable: boolean, o: CodegenOptions): string {
+function sqliteBind(expr: string, t: ResolvedType, nullable: boolean, ctx: Ctx): string {
+  const { o } = ctx;
   if (t.logical === 'bool') return nullable ? `${expr} == null ? null : Number(${expr})` : `Number(${expr})`;
-  if (baseTs(t, o) === 'Date') return nullable ? `${expr}?.toISOString() ?? null` : `${expr}.toISOString()`;
+  if (baseTs(t, o) === 'Date') {
+    const fn = helper(ctx, t.logical === 'date' ? 'toSqliteDate' : 'toSqliteDateTime');
+    return nullable ? `${expr} == null ? null : ${fn}(${expr})` : `${fn}(${expr})`;
+  }
   return nullable && ctxOptional(o) ? `${expr} ?? null` : expr;
 }
 
@@ -172,17 +220,21 @@ function needsRowMap(members: Member[], d: Dialect, o: CodegenOptions): boolean 
   return d === 'sqlite' && members.some((m) => m.type.logical === 'bool' || baseTs(m.type, o) === 'Date');
 }
 
-function rowMapper(w: Writer, typeName: string, members: Member[], o: CodegenOptions) {
+/** A better-sqlite3 row value as the member's type: 0/1 → boolean, SQLite date text → Date (tsDate 'Date'), else a cast. */
+function sqliteRead(src: string, m: Member, ctx: Ctx): string {
+  const { o } = ctx;
+  if (m.type.logical === 'bool') return m.nullable ? `${src} == null ? null : ${src} === 1` : `${src} === 1`;
+  if (baseTs(m.type, o) === 'Date') {
+    const fn = helper(ctx, m.type.logical === 'date' ? 'fromSqliteDate' : 'fromSqliteDateTime');
+    return m.nullable ? `${src} == null ? null : ${fn}(${src} as string)` : `${fn}(${src} as string)`;
+  }
+  return `${src} as ${tsType(m.type, m.nullable, o)}`;
+}
+
+function rowMapper(w: Writer, typeName: string, members: Member[], ctx: Ctx) {
   w.block(`function to${typeName}(r: Record<string, unknown>): ${typeName} {`, () => {
     w.block('return {', () => {
-      for (const m of members) {
-        const src = `r[${JSON.stringify(m.name)}]`;
-        let v: string;
-        if (m.type.logical === 'bool') v = m.nullable ? `${src} == null ? null : ${src} === 1` : `${src} === 1`;
-        else if (baseTs(m.type, o) === 'Date') v = m.nullable ? `${src} == null ? null : new Date(${src} as string)` : `new Date(${src} as string)`;
-        else v = `${src} as ${tsType(m.type, m.nullable, o)}`;
-        w.line(`${m.name}: ${v},`);
-      }
+      for (const m of members) w.line(`${m.name}: ${sqliteRead(`r[${JSON.stringify(m.name)}]`, m, ctx)},`);
     }, '};');
   });
 }
@@ -211,7 +263,7 @@ function driverCrud(w: Writer, t: CgTable, typeName: string, members: Member[], 
   const conn = `${connParam}: ${drv.conn}`;
   const mapRows = needsRowMap(members, d, o);
   if (mapRows) {
-    rowMapper(w, typeName, members, o);
+    rowMapper(w, typeName, members, ctx);
     w.blank();
   }
   const sqlName = (n: string) => `${camel(typeName)}${n}Sql`;
@@ -283,9 +335,12 @@ function driverCrud(w: Writer, t: CgTable, typeName: string, members: Member[], 
     const identity = t.columns.find((c) => c.identity);
     const idMember = identity ? byCol.get(identity)! : null;
     const binds = entityBinds(ins.params);
-    const inputType = idMember ? `Omit<${typeName}, '${idMember.name}'>` : typeName;
+    // The generated key and the server-defaulted columns are not inserted: callers need not (and cannot) pass them.
+    const omitted = [...(idMember ? [idMember.name] : []), ...ins.defaulted.map((c) => byCol.get(c)!.name)];
+    const inputType = omitted.length ? `Omit<${typeName}, ${omitted.map((n) => `'${n}'`).join(' | ')}>` : typeName;
     const idTs = idMember ? tsType(idMember.type, false, o) : null;
-    w.line(idMember ? `/** Inserts a row and returns its generated ${identity!.name}. */` : '/** Inserts a row. */');
+    const note = defaultsNote(ins, !!crud.update);
+    w.line(`/** ${idMember ? `Inserts a row and returns its generated ${identity!.name}.` : 'Inserts a row.'}${note ? ` ${note}` : ''} */`);
     if (d === 'tsql') {
       w.block(`export async function insert${typeName}(${conn}, e: ${inputType}): Promise<${idTs ?? 'void'}> {`, () => {
         w.line(idMember ? 'const result = await pool' : 'await pool');
@@ -307,7 +362,7 @@ function driverCrud(w: Writer, t: CgTable, typeName: string, members: Member[], 
       });
     } else {
       w.block(`export function insert${typeName}(${conn}, e: ${inputType}): ${idTs ? idTs : 'void'} {`, () => {
-        const args = binds.map((b) => sqliteBind(b.expr, b.t, b.nullable, o)).join(', ');
+        const args = binds.map((b) => sqliteBind(b.expr, b.t, b.nullable, ctx)).join(', ');
         if (idMember) {
           w.line(`const info = db.prepare(${sqlName('Insert')}).run(${args});`);
           w.line(idTs === 'bigint' ? 'return BigInt(info.lastInsertRowid);' : `return Number(info.lastInsertRowid);`);
@@ -334,7 +389,7 @@ function driverCrud(w: Writer, t: CgTable, typeName: string, members: Member[], 
       });
     } else {
       w.block(`export function ${name}(${conn}, ${params}): boolean {`, () => {
-        w.line(`return db.prepare(${sqlName(sqlKey)}).run(${binds.map((b) => sqliteBind(b.expr, b.t, b.nullable, o)).join(', ')}).changes === 1;`);
+        w.line(`return db.prepare(${sqlName(sqlKey)}).run(${binds.map((b) => sqliteBind(b.expr, b.t, b.nullable, ctx)).join(', ')}).changes === 1;`);
       });
     }
   };
@@ -459,14 +514,22 @@ function queryDriver(w: Writer, q: CgQuery, ctx: Ctx) {
   w.blank();
   const fn = claim(ctx, camel(q.name), camel(`${q.name}_query`));
   const scope = new NameScope(['pool', 'conn', 'db', 'result']);
-  const args = q.params.map((p) => ({ p, local: scope.take(localName(p.name, o)), type: queryParamTs(p.type, o) }));
+  const args = q.params.map((p) => {
+    const local = scope.take(localName(p.name, o));
+    // better-sqlite3 binds numbers, strings, bigints, buffers and null only: booleans and Dates are converted.
+    return { p, local, type: queryParamTs(p.type, o), bind: d === 'sqlite' ? sqliteBind(local, queryParamResolved(p.type), false, ctx) : local };
+  });
   const style = d === 'tsql' ? 'at' : d === 'plsql' ? 'colon' : 'keep';
   const { sql, order } = rewriteQuery(trimStatement(q.sql), d, style);
   const aliased = members.some((m) => m.name !== m.col.name);
   w.line(`const ${fn}Sql = ${backtick(sql)};`);
   w.blank();
   if (aliased) w.line(`// Rows arrive keyed by column name; ${members.filter((m) => m.name !== m.col.name).map((m) => `${m.col.name} -> ${m.name}`).join(', ')} are mapped below.`);
-  const mapExpr = (r: string) => `{ ${members.map((m) => `${m.name}: ${r}[${JSON.stringify(m.col.name)}] as ${tsType(m.type, m.nullable, o)}`).join(', ')} }`;
+  const mapExpr = (r: string) =>
+    `{ ${members.map((m) => {
+      const src = `${r}[${JSON.stringify(m.col.name)}]`;
+      return `${m.name}: ${d === 'sqlite' ? sqliteRead(src, m, ctx) : `${src} as ${tsType(m.type, m.nullable, o)}`}`;
+    }).join(', ')} }`;
   const connParam = d === 'tsql' ? 'pool' : d === 'plsql' ? 'conn' : 'db';
   const sig = [`${connParam}: ${drv.conn}`, ...args.map((a) => `${a.local}: ${a.type}`)].join(', ');
   w.line(`/** Runs the ${q.name} query. */`);
@@ -483,7 +546,9 @@ function queryDriver(w: Writer, q: CgQuery, ctx: Ctx) {
     });
   } else {
     const positional = q.params.some((p) => p.positional);
-    const bindArgs = positional ? order.map((n) => args.find((a) => a.p.name === n)!.local).join(', ') : `{ ${args.map((a) => (a.p.name === a.local ? a.local : `${a.p.name}: ${a.local}`)).join(', ')} }`;
+    const bindArgs = positional
+      ? order.map((n) => args.find((a) => a.p.name === n)!.bind).join(', ')
+      : `{ ${args.map((a) => (a.p.name === a.bind ? a.bind : `${a.p.name}: ${a.bind}`)).join(', ')} }`;
     w.block(`export function ${fn}(${sig}): ${rowType}[] {`, () => {
       w.line(`const rows = db.prepare<unknown[], Record<string, unknown>>(${fn}Sql).all(${args.length ? bindArgs : ''});`);
       w.line(`return rows.map((r) => (${mapExpr('r')}));`);
@@ -501,6 +566,15 @@ function queryParamTs(t: CgQuery['params'][number]['type'], o: CodegenOptions): 
   return 'string';
 }
 
+/** A query parameter type as a resolved type (for the shared per-driver conversions). */
+function queryParamResolved(t: CgQuery['params'][number]['type']): ResolvedType {
+  const db: Record<string, string> = {
+    string: 'nvarchar', int: 'int', long: 'bigint', decimal: 'decimal', float: 'float', bool: 'bit', date: 'date', datetime: 'datetime2',
+    datetimeoffset: 'datetimeoffset', time: 'time', guid: 'uniqueidentifier', binary: 'varbinary',
+  };
+  return resolveType('tsql', db[t] ?? 'nvarchar');
+}
+
 function queryParamMssql(t: CgQuery['params'][number]['type']): string {
   const m: Record<string, string> = {
     string: 'sql.NVarChar(sql.MAX)', int: 'sql.Int', long: 'sql.BigInt', decimal: 'sql.Decimal(38, 10)', float: 'sql.Float', bool: 'sql.Bit',
@@ -515,6 +589,7 @@ interface Unit {
   name: string;
   label: string;
   imports: Map<string, string>;
+  helpers: Map<string, string>;
   body: string;
 }
 
@@ -523,10 +598,10 @@ export function generateTypeScript(input: CgInput, o: CodegenOptions): Generated
   const units: Unit[] = [];
   const exported = new Set<string>();
   const unitFor = (name: string, label: string, fn: (w: Writer, ctx: Ctx) => void) => {
-    const ctx: Ctx = { d, o, imports: new Map(), exported };
+    const ctx: Ctx = { d, o, imports: new Map(), helpers: new Map(), exported };
     const w = new Writer('  ');
     fn(w, ctx);
-    if (!w.isEmpty) units.push({ name, label, imports: ctx.imports, body: w.toString() });
+    if (!w.isEmpty) units.push({ name, label, imports: ctx.imports, helpers: ctx.helpers, body: w.toString() });
   };
   for (const obj of input.objects) {
     if (isTable(obj)) {
@@ -577,7 +652,13 @@ export function generateTypeScript(input: CgInput, o: CodegenOptions): Generated
     const imports = new Map<string, string>();
     us.forEach((u) => u.imports.forEach((v, k) => imports.set(k, v)));
     const imp = [...imports.values()].sort();
-    return [header(us.map((u) => u.label)), '', ...(imp.length ? [...imp, ''] : []), us.map((u) => u.body).join('\n\n'), ''].join('\n');
+    const helpers = new Map<string, string>();
+    us.forEach((u) => u.helpers.forEach((v, k) => helpers.set(k, v)));
+    const help = [...helpers.keys()].sort().map((k) => helpers.get(k)!);
+    return [
+      header(us.map((u) => u.label)), '', ...(imp.length ? [...imp, ''] : []), ...(help.length ? [help.join('\n\n'), ''] : []),
+      us.map((u) => u.body).join('\n\n'), '',
+    ].join('\n');
   };
   if (o.combined) return [{ path: units.length === 1 ? `${units[0].name}.ts` : 'db.ts', language: 'typescript', content: file(units) }];
   return units.map((u) => ({ path: `${u.name}.ts`, language: 'typescript', content: file([u]) }));

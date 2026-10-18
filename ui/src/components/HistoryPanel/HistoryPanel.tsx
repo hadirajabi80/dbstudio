@@ -13,6 +13,7 @@ import { activeFilterCount, useHistory, type HistoryWhen } from '../../store/his
 import { toast } from '../../store/ui';
 import { showContextMenu, showMenuBelow, type MenuItem } from '../common/Menu';
 import { ColorDot } from '../common/ConnectionBadge';
+import { pluralize } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
 
@@ -24,6 +25,9 @@ function when(iso: string): string {
 }
 
 const STATUS_LABEL: Record<HistoryStatus, string> = { ok: 'Succeeded', error: 'Failed', cancelled: 'Cancelled' };
+/** Focus requests already acted on (remounting the panel when switching dock tabs must not steal focus again). */
+let consumedFocus = 0;
+
 const WHEN_LABEL: Record<HistoryWhen, string> = { any: 'Any time', today: 'Today', '7d': 'Last 7 days', '30d': 'Last 30 days', custom: 'Custom range' };
 
 /** Query history (engine FTS) with filter chips: Connection, Status, When, Only pinned (1.1.3). */
@@ -44,7 +48,8 @@ export function HistoryPanel() {
     void h().load();
   }, [h]);
   useEffect(() => {
-    if (focusSeq) {
+    if (focusSeq && focusSeq !== consumedFocus) {
+      consumedFocus = focusSeq;
       searchRef.current?.focus();
       searchRef.current?.select();
     }
@@ -92,17 +97,6 @@ export function HistoryPanel() {
 
   return (
     <div className="history dock-panel" aria-label="Query history" data-command-scope="history">
-      <div className="panel-header">
-        <span className="panel-title">History</span>
-        <div className="panel-actions">
-          <button className="icon-btn" title="Reload" aria-label="Reload history" onClick={() => void h().load()}>
-            <RefreshCw size={16} strokeWidth={1.5} className={loading ? 'spin' : ''} />
-          </button>
-          <button className="icon-btn" title="Clear unpinned history…" aria-label="Clear history" onClick={() => runCommand('history.clear')}>
-            <Trash size={16} strokeWidth={1.5} />
-          </button>
-        </div>
-      </div>
       <div className="history-filters">
         <div className="search-box">
           <Search size={14} strokeWidth={1.5} />
@@ -153,6 +147,18 @@ export function HistoryPanel() {
             <input type="date" className="input sm" aria-label="To date" value={filters.to ?? ''} onChange={(e) => h().setFilters({ to: e.target.value || null })} />
           </div>
         )}
+      </div>
+      {/* Search first in the DOM (Tab, F6 and screen readers reach it first); the header stays on top visually. */}
+      <div className="panel-header" style={{ order: -1 }}>
+        <span className="panel-title">History</span>
+        <div className="panel-actions">
+          <button className="icon-btn" title="Reload" aria-label="Reload history" onClick={() => void h().load()}>
+            <RefreshCw size={16} strokeWidth={1.5} className={loading ? 'spin' : ''} />
+          </button>
+          <button className="icon-btn" title="Clear unpinned history…" aria-label="Clear history" onClick={() => runCommand('history.clear')}>
+            <Trash size={16} strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
       {error && <div className="history-error" role="alert">{error}</div>}
       <div className="history-list" role="list">
@@ -206,8 +212,8 @@ function HistoryItem({ x, connName, connColor }: { x: HistoryEntry; connName?: s
       {x.error && <div className="history-err">{x.error}</div>}
       <div className="history-actions">
         <span className="muted tabular">{formatDuration(x.durationMs)}</span>
-        {x.resultRows !== null && <span className="muted">{x.resultRows.toLocaleString()} rows</span>}
-        {x.rowsAffected !== null && x.rowsAffected > 0 && <span className="muted">{x.rowsAffected.toLocaleString()} affected</span>}
+        {x.resultRows !== null && <span className="muted">{pluralize(x.resultRows, 'row')}</span>}
+        {x.rowsAffected !== null && x.rowsAffected > 0 && <span className="muted">{pluralize(x.rowsAffected, 'row')} affected</span>}
         <div className="flex-1" />
         <button className="icon-btn xs" title="Open in new console" aria-label="Open in new console" tabIndex={-1} onClick={() => reopenSql(x.sql, x.connectionId, x.database)}>
           <SquareTerminal size={13} />

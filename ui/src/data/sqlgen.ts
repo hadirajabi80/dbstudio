@@ -14,6 +14,11 @@ export interface TableTarget {
   identityColumns?: string[];
   /** Default schema of the session (left unqualified in generated SQL when equal, except on T-SQL). */
   defaultSchema?: string | null;
+  /**
+   * Deterministic ORDER BY when the table has no key (see `noKeyOrder`): `rowid` (SQLite), `ROWID` (Oracle) or every
+   * orderable column (T-SQL heaps, views). Without it OFFSET paging can repeat or skip rows.
+   */
+  orderFallback?: string[];
 }
 
 export interface ColumnValue {
@@ -45,6 +50,86 @@ export interface GenOptions {
   verifyUnchanged?: boolean;
   /** SQLite version, e.g. "3.46.1" (RETURNING needs 3.35). */
   sqliteVersion?: string | null;
+  /** Columns of the result (T-SQL INSERT: the key types for the `@ins` table variable). */
+  columns?: readonly ColumnInfo[];
+}
+
+const TSQL_PLAIN_TYPES = new Set([
+  'int', 'bigint', 'smallint', 'tinyint', 'bit', 'uniqueidentifier', 'date', 'datetime', 'smalldatetime', 'money', 'smallmoney',
+  'float', 'real', 'sql_variant',
+]);
+
+/** T-SQL type declaration for a key column (DECLARE @ins TABLE …), or null when it cannot be derived reliably. */
+export function tsqlDeclaredType(c: ColumnInfo): string | null {
+  const t = c.dbType.trim().toLowerCase();
+  if (!t || !/^[a-z0-9_]+(\s*\(\s*(max|\d+)(\s*,\s*\d+)?\s*\))?$/.test(t)) return null;
+  if (t.includes('(')) return t;
+  const size = c.size ?? -1;
+  switch (t) {
+    case 'varchar': case 'varbinary': return size > 0 && size <= 8000 ? `${t}(${size})` : `${t}(max)`;
+    case 'nvarchar': return size > 0 && size <= 4000 ? `${t}(${size})` : 'nvarchar(max)';
+    case 'char': case 'binary': return size > 0 && size <= 8000 ? `${t}(${size})` : null;
+    case 'nchar': return size > 0 && size <= 4000 ? `${t}(${size})` : null;
+    case 'decimal': case 'numeric': return c.precision ? `${t}(${c.precision}, ${c.scale ?? 0})` : `${t}(38, 0)`;
+    case 'datetime2': case 'time': case 'datetimeoffset': return c.scale !== null && c.scale >= 0 && c.scale <= 7 ? `${t}(${c.scale})` : t;
+    case 'timestamp': case 'rowversion': return 'binary(8)';
+    default: return TSQL_PLAIN_TYPES.has(t) ? t : null;
+  }
+}
+
+/** The column fallback of `noKeyOrder` orders by at most this many columns. */
+export const NO_KEY_ORDER_MAX_COLUMNS = 8;
+/**
+ * Keyless paging sorts by the column fallback only up to this many rows (features-r1-04): above it (or while the count
+ * is unknown) every page would be a full scan plus sort, so pages are read without ORDER BY and the UI says so.
+ */
+export const NO_KEY_ORDER_MAX_ROWS = 500_000;
+
+const isOrderable = (c: ColumnInfo) => {
+  if (!c.name || c.kind === 'binary' || c.kind === 'xml' || c.kind === 'cursor' || c.kind === 'other') return false;
+  return !/^(n?text|image|xml|geography|geometry|hierarchyid|sql_variant|clob|nclob|blob|long( raw)?|bfile)$/i.test(c.dbType.trim());
+};
+
+/** Pseudo-columns / columns that make paging deterministic for a table or view without a key. */
+export function noKeyOrder(dialect: Dialect, columns: readonly ColumnInfo[], isView: boolean): string[] {
+  if (!isView && dialect === 'sqlite') return ['rowid'];
+  if (!isView && dialect === 'plsql') return ['ROWID'];
+  return columns.filter(isOrderable).slice(0, NO_KEY_ORDER_MAX_COLUMNS).map((c) => c.name);
+}
+
+/**
+ * ORDER BY fallback of a keyless table or view, or null to page without ORDER BY (features-r1-04):
+ * - a SQLite table pages by `rowid` (its storage order: free);
+ * - otherwise (views, T-SQL heaps, Oracle ROWID) the fallback costs a full sort, so it is used only when `rowCount`
+ *   (COUNT(*) of the current query) is known and at most NO_KEY_ORDER_MAX_ROWS.
+ */
+export function keylessOrder(dialect: Dialect, columns: readonly ColumnInfo[], isView: boolean, rowCount: number | null): string[] | null {
+  if (!isView && dialect === 'sqlite') return ['rowid'];
+  if (rowCount === null || rowCount > NO_KEY_ORDER_MAX_ROWS) return null;
+  const order = noKeyOrder(dialect, columns, isView);
+  return order.length ? order : null;
+}
+
+/**
+ * Columns of a unique index or constraint that can order a table without a primary key: every column must be in
+ * the result and orderable. Prefers indexes whose columns are all NOT NULL (several NULLs can tie), then the fewest
+ * columns. Returns the result's own spelling of the names, or null.
+ */
+export function uniqueOrderKey(
+  indexes: readonly { unique: boolean; columns: string[]; isPrimaryKey?: boolean }[] | null | undefined,
+  columns: readonly ColumnInfo[],
+): string[] | null {
+  const byName = new Map(columns.map((c) => [c.name.toLowerCase(), c]));
+  let best: { cols: ColumnInfo[]; score: number } | null = null;
+  for (const ix of indexes ?? []) {
+    if (!ix.unique || !ix.columns.length || ix.columns.length > NO_KEY_ORDER_MAX_COLUMNS) continue;
+    const cols = ix.columns.map((n) => byName.get(n.toLowerCase()));
+    if (cols.some((c) => !c || !isOrderable(c))) continue;
+    const list = cols as ColumnInfo[];
+    const score = (list.some((c) => c.nullable) ? 100 : 0) + list.length;
+    if (!best || score < best.score) best = { cols: list, score };
+  }
+  return best ? best.cols.map((c) => c.name) : null;
 }
 
 export function tableSql(t: TableTarget, dialect: Dialect): string {
@@ -144,8 +229,27 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
   let followUp: string | undefined;
   const ret = returning.length ? returning : [];
   if (dialect === 'tsql') {
-    const output = ret.length ? ` OUTPUT ${ret.map((k) => `INSERTED.${q(k)}`).join(', ')}` : '';
-    sql = values.length ? `INSERT INTO ${table} (${cols})${output} VALUES (${vals})` : `INSERT INTO ${table}${output} DEFAULT VALUES`;
+    // OUTPUT without INTO is rejected on tables with enabled triggers (Msg 334), so the key goes through a table
+    // variable and comes back as a result set: DECLARE @ins TABLE (…); INSERT … OUTPUT INSERTED.k INTO @ins …; SELECT.
+    const body = (output: string) => (values.length ? `INSERT INTO ${table} (${cols})${output} VALUES (${vals})` : `INSERT INTO ${table}${output} DEFAULT VALUES`);
+    if (!ret.length) sql = body('');
+    else {
+      const info = (k: string) =>
+        opts.columns?.find((c) => c.name.toLowerCase() === k.toLowerCase()) ?? change.values.find((v) => v.column.name.toLowerCase() === k.toLowerCase())?.column;
+      const types = ret.map((k) => {
+        const c = info(k);
+        return c ? tsqlDeclaredType(c) : null;
+      });
+      const identity = new Set((t.identityColumns ?? []).map((s) => s.toLowerCase()));
+      if (ret.length === 1 && types[0] === null && identity.has(ret[0].toLowerCase())) {
+        // Type unknown, single identity key: SCOPE_IDENTITY() is scoped to this batch (unaffected by triggers).
+        sql = `${body('')};\nSELECT CAST(SCOPE_IDENTITY() AS bigint) AS ${q(ret[0])};`;
+      } else {
+        const decl = ret.map((k, i) => `${q(k)} ${types[i] ?? 'sql_variant'}`).join(', ');
+        const output = ` OUTPUT ${ret.map((k) => `INSERTED.${q(k)}`).join(', ')} INTO @ins`;
+        sql = `DECLARE @ins TABLE (${decl});\n${body(output)};\nSELECT * FROM @ins;`;
+      }
+    }
   } else if (dialect === 'plsql') {
     const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} (${q(t.keyColumns[0] ?? change.values[0]?.column.name ?? 'ID')}) VALUES (DEFAULT)`;
     if (ret.length) {
@@ -180,9 +284,25 @@ export function generateChanges(changes: RowChange[], t: TableTarget, dialect: D
   return [...changes].sort((a, b) => order[a.kind] - order[b.kind]).map((c) => generateChange(c, t, dialect, opts));
 }
 
+/** Savepoint used when a grid submit joins a transaction the user already has open (manual mode). */
+export const EDIT_SAVEPOINT = 'dbs_edit';
+
+export function savepointSql(dialect: Dialect, name = EDIT_SAVEPOINT): string {
+  return dialect === 'tsql' ? `SAVE TRANSACTION ${name}` : `SAVEPOINT ${name}`;
+}
+
+export function rollbackToSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT): string {
+  return dialect === 'tsql' ? `ROLLBACK TRANSACTION ${name}` : `ROLLBACK TO SAVEPOINT ${name}`;
+}
+
+/** SQLite only: drop the savepoint after a successful submit (Oracle/T-SQL have no RELEASE). */
+export function releaseSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT): string | null {
+  return dialect === 'sqlite' ? `RELEASE SAVEPOINT ${name}` : null;
+}
+
 /** Readable script for the preview / "Copy SQL" (parameters shown as literals). */
 export function previewScript(stmts: GenStatement[], dialect: Dialect): string {
-  return stmts.map((s) => `${inlineParams(s.sql, s.params.filter((p) => p.direction !== 'out'), dialect)};`).join('\n');
+  return stmts.map((s) => `${inlineParams(s.sql, s.params.filter((p) => p.direction !== 'out'), dialect).replace(/;\s*$/, '')};`).join('\n');
 }
 
 // ---------------------------------------------------------------- reading
@@ -212,12 +332,14 @@ function majorOf(v: string | null | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-export function orderByClause(sort: SortSpec[] | undefined, keyColumns: string[], dialect: Dialect): string | null {
-  const items = sort?.length ? sort : keyColumns.map((k) => ({ column: k, dir: 'asc' as const }));
+export function orderByClause(sort: SortSpec[] | undefined, keyColumns: string[], dialect: Dialect, fallback: string[] = []): string | null {
+  // Without a key, a pseudo-column (rowid / ROWID) or every orderable column keeps OFFSET pages deterministic.
+  const stable = keyColumns.length ? keyColumns : fallback;
+  const items = sort?.length ? sort : stable.map((k) => ({ column: k, dir: 'asc' as const }));
   if (!items.length) return null;
   const all = [...items];
   // Stable paging: append the key when sorting by another column.
-  for (const k of keyColumns) if (!all.some((s) => s.column.toLowerCase() === k.toLowerCase())) all.push({ column: k, dir: 'asc' });
+  for (const k of stable) if (!all.some((s) => s.column.toLowerCase() === k.toLowerCase())) all.push({ column: k, dir: 'asc' });
   return all.map((s) => `${quoteIdent(s.column, dialect)}${s.dir === 'desc' ? ' DESC' : ''}`).join(', ');
 }
 
@@ -225,7 +347,7 @@ export function orderByClause(sort: SortSpec[] | undefined, keyColumns: string[]
 export function selectPageSql(t: TableTarget, dialect: Dialect, o: PageOptions): PageSql {
   const table = tableSql(t, dialect);
   const where = o.where ? `\nWHERE ${o.where}` : '';
-  const order = orderByClause(o.sort, t.keyColumns, dialect);
+  const order = orderByClause(o.sort, t.keyColumns, dialect, t.orderFallback);
   const limit = Math.max(1, Math.floor(o.limit));
   const offset = Math.max(0, Math.floor(o.offset));
   const major = majorOf(o.serverVersion);
@@ -250,12 +372,17 @@ export function countSql(t: TableTarget, dialect: Dialect, where?: string | null
 }
 
 /** Top-N distinct values of a column with counts (header "Show only distinct values"). */
-export function distinctSql(t: TableTarget, dialect: Dialect, column: string, where?: string | null, limit = 500): string {
+export function distinctSql(t: TableTarget, dialect: Dialect, column: string, where?: string | null, limit = 500, serverVersion?: string | null): string {
   const c = quoteIdent(column, dialect);
   const cnt = quoteIdent('cnt', dialect);
   const body = `SELECT ${c}, COUNT(*) AS ${cnt}\nFROM ${tableSql(t, dialect)}${where ? `\nWHERE ${where}` : ''}\nGROUP BY ${c}\nORDER BY COUNT(*) DESC`;
   if (dialect === 'tsql') return body.replace(/^SELECT /, `SELECT TOP ${limit} `);
-  if (dialect === 'plsql') return `${body}\nFETCH FIRST ${limit} ROWS ONLY`;
+  if (dialect === 'plsql') {
+    const major = majorOf(serverVersion);
+    // FETCH FIRST needs 12c; older servers get the ROWNUM wrapper (as selectPageSql does).
+    if (major !== null && major < 12) return `SELECT * FROM (\n${body}\n)\nWHERE ROWNUM <= ${limit}`;
+    return `${body}\nFETCH FIRST ${limit} ROWS ONLY`;
+  }
   return `${body}\nLIMIT ${limit}`;
 }
 

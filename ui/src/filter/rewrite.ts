@@ -14,6 +14,15 @@ function intelFor(d: Dialect): Intel {
   return i;
 }
 
+/** `sql` is exactly one SELECT statement (a `WITH …` prefix, comments and a trailing semicolon allowed). */
+export function isSingleSelect(sql: string, dialect: Dialect): boolean {
+  const intel = intelFor(dialect);
+  const uri = 'filter://kind';
+  intel.setDocument(uri, sql);
+  const sts = intel.statements(uri).filter((s) => s.kind !== 'empty');
+  return sts.length === 1 && sts[0].kind.startsWith('select');
+}
+
 export interface SelectAnalysis {
   ok: true;
   /** `WITH …` prefix (hoisted outside the wrapper), or ''. */
@@ -119,7 +128,7 @@ export function analyzeSelect(sql: string, dialect: Dialect): AnalysisResult {
     }
     const itemsText = text.slice(toks[ob + 2]?.start, itemsEnd < toks.length ? toks[itemsEnd].start : mainEnd).trim();
     orderBy = itemsText || null;
-    outerOrderBy = orderBy ? hoistOrderBy(toks.slice(ob + 2, itemsEnd), depth.slice(ob + 2, itemsEnd), text) : null;
+    outerOrderBy = orderBy ? hoistOrderBy(toks.slice(ob + 2, itemsEnd), depth.slice(ob + 2, itemsEnd), text, dialect) : null;
     // ORDER BY that defines a limit (OFFSET/FETCH/LIMIT after it, or T-SQL TOP) stays inside; the outer one keeps the order.
     const keepInside = itemsEnd < endTok || hasTop;
     if (!keepInside) body = text.slice(toks[mainStart].start, toks[ob].start).trim();
@@ -130,8 +139,11 @@ export function analyzeSelect(sql: string, dialect: Dialect): AnalysisResult {
 /**
  * ORDER BY items for the wrapper: `alias.col` / `col` → `q.col`; ordinals stay; expressions get their
  * qualifiers replaced by `q.`. Returns null if an item cannot be expressed against the wrapper.
+ * Oracle: the column after `q.` is always quoted (an unquoted name folds to upper case, as Oracle itself does), the
+ * same way the filter predicate quotes result columns, so case-sensitive identifiers survive the hoist.
  */
-function hoistOrderBy(items: Token[], depth: number[], text: string): string | null {
+function hoistOrderBy(items: Token[], depth: number[], text: string, dialect: Dialect): string | null {
+  const col = (t: Token) => (dialect === 'plsql' && t.kind === 'ident' ? `"${t.text.toUpperCase()}"` : t.text);
   const groups: Token[][] = [[]];
   items.forEach((t, i) => {
     if (depth[i] === 0 && t.text === ',') groups.push([]);
@@ -148,7 +160,7 @@ function hoistOrderBy(items: Token[], depth: number[], text: string): string | n
     if (expr.length === 0) return null;
     let rendered: string;
     if (expr.length === 1 && expr[0].kind === 'number') rendered = expr[0].text;
-    else if (isChain(expr)) rendered = `q.${expr[expr.length - 1].text}`;
+    else if (isChain(expr)) rendered = `q.${col(expr[expr.length - 1])}`;
     else {
       // expression: replace each identifier chain a.b → q.b
       let s = '';
@@ -159,7 +171,7 @@ function hoistOrderBy(items: Token[], depth: number[], text: string): string | n
         if ((t.kind === 'ident' || t.kind === 'quotedIdent') && expr[i + 1]?.text === '.' && (expr[i + 2]?.kind === 'ident' || expr[i + 2]?.kind === 'quotedIdent')) {
           let j = i;
           while (expr[j + 1]?.text === '.' && (expr[j + 2]?.kind === 'ident' || expr[j + 2]?.kind === 'quotedIdent')) j += 2;
-          s += `q.${expr[j].text}`;
+          s += `q.${col(expr[j])}`;
           i = j;
         } else s += t.text;
       }

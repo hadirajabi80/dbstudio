@@ -155,18 +155,29 @@ export const MENUS: MenuDef[] = [
   },
 ];
 
-/** A context menu / toolbar entry: a command id, or a separator. */
-export type ContextEntry = { command: string; optional?: boolean; label?: string; /** Hidden (not greyed) when disabled. */ hideDisabled?: boolean } | 'separator';
+/** A context menu / toolbar entry: a command id, a submenu of entries, or a separator. */
+export type ContextEntry =
+  | { command: string; optional?: boolean; label?: string; /** Hidden (not greyed) when disabled. */ hideDisabled?: boolean }
+  | { submenu: string; label: string; icon?: string; entries: ContextEntry[] }
+  | 'separator';
 
 const c = (command: string, optional = false, label?: string): ContextEntry => ({ command, ...(optional ? { optional } : {}), ...(label ? { label } : {}) });
 /** Creation items that only apply to some dialects (e.g. no procedures on SQLite): hidden when not applicable. */
 const n = (command: string): ContextEntry => ({ command, optional: true, hideDisabled: true });
+/** Shown only when enabled (e.g. Drop… on a read-only connection is hidden). */
+const h = (command: string): ContextEntry => ({ command, hideDisabled: true });
+
+/** Generate SQL ▸ SELECT / INSERT / UPDATE / DELETE (inserted at the caret of the active console, else a new one). */
+const GENERATE_SQL: ContextEntry = {
+  submenu: 'explorer.generateSql', label: 'Generate SQL', icon: 'CodeXml',
+  entries: [c('explorer.generateSelect'), h('explorer.generateInsert'), h('explorer.generateUpdate'), h('explorer.generateDelete')],
+};
 
 /** Explorer context menus by node kind (args: a CommandTarget). */
 export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.connection': [
     c('connections.openConsole'), 'separator',
-    c('designer.newTable', true), 'separator',
+    c('designer.newTable', true), n('designer.newView'), n('designer.newTrigger'), 'separator',
     c('connections.edit'), c('connections.duplicate'), 'separator',
     c('connections.refreshCatalog'), c('connections.disconnect'), c('explorer.copyName'), 'separator',
     c('connections.delete'),
@@ -178,33 +189,42 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('connections.refreshCatalog'), c('explorer.copyName'),
   ],
   'explorer.table': [
-    c('data.open', true), c('explorer.selectTop'), 'separator',
-    c('designer.edit', true), c('explorer.openDdl'), c('codegen.open', true), n('designer.newTrigger'), 'separator',
+    c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
+    c('designer.edit', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), n('designer.newTrigger'), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
-    c('designer.newTable', true), c('connections.refreshCatalog'),
+    c('designer.newTable', true), c('connections.refreshCatalog'), 'separator',
+    h('explorer.truncate'), h('explorer.drop'),
   ],
   'explorer.view': [
-    c('data.open', true), c('explorer.selectTop'), 'separator',
-    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('codegen.open', true), 'separator',
+    c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
+    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
-    c('designer.newView', true), c('connections.refreshCatalog'),
+    c('designer.newView', true), c('connections.refreshCatalog'), 'separator',
+    h('explorer.drop'),
   ],
   'explorer.routine': [
-    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('codegen.open', true), 'separator',
+    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
-    c('designer.newProcedure', true), c('connections.refreshCatalog'),
+    c('designer.newProcedure', true), c('connections.refreshCatalog'), 'separator',
+    h('explorer.drop'),
   ],
   'explorer.object': [
-    c('explorer.openDdl'), c('designer.edit', true), 'separator',
+    c('explorer.openDdl'), c('explorer.copyDdl'), c('designer.edit', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
-    c('connections.refreshCatalog'),
+    c('connections.refreshCatalog'), 'separator',
+    h('explorer.drop'),
   ],
   'explorer.folder': [c('connections.connectFolder'), c('connections.newInFolder')],
-  tab: [c('tab.close'), c('tab.closeOthers'), 'separator', c('tab.rename'), c('tab.duplicate'), 'separator', c('tab.reopenClosed')],
+  tab: [
+    c('tab.close'), c('tab.closeOthers'), 'separator', c('tab.rename'), c('tab.duplicate'),
+    { command: 'designer.compareWithServer', optional: true, hideDisabled: true }, 'separator', c('tab.reopenClosed'),
+  ],
   'history.entry': [
     c('history.openEntry'), c('history.insertEntry'), c('history.copyEntry'), c('history.togglePin'), 'separator', c('history.deleteEntry'),
   ],
   'connections.session': [c('sessions.cancel'), c('sessions.disconnect'), 'separator', c('connections.disconnectAll')],
+  /** A session no open tab owns (left over from a reload). */
+  'connections.orphan': [h('sessions.disconnect'), h('sessions.rollbackClose'), 'separator', c('sessions.closeOrphans')],
 };
 
 /** Console toolbar (left to right). */
@@ -212,6 +232,7 @@ export const CONSOLE_TOOLBAR: ContextEntry[] = [
   c('run.statement'), c('run.script'), c('run.cancel'), c('run.multi'), 'separator',
   c('connections.change'), c('connections.changeDatabase'), c('tx.toggleMode'), c('tx.commit'), c('tx.rollback'), 'separator',
   c('explain.estimated', true), c('explain.actual', true), c('format.document', true), c('codegen.query', true),
+  { command: 'designer.compareWithServer', optional: true, hideDisabled: true },
 ];
 
 /** Top bar (app header) buttons. */

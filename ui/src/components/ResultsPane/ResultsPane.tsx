@@ -1,13 +1,17 @@
 import {
-  CloudUpload, Copy, Download, Funnel, LoaderCircle, Lock, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Rows3, Search,
+  ChevronDown, CloudUpload, Code2, Copy, Download, Funnel, LoaderCircle, Lock, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Rows3, Search,
   Table2, TriangleAlert, Undo2, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CellValue, Dialect } from '../../api/types';
-import { catalogDatabase, copyText, exportResultSet, rerun, visibleRows } from '../../app/actions';
-import { appendAnd, columnSignature, countConditions, EMPTY_VIEW, type GridViewModel } from '../../filter/model';
+import type { CellValue, Dialect, ExportFormat } from '../../api/types';
+import { catalogDatabase, exportResultSet, rerun } from '../../app/actions';
+import { displayShortcut } from '../../commands/keys';
+import { runCommand } from '../../commands/registry';
+import { commandView, useCommandContext } from '../../commands/useCommands';
+import { appendAnd, columnSignature, EMPTY_VIEW, type GridViewModel } from '../../filter/model';
+import { countActiveConditions } from '../../filter/values';
 import { formatCount, formatDuration } from '../../lib/format';
-import { serializeRows } from '../../lib/serialize';
+import type { CellLocator } from '../../lib/serialize';
 import { useCatalog, useSnapshot } from '../../store/catalog';
 import { useConnection } from '../../store/connections';
 import { pendingCount, useEditBuffer, useEdits } from '../../store/edits';
@@ -20,23 +24,32 @@ import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { showMenuBelow } from '../common/Menu';
+import { commandMenuItems } from '../layout/commandMenu';
 import { Splitter } from '../common/Splitter';
 import { openDataTab } from '../DataTab/open';
 import { describeNode } from '../FilterBar/describe';
 import { DistinctValuesPopover, distinctValues } from '../FilterBar/DistinctValues';
-import { FilterBar } from '../FilterBar/FilterBar';
+import { FilterBar, type FilterBarCloseReason } from '../FilterBar/FilterBar';
+import type { SelectionAggregates } from '../Grid/aggregate';
+import { AggregateStrip } from '../Grid/AggregateStrip';
 import { CellViewer } from '../Grid/CellViewer';
 import { DataGrid, rowValue, type GridSelectionInfo, type RowRef } from '../Grid/DataGrid';
 import { foreignKeys, referencingTables, resultEditability, type FkLink } from '../Grid/editability';
 import { overlayRows } from '../Grid/overlay';
-import { gridController } from '../Grid/controller';
+import { focusGrid, gridController } from '../Grid/controller';
 import '../Grid/grid.css';
 import { MessagesPane } from '../MessagesPane/MessagesPane';
-import { PendingChangesDialog } from '../PendingChanges/PendingChanges';
+import { PendingBar } from '../PendingChanges/PendingBar';
+import { usePendingChanges } from '../PendingChanges/usePendingChanges';
 import type { EditContext } from '../PendingChanges/submit';
 import { RecordView } from '../RecordView/RecordView';
 import { analyzeSelect } from '../../filter/rewrite';
-import { applyServerFilter, originalBatch, previewServerSql, serverFilterAvailability } from './serverFilter';
+import type { QueryCodegenArgs } from '../CodegenPanel/commands';
+import { OverflowToolbar, type OverflowItem } from '../layout/OverflowToolbar';
+import type { ObjectTarget } from '../../commands/types';
+import { applyServerFilter, originalBatch, originatingSelect, previewServerSql, serverFilterAvailability } from './serverFilter';
+import { GRID_EXPORT_MENU, RESULTS_CODE_ENTRY } from './toolbarModel';
+import './results.css';
 
 interface Props {
   tabId: string;
@@ -56,7 +69,7 @@ export function ResultsPane({ tabId, dialect, theme, onClose }: Props) {
         <div className="results-empty">
           <Table2 size={26} />
           <div>
-            Run a statement with <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, or the whole script with <kbd>F5</kbd>.
+            Run a statement with <kbd>{displayShortcut('Mod+Enter')}</kbd>, or the whole script with <kbd>{displayShortcut('F5')}</kbd>.
           </div>
         </div>
       </div>
@@ -96,7 +109,7 @@ export function ResultsPane({ tabId, dialect, theme, onClose }: Props) {
         <div className="flex-1" />
         <ExecStatus exec={exec} />
         {onClose && (
-          <button className="icon-btn sm" title="Hide results (Ctrl+R)" aria-label="Hide results" onClick={onClose}>
+          <button className="icon-btn sm" title={commandView('view.toggleResults', undefined, 'Hide results').tooltip} aria-label="Hide results" onClick={onClose}>
             <X size={14} />
           </button>
         )}
@@ -104,6 +117,12 @@ export function ResultsPane({ tabId, dialect, theme, onClose }: Props) {
       {view ? <ResultSetView key={viewKey(exec.localId, view.id)} exec={exec} rs={view} dialect={dialect} theme={theme} /> : <MessagesPane exec={exec} />}
     </div>
   );
+}
+
+/** "CustomersQuery" for a result of Customers, else undefined ("Query"): name of the generated types. */
+function queryNameFor(table: string | null | undefined): string | undefined {
+  const words = (table ?? '').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  return words.length ? `${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}Query` : undefined;
 }
 
 function ExecStatus({ exec }: { exec: ExecutionState }) {
@@ -151,9 +170,10 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
   const [side, setSide] = useState<SidePanel>(null);
   const [dragStart, setDragStart] = useState(viewerWidth);
   const [viewCount, setViewCount] = useState<number | null>(null);
-  const [showPending, setShowPending] = useState(false);
   const [distinct, setDistinct] = useState<{ col: number; x: number; y: number } | null>(null);
+  const [agg, setAgg] = useState<SelectionAggregates | null>(null);
   const setView = useCallback((v: Partial<GridViewModel>) => setGridView(key, v), [setGridView, key]);
+  useCommandContext();
 
   // Reset the edit buffer when this result goes away (re-run, tab closed).
   useEffect(() => () => useEdits.getState().reset(key), [key]);
@@ -171,7 +191,8 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
   const refs = useMemo(() => (table ? referencingTables(table.schema, table.name, snapshot) : []), [table, snapshot]);
   const overlay = useMemo(() => overlayRows(rs.rows, buffer.committed), [rs.rows, rs.rev, buffer.committed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const n = countConditions(view.filter);
+  // Only complete, enabled conditions count (an empty "Id equals ..." draft does not filter anything).
+  const n = countActiveConditions(view.filter, columns);
   const hasFilter = n > 0 || !!view.quickFilter;
   const shown = viewCount ?? overlay.length;
   const filtered = hasFilter && shown !== overlay.length;
@@ -191,6 +212,11 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
     setBarOpen(true);
     setFocusReq({ column: column ?? null, nonce: Date.now() });
   };
+  /** Esc or ✕ inside the filter bar: focus goes back to the grid, on the selected cell (design-r1-01). */
+  const closeBar = (reason?: FilterBarCloseReason) => {
+    setBarOpen(false);
+    if (reason === 'escape' || reason === 'button') focusGrid(key);
+  };
 
   const navigateFk = (fk: FkLink, values: CellValue[]) => {
     openDataTab({
@@ -203,30 +229,71 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
   const recordValues = selRef ? columns.map((_, c) => rowValue(overlay, buffer.pending.updates, selRef, c)) : null;
   const viewerValue = side === 'viewer' && sel && selRef ? rowValue(overlay, buffer.pending.updates, selRef, sel.col) : undefined;
 
-  const exportMenu = (el: HTMLElement) =>
-    showMenuBelow(el, [
-      { label: 'Export CSV…', onClick: () => void exportResultSet(exec, rs, 'csv') },
-      { label: 'Export JSON…', onClick: () => void exportResultSet(exec, rs, 'json') },
-      { label: 'Export SQL INSERT…', onClick: () => void exportResultSet(exec, rs, 'sql-insert') },
-      { separator: true },
-      { label: 'Copy all as TSV', onClick: () => void copyText(serializeRows('tsv', rs.columns, visibleRows(exec, rs)), `Copied ${shown} rows`) },
-      { label: 'Copy all as CSV', onClick: () => void copyText(serializeRows('csv', rs.columns, visibleRows(exec, rs)), `Copied ${shown} rows`) },
-      { label: 'Copy all as JSON', onClick: () => void copyText(serializeRows('json', rs.columns, visibleRows(exec, rs)), `Copied ${shown} rows`) },
-      { label: 'Copy all as Markdown', onClick: () => void copyText(serializeRows('markdown', rs.columns, visibleRows(exec, rs)), `Copied ${shown} rows`) },
-      { label: 'Copy all as SQL INSERT', onClick: () => void copyText(serializeRows('sql-insert', rs.columns, visibleRows(exec, rs), { dialect }), `Copied ${shown} rows`) },
-    ]);
+  /** Engine cell of a source row (full values of truncated cells for copy / client-side export). */
+  const xid = exec.executionId;
+  const stored = rs.rows.length;
+  const cellSource = useCallback(
+    (sourceRow: number, col: number): CellLocator | null => (xid && sourceRow < stored ? { executionId: xid, resultSetId: rs.id, row: sourceRow, col } : null),
+    [xid, stored, rs.id],
+  );
+
+  /**
+   * Whole result straight from the engine's result store (full values, every row) when the grid shows it unchanged;
+   * otherwise the visible rows (filter / sort / submitted edits) are exported client-side with full values fetched.
+   */
+  const exportAs = (format: ExportFormat) => {
+    const v = useResults.getState().views[key];
+    const hasView = !!v && (!!v.quickFilter || !!v.filter || v.sort.length > 0);
+    const c = useEdits.getState().get(key).committed;
+    const edited = c.appended.length > 0 || Object.keys(c.patched).length > 0 || Object.keys(c.hidden).length > 0;
+    const g = gridController(key);
+    if ((xid && !hasView && !edited) || !g?.exportVisible) return void exportResultSet(exec, rs, format);
+    void g.exportVisible(format, { baseName: rs.columns.find((x) => x.table)?.table ?? `result_${rs.id + 1}` });
+  };
+  const gridArgs = { gridKey: key };
+  const cv = (id: string) => commandView(id, gridArgs);
+  const exportMenu = (el: HTMLElement) => showMenuBelow(el, commandMenuItems(GRID_EXPORT_MENU, { ...gridArgs, all: true }));
 
   const serverApply = () => void applyServerFilter(exec, columns, dialect, view.filter, view.quickFilter, view.sort);
   const serverClear = () => void applyServerFilter(exec, columns, dialect, null, '', view.sort, true);
-  const submit = () => editCtx && setShowPending(true);
+  // Ctrl+S / Save write the pending edits directly; the SQL preview is opt-in (user-02).
+  const pendingActions = usePendingChanges(editCtx);
+  const toggleViewer = () => setSide((s) => (s === 'viewer' ? null : 'viewer'));
   const toggleRecord = () => setSide((s) => (s === 'record' ? null : 'record'));
-  const statusText = sfActive
-    ? `Server · ${formatCount(rs.rows.length)} rows${filtered ? ` · ${formatCount(shown)} shown` : ''}`
-    : filtered ? `Filtered ${formatCount(shown)} of ${formatCount(overlay.length)}` : null;
+  const clearAll = () => {
+    if (sfActive) serverClear();
+    setView({ filter: null, quickFilter: '' });
+  };
+  const noMatch = hasFilter && shown === 0 && rs.done;
 
-  return (
-    <div className="resultset">
-      <div className="resultset-toolbar wpg">
+  // "Code ▾" (design-09): code for the SELECT that produced this result, with its columns.
+  const codeSql = useMemo(() => originatingSelect(exec, rs, dialect), [exec.batches, exec.resultSets.length, rs.batchIndex, dialect, serverFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  const codeArgs: QueryCodegenArgs | null = codeSql
+    ? { connectionId: exec.connectionId, database: session?.database ?? tabDb, sql: codeSql, columns, name: queryNameFor(tableCol?.table) }
+    : null;
+  const codeEntries = [{ ...RESULTS_CODE_ENTRY, label: 'Generate code for this query…' }];
+  const codeMenu = (el: HTMLElement) => {
+    if (!codeArgs) return;
+    const items = commandMenuItems(codeEntries, codeArgs);
+    if (table) {
+      const target: ObjectTarget = { kind: 'object', connectionId: exec.connectionId, database: tabDb, ref: { database: tabDb, schema: table.schema, name: table.name, type: 'table' } };
+      items.push(...commandMenuItems([{ command: 'codegen.open', optional: true, hideDisabled: true, label: `Generate code for table ${table.name}…` }], target));
+    }
+    if (items.length) showMenuBelow(el, items);
+  };
+  const codeCmd = codeArgs ? commandView(RESULTS_CODE_ENTRY.command, codeArgs) : null;
+  const showCode = !!codeArgs && !!codeCmd?.enabled;
+  const insertRow = () => {
+    const g = gridController(key);
+    if (g?.insertRow) g.insertRow();
+    else useEdits.getState().addInsert(key, columns.length);
+  };
+
+  // Never wraps or scrolls (styles-03): low-priority items collapse into "…". Search, Filter, Save and Export stay.
+  const toolbarItems: OverflowItem[] = [
+    {
+      id: 'search',
+      node: (
         <div className="rs-quick">
           <Search size={13} />
           <input
@@ -244,65 +311,132 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
             </button>
           )}
         </div>
-        <button className={`btn btn-xs${barOpen || n ? ' on' : ''}`} onClick={() => (barOpen ? setBarOpen(false) : openFilter())} title="Filter rows (Ctrl+F in the grid)" aria-pressed={barOpen}>
+      ),
+    },
+    {
+      id: 'filter',
+      node: (
+        <button className={`btn btn-xs${barOpen || n ? ' on' : ''}`} onClick={() => (barOpen ? setBarOpen(false) : openFilter())} title={cv('grid.filter').tooltip} aria-pressed={barOpen}>
           <Funnel size={12} /> Filter{n ? ` (${n})` : ''}
         </button>
-        {view.sort.length > 0 && (
-          <button className="btn btn-xs" onClick={() => setView({ sort: [] })} title="Clear sorting">
-            Sorted by {view.sort.map((s) => `${columns[s.column]?.name} ${s.dir}`).join(', ')} <X size={11} />
-          </button>
-        )}
-        {sfActive && (
-          <span className="rs-badge server" title={serverFilter?.sql}>
-            <CloudUpload size={11} /> Server filter
-          </span>
-        )}
-        <div className="flex-1" />
-        {editability && (
-          editability.editable ? (
-            <span className="rs-badge editable" title={`Edits go to ${editability.target?.name} (key: ${editability.target?.keyColumns.join(', ')})`}>
-              <PencilLine size={11} /> Editable
-            </span>
-          ) : (
-            <span className="rs-badge" title={editability.reason ?? undefined}>
-              <Lock size={11} /> {editability.reason}
-            </span>
-          )
-        )}
-        {editability?.editable && (
-          <span className="rs-pending">
-            <button className="icon-btn sm" title="Insert row (Insert)" aria-label="Insert row" onClick={() => { const g = gridController(key); if (g?.insertRow) g.insertRow(); else useEdits.getState().addInsert(key, columns.length); }}>
-              <Plus size={14} />
-            </button>
-            <button className="icon-btn sm" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!buffer.undo.length} onClick={() => useEdits.getState().undo(key)}>
-              <Undo2 size={14} />
-            </button>
-            <button className="icon-btn sm" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!buffer.redo.length} onClick={() => useEdits.getState().redo(key)}>
-              <Redo2 size={14} />
-            </button>
-            {pending > 0 && (
-              <>
-                <button className="btn btn-xs" onClick={() => useEdits.getState().revertAll(key)} title="Discard all pending changes">
-                  <RotateCcw size={12} /> Revert
-                </button>
-                <button className="btn btn-xs btn-primary" onClick={submit} title="Preview and submit (Ctrl+S)">
-                  Submit ({pending})
-                </button>
-              </>
-            )}
-          </span>
-        )}
-        <span className="rs-sep" />
-        <button className="btn btn-xs" onClick={(e) => exportMenu(e.currentTarget)} title="Export or copy the result set">
-          <Download size={12} /> Export
+      ),
+    },
+  ];
+  if (view.sort.length > 0) {
+    toolbarItems.push({
+      id: 'sort', priority: 3, menu: () => commandMenuItems([{ command: 'grid.clearSort' }], gridArgs),
+      node: (
+        <button className="btn btn-xs" onClick={() => runCommand('grid.clearSort', gridArgs)} title={cv('grid.clearSort').tooltip}>
+          Sorted by {view.sort.map((s) => `${columns[s.column]?.name} ${s.dir}`).join(', ')} <X size={11} />
         </button>
-        <button className={`icon-btn sm${side === 'record' ? ' on' : ''}`} title="Record view (F7)" aria-label="Record view" aria-pressed={side === 'record'} onClick={toggleRecord}>
+      ),
+    });
+  }
+  if (sfActive) {
+    toolbarItems.push({
+      id: 'server', priority: 2,
+      node: (
+        <span className="rs-badge server" title={serverFilter?.sql}>
+          <CloudUpload size={11} /> Server filter
+        </span>
+      ),
+    });
+  }
+  toolbarItems.push({ id: 'spacer', spacer: true });
+  if (editability) {
+    toolbarItems.push({
+      id: 'editability', priority: 1,
+      node: editability.editable ? (
+        <span className="rs-badge editable" title={`Edits go to ${editability.target?.name} (key: ${editability.target?.keyColumns.join(', ')})`}>
+          <PencilLine size={11} /> Editable
+        </span>
+      ) : (
+        <span className="rs-badge" title={editability.reason ?? undefined}>
+          <Lock size={11} /> {editability.reason}
+        </span>
+      ),
+    });
+  }
+  if (editability?.editable) {
+    toolbarItems.push({
+      id: 'edit', priority: 5, menu: () => commandMenuItems([{ command: 'grid.insertRow' }, { command: 'grid.undo' }, { command: 'grid.redo' }], gridArgs),
+      node: (
+        <span className="rs-pending">
+          <button className="icon-btn sm" title={cv('grid.insertRow').tooltip} aria-label="Insert row" onClick={insertRow}>
+            <Plus size={14} />
+          </button>
+          <button className="icon-btn sm" title={cv('grid.undo').tooltip} aria-label="Undo" disabled={!buffer.undo.length} onClick={() => useEdits.getState().undo(key)}>
+            <Undo2 size={14} />
+          </button>
+          <button className="icon-btn sm" title={cv('grid.redo').tooltip} aria-label="Redo" disabled={!buffer.redo.length} onClick={() => useEdits.getState().redo(key)}>
+            <Redo2 size={14} />
+          </button>
+        </span>
+      ),
+    });
+    if (pending > 0) {
+      toolbarItems.push({
+        id: 'save',
+        node: (
+          <span className="rs-pending">
+            <PendingBar gridKey={key} count={pending} actions={pendingActions} />
+          </span>
+        ),
+      });
+    }
+  }
+  toolbarItems.push({ id: 'sep-export', separator: true });
+  if (showCode) {
+    toolbarItems.push({
+      id: 'code', priority: 4, menu: () => commandMenuItems(codeEntries, codeArgs),
+      node: (
+        <button className="btn btn-xs" aria-haspopup="menu" title={codeCmd?.tooltip || 'Generate code for this query'} onClick={(e) => codeMenu(e.currentTarget)}>
+          <Code2 size={12} /> Code <ChevronDown size={11} />
+        </button>
+      ),
+    });
+  }
+  toolbarItems.push(
+    {
+      id: 'export',
+      node: (
+        <button className="btn btn-xs" aria-haspopup="menu" onClick={(e) => exportMenu(e.currentTarget)} title="Export or copy the result set">
+          <Download size={12} /> Export <ChevronDown size={11} />
+        </button>
+      ),
+    },
+    {
+      id: 'record', priority: 2, menu: () => commandMenuItems([{ command: 'grid.toggleRecordView' }], gridArgs),
+      node: (
+        <button className={`icon-btn sm${side === 'record' ? ' on' : ''}`} title={cv('grid.toggleRecordView').tooltip} aria-label="Record view" aria-pressed={side === 'record'} onClick={toggleRecord}>
           <Rows3 size={14} />
         </button>
-        <button className={`icon-btn sm${side === 'viewer' ? ' on' : ''}`} title="Value viewer" aria-label="Value viewer" aria-pressed={side === 'viewer'} onClick={() => setSide(side === 'viewer' ? null : 'viewer')}>
+      ),
+    },
+    {
+      id: 'viewer', priority: 2, menu: () => commandMenuItems([{ command: 'grid.toggleValueViewer' }], gridArgs),
+      node: (
+        <button className={`icon-btn sm${side === 'viewer' ? ' on' : ''}`} title={cv('grid.toggleValueViewer').tooltip} aria-label="Value viewer" aria-pressed={side === 'viewer'} onClick={toggleViewer}>
           <PanelRight size={14} />
         </button>
-      </div>
+      ),
+    },
+    {
+      id: 'columns', priority: 1, menu: () => commandMenuItems([{ command: 'grid.copyColumnNames' }], gridArgs),
+      node: (
+        <button className="icon-btn sm" title={cv('grid.copyColumnNames').tooltip} aria-label="Copy column names" onClick={() => runCommand('grid.copyColumnNames', gridArgs)}>
+          <Copy size={13} />
+        </button>
+      ),
+    },
+  );
+  const statusText = sfActive
+    ? `Server · ${formatCount(rs.rows.length)} rows${filtered ? ` · ${formatCount(shown)} shown` : ''}`
+    : filtered ? `Filtered ${formatCount(shown)} of ${formatCount(overlay.length)}` : null;
+
+  return (
+    <div className="resultset">
+      <OverflowToolbar className="resultset-toolbar" ariaLabel="Result set toolbar" items={toolbarItems} />
       {barOpen && (
         <FilterBar
           columns={columns}
@@ -310,9 +444,10 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
           quick={view.quickFilter}
           onChange={(f) => setView({ filter: f })}
           onQuickChange={(q) => setView({ quickFilter: q })}
-          onClose={() => setBarOpen(false)}
+          onClose={closeBar}
           dialect={dialect}
           focusRequest={focusReq}
+          focusedColumn={sel ? columns[sel.col]?.name ?? null : null}
           saved={{ connectionId: exec.connectionId, signature }}
           status={statusText}
           server={{
@@ -350,16 +485,19 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
                   setSide('viewer');
                 }}
                 onOpenFilter={openFilter}
-                onSubmit={submit}
+                onSubmit={pendingActions.save}
                 onToggleRecord={toggleRecord}
                 onShowDistinct={(col, pos) => setDistinct({ col, x: pos.clientX, y: pos.clientY })}
-                controllerExtras={{ applyServerFilter: avail.available ? serverApply : undefined }}
+                cellSource={cellSource}
+                onAggregates={setAgg}
+                hideTrailingRow={noMatch}
+                controllerExtras={{ applyServerFilter: avail.available ? serverApply : undefined, exportAs, toggleValueViewer: toggleViewer, ...(editCtx ? pendingActions.controller : {}) }}
               />
-              {hasFilter && shown === 0 && rs.done && (
+              {noMatch && (
                 <div className="rs-empty-filter">
                   <Funnel size={20} />
                   <div>No rows match</div>
-                  <button className="btn btn-xs" onClick={() => setView({ filter: null, quickFilter: '' })}>
+                  <button className="btn btn-xs" onClick={clearAll}>
                     Clear filter
                   </button>
                 </div>
@@ -420,22 +558,15 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
           {filtered ? `${formatCount(shown)} of ${formatCount(overlay.length)} rows` : `${formatCount(overlay.length)} row${overlay.length === 1 ? '' : 's'}`}
         </span>
         {!barOpen && hasFilter && (
-          <button className="fb-chip" onClick={() => openFilter()} title={`${view.filter ? describeNode(view.filter) : ''}${view.quickFilter ? ` “${view.quickFilter}”` : ''}`}>
-            <Funnel size={10} /> {sfActive ? 'Server filter' : `Filtered ${formatCount(shown)} of ${formatCount(overlay.length)}`}
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label="Clear filter"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (sfActive) serverClear();
-                setView({ filter: null, quickFilter: '' });
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && (e.stopPropagation(), setView({ filter: null, quickFilter: '' }))}
-            >
-              · Clear
-            </span>
-          </button>
+          // Two sibling buttons (a button inside a button is invalid and unreachable for assistive tech).
+          <span className="rs-chip" role="group" aria-label="Active filter">
+            <button className="fb-chip" onClick={() => openFilter()} title={`${view.filter ? describeNode(view.filter) : ''}${view.quickFilter ? ` “${view.quickFilter}”` : ''}`}>
+              <Funnel size={10} /> {sfActive ? 'Server filter' : `Filtered ${formatCount(shown)} of ${formatCount(overlay.length)}`}
+            </button>
+            <button className="fb-chip" onClick={clearAll} aria-label="Clear filter" title="Clear filter">
+              <X size={10} /> Clear
+            </button>
+          </span>
         )}
         {sfActive && serverFilter?.limited && (
           <span className="rs-limit-note">
@@ -450,6 +581,7 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
         {rs.elapsedMs !== null && <span className="muted">{formatDuration(rs.elapsedMs)}</span>}
         <span className="muted">{rs.columns.length} columns</span>
         {pending > 0 && <span className="muted">{pending} pending change{pending === 1 ? '' : 's'}</span>}
+        <AggregateStrip agg={agg} partial={rs.truncated || !rs.done} />
         {rs.truncated && (
           <span className="truncated">
             <TriangleAlert size={12} /> Limited to {formatCount(exec.maxRows)} rows
@@ -464,15 +596,8 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
             {rs.columns[sel.col].name}: {rs.columns[sel.col].dbType}
           </span>
         )}
-        <button
-          className="icon-btn xs"
-          title="Copy column names"
-          onClick={() => void copyText(rs.columns.map((c) => c.name).join(', '), 'Copied column names')}
-        >
-          <Copy size={11} />
-        </button>
       </div>
-      {showPending && editCtx && <PendingChangesDialog ctx={editCtx} onClose={() => setShowPending(false)} />}
+      {pendingActions.dialog}
       {distinct && columns[distinct.col] && (
         <DistinctValuesPopover
           column={columns[distinct.col]}

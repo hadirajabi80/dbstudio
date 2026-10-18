@@ -5,6 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- code-p3: a package (direct or transitive) with a known moderate/high/critical advisory fails the restore.
+         Fix by pinning a patched version (see the providers' System.Security.Cryptography.Pkcs pin). -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1902;NU1903;NU1904</WarningsAsErrors>
     <Version>0.1.0</Version>
   </PropertyGroup>
 </Project>

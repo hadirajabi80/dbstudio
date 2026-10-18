@@ -227,6 +227,10 @@ public sealed class OracleSession : AdoSessionBase
             CurrentDatabase = await ReadCurrentSchemaAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
+    /// <summary>ORA-01013 "user requested cancel of current operation": the server aborted the statement.</summary>
+    protected override bool IsCancellationException(Exception exception) =>
+        base.IsCancellationException(exception) || exception is OracleException { Number: 1013 };
+
     protected override ErrorInfo MapException(Exception exception, SqlBatch batch)
     {
         if (exception is not OracleException ora) return base.MapException(exception, batch);

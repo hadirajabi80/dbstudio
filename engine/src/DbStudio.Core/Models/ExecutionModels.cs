@@ -5,13 +5,16 @@ namespace DbStudio.Core.Models;
 /// <param name="MaxRows">Row cap per result set; 0 = unlimited.</param>
 /// <param name="Label">"statement" | "selection" | "script" (M1.5 also "filter" | "data" | "multi" | "explain").</param>
 /// <param name="Params">M1.5 bind values (docs/PLAN-M1.5.md 3.8); null/empty = no binding (M1 behaviour).</param>
+/// <param name="WritesConfirmed">B1: the user explicitly allowed this execution to write to a read-only connection
+/// (ExecuteCommand.ConfirmedDestructive); SQLite lifts its <c>PRAGMA query_only</c> guard for it.</param>
 public sealed record ExecuteRequest(
     IReadOnlyList<SqlBatch> Batches,
     int MaxRows,
     bool StopOnError,
     bool CaptureServerOutput,
     string Label,
-    IReadOnlyList<QueryParam>? Params = null);
+    IReadOnlyList<QueryParam>? Params = null,
+    bool WritesConfirmed = false);
 
 /// <summary>One unit sent to the server. T-SQL: a GO-delimited batch. Oracle/SQLite: a single statement. Line/Col are 1-based document positions of its first char.</summary>
 public sealed record SqlBatch(string Sql, int Line, int Col);

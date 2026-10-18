@@ -99,6 +99,16 @@ export function runExplain(ed: monaco.editor.IStandaloneCodeEditor, b: ModelBind
   const t = explainTarget(ed, b, mode);
   const h = handler ?? getEditorConfig().explain;
   if (!t || !h) return false;
+  dismissEditorPopups(ed);
   h(t);
   return true;
+}
+
+/**
+ * Close the suggest list and the parameter hints before a run or explain (styles-r1-05): left open, they cover the
+ * editor and the results, and the next Enter or Tab would accept a suggestion.
+ */
+export function dismissEditorPopups(ed: Pick<monaco.editor.ICodeEditor, 'trigger'>): void {
+  ed.trigger('run', 'hideSuggestWidget', null);
+  ed.trigger('run', 'closeParameterHints', null);
 }

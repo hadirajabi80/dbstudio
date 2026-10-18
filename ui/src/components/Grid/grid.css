@@ -39,7 +39,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 24px;
+  height: var(--input-h-sm, 24px);
   padding: 0 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -53,11 +53,6 @@
 .rs-quick .input {
   flex: 1;
   min-width: 0;
-}
-.resultset-toolbar.wpg {
-  align-items: center;
-  flex-wrap: wrap;
-  row-gap: 4px;
 }
 .rs-sep {
   width: 1px;
@@ -98,4 +93,71 @@
 }
 .rs-error .flex-1 {
   min-width: 0;
+}
+
+/* glide renders its in-place editor into the global #portal (inline z-index 9999 in index.html): keep it below
+   modal layers so nothing floats above a dialog (design-01). Open editors are also committed when a modal opens. */
+#portal {
+  z-index: calc(var(--z-dialog, 900) - 10) !important;
+}
+.grid-host {
+  /* the canvas stops after the last row; the rest of the pane is plain panel */
+  background: var(--bg-panel);
+}
+.grid-host.fk-hover canvas {
+  cursor: pointer;
+}
+
+/* selection aggregates in the status row (prop-01) */
+.rs-agg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.rs-agg-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.rs-agg-item:hover {
+  background: var(--bg-hover);
+}
+.rs-agg-item:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--focus-ring, var(--accent));
+  outline-offset: -1px;
+}
+.rs-agg-label,
+.rs-agg-note {
+  color: var(--fg-muted, var(--text-muted));
+}
+.rs-agg-note {
+  padding-left: 4px;
+  font-style: italic;
+}
+
+/* filter chip in the status row: two sibling buttons (design-21b) */
+.rs-chip {
+  display: inline-flex;
+  align-items: center;
+}
+.rs-chip > .fb-chip:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.rs-chip > .fb-chip + .fb-chip {
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }

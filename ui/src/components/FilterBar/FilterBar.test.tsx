@@ -1,14 +1,15 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ColumnInfo, ColumnKind } from '../../api/types';
 import { columnSignature, type FilterGroup } from '../../filter/model';
-import { useGridMockEngine, until } from '../../mocks/m15/testServer';
+import { installGridMockEngine, until } from '../../mocks/m15/testServer';
 import { useFilters } from '../../store/filters';
+import { chooseOption, optionValues, selectValue } from '../../test/select';
 import { MenuHost } from '../common/Menu';
 import { FilterBar } from './FilterBar';
 
-const mock = useGridMockEngine();
+const mock = installGridMockEngine();
 
 const col = (name: string, kind: ColumnKind, ordinal: number): ColumnInfo => ({
   name, ordinal, dbType: kind, kind, nullable: true, size: null, precision: null, scale: null, table: 'orders', schema: 'main', isKey: false,
@@ -53,17 +54,17 @@ describe('FilterBar', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: /Add condition/ }));
     // first unused column (Id, number): number operators only
-    const ops = within(screen.getAllByLabelText('Operator')[0]).getAllByRole('option').map((o) => o.getAttribute('value'));
+    const ops = optionValues(screen.getAllByLabelText('Operator')[0]);
     expect(ops).toEqual(['eq', 'neq', 'lt', 'lte', 'gt', 'gte', 'between', 'in', 'notIn', 'isNull', 'isNotNull']);
-    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'gt' } });
+    chooseOption(screen.getByLabelText('Operator'), { value: 'gt' });
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: '5' } });
     await wait();
     expect(last!.items[0]).toMatchObject({ column: 'Id', op: 'gt', values: ['5'] });
 
     fireEvent.click(screen.getByRole('button', { name: /Add condition/ }));
     const colSelects = screen.getAllByLabelText('Column');
-    expect((colSelects[1] as HTMLSelectElement).value).toBe('1'); // next unused column: Name
-    const ops2 = within(screen.getAllByLabelText('Operator')[1]).getAllByRole('option').map((o) => o.getAttribute('value'));
+    expect(selectValue(colSelects[1])).toBe('1'); // next unused column: Name
+    const ops2 = optionValues(screen.getAllByLabelText('Operator')[1]);
     expect(ops2[0]).toBe('contains');
     expect(ops2).toContain('regex');
     fireEvent.change(screen.getAllByLabelText('Value')[1], { target: { value: 'acme' } });
@@ -76,14 +77,14 @@ describe('FilterBar', () => {
   it('switching to a date column offers date operators; invalid values are flagged, not applied', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: /Add condition/ }));
-    fireEvent.change(screen.getByLabelText('Column'), { target: { value: '3' } });
-    expect((screen.getByLabelText('Operator') as HTMLSelectElement).value).toBe('onDate');
+    chooseOption(screen.getByLabelText('Column'), { value: 3 });
+    expect(selectValue(screen.getByLabelText('Operator'))).toBe('onDate');
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'tomorrow' } });
     await wait();
     expect(screen.getByRole('note')).toHaveTextContent('YYYY-MM-DD');
-    fireEvent.change(screen.getByLabelText('Operator'), { target: { value: 'last' } });
+    chooseOption(screen.getByLabelText('Operator'), { value: 'last' });
     expect(screen.getByLabelText('Count')).toBeInTheDocument();
-    expect((screen.getByLabelText('Unit') as HTMLSelectElement).value).toBe('days');
+    expect(selectValue(screen.getByLabelText('Unit'))).toBe('days');
   });
 
   it('removing a condition and Clear', async () => {
@@ -160,5 +161,41 @@ describe('FilterBar', () => {
     });
     await until(() => mock.ctx.filters.filters.length === 0);
     expect(await screen.findByText('No saved filters yet')).toBeInTheDocument();
+  });
+});
+
+describe('FilterBar drafts and the focused column (design-16)', () => {
+  function Bar({ focusedColumn }: { focusedColumn?: string | null }) {
+    const [filter, setFilter] = useState<FilterGroup | null>(null);
+    return (
+      <FilterBar
+        columns={COLS}
+        filter={filter}
+        quick=""
+        onChange={(f) => {
+          last = f;
+          setFilter(f);
+        }}
+        onClose={() => {}}
+        dialect="sqlite"
+        focusedColumn={focusedColumn}
+      />
+    );
+  }
+
+  it('Add condition starts on the focused grid column and focuses the value input', () => {
+    render(<Bar focusedColumn="Name" />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/ }));
+    const cond = last!.items[0] as { column: string; ordinal?: number };
+    expect(cond.column).toBe('Name');
+    expect(screen.getByLabelText('Value')).toHaveFocus();
+  });
+
+  it('an empty condition is a draft: muted hint, and the "applied" count excludes it', () => {
+    render(<Bar />);
+    fireEvent.click(screen.getByRole('button', { name: /Add condition/ }));
+    expect(screen.getByText('incomplete')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Condition on Id' }).className).toContain('draft');
+    expect(screen.getByText('0 of 1 applied')).toBeInTheDocument();
   });
 });

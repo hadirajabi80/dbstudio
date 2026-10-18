@@ -207,9 +207,10 @@ public sealed class EventConfiguration : IEntityTypeConfiguration<Event>
     {
         builder.ToTable("Events", "dbo", t => t.HasComment("Audit trail of things that happened"));
         builder.HasKey(e => e.EventId);
-        builder.Property(e => e.OccurredAt).HasComment("When it happened (with offset)");
+        builder.Property(e => e.OccurredAt).ValueGeneratedOnAdd().HasComment("When it happened (with offset)");
         builder.Property(e => e.Kind).HasMaxLength(20).IsRequired();
         builder.Property(e => e.Payload).HasComment("JSON document");
+        builder.Property(e => e.IsActive).ValueGeneratedOnAdd();
         builder.Property(e => e.RowVer).IsRequired().IsRowVersion();
         // TODO: unmapped type geography; map it with a value converter or a provider type (e.g. NetTopologySuite).
         builder.Ignore(e => e.Location);

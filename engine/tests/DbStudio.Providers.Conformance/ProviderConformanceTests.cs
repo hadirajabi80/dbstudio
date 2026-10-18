@@ -392,6 +392,98 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
         }
     }
 
+    // The grid's edit savepoint (ui/src/data/sqlgen.ts savepointSql / rollbackToSavepointSql / releaseSavepointSql).
+    private string SavepointSql => Dialect == Dialect.TSql ? "SAVE TRANSACTION dbs_edit" : "SAVEPOINT dbs_edit";
+    private string RollbackToSavepointSql => Dialect == Dialect.TSql ? "ROLLBACK TRANSACTION dbs_edit" : "ROLLBACK TO SAVEPOINT dbs_edit";
+    private string? ReleaseSavepointSql => Dialect == Dialect.Sqlite ? "RELEASE SAVEPOINT dbs_edit" : null;
+
+    /// <summary>
+    /// Rows of <paramref name="table"/> with val = <paramref name="val"/> as another session sees them. SQL Server reads
+    /// with READPAST: a row still locked by an uncommitted change is skipped instead of blocking, a committed one counts.
+    /// </summary>
+    private async Task<long> CommittedCountAsync(string table, string val) =>
+        ToLong(await Fixture.ScalarAsync($"SELECT COUNT(*) FROM {table}{(Dialect == Dialect.TSql ? " WITH (READPAST)" : "")} WHERE val = '{val}'"));
+
+    private async Task RunOkAsync(IDbSession session, string sql)
+    {
+        var (summary, sink) = await RunAsync(session, Request(sql));
+        AssertOk(summary, sink);
+    }
+
+    /// <summary>
+    /// code-r1-01: a manual-mode session with nothing open runs the grid's "SAVEPOINT; DML; RELEASE". The savepoint
+    /// begins the engine transaction (SQL Server would refuse SAVE TRANSACTION outside one, SQLite's RELEASE would commit
+    /// its own, Oracle would auto-commit), so the change stays pending until the user commits and Rollback undoes it.
+    /// </summary>
+    [SkippableFact]
+    public async Task ManualTransaction_EditSavepoint_WithNothingOpen_KeepsTheChangePending()
+    {
+        RequireAvailable();
+        var table = NewScratchName();
+        await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table), Fixture.InsertScratchRowsSql(table, 1, 1)]);
+        try
+        {
+            await using (var session = await Fixture.OpenSessionAsync(TransactionMode.Manual))
+            {
+                Assert.False(session.TxOpen);
+                await RunOkAsync(session, SavepointSql);
+                Assert.True(session.TxOpen);
+                await RunOkAsync(session, $"UPDATE {table} SET val = 'edited' WHERE id = 1");
+                if (ReleaseSavepointSql is { } release) await RunOkAsync(session, release);
+
+                // RELEASE released only the savepoint: the engine transaction is still open and nothing is committed.
+                Assert.True(session.TxOpen);
+                Assert.Equal(0L, await CommittedCountAsync(table, "edited"));
+
+                await session.RollbackAsync(CancellationToken.None);
+                Assert.False(session.TxOpen);
+            }
+
+            Assert.Equal(0L, await CommittedCountAsync(table, "edited"));
+            Assert.Equal(1L, await CommittedCountAsync(table, "v1"));
+        }
+        finally
+        {
+            await Fixture.RunBatchesAsync([Fixture.DropScratchTableSql(table)]);
+        }
+    }
+
+    /// <summary>code-r1-01, failure path: ROLLBACK TO the savepoint (+ RELEASE) leaves a clean open transaction.</summary>
+    [SkippableFact]
+    public async Task ManualTransaction_EditSavepoint_RollbackTo_LeavesACleanOpenTransaction()
+    {
+        RequireAvailable();
+        var table = NewScratchName();
+        await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table), Fixture.InsertScratchRowsSql(table, 1, 1)]);
+        try
+        {
+            await using (var session = await Fixture.OpenSessionAsync(TransactionMode.Manual))
+            {
+                await RunOkAsync(session, SavepointSql);
+                await RunOkAsync(session, $"UPDATE {table} SET val = 'edited' WHERE id = 1");
+                await RunOkAsync(session, RollbackToSavepointSql);
+                if (ReleaseSavepointSql is { } release) await RunOkAsync(session, release);
+                Assert.True(session.TxOpen);
+
+                // The session itself no longer sees the edit, and nobody else ever did.
+                var (_, own) = await RunAsync(session, Request($"SELECT val FROM {table} WHERE id = 1"));
+                Assert.Equal("v1", own.ResultSets[0].Rows[0][0]);
+                Assert.Equal(0L, await CommittedCountAsync(table, "edited"));
+
+                // Committing that transaction commits nothing of the undone edit.
+                await session.CommitAsync(CancellationToken.None);
+                Assert.False(session.TxOpen);
+            }
+
+            Assert.Equal(1L, await CommittedCountAsync(table, "v1"));
+            Assert.Equal(0L, await CommittedCountAsync(table, "edited"));
+        }
+        finally
+        {
+            await Fixture.RunBatchesAsync([Fixture.DropScratchTableSql(table)]);
+        }
+    }
+
     [SkippableFact]
     public async Task SwitchToAuto_WithOpenTransaction_Throws()
     {

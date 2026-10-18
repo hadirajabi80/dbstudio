@@ -384,7 +384,7 @@ public class Event {
     @Column(name = "EventId", nullable = false)
     private UUID eventId;
 
-    @Column(name = "OccurredAt", nullable = false)
+    @Column(name = "OccurredAt", nullable = false, insertable = false)
     private OffsetDateTime occurredAt;
 
     @Column(name = "Day", nullable = false)
@@ -421,7 +421,7 @@ public class Event {
     @Column(name = "Price")
     private BigDecimal price;
 
-    @Column(name = "IsActive", nullable = false)
+    @Column(name = "IsActive", nullable = false, insertable = false)
     private boolean isActive;
 
     @Version
@@ -647,6 +647,7 @@ package com.example.shop.jpa_tsql;
 
 import java.math.BigDecimal;
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

@@ -777,8 +777,8 @@ public sealed class EventRepository(SqlConnection db)
         """;
 
     private const string InsertSql = """
-        INSERT INTO dbo.Events (EventId, OccurredAt, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, IsActive, Location)
-        VALUES (@EventId, @OccurredAt, @Day, @At, @Kind, @Payload, @Snapshot, @Spec, @Score, @Ratio, @Flags, @Big, @Price, @IsActive, @Location)
+        INSERT INTO dbo.Events (EventId, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, Location)
+        VALUES (@EventId, @Day, @At, @Kind, @Payload, @Snapshot, @Spec, @Score, @Ratio, @Flags, @Big, @Price, @Location)
         """;
 
     private const string UpdateSql = """
@@ -838,12 +838,12 @@ public sealed class EventRepository(SqlConnection db)
         return list;
     }
 
+    /// <summary>OccurredAt and IsActive are not inserted, so the server defaults apply; change them with update.</summary>
     public async Task<int> InsertAsync(Event entity, CancellationToken ct = default)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = InsertSql;
         cmd.Parameters.AddWithValue("@EventId", entity.EventId);
-        cmd.Parameters.AddWithValue("@OccurredAt", entity.OccurredAt);
         cmd.Parameters.AddWithValue("@Day", entity.Day);
         cmd.Parameters.AddWithValue("@At", (object?)entity.At ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Kind", (object?)entity.Kind ?? DBNull.Value);
@@ -855,7 +855,6 @@ public sealed class EventRepository(SqlConnection db)
         cmd.Parameters.AddWithValue("@Flags", entity.Flags);
         cmd.Parameters.AddWithValue("@Big", (object?)entity.Big ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Price", (object?)entity.Price ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@IsActive", entity.IsActive);
         cmd.Parameters.AddWithValue("@Location", (object?)entity.Location ?? DBNull.Value);
         await OpenAsync(ct);
         return await cmd.ExecuteNonQueryAsync(ct);

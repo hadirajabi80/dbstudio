@@ -1,4 +1,4 @@
-import { Activity, CircleStop, Lock, LoaderCircle, RefreshCw, SquareTerminal, Unplug, X } from 'lucide-react';
+import { Activity, AppWindow, CircleStop, Lock, LoaderCircle, RefreshCw, SquareTerminal, TriangleAlert, Unplug, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { SessionInfo } from '../../api/types';
 import { runCommand } from '../../commands/registry';
@@ -8,11 +8,12 @@ import { useCatalog } from '../../store/catalog';
 import { useConnections } from '../../store/connections';
 import { useResults } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
-import { useSessions } from '../../store/sessions';
+import { isForeignSession, useSessions } from '../../store/sessions';
 import { useTabs } from '../../store/tabs';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
 import { ProviderIcon } from '../common/icons';
+import { pluralize } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
 
@@ -46,22 +47,32 @@ export function ConnectionsPanel() {
     return m;
   }, [byTab]);
 
+  // Sessions no open tab owns. Left over from a reload or a crash (the engine reports their window gone): listed
+  // apart, with Close / Roll back & close. Used by another live window: listed read-only (logic-r1-03).
+  const { orphans, foreign } = useMemo(() => {
+    const free = Object.values(sessions).filter((s) => !tabOf.has(s.sessionId) && s.state !== 'closed');
+    return { orphans: free.filter((s) => !isForeignSession(s)), foreign: free.filter(isForeignSession) };
+  }, [sessions, tabOf]);
+
   const groups = useMemo(() => {
-    const ids = new Set<string>([...Object.values(sessions).map((s) => s.connectionId), ...Object.keys(catalogConns)]);
+    // "Connected" = an open session or a loaded catalog (the explorer dot and the status bar use the same rule).
+    const ready = Object.entries(catalogConns).filter(([, c]) => c.status === 'ready').map(([cid]) => cid);
+    const ids = new Set<string>([...Object.values(sessions).filter((s) => tabOf.has(s.sessionId)).map((s) => s.connectionId), ...ready]);
     return [...ids]
-      .map((cid) => ({ conn: connections.find((c) => c.id === cid), cid, list: Object.values(sessions).filter((s) => s.connectionId === cid) }))
+      .map((cid) => ({ conn: connections.find((c) => c.id === cid), cid, list: Object.values(sessions).filter((s) => s.connectionId === cid && tabOf.has(s.sessionId)) }))
       .filter((g) => g.conn)
       .sort((a, b) => a.conn!.name.localeCompare(b.conn!.name));
-  }, [sessions, catalogConns, connections]);
+  }, [sessions, catalogConns, connections, tabOf]);
 
   const total = Object.keys(sessions).length;
   const disconnectAll = commandView('connections.disconnectAll');
+  const closeOrphans = commandView('sessions.closeOrphans');
 
   return (
     <div className="dock-panel connections-panel" aria-label="Active connections">
       <div className="panel-header">
         <span className="panel-title">Active connections</span>
-        <span className="panel-count">{groups.length} · {total} session{total === 1 ? '' : 's'}</span>
+        <span className="panel-count">{groups.length} · {pluralize(total, 'session')}</span>
         <div className="panel-actions">
           <button className="icon-btn" title="Refresh" aria-label="Refresh sessions" onClick={() => void useSessions.getState().refreshAll()}>
             <RefreshCw size={14} />
@@ -71,7 +82,35 @@ export function ConnectionsPanel() {
           </button>
         </div>
       </div>
-      {groups.length === 0 ? (
+      {orphans.length > 0 && (
+        <section className="session-group orphan-group" aria-label="Unused sessions">
+          <div className="session-group-header">
+            <TriangleAlert size={14} className="text-warning" aria-hidden="true" />
+            <span className="session-conn-name">Unused sessions</span>
+            <span className="muted">{pluralize(orphans.length, 'session')} from an earlier window</span>
+            <div className="flex-1" />
+            <button className="btn btn-xs" title={closeOrphans.tooltip} disabled={!closeOrphans.enabled} onClick={closeOrphans.run}>
+              Close all
+            </button>
+          </div>
+          {orphans.map((s) => (
+            <OrphanRow key={s.sessionId} s={s} connName={connections.find((c) => c.id === s.connectionId)?.name ?? 'deleted connection'} />
+          ))}
+        </section>
+      )}
+      {foreign.length > 0 && (
+        <section className="session-group foreign-group" aria-label="In use by another window">
+          <div className="session-group-header" title="Sessions of another DbStudio window that is still open. Close or commit them there.">
+            <AppWindow size={14} className="muted" aria-hidden="true" />
+            <span className="session-conn-name">In use by another window</span>
+            <span className="muted">{pluralize(foreign.length, 'session')}</span>
+          </div>
+          {foreign.map((s) => (
+            <ForeignRow key={s.sessionId} s={s} connName={connections.find((c) => c.id === s.connectionId)?.name ?? 'deleted connection'} />
+          ))}
+        </section>
+      )}
+      {groups.length === 0 && orphans.length === 0 && foreign.length === 0 ? (
         <EmptyState
           icon={<Activity size={28} strokeWidth={1.5} />}
           title="No active connections"
@@ -87,7 +126,7 @@ export function ConnectionsPanel() {
                 <ProviderIcon providerId={conn!.providerId} color={conn!.color} size={16} />
                 <span className="session-conn-name">{conn!.name}</span>
                 {conn!.readOnly && <Lock size={12} aria-label="Read-only" />}
-                <span className="muted">{list.length ? `${list.length} session${list.length === 1 ? '' : 's'}` : 'catalog only'}</span>
+                <span className="muted">{list.length ? pluralize(list.length, 'session') : 'catalog loaded'}</span>
                 <div className="flex-1" />
                 <button className="icon-btn xs" title="Disconnect" aria-label={`Disconnect ${conn!.name}`} onClick={() => runCommand('connections.disconnect', { kind: 'connection', connectionId: cid })}>
                   <Unplug size={13} />
@@ -116,6 +155,39 @@ export function ConnectionsPanel() {
   );
 }
 
+/** A session no tab owns: Close (no transaction) or Roll back & close (open transaction). */
+function OrphanRow({ s, connName }: { s: SessionInfo; connName: string }) {
+  const args = { sessionId: s.sessionId };
+  return (
+    <div className={`session-row orphan${s.txOpen ? ' state-tx-open' : ''}`} onContextMenu={(e) => showContextMenu(e, contextMenu('connections.orphan', args))}>
+      <SquareTerminal size={14} strokeWidth={1.5} className="muted" />
+      <span className="session-tab" title={s.label ?? undefined}>{s.label ?? 'Session'}</span>
+      <span className="muted session-db">{connName}{s.database ? ` · ${s.database}` : ''}</span>
+      <div className="flex-1" />
+      {s.txOpen && <span className="state-badge state-tx-open">tx open</span>}
+      {s.txOpen ? (
+        <button className="btn btn-xs btn-danger-outline" onClick={() => runCommand('sessions.rollbackClose', args)}>Roll back &amp; close</button>
+      ) : (
+        <button className="btn btn-xs" onClick={() => runCommand('sessions.disconnect', args)}>Close</button>
+      )}
+    </div>
+  );
+}
+
+/** A session of another live window: shown for the session count, never closed or adopted from here. */
+function ForeignRow({ s, connName }: { s: SessionInfo; connName: string }) {
+  const state = s.state === 'executing' ? 'executing' : s.txOpen ? 'tx open' : null;
+  return (
+    <div className="session-row foreign" aria-readonly="true">
+      <SquareTerminal size={14} strokeWidth={1.5} className="muted" />
+      <span className="session-tab" title={s.label ?? undefined}>{s.label ?? 'Session'}</span>
+      <span className="muted session-db">{connName}{s.database ? ` · ${s.database}` : ''}</span>
+      <div className="flex-1" />
+      {state && <span className={`state-badge state-${state.replace(' ', '-')}`}>{state}</span>}
+    </div>
+  );
+}
+
 function SessionRow({ s, tabTitle, tabId, startedAt, now }: { s: SessionInfo; tabTitle: string; tabId?: string; startedAt: number | null; now: number }) {
   const executing = s.state === 'executing' || startedAt !== null;
   const state = executing ? 'executing' : s.txOpen ? 'tx open' : s.state;
@@ -138,7 +210,7 @@ function SessionRow({ s, tabTitle, tabId, startedAt, now }: { s: SessionInfo; ta
         {executing && startedAt !== null && <span className="tabular"> {formatDuration(Math.max(0, now - startedAt))}</span>}
       </span>
       {executing && (
-        <button className="icon-btn xs danger" title="Cancel running query" aria-label="Cancel" disabled={!cancel.enabled && s.state !== 'executing'} onClick={cancel.run}>
+        <button className="icon-btn xs danger" title={cancel.title} aria-label={cancel.title} disabled={!cancel.enabled && s.state !== 'executing'} onClick={cancel.run}>
           <CircleStop size={13} />
         </button>
       )}

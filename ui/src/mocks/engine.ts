@@ -246,6 +246,11 @@ export class MockEngine {
     s.state = 'executing';
     s.cancel = false;
     s.lastResults = { executionId, sets: [] };
+    // Like the engine: the session remembers the tab of its last run (re-attach after a reload).
+    if (req.source?.tabId) {
+      s.tabId = req.source.tabId;
+      s.label = req.source.title ?? null;
+    }
     // Events start after the HTTP response (like the real engine, they may also race it).
     setTimeout(() => void this.run(s, executionId, req), 0);
     return { executionId };

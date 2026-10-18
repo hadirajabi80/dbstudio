@@ -74,8 +74,27 @@ interface Ctx {
   count: number;
 }
 
+/**
+ * A rendered predicate piece. `compound` = it has a top-level AND/OR, so it needs parentheses when it is combined
+ * with anything else (never guessed from the text: `(A) OR (B)` starts with "(" and ends with ")" but is compound).
+ */
+interface Piece {
+  sql: string;
+  compound: boolean;
+}
+
+const atom = (sql: string): Piece => ({ sql, compound: false });
+const compound = (sql: string): Piece => ({ sql, compound: true });
+
+/** Join pieces with AND/OR, parenthesizing compound ones. */
+function joinPieces(pieces: Piece[], glue: ' AND ' | ' OR '): Piece {
+  if (pieces.length === 1) return pieces[0];
+  return compound(pieces.map((p) => (p.compound ? `(${p.sql})` : p.sql)).join(glue));
+}
+
 function colRef(ctx: Ctx, c: ColumnInfo): string {
-  const id = quoteIdent(c.name, ctx.dialect);
+  // Oracle: result column names are exact (case-sensitive), so they are always quoted, whatever their case.
+  const id = quoteIdent(c.name, ctx.dialect, ctx.dialect === 'plsql');
   return ctx.alias ? `${ctx.alias}.${id}` : id;
 }
 
@@ -93,7 +112,13 @@ function dateParam(ctx: Ctx, iso: string): string {
   return ctx.pb.add('datetime', iso.length === 10 ? `${iso}T00:00:00` : iso);
 }
 
-function conditionSql(ctx: Ctx, cond: FilterCondition): string | null {
+function conditionSql(ctx: Ctx, cond: FilterCondition): Piece | null {
+  const r = conditionText(ctx, cond);
+  return r === null ? null : typeof r === 'string' ? atom(r) : r;
+}
+
+/** A condition as SQL text (atomic) or as a Piece (date ranges may be compound). */
+function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
   const ci = resolveColumn(ctx.columns, cond.column, cond.ordinal);
   if (ci < 0) {
     ctx.warnings.push(`Column “${cond.column}” is not in the result; condition ignored`);
@@ -182,29 +207,34 @@ function conditionSql(ctx: Ctx, cond: FilterCondition): string | null {
   return `${e.left} ${op} ${e.wrap(strParam(String(v[0])))}${e.suffix}`;
 }
 
-function dateSql(ctx: Ctx, cond: FilterCondition, c: string): string | null {
+function dateSql(ctx: Ctx, cond: FilterCondition, c: string): Piece | null {
   const d = ctx.dialect;
   const v = cond.values;
   if (cond.op === 'last' || cond.op === 'next') {
     const p = parsePeriod(v)!;
     const b = periodBounds(cond.op, p.count, p.unit, ctx.now);
     const left = d === 'sqlite' ? `datetime(${c})` : c;
-    return `${left} >= ${dateParam(ctx, b.from)} AND ${left} ${cond.op === 'last' ? '<=' : '<'} ${dateParam(ctx, b.to)}`;
+    return compound(`${left} >= ${dateParam(ctx, b.from)} AND ${left} ${cond.op === 'last' ? '<=' : '<'} ${dateParam(ctx, b.to)}`);
   }
   const ops = cond.op === 'between' ? [0, 1] : [0];
   const vals = ops.map((i) => parseDateOperand(v[i])!);
   const dateOnly = cond.op === 'onDate' || vals.every(isDateOnly);
+  // Mixed precision ("2024-01-01 10:00" .. "2024-01-02"): a date-only upper bound means "through that whole day",
+  // exactly like the grid evaluator (evaluate.ts dateCondition), so "Apply on server" keeps the row count.
+  const dayUpper = cond.op === 'between' && !dateOnly && isDateOnly(vals[1]);
   if (d === 'sqlite') {
     const left = dateOnly ? `date(${c})` : `datetime(${c})`;
     const p = (s: string) => dateParam(ctx, dateOnly ? s.slice(0, 10) : s);
     switch (cond.op) {
-      case 'onDate': case 'eq': return `${left} = ${p(vals[0])}`;
-      case 'neq': return `${left} <> ${p(vals[0])}`;
-      case 'before': case 'lt': return `${left} < ${p(vals[0])}`;
-      case 'lte': return `${left} <= ${p(vals[0])}`;
-      case 'after': case 'gt': return `${left} > ${p(vals[0])}`;
-      case 'gte': return `${left} >= ${p(vals[0])}`;
-      case 'between': return `${left} BETWEEN ${p(vals[0])} AND ${p(vals[1])}`;
+      case 'onDate': case 'eq': return atom(`${left} = ${p(vals[0])}`);
+      case 'neq': return atom(`${left} <> ${p(vals[0])}`);
+      case 'before': case 'lt': return atom(`${left} < ${p(vals[0])}`);
+      case 'lte': return atom(`${left} <= ${p(vals[0])}`);
+      case 'after': case 'gt': return atom(`${left} > ${p(vals[0])}`);
+      case 'gte': return atom(`${left} >= ${p(vals[0])}`);
+      case 'between':
+        if (dayUpper) return compound(`${left} >= ${p(vals[0])} AND ${left} < ${dateParam(ctx, addDays(vals[1], 1))}`);
+        return atom(`${left} BETWEEN ${p(vals[0])} AND ${p(vals[1])}`);
     }
     return null;
   }
@@ -212,19 +242,22 @@ function dateSql(ctx: Ctx, cond: FilterCondition, c: string): string | null {
   const day = (s: string) => s.slice(0, 10);
   if (dateOnly) {
     switch (cond.op) {
-      case 'onDate': case 'eq': return `${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[0], 1))}`;
-      case 'neq': return `NOT (${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[0], 1))})`;
-      case 'before': case 'lt': return `${c} < ${dateParam(ctx, day(vals[0]))}`;
-      case 'lte': return `${c} < ${dateParam(ctx, addDays(vals[0], 1))}`;
-      case 'after': case 'gt': return `${c} >= ${dateParam(ctx, addDays(vals[0], 1))}`;
-      case 'gte': return `${c} >= ${dateParam(ctx, day(vals[0]))}`;
-      case 'between': return `${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[1], 1))}`;
+      case 'onDate': case 'eq': return compound(`${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[0], 1))}`);
+      case 'neq': return atom(`NOT (${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[0], 1))})`);
+      case 'before': case 'lt': return atom(`${c} < ${dateParam(ctx, day(vals[0]))}`);
+      case 'lte': return atom(`${c} < ${dateParam(ctx, addDays(vals[0], 1))}`);
+      case 'after': case 'gt': return atom(`${c} >= ${dateParam(ctx, addDays(vals[0], 1))}`);
+      case 'gte': return atom(`${c} >= ${dateParam(ctx, day(vals[0]))}`);
+      case 'between': return compound(`${c} >= ${dateParam(ctx, day(vals[0]))} AND ${c} < ${dateParam(ctx, addDays(vals[1], 1))}`);
     }
     return null;
   }
   const op = { eq: '=', neq: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=', before: '<', after: '>' }[cond.op as 'eq'];
-  if (cond.op === 'between') return `${c} BETWEEN ${dateParam(ctx, vals[0])} AND ${dateParam(ctx, vals[1])}`;
-  return op ? `${c} ${op} ${dateParam(ctx, vals[0])}` : null;
+  if (cond.op === 'between') {
+    if (dayUpper) return compound(`${c} >= ${dateParam(ctx, vals[0])} AND ${c} < ${dateParam(ctx, addDays(vals[1], 1))}`);
+    return atom(`${c} BETWEEN ${dateParam(ctx, vals[0])} AND ${dateParam(ctx, vals[1])}`);
+  }
+  return op ? atom(`${c} ${op} ${dateParam(ctx, vals[0])}`) : null;
 }
 
 interface Split {
@@ -255,24 +288,19 @@ export function splitForServer(node: FilterNode | null, columns: readonly Column
   return { server: null, client: node };
 }
 
-function nodeSql(ctx: Ctx, n: FilterNode, top: boolean): string | null {
+function nodeSql(ctx: Ctx, n: FilterNode, top: boolean): Piece | null {
   if (n.kind === 'condition') return conditionSql(ctx, n);
-  const parts = n.items.map((i) => nodeSql(ctx, i, false)).filter((x): x is string => !!x);
+  const parts = n.items.map((i) => nodeSql(ctx, i, false)).filter((x): x is Piece => !!x);
   if (parts.length === 0) return null;
-  const glue = n.logic === 'and' ? ' AND ' : ' OR ';
-  let s = parts.length === 1 ? parts[0] : parts.map((p) => (needsParens(p) ? `(${p})` : p)).join(glue);
-  if (n.negate) s = `NOT (${s})`;
-  else if (!top && parts.length > 1) s = `(${s})`;
-  return s;
-}
-
-function needsParens(p: string): boolean {
-  if (p.startsWith('(') && p.endsWith(')')) return false;
-  return / (AND|OR) /.test(p.replace(/BETWEEN .+? AND /g, 'BETWEEN x '));
+  const joined = joinPieces(parts, n.logic === 'and' ? ' AND ' : ' OR ');
+  if (n.negate) return atom(`NOT (${joined.sql})`);
+  // Nested groups carry their own parentheses (readable SQL); the top level is wrapped by the caller when needed.
+  if (!top && parts.length > 1) return atom(`(${joined.sql})`);
+  return joined;
 }
 
 /** Free-text search pushed as OR of LIKEs over the string columns. */
-function quickSql(ctx: Ctx, quick: string): string | null {
+function quickSql(ctx: Ctx, quick: string): Piece | null {
   const q = quick.trim();
   if (!q) return null;
   const cols = ctx.columns.filter((c) => kindClass(c.kind) === 'string' && c.kind !== 'guid');
@@ -285,7 +313,7 @@ function quickSql(ctx: Ctx, quick: string): string | null {
     if (d === 'tsql' && (c.kind === 'xml' || c.kind === 'json')) ref = `CAST(${ref} AS NVARCHAR(MAX))`;
     return `${d === 'plsql' ? `UPPER(${ref})` : ref} LIKE ${pattern} ${LIKE_ESCAPE}`;
   });
-  return parts.length === 1 ? parts[0] : `(${parts.join(' OR ')})`;
+  return atom(parts.length === 1 ? parts[0] : `(${parts.join(' OR ')})`);
 }
 
 export function buildPredicate(
@@ -297,12 +325,12 @@ export function buildPredicate(
   const pb = opts.builder ?? new ParamBuilder(dialect, opts.paramPrefix ?? 'fp');
   const ctx: Ctx = { dialect, columns, pb, alias: opts.alias ?? null, now: opts.now, warnings: [], count: 0 };
   const { server, client } = splitForServer(filter, columns);
-  const parts: string[] = [];
+  const parts: Piece[] = [];
   const main = server ? nodeSql(ctx, server, true) : null;
   if (main) parts.push(main);
   const quick = opts.quick ? quickSql(ctx, opts.quick) : null;
   if (quick) parts.push(quick);
-  const where = parts.length === 0 ? null : parts.length === 1 ? parts[0] : parts.map((p) => (needsParens(p) ? `(${p})` : p)).join(' AND ');
+  const where = parts.length === 0 ? null : joinPieces(parts, ' AND ').sql;
   const clientOnly: FilterGroup | null = !client ? null : client.kind === 'group' ? client : { kind: 'group', id: 'client', logic: 'and', items: [client] };
   if (clientOnly) ctx.warnings.push('Regular expressions are applied in the grid after the server filter');
   return { where, params: pb.params, clientOnly, serverConditions: ctx.count, warnings: ctx.warnings };

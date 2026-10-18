@@ -6,9 +6,11 @@ import { api, errorMessage } from '../api/client';
 import { Dialog } from '../components/common/Dialog';
 import * as monaco from '../editor/monaco';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from '../editor/monaco-setup';
+import { remeasureAfterFonts } from '../editor/monacoOptions';
 import { useTabs } from '../store/tabs';
 import { currentTheme } from '../theme/useTheme';
 import { rewriteForEdit } from './rewrite';
+import { diffEditorOptions, plainBrackets } from './compareOptions';
 import { useDesignerUi } from './store';
 
 export function CompareDialog({ tabId }: { tabId: string }) {
@@ -27,6 +29,11 @@ export function CompareDialog({ tabId }: { tabId: string }) {
       .then((r) => live && setServer(rewriteForEdit(r.ddl, { dialect: session.dialect, type: session.ref.type, name: session.ref.name, schema: session.ref.schema }).text))
       .catch((e) => {
         if (!live) return;
+        if (session.serverDdl === undefined) {
+          setError(`Could not load the server definition (${errorMessage(e)}).`);
+          setServer('');
+          return;
+        }
         setError(`Could not reload the server definition (${errorMessage(e)}); showing the one loaded when the tab opened.`);
         setServer(rewriteForEdit(session.serverDdl, { dialect: session.dialect, type: session.ref.type, name: session.ref.name, schema: session.ref.schema }).text);
       });
@@ -41,16 +48,11 @@ export function CompareDialog({ tabId }: { tabId: string }) {
     const lang = LANGUAGE_IDS[session.dialect];
     const original = monaco.editor.createModel(server, lang);
     const modified = monaco.editor.createModel(tab.text, lang);
-    const diff = monaco.editor.createDiffEditor(host.current, {
-      readOnly: true,
-      originalEditable: false,
-      automaticLayout: true,
-      renderSideBySide: true,
-      theme: THEME_IDS[currentTheme()],
-      minimap: { enabled: false },
-      scrollBeyondLastLine: false,
-    });
+    const diff = monaco.editor.createDiffEditor(host.current, diffEditorOptions(THEME_IDS[currentTheme()]));
     diff.setModel({ original, modified });
+    // after setModel: attaching a model to an editor re-applies the configured model options
+    plainBrackets(original, modified);
+    remeasureAfterFonts();
     return () => {
       diff.dispose();
       original.dispose();

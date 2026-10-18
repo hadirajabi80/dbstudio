@@ -174,8 +174,10 @@ public sealed partial class OracleDdlScripter : IDdlScripter
                 if (m.New.Identity is null)
                     statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Ident(m.New.Name)} DROP IDENTITY", DdlKinds.Alter));
                 else if (m.Old.Identity is null)
-                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Ident(m.New.Name)} {IdentityClause(m.New.Identity)}", DdlKinds.Alter,
-                        "Adding an identity to an existing column needs Oracle 12c and an empty or NULL-free numeric column."));
+                    // ORA-30673: MODIFY ... AS IDENTITY only alters a column that already is an identity. Refuse the design
+                    // up front instead of scripting DDL that always fails (after earlier statements were committed).
+                    throw new ArgumentException(
+                        $"Oracle cannot add an identity to an existing column ({m.New.Name}); add a new identity column instead.");
                 else
                     statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Ident(m.New.Name)} {IdentityClause(m.New.Identity)}", DdlKinds.Alter));
             }
@@ -185,7 +187,7 @@ public sealed partial class OracleDdlScripter : IDdlScripter
             if (m.NullabilityChanged) parts.Add(m.New.Nullable ? "NULL" : "NOT NULL");
             if (parts.Count == 0) continue;
             string? warning = null;
-            if (m.TypeChanged) warning = $"Changing {m.Old.Type} to {m.New.Type} fails when existing data does not fit (or the column is not empty for some type changes).";
+            if (m.TypeChanged && m.New.Computed is null) warning = TypeChangeWarning(m.Old, m.New);
             if (m.NullabilityChanged && !m.New.Nullable) warning = (warning is null ? "" : warning + " ") + $"Fails if {m.New.Name} contains NULLs.";
             statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY ({Ident(m.New.Name)} {string.Join(" ", parts)})", DdlKinds.Alter, warning));
         }
@@ -207,6 +209,58 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         foreach (var m in d.Matched.Where(m => m.CommentChanged)) statements.Add(CommentSql($"COLUMN {table}.{Ident(m.New.Name)}", m.New.Comment));
         foreach (var c in d.Added.Where(c => !string.IsNullOrWhiteSpace(c.Comment))) statements.Add(CommentSql($"COLUMN {table}.{Ident(c.Name)}", c.Comment));
     }
+
+    /// <summary>
+    /// Warning for a column type change, or null when nothing can go wrong. Widening a length or precision (VARCHAR2(200)
+    /// to VARCHAR2(400), NUMBER(10) to NUMBER(12)) always succeeds; only a smaller length, precision, scale or count of
+    /// integer digits can fail on existing data, and a change of base type converts it (most need an empty column).
+    /// </summary>
+    public static string? TypeChangeWarning(TableColumnModel oldCol, TableColumnModel newCol)
+    {
+        if (TableDiff.SameType(oldCol.Type, newCol.Type)) return null;
+        var (ob, oa) = DdlText.ParseType(oldCol.Type);
+        var (nb, na) = DdlText.ParseType(newCol.Type);
+        ob = Synonym(ob.Trim().ToUpperInvariant());
+        nb = Synonym(nb.Trim().ToUpperInvariant());
+        var conversion = $"Changing {oldCol.Type} to {newCol.Type} converts existing data: Oracle requires an empty column for most type changes, and fails when a value cannot be converted.";
+
+        if (ob == "NUMBER" && nb == "NUMBER")
+        {
+            // NUMBER without precision is unbounded; NUMBER(p) is NUMBER(p,0); NUMBER(*,s) has precision 38.
+            if (na.Count == 0) return null;
+            if (oa.Count == 0) return $"Narrowing {oldCol.Type} to {newCol.Type} fails unless the column is empty (ORA-01440).";
+            static (int P, int S) Precision(IReadOnlyList<string> a) => (a[0] == "*" ? 38 : DdlText.ArgInt(a, 0) ?? 38, DdlText.ArgInt(a, 1) ?? 0);
+            var (op, os) = Precision(oa);
+            var (np, ns) = Precision(na);
+            return np < op || ns < os || np - ns < op - os
+                ? $"Narrowing {oldCol.Type} to {newCol.Type} fails unless the column is empty (ORA-01440)."
+                : null;
+        }
+
+        var sameFamily = ob == nb || (IsCharacterType(ob) && IsCharacterType(nb) && IsNational(ob) == IsNational(nb));
+        if (!sameFamily) return conversion;
+        var (oLen, oChar) = Length(oa);
+        var (nLen, nChar) = Length(na);
+        // CHAR <-> VARCHAR2 is allowed on data only while the length stays the same.
+        if (ob != nb) return oLen == nLen && oChar == nChar ? null : conversion;
+        var smaller = (oLen is not null && nLen is not null && nLen < oLen) || (oLen is null && nLen is not null) || (oChar && !nChar && nLen <= oLen);
+        return smaller ? $"Narrowing {oldCol.Type} to {newCol.Type} fails when existing values do not fit (ORA-01441)." : null;
+
+        static string Synonym(string t) => t switch { "VARCHAR" => "VARCHAR2", "DECIMAL" or "NUMERIC" => "NUMBER", _ => t };
+
+        // "200", "200 CHAR", "200 BYTE": the length, and whether it counts characters.
+        static (int? Length, bool Chars) Length(IReadOnlyList<string> a)
+        {
+            if (a.Count == 0) return (null, false);
+            var bits = a[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var n = DdlText.ArgInt(bits, 0);
+            return (n, bits.Length > 1 && bits[1].Equals("CHAR", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private static bool IsCharacterType(string baseType) => baseType is "VARCHAR2" or "CHAR" or "NVARCHAR2" or "NCHAR";
+
+    private static bool IsNational(string baseType) => baseType is "NVARCHAR2" or "NCHAR";
 
     // ------------------------------------------------------------------ builders
 
@@ -292,17 +346,21 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         var schema = string.IsNullOrWhiteSpace(view.Schema) ? context.DefaultSchema : Fold(view.Schema);
         var name = Fold(view.Name);
         var statements = new List<DdlStatement>();
-        if (view.OriginalName is not null && !Fold(view.OriginalName).Equals(name, StringComparison.Ordinal))
-        {
-            if (schema is not null && context.DefaultSchema is not null && !schema.Equals(context.DefaultSchema, StringComparison.Ordinal))
-                warnings.Add("RENAME only works for objects of the current schema.");
-            statements.Add(new DdlStatement($"RENAME {Ident(Fold(view.OriginalName))} TO {Ident(name)}", DdlKinds.Rename));
-        }
-        var sb = new StringBuilder("CREATE OR REPLACE ");
+        // OR REPLACE only when editing the same view: a new name is a plain CREATE, so an existing object of that name
+        // fails with ORA-00955 instead of being replaced. A renamed view is created first, then the old one dropped
+        // (DDL commits each statement: if the CREATE fails nothing has changed).
+        var original = view.OriginalName is null ? null : Fold(view.OriginalName);
+        var editing = original is not null && original.Equals(name, StringComparison.Ordinal);
+        var sb = new StringBuilder(editing ? "CREATE OR REPLACE " : "CREATE ");
         if (view.Options.Force) sb.Append("FORCE ");
         sb.Append("VIEW ").Append(Table(schema, name)).Append(" AS\n").Append(TrimBody(view.Body));
         if (view.Options.CheckOption) sb.Append("\nWITH CHECK OPTION");
-        statements.Add(new DdlStatement(sb.ToString(), view.OriginalName is null ? DdlKinds.Create : DdlKinds.Alter));
+        statements.Add(new DdlStatement(sb.ToString(), editing ? DdlKinds.Alter : DdlKinds.Create));
+        if (original is not null && !editing)
+        {
+            statements.Add(new DdlStatement($"DROP VIEW {Table(schema, original)}", DdlKinds.Drop));
+            warnings.Add($"{Table(schema, original)} is replaced by a new view {Table(schema, name)}: grants on the old view are not carried over.");
+        }
         return new DdlScript(statements, false, false, warnings);
     }
 

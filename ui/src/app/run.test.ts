@@ -7,11 +7,11 @@ import { isRunning } from '../store/resultsReducer';
 import { useSessions } from '../store/sessions';
 import { useTabs } from '../store/tabs';
 import { useUi } from '../store/ui';
-import { TEST_ENGINE_URL, useMockEngine } from '../test/mockServer';
+import { TEST_ENGINE_URL, installMockEngine } from '../test/mockServer';
 import { cancelTab, commitTab, runInTab, setTxMode } from './actions';
 import { wireSocket } from './boot';
 
-const mock = useMockEngine({ frameDelay: 0, frameRows: 500 });
+const mock = installMockEngine({ frameDelay: 0, frameRows: 500 });
 
 async function until(pred: () => boolean, ms = 5000) {
   const t0 = Date.now();

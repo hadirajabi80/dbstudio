@@ -9,9 +9,25 @@ import { connectAndOpen } from '../../app/actions';
 import { isMac } from '../../commands/keys';
 import { CONNECTION_PALETTE, connColorCss } from '../../theme/connColors';
 import { Dialog } from '../common/Dialog';
-import { ProviderIcon } from '../common/icons';
+import { Select } from '../common/Select';
+import { PROVIDER_LABEL, ProviderIcon } from '../common/icons';
 
 type Values = Record<string, unknown>;
+
+/**
+ * Client-side wording of provider fields: one naming set across the app, and the two SQLite read-only concepts kept
+ * apart (the file opened read-only vs. the engine refusing statements that change data).
+ */
+const FIELD_TEXT: Record<string, Record<string, { label?: string; help?: string }>> = {
+  sqlite: {
+    readOnly: { label: 'Open file read-only', help: 'SQLite opens the file with Mode=ReadOnly: nothing can write to it, not even DbStudio.' },
+  },
+};
+
+function fieldText(providerId: string | undefined, f: FormField): FormField {
+  const o = providerId ? FIELD_TEXT[providerId]?.[f.key] : undefined;
+  return o ? { ...f, label: o.label ?? f.label, help: o.help ?? f.help } : f;
+}
 
 export function isFieldVisible(f: FormField, values: Values): boolean {
   if (!f.visibleWhen) return true;
@@ -81,7 +97,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const folders = useMemo(() => [...new Set(connections.map((c) => c.folder).filter((f): f is string => !!f))].sort(), [connections]);
-  const fields = provider?.formSpec.fields ?? [];
+  const fields = (provider?.formSpec.fields ?? []).map((f) => fieldText(provider?.id, f));
   const visible = fields.filter((f) => isFieldVisible(f, values));
   const effectiveName = nameTouched ? name : name || suggestName(provider, values);
   const hasStored = !!editing?.hasPassword && state.mode === 'edit';
@@ -100,7 +116,8 @@ export function ConnectionDialog({ state, onClose }: Props) {
     setTestResult(null);
   };
 
-  const validate = (): boolean => {
+  /** Required fields (and the name, except for Test). Marks the fields and focuses the first invalid one. */
+  const validate = (forTest = false): boolean => {
     const e: Record<string, string> = {};
     for (const f of visible) {
       if (!f.required) continue;
@@ -111,8 +128,10 @@ export function ConnectionDialog({ state, onClose }: Props) {
       const v = values[f.key];
       if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) e[f.key] = `${f.label} is required`;
     }
-    if (!effectiveName.trim()) e.__name = 'Name is required';
+    if (!forTest && !effectiveName.trim()) e.__name = 'Name is required';
     setErrors(e);
+    const first = Object.keys(e)[0];
+    if (first) setTimeout(() => document.getElementById(first === '__name' ? 'conn-name' : `conn-f-${first}`)?.focus(), 0);
     return Object.keys(e).length === 0;
   };
 
@@ -127,7 +146,8 @@ export function ConnectionDialog({ state, onClose }: Props) {
   };
 
   const runTest = async () => {
-    if (!provider) return;
+    // Empty required fields are marked here; the engine is not asked to test an incomplete profile.
+    if (!provider || !validate(true)) return;
     setTesting(true);
     setTestResult(null);
     try {
@@ -223,7 +243,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
               disabled={isEdit && p.id !== providerId}
             >
               <ProviderIcon providerId={p.id} size={22} />
-              <span>{p.displayName}</span>
+              <span>{PROVIDER_LABEL[p.id] ?? p.displayName}</span>
             </button>
           ))}
         </div>
@@ -236,6 +256,8 @@ export function ConnectionDialog({ state, onClose }: Props) {
               <input
                 id="conn-name"
                 className={`input${errors.__name ? ' invalid' : ''}`}
+                aria-invalid={errors.__name ? true : undefined}
+                aria-describedby={errors.__name ? 'conn-name-error' : undefined}
                 value={effectiveName}
                 placeholder="Connection name"
                 onChange={(e) => {
@@ -243,7 +265,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
                   setNameTouched(true);
                 }}
               />
-              {errors.__name && <div className="form-error">{errors.__name}</div>}
+              {errors.__name && <div className="form-error" id="conn-name-error" role="alert">{errors.__name}</div>}
             </div>
 
             {visible.map((f) => (
@@ -303,7 +325,8 @@ export function ConnectionDialog({ state, onClose }: Props) {
             <div className="form-control checks">
               <label className="check">
                 <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} />
-                Read-only <span className="muted">(engine rejects statements that change data)</span>
+                {/* One label on every provider (design-r1-05); SQLite's "Open file read-only" is its own field above. */}
+                Read-only <span className="muted">(DbStudio blocks statements that change data)</span>
               </label>
               {fields.some((f) => f.type === 'password') && (
                 <label className="check">
@@ -386,12 +409,15 @@ interface FieldRowProps {
 function FieldRow({ field: f, value, error, password, hasStoredPassword, onChange, onPassword }: FieldRowProps) {
   const id = `conn-f-${f.key}`;
   const cls = `input${error ? ' invalid' : ''}`;
+  // Accessible error state: the message under the field describes the invalid control.
+  const aria = error ? { 'aria-invalid': true as const, 'aria-describedby': `${id}-error` } : {};
   let control: ReactNode;
   switch (f.type) {
     case 'password':
       control = (
         <input
           id={id}
+          {...aria}
           type="password"
           className={cls}
           autoComplete="new-password"
@@ -405,6 +431,7 @@ function FieldRow({ field: f, value, error, password, hasStoredPassword, onChang
       control = (
         <input
           id={id}
+          {...aria}
           type="number"
           className={`${cls} narrow`}
           value={value === undefined || value === null ? '' : String(value)}
@@ -423,22 +450,24 @@ function FieldRow({ field: f, value, error, password, hasStoredPassword, onChang
       break;
     case 'select':
       control = (
-        <select id={id} className={cls} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-          {(f.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <Select
+          id={id}
+          {...aria}
+          className={error ? 'invalid' : undefined}
+          value={String(value ?? '')}
+          options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
+          onChange={(v) => onChange(v)}
+        />
       );
       break;
     case 'file':
-      control = <FileInput id={id} className={cls} field={f} value={typeof value === 'string' ? value : ''} onChange={onChange} />;
+      control = <FileInput id={id} aria={aria} className={cls} field={f} value={typeof value === 'string' ? value : ''} onChange={onChange} />;
       break;
     case 'list':
       control = (
         <input
           id={id}
+          {...aria}
           className={cls}
           value={Array.isArray(value) ? value.join(', ') : typeof value === 'string' ? value : ''}
           placeholder={f.placeholder ?? 'Comma-separated'}
@@ -450,6 +479,7 @@ function FieldRow({ field: f, value, error, password, hasStoredPassword, onChang
       control = (
         <input
           id={id}
+          {...aria}
           className={cls}
           value={typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)}
           placeholder={f.placeholder ?? ''}
@@ -470,19 +500,19 @@ function FieldRow({ field: f, value, error, password, hasStoredPassword, onChang
       )}
       <div className="form-control">
         {control}
-        {error && <div className="form-error">{error}</div>}
+        {error && <div className="form-error" id={`${id}-error`} role="alert">{error}</div>}
         {f.help && !error && <div className="form-help">{f.help}</div>}
       </div>
     </>
   );
 }
 
-function FileInput({ id, className, field, value, onChange }: { id: string; className: string; field: FormField; value: string; onChange: (v: string) => void }) {
+function FileInput({ id, aria, className, field, value, onChange }: { id: string; aria: Record<string, unknown>; className: string; field: FormField; value: string; onChange: (v: string) => void }) {
   const platform = getPlatform();
   const exts = (field.fileFilter ?? '').split(';').map((s) => s.trim().replace(/^\*\./, '')).filter(Boolean);
   return (
     <div className="file-input">
-      <input id={id} className={className} value={value} placeholder={field.placeholder ?? 'C:\\data\\database.db'} spellCheck={false} onChange={(e) => onChange(e.target.value)} />
+      <input id={id} {...aria} className={className} value={value} placeholder={field.placeholder ?? 'C:\\data\\database.db'} spellCheck={false} onChange={(e) => onChange(e.target.value)} />
       {platform.hasFileSystem && (
         <button
           className="btn"

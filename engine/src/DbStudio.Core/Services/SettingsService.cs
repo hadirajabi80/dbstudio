@@ -67,6 +67,8 @@ public sealed class SettingsService
         ["connections"] = new JsonObject
         {
             ["maxSessionsPerProfile"] = 8,
+            // B1 (logic-08): seconds a session survives its UI client's disconnect before it is closed (0 = never).
+            ["orphanGraceSeconds"] = SessionManager.DefaultOrphanGraceSeconds,
         },
     };
 
@@ -223,6 +225,7 @@ public sealed class SettingsService
 
         if (s["connections"] is not JsonObject connections) throw Invalid("connections", "object");
         CheckRange(connections, "connections.maxSessionsPerProfile", 0, 1000);
+        CheckRange(connections, "connections.orphanGraceSeconds", 0, 86_400);
     }
 
     private static void CheckRange(JsonObject o, string path, double min, double max)

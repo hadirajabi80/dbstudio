@@ -216,6 +216,24 @@ public sealed class HistoryService : IDisposable
         }
     }
 
+    /// <summary>True when the entry exists (PUT /history/{id} with nothing to change).</summary>
+    public async Task<bool> ExistsAsync(long id, CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await using var c = await OpenAsync(ct).ConfigureAwait(false);
+            await using var cmd = c.CreateCommand();
+            cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM history WHERE id = $id)";
+            cmd.Parameters.AddWithValue("$id", id);
+            return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture) != 0;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<bool> SetPinnedAsync(long id, bool pinned, CancellationToken ct = default) =>
         await NonQueryAsync("UPDATE history SET pinned = $p WHERE id = $id", ct, ("$p", pinned ? 1 : 0), ("$id", id)).ConfigureAwait(false) > 0;
 

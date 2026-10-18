@@ -31,8 +31,13 @@ export interface Command<A = unknown> {
   category: string;
   /** Primary shortcut in display form ("Ctrl+Alt+T", chord "Ctrl+K Ctrl+S"). */
   shortcut?: string;
-  /** Extra bindings that trigger the same command (not shown in menus; shown in the shortcut sheet). */
+  /** Extra bindings that trigger the same command (not shown in menus unless `showAltShortcuts`; always in the sheet). */
   altShortcuts?: string[];
+  /**
+   * Also show `altShortcuts` next to the primary one in tooltips, menus and the palette (a second binding users of
+   * other tools expect, e.g. Format SQL: Shift+Alt+F and the JetBrains Ctrl+Alt+L).
+   */
+  showAltShortcuts?: boolean;
   scope?: CommandScope;
   /** Enablement; evaluated for the palette, menus and before running. */
   when?(args?: A): boolean;
@@ -92,6 +97,12 @@ function bindingsOf(c: AnyCommand): ShortcutBinding[] {
   if (c.shortcut) out.push({ key: normalizeShortcut(c.shortcut), display: displayShortcut(c.shortcut), commandId: c.id, scope, primary: true });
   for (const s of c.altShortcuts ?? []) out.push({ key: normalizeShortcut(s), display: displayShortcut(s), commandId: c.id, scope, primary: false });
   return out;
+}
+
+/** Shortcuts a command shows in tooltips, menus and the palette: the primary one (+ alternatives when advertised). */
+export function advertisedShortcuts(c: Pick<Command<never>, 'shortcut' | 'altShortcuts' | 'showAltShortcuts'>): string[] {
+  if (!c.shortcut) return [];
+  return c.showAltShortcuts ? [c.shortcut, ...(c.altShortcuts ?? [])] : [c.shortcut];
 }
 
 /** Register (or replace, same id) a command. Returns a disposer. */

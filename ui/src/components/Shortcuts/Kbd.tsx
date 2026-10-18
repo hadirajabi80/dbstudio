@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { displayShortcut, shortcutKeys } from '../../commands/keys';
+import { displayShortcut, shortcutKeys, tooltipWithShortcut } from '../../commands/keys';
 
 /** Key caps for a shortcut, platform-aware: Ctrl+Shift+P on Windows, ⇧⌘P on macOS. */
 export function Kbd({ shortcut, className }: { shortcut: string | undefined | null; className?: string }) {
@@ -20,7 +20,7 @@ export function Kbd({ shortcut, className }: { shortcut: string | undefined | nu
   );
 }
 
-/** "Title (Ctrl+Shift+P)" for tooltips. */
+/** "Title (Ctrl+Shift+P)" for tooltips ("Title (detail) · Ctrl+Shift+P" after a parenthetical). */
 export function withShortcut(title: string, shortcut?: string | null): string {
-  return shortcut ? `${title} (${displayShortcut(shortcut)})` : title;
+  return tooltipWithShortcut(title, shortcut ? displayShortcut(shortcut) : null);
 }

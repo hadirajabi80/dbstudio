@@ -1,12 +1,15 @@
 // View designer tab (docs/PLAN-M1.5.md 1.3.2): name/schema/options strip over a SqlEditor holding only the SELECT,
 // a live column preview (POST /sessions/{sid}/describe, debounced 600 ms) and the generated DDL
 // (CREATE OR ALTER / CREATE OR REPLACE / DROP+CREATE) which Apply runs.
-import { Code2, Eye, FileCode2, LoaderCircle, Play, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { CircleAlert, Code2, Eye, FileCode2, LoaderCircle, Play, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage, isApiError } from '../../api/client';
 import type { ColumnInfo, DdlFailedDetail, DdlScript, ViewModel, ViewOptions } from '../../api/types';
 import { catalogDatabase, effectiveDatabase } from '../../app/actions';
+import { displayShortcut } from '../../commands/keys';
 import { runCommand } from '../../commands/registry';
+import { commandView } from '../../commands/useCommands';
+import { Select } from '../../components/common/Select';
 import type { TabViewProps } from '../../components/layout/tabViews';
 import { SqlEditor } from '../../editor/SqlEditor';
 import { useCatalog, useSnapshot } from '../../store/catalog';
@@ -18,10 +21,9 @@ import { toast, useUi } from '../../store/ui';
 import { registerDesignerActions } from '../actions';
 import { applySummary, scriptToText, splitForApply } from '../ddl';
 import { DdlPreview, type ApplyFailure } from '../DdlPreview';
-import { openEditScript, viewTitle, type ViewDesignerState } from '../open';
-import '../designer.css';
-
-const NO_OPTIONS: ViewOptions = { schemaBinding: false, checkOption: false, force: false };
+import { designerKey, openEditScript, openTableDesigner, openViewDesigner, viewTitle, type ViewDesignerState } from '../open';
+import { viewNameConflict } from './nameConflict';
+import { NO_VIEW_OPTIONS as NO_OPTIONS, viewDirty, viewUnchanged } from './viewState';
 
 export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
   const st = tab.state as ViewDesignerState;
@@ -54,6 +56,12 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
   const [failure, setFailure] = useState<ApplyFailure | null>(null);
   const lines = useRef<number[]>([]);
   const originalName = server?.name ?? st.name ?? null;
+  const conflict = useMemo(() => viewNameConflict(snapshot, dialect, schema, name, originalName), [snapshot, dialect, schema, name, originalName]);
+
+  // The existence check needs the schema's objects in the catalog.
+  useEffect(() => {
+    if (schema) void useCatalog.getState().loadSchema(cid, catalogDb, schema);
+  }, [cid, catalogDb, schema]);
 
   const load = useCallback(async () => {
     if (!st.name) return;
@@ -76,7 +84,10 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
     if (st.name) void load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = loaded && (server ? body !== server.body || name !== server.name || JSON.stringify(options) !== JSON.stringify(server.options) : body.replace(/\s+/g, ' ').trim() !== 'SELECT FROM' && body.trim() !== '');
+  const editState = { loaded, server, name, body, options, handEdited };
+  const dirty = viewDirty(editState);
+  /** The view matches the server: "No changes", Apply disabled (as in the table designer). */
+  const unchanged = viewUnchanged(editState);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -127,7 +138,7 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
     if (!name.trim() || !body.trim()) {
       setScript(null);
       setGenerated('');
-      setText(!name.trim() ? '-- Name the view to see its DDL\n' : '');
+      setText('');
       return;
     }
     const ac = new AbortController();
@@ -156,6 +167,14 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
 
   const apply = useCallback(async () => {
     if (applying) return;
+    if (unchanged) {
+      toast('info', 'Nothing to apply', 'The view already matches the server.');
+      return;
+    }
+    if (conflict) {
+      toast('warning', `A ${conflict.type === 'table' ? 'table' : 'view'} named ${conflict.name} already exists`, 'Choose another name, or open the existing object instead.');
+      return;
+    }
     const statements = handEdited ? splitForApply(text, dialect) : (script?.statements ?? []).map((s, i) => ({ sql: s.sql, line: lines.current[i] ?? null }));
     if (!statements.length) {
       toast('info', 'Nothing to apply');
@@ -172,17 +191,21 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
       const n = name.trim();
       toast('success', `${originalName ? 'Updated' : 'Created'} view ${n}`, `${r.executed} statement${r.executed === 1 ? '' : 's'} in ${r.elapsedMs} ms`);
       useTabs.getState().updateView(tab.id, {
-        title: viewTitle(dialect, schema, n), dirty: false,
+        title: viewTitle(dialect, schema, n), dirty: false, key: designerKey('view', { connectionId: cid, database: st.database, schema }, n),
         state: { ...st, schema, name: n, body: undefined, newName: undefined, options: undefined } satisfies ViewDesignerState,
       });
       setHandEdited(false);
+      setFailure(null);
+      // The applied view is the server's now: until the next edit the designer shows "No changes".
       try {
         const v = await api.designerView(cid, st.database, schema, n);
         setServer(v);
         setBody(v.body);
         setOptions(v.options ?? NO_OPTIONS);
+        setName(v.name);
       } catch {
         setServer({ schema, name: n, body, options, ddl: '' });
+        setName(n);
       }
       if (schema) void useCatalog.getState().loadSchema(cid, catalogDb, schema, true);
     } catch (e) {
@@ -197,7 +220,7 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
     } finally {
       setApplying(false);
     }
-  }, [applying, handEdited, text, dialect, script, originalName, name, cid, st, schema, tab.id, body, options, catalogDb, askConfirm]);
+  }, [applying, unchanged, conflict, handEdited, text, dialect, script, originalName, name, cid, st, schema, tab.id, body, options, catalogDb, askConfirm]);
 
   useEffect(() => registerDesignerActions(tab.id, { apply: () => void apply() }), [tab.id, apply]);
 
@@ -217,18 +240,28 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
         </div>
         <label className="dz-field">
           Name
-          <input className="input mono" style={{ width: 200 }} value={name} disabled={locked} autoFocus={!originalName} placeholder={dialect === 'plsql' ? 'V_NAME' : 'vName'} onChange={(e) => setName(e.target.value)} />
+          <input
+            className={`input mono${conflict ? ' invalid' : ''}`}
+            style={{ width: 200 }}
+            value={name}
+            disabled={locked}
+            autoFocus={!originalName}
+            placeholder={dialect === 'plsql' ? 'V_NAME' : 'vName'}
+            aria-invalid={conflict ? true : undefined}
+            aria-describedby={conflict ? `${tab.id}-name-conflict` : undefined}
+            onChange={(e) => setName(e.target.value)}
+          />
         </label>
         {dialect !== 'sqlite' && (
           <label className="dz-field">
             Schema
-            <select className="input" value={schema ?? ''} disabled={locked || !!originalName} onChange={(e) => setSchema(e.target.value || null)}>
-              {(schemas.length ? schemas : ['']).map((s) => (
-                <option key={s} value={s}>
-                  {s || '(default)'}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={schema ?? ''}
+              disabled={locked || !!originalName}
+              options={(schemas.length ? schemas : ['']).map((s) => ({ value: s, label: s || '(default)' }))}
+              onChange={(v) => setSchema(v || null)}
+              menuMinWidth={160}
+            />
           </label>
         )}
         {dialect === 'tsql' && (
@@ -265,10 +298,35 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
             </button>
           </>
         )}
-        <button type="button" className="btn btn-primary btn-xs" disabled={applying || (!handEdited && !script?.statements.length)} onClick={() => void apply()} title="Apply the DDL (Ctrl+S)">
+        <button
+          type="button"
+          className="btn btn-primary btn-xs"
+          disabled={applying || unchanged || !!conflict || (!handEdited && !script?.statements.length)}
+          onClick={() => void apply()}
+          title={conflict ? 'Choose a name that is not taken' : unchanged ? 'No changes: the view matches the server' : commandView('designer.apply', undefined, 'Apply the DDL').tooltip}
+        >
           {applying ? <LoaderCircle size={12} className="spin" /> : <Play size={12} />} Apply
         </button>
       </div>
+      {conflict && (
+        <div className="dz-banner error" role="alert" id={`${tab.id}-name-conflict`}>
+          <CircleAlert size={14} aria-hidden="true" />
+          <span>
+            A {conflict.type === 'table' ? 'table' : 'view'} named <span className="mono">{conflict.name}</span> already exists — open it instead, or choose another name.
+          </span>
+          <button
+            type="button"
+            className="btn btn-xs"
+            onClick={() => {
+              const ctx = { connectionId: cid, database: st.database, schema, dialect };
+              if (conflict.type === 'table') openTableDesigner(ctx, conflict.name);
+              else openViewDesigner(ctx, conflict.name);
+            }}
+          >
+            Open {conflict.name}
+          </button>
+        </div>
+      )}
       {loadError && (
         <div className="dz-banner error" role="alert">
           <span>Could not load the view: {loadError}</span>
@@ -283,11 +341,11 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
         </div>
       ) : (
         <div className="dz-body">
-          <div className="dz-split" style={{ flex: '1 1 55%' }}>
+          <div className="dz-split">
             <div className={`dz-split-main${locked ? ' dz-locked' : ''}`}>
               <div className="dz-preview-bar">
                 <strong>SELECT</strong>
-                <span>The query the view returns (IntelliSense knows this connection’s tables). Ctrl+Enter refreshes the columns.</span>
+                <span>The query the view returns (IntelliSense knows this connection’s tables). {displayShortcut('Mod+Enter')} refreshes the columns.</span>
               </div>
               <div className="dz-editor-host">
                 <SqlEditor
@@ -349,7 +407,20 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
             text={text}
             handEdited={handEdited}
             loading={scriptLoading}
-            summary={handEdited ? `${splitForApply(text, dialect).length} statement(s) (edited)` : script ? applySummary(script, dialect) : ''}
+            summary={
+              handEdited
+                ? `${splitForApply(text, dialect).length} statement(s) (edited)`
+                : unchanged
+                  ? 'No changes'
+                  : !name.trim()
+                  ? 'Name the view to see its DDL'
+                  : !body.trim()
+                    ? 'Write the SELECT to see the DDL'
+                    : script
+                      ? applySummary(script, dialect)
+                      : ''
+            }
+            empty={!handEdited && !scriptError && !failure && (unchanged || !name.trim() || !body.trim() || !script?.statements.length)}
             warnings={handEdited ? [] : [...(script?.warnings ?? []), ...(script?.statements.map((s) => s.warning).filter((w): w is string => !!w) ?? [])]}
             error={scriptError}
             failure={failure}

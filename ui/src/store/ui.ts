@@ -11,6 +11,19 @@ export interface Toast {
   action?: { label: string; run: () => void };
 }
 
+export interface ConfirmAck {
+  /** Checkbox label ("Allow this statement to write to “Prod”"). */
+  label: string;
+  /** true: the confirm button stays disabled until the box is ticked (explicit arming of a dangerous action). */
+  required?: boolean;
+}
+
+export interface ConfirmResult {
+  ok: boolean;
+  /** State of the `ack` checkbox (false when there is none). */
+  ack: boolean;
+}
+
 export interface ConfirmRequest {
   title: string;
   message: string;
@@ -18,8 +31,13 @@ export interface ConfirmRequest {
   items?: string[];
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Danger dialogs focus Cancel (Enter = Cancel) and style the confirm button as destructive. */
   danger?: boolean;
-  resolve: (ok: boolean) => void;
+  /** Optional acknowledgement checkbox (read-only override, writes on read-only multi-run targets). */
+  ack?: ConfirmAck;
+  resolve: (r: ConfirmResult) => void;
+  /** Set by askConfirmAck: every request is a fresh dialog (its checkbox starts unticked). */
+  seq?: number;
 }
 
 export type ConnectionDialogState =
@@ -43,6 +61,7 @@ export interface SwitcherState {
 const LAYOUT_KEY = 'dbstudio.layout.v1';
 
 interface Layout {
+  /** Dock width in px; 0 = automatic (see defaultDockWidth). */
   explorerWidth: number;
   /** Kept for M1 layouts; history now lives in the left dock. */
   historyWidth: number;
@@ -54,13 +73,25 @@ interface Layout {
   resultsVisible: boolean;
   cellViewerWidth: number;
   dock: DockPanel;
+  /** Results fraction chosen by the user per console tab (overrides `resultsFraction`). */
+  tabSplits: Record<string, number>;
 }
 
-export const DOCK_MIN = 220;
+/** Dock width bounds: clamp(200px, 22vw, 480px). The default follows the window; a dragged width is kept. */
+export const DOCK_MIN = 200;
 export const DOCK_MAX = 480;
 
+/** Default dock width for a window: 22vw within [DOCK_MIN, DOCK_MAX]. */
+export function defaultDockWidth(viewport = typeof window === 'undefined' ? 1280 : window.innerWidth): number {
+  return Math.round(Math.max(DOCK_MIN, Math.min(DOCK_MAX, viewport * 0.22)));
+}
+
+/** Windows shorter than this favour the results pane (40/60) after the first run. */
+export const SHORT_WINDOW = 760;
+
 const DEFAULT_LAYOUT: Layout = {
-  explorerWidth: 280,
+  // 0 = automatic: clamp(DOCK_MIN, 22vw, DOCK_MAX); a dragged width is stored in pixels.
+  explorerWidth: 0,
   historyWidth: 340,
   resultsFraction: 0.45,
   explorerVisible: true,
@@ -68,6 +99,7 @@ const DEFAULT_LAYOUT: Layout = {
   resultsVisible: true,
   cellViewerWidth: 340,
   dock: 'explorer',
+  tabSplits: {},
 };
 
 function loadLayout(): Layout {
@@ -75,8 +107,10 @@ function loadLayout(): Layout {
     const raw = localStorage.getItem(LAYOUT_KEY);
     if (raw) {
       const l = { ...DEFAULT_LAYOUT, ...(JSON.parse(raw) as Partial<Layout>) };
-      l.explorerWidth = Math.max(DOCK_MIN, Math.min(DOCK_MAX, l.explorerWidth));
+      // 280 was the fixed M1 default (never dragged): treat it as automatic.
+      l.explorerWidth = !l.explorerWidth || l.explorerWidth === 280 ? 0 : Math.max(DOCK_MIN, Math.min(DOCK_MAX, l.explorerWidth));
       if (!['explorer', 'history', 'connections'].includes(l.dock)) l.dock = 'explorer';
+      if (!l.tabSplits || typeof l.tabSplits !== 'object') l.tabSplits = {};
       return l;
     }
   } catch {
@@ -101,7 +135,8 @@ interface UiState extends Layout {
   connectionDialog: ConnectionDialogState | null;
   confirm: ConfirmRequest | null;
   toasts: Toast[];
-  cursor: { line: number; col: number } | null;
+  /** Cursor position per console tab (status bar "Ln, Col"). */
+  cursors: Record<string, { line: number; col: number }>;
   wsStatus: WsStatus;
   engineError: string | null;
   /** Screen-reader announcement (aria-live region). */
@@ -121,10 +156,14 @@ interface UiState extends Layout {
   openConnectionDialog(s: ConnectionDialogState): void;
   closeConnectionDialog(): void;
   askConfirm(req: Omit<ConfirmRequest, 'resolve'>): Promise<boolean>;
-  resolveConfirm(ok: boolean): void;
+  /** Like askConfirm, also returning the state of the `ack` checkbox. */
+  askConfirmAck(req: Omit<ConfirmRequest, 'resolve'>): Promise<ConfirmResult>;
+  resolveConfirm(ok: boolean, ack?: boolean): void;
   toast(kind: Toast['kind'], text: string, detail?: string, action?: Toast['action']): void;
   dismissToast(id: number): void;
-  setCursor(c: { line: number; col: number } | null): void;
+  setCursor(tabId: string, c: { line: number; col: number } | null): void;
+  /** Remember the results/editor split of one console tab (null forgets it). */
+  setTabSplit(tabId: string, fraction: number | null): void;
   setWsStatus(s: WsStatus): void;
   setEngineError(e: string | null): void;
   announce(text: string): void;
@@ -146,6 +185,8 @@ function persistLayout(s: Layout) {
       resultsVisible: s.resultsVisible,
       cellViewerWidth: s.cellViewerWidth,
       dock: s.dock,
+      // Bounded: only the most recent tabs are kept.
+      tabSplits: Object.fromEntries(Object.entries(s.tabSplits).slice(-100)),
     };
     try {
       localStorage.setItem(LAYOUT_KEY, JSON.stringify(l));
@@ -154,6 +195,8 @@ function persistLayout(s: Layout) {
     }
   }, 300);
 }
+
+let confirmSeq = 0;
 
 export const useUi = create<UiState>((set, get) => ({
   ...loadLayout(),
@@ -169,7 +212,7 @@ export const useUi = create<UiState>((set, get) => ({
   connectionDialog: null,
   confirm: null,
   toasts: [],
-  cursor: null,
+  cursors: {},
   wsStatus: 'idle',
   engineError: null,
   announcement: null,
@@ -224,14 +267,18 @@ export const useUi = create<UiState>((set, get) => ({
     set({ connectionDialog: null });
   },
   askConfirm(req) {
-    const prev = get().confirm;
-    if (prev) prev.resolve(false);
-    return new Promise<boolean>((resolve) => set({ confirm: { ...req, resolve } }));
+    return get().askConfirmAck(req).then((r) => r.ok);
   },
-  resolveConfirm(ok) {
+  askConfirmAck(req) {
+    const prev = get().confirm;
+    if (prev) prev.resolve({ ok: false, ack: false });
+    return new Promise<ConfirmResult>((resolve) => set({ confirm: { ...req, resolve, seq: ++confirmSeq } }));
+  },
+  resolveConfirm(ok, ack = false) {
     const c = get().confirm;
     set({ confirm: null });
-    c?.resolve(ok);
+    // A required acknowledgement that was not ticked never confirms.
+    c?.resolve({ ok: ok && (!c.ack?.required || ack), ack: !!c.ack && ack });
   },
   toast(kind, text, detail, action) {
     const id = ++toastSeq;
@@ -242,8 +289,20 @@ export const useUi = create<UiState>((set, get) => ({
   dismissToast(id) {
     set({ toasts: get().toasts.filter((t) => t.id !== id) });
   },
-  setCursor(c) {
-    set({ cursor: c });
+  setCursor(tabId, c) {
+    const cur = get().cursors[tabId];
+    if (c && cur && cur.line === c.line && cur.col === c.col) return;
+    const cursors = { ...get().cursors };
+    if (c) cursors[tabId] = c;
+    else delete cursors[tabId];
+    set({ cursors });
+  },
+  setTabSplit(tabId, fraction) {
+    const tabSplits = { ...get().tabSplits };
+    if (fraction === null) delete tabSplits[tabId];
+    else tabSplits[tabId] = fraction;
+    set({ tabSplits });
+    persistLayout(get());
   },
   setWsStatus(s) {
     set({ wsStatus: s });

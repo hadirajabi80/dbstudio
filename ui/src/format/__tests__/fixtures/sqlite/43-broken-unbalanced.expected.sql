@@ -1,2 +1,2 @@
 select (1 + 2 from t;
-select 1;
+SELECT 1;

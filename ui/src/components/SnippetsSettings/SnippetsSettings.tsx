@@ -2,6 +2,7 @@
 // Settings.snippets, next to the read-only built-ins. A user snippet with a built-in's prefix overrides it.
 import { Braces, Copy, Plus, Save, Trash2, Undo2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Select } from '../common/Select';
 import type { Dialect, Snippet } from '../../api/types';
 import { BUILTIN_SNIPPETS, newSnippetId, snippetPreview, validateSnippet, type SnippetDef } from '../../snippets';
 import { useSettings } from '../../store/settings';
@@ -82,10 +83,13 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
         <span className="snip-hint">Type a prefix at the start of a statement, or press {displayShortcut('Ctrl+J')} in the editor.</span>
         <span className="flex-1" />
         <input className="input snip-search" placeholder="Filter snippets" aria-label="Filter snippets" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <select className="input snip-dialect" aria-label="Dialect" value={dialect} onChange={(e) => setDialect(e.target.value as Dialect | 'all')}>
-          <option value="all">All dialects</option>
-          {DIALECTS.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-        </select>
+        <Select<Dialect | 'all'>
+          className="snip-dialect"
+          aria-label="Dialect"
+          value={dialect}
+          options={[{ value: 'all', label: 'All dialects' }, ...DIALECTS.map((d) => ({ value: d.id, label: d.label }))]}
+          onChange={setDialect}
+        />
         <button className="btn btn-primary btn-xs" onClick={() => create()}><Plus size={14} strokeWidth={1.5} aria-hidden /> New snippet</button>
       </div>
       <div className="snip-body">

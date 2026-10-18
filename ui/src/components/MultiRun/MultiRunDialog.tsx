@@ -10,6 +10,7 @@ import { toast, useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
 import { Dialog } from '../common/Dialog';
 import { ProviderIcon } from '../common/icons';
+import { Select } from '../common/Select';
 import { Kbd } from '../Shortcuts/Kbd';
 
 const LAST_KEY = 'dbstudio.multirun.last.v1';
@@ -154,17 +155,13 @@ function Inner({ tabId }: { tabId: string }) {
                         {c.id === tab?.connectionId && <span className="pill pill-muted">this console</span>}
                       </label>
                       {c.providerId === 'sqlserver' && picked.has(c.id) && (
-                        <select
-                          className="input sm"
+                        <Select
+                          size="sm"
                           aria-label={`Database for ${c.name}`}
                           value={picked.get(c.id) ?? ''}
-                          onChange={(e) => setPicked(new Map(picked).set(c.id, e.target.value || null))}
-                        >
-                          <option value="">Default database</option>
-                          {dbs.map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
+                          options={[{ value: '', label: 'Default database' }, ...dbs.map((d) => ({ value: d, label: d }))]}
+                          onChange={(v) => setPicked(new Map(picked).set(c.id, v || null))}
+                        />
                       )}
                     </div>
                   );

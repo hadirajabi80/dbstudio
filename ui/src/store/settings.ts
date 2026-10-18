@@ -19,7 +19,7 @@ export const DEFAULT_FORMAT: FormatOptions = {
   formatDdlOnOpen: true,
 };
 
-export const DEFAULT_GRID: GridSettings = { density: 'comfortable', pageSize: 1000, verifyUnchanged: false };
+export const DEFAULT_GRID: GridSettings = { density: 'comfortable', pageSize: 1000, verifyUnchanged: false, showSqlBeforeSave: false };
 export const DEFAULT_CONNECTIONS: ConnectionsSettings = { maxSessionsPerProfile: 8 };
 
 /** Settings with every M1.5 key present (the engine always returns them; the defaults cover older engines). */

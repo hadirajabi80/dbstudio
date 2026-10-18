@@ -2,7 +2,9 @@
 // own session (synthetic tab id `<multiTab>::<connectionId>`), its own execution in the results store and its own
 // history entry (label "multi"). Results are shown grouped by connection in a "multirun" view tab.
 import { api, errorMessage, isApiError } from '../api/client';
-import type { RunLabel, SqlBatch } from '../api/types';
+import type { QueryParam, RunLabel, SqlBatch } from '../api/types';
+import { pluralize } from '../components/common/text';
+import { resolveParams } from '../components/ParamsDialog/ParamsDialog';
 import { findDestructive } from '../lib/classify';
 import { getConnection, dialectOf, useConnections } from '../store/connections';
 import { useResults } from '../store/results';
@@ -39,7 +41,13 @@ function maxRows(): number {
   return useSettings.getState().settings.results.maxRows;
 }
 
-async function runOne(multiTabId: string, t: MultiTarget, label: RunLabel, batches: SqlBatch[], confirmed: boolean): Promise<void> {
+/** How one target runs: `confirmed` only after an explicit confirmation; `skip` = do not send (read-only target). */
+interface TargetPlan {
+  confirmed: boolean;
+  skip: string | null;
+}
+
+async function runOne(multiTabId: string, t: MultiTarget, label: RunLabel, batches: SqlBatch[], plan: TargetPlan, params: QueryParam[]): Promise<void> {
   const conn = getConnection(t.connectionId);
   if (!conn) return;
   const tabId = targetTabId(multiTabId, t.connectionId);
@@ -47,14 +55,19 @@ async function runOne(multiTabId: string, t: MultiTarget, label: RunLabel, batch
   useResults.getState().clearTab(tabId);
   useResults.getState().begin(createExecution({
     localId, tabId, connectionId: conn.id, sessionId: useSessions.getState().byTab[tabId] ?? null, label, batches, maxRows: maxRows(),
-    confirmedDestructive: confirmed,
+    confirmedDestructive: plan.confirmed, params,
   }));
+  if (plan.skip) {
+    useResults.getState().fail(localId, plan.skip, 'READ_ONLY');
+    return;
+  }
   try {
     const session = await useSessions.getState().ensure(tabId, conn.id, t.database ?? effectiveDatabase(conn.id, null), 'auto');
     useConnections.getState().touch(conn.id);
     const res = await api.execute(session.sessionId, {
       batches, maxRows: maxRows(), stopOnError: true, label: 'multi', source: { tabId: multiTabId, title: `Multi-run · ${conn.name}` },
-      ...(confirmed ? { confirmedDestructive: true } : {}),
+      ...(plan.confirmed ? { confirmedDestructive: true } : {}),
+      ...(params.length ? { params } : {}),
     });
     useResults.getState().attach(localId, res.executionId);
   } catch (e) {
@@ -63,33 +76,63 @@ async function runOne(multiTabId: string, t: MultiTarget, label: RunLabel, batch
   }
 }
 
+/**
+ * Destructive guard: one confirmation listing every target. Read-only targets are never written implicitly: they
+ * are listed as "skipped (read-only)" unless the user ticks "Allow writes on read-only targets: …".
+ * Returns null when cancelled.
+ */
+async function planTargets(targets: MultiTarget[], batches: SqlBatch[]): Promise<Map<string, TargetPlan> | null> {
+  const plans = new Map<string, TargetPlan>(targets.map((t) => [t.connectionId, { confirmed: false, skip: null }]));
+  if (!useSettings.getState().settings.confirmDestructive) return plans;
+  const findings = new Map<string, string[]>();
+  for (const t of targets) {
+    const f = findDestructive(batches, dialectOf(t.connectionId));
+    if (f.length) findings.set(t.connectionId, f.map((x) => `Line ${x.line}: ${x.description}`));
+  }
+  if (!findings.size) return plans;
+  const nameOf = (cid: string) => getConnection(cid)?.name ?? cid;
+  const destructive = targets.filter((t) => findings.has(t.connectionId));
+  const readOnly = destructive.filter((t) => getConnection(t.connectionId)?.readOnly);
+  const writable = destructive.filter((t) => !getConnection(t.connectionId)?.readOnly);
+  const roNames = readOnly.map((t) => nameOf(t.connectionId));
+  const first = [...findings.values()][0];
+  const r = await useUi.getState().askConfirmAck({
+    title: `Run destructive statement on ${pluralize(targets.length, 'connection')}?`,
+    message: writable.length
+      ? `This modifies data on: ${writable.map((t) => nameOf(t.connectionId)).join(', ')}.${readOnly.length ? ' Read-only targets are skipped.' : ''}`
+      : 'Every target that this statement would modify is read-only, so they are skipped.',
+    items: [
+      ...first,
+      ...targets.map((t) => `Target: ${nameOf(t.connectionId)}${readOnly.includes(t) ? ' — skipped (read-only)' : ''}`),
+    ],
+    confirmLabel: `Run on ${targets.length}`,
+    danger: true,
+    ...(readOnly.length ? { ack: { label: `Allow writes on read-only targets: ${roNames.join(', ')}` } } : {}),
+  });
+  if (!r.ok) return null;
+  for (const t of writable) plans.set(t.connectionId, { confirmed: true, skip: null });
+  for (const t of readOnly) {
+    plans.set(t.connectionId, r.ack
+      ? { confirmed: true, skip: null }
+      : { confirmed: false, skip: `Skipped: “${nameOf(t.connectionId)}” is read-only and the statement changes data.` });
+  }
+  return plans;
+}
+
 /** Opens (or reuses) the multi-run tab and runs `batches` on every target. */
 export async function runMulti(opts: { sourceTabId: string | null; title: string; label: RunLabel; batches: SqlBatch[]; targets: MultiTarget[]; tabId?: string }): Promise<string | null> {
   const { targets, batches, label } = opts;
   if (!targets.length || !batches.some((b) => b.sql.trim())) return null;
 
-  // Destructive guard: one confirmation that lists every target.
-  let confirmed = false;
-  if (useSettings.getState().settings.confirmDestructive) {
-    const findings = new Map<string, string[]>();
-    for (const t of targets) {
-      const f = findDestructive(batches, dialectOf(t.connectionId));
-      if (f.length) findings.set(t.connectionId, f.map((x) => `Line ${x.line}: ${x.description}`));
-    }
-    if (findings.size) {
-      const names = targets.map((t) => getConnection(t.connectionId)?.name ?? t.connectionId);
-      const first = [...findings.values()][0];
-      const ok = await useUi.getState().askConfirm({
-        title: `Run destructive statement on ${targets.length} connection${targets.length === 1 ? '' : 's'}?`,
-        message: `This modifies data on: ${names.join(', ')}.`,
-        items: [...first, ...names.map((n) => `Target: ${n}`)],
-        confirmLabel: `Run on ${targets.length}`,
-        danger: true,
-      });
-      if (!ok) return null;
-      confirmed = true;
-    }
-  }
+  const plans = await planTargets(targets, batches);
+  if (!plans) return null;
+
+  // Bind parameters are asked once (for the source console's connection, else the first target) and sent to all.
+  const source = opts.sourceTabId ? useTabs.getState().tabs.find((t) => t.id === opts.sourceTabId) : undefined;
+  const paramsConn = targets.find((t) => t.connectionId === source?.connectionId)?.connectionId ?? targets[0].connectionId;
+  const resolved = await resolveParams(opts.sourceTabId ?? opts.tabId ?? 'multirun', paramsConn, dialectOf(paramsConn), batches);
+  if (resolved === null) return null;
+  const params = resolved ?? [];
 
   const state: MultiRunState = {
     sourceTabId: opts.sourceTabId, title: opts.title, label, batches, targets, active: targets[0].connectionId, startedAt: Date.now(),
@@ -108,7 +151,7 @@ export async function runMulti(opts: { sourceTabId: string | null; title: string
     id = useTabs.getState().openView({ view: MULTIRUN_VIEW, title: `Multi-run: ${opts.title}`, state });
   }
   const multiId = id;
-  await Promise.all(targets.map((t) => runOne(multiId, t, label, batches, confirmed)));
+  await Promise.all(targets.map((t) => runOne(multiId, t, label, batches, plans.get(t.connectionId)!, params)));
   return multiId;
 }
 

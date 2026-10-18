@@ -142,7 +142,10 @@ export function shopInput(dialect: Dialect, opts: { query?: boolean } = {}): CgI
   const extra = EXTRA[dialect];
   for (const o of extra.objects) {
     const cg = fromCatalogObject(o, extra.schema);
-    if (cg) objects.push(cg);
+    if (!cg) continue;
+    // Server defaults (GET /catalog/object details in the app): left out of generated INSERTs.
+    if (cg.kind === 'table' && cg.name === 'Events') cg.columns = cg.columns.map((c) => (c.name === 'OccurredAt' || c.name === 'IsActive' ? { ...c, hasDefault: true } : c));
+    objects.push(cg);
   }
   if (opts.query !== false) {
     const q = QUERY[dialect];

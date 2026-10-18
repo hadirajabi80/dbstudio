@@ -168,10 +168,47 @@ public sealed record DdlScriptContext(string? ServerVersion = null, string? Defa
     public static readonly DdlScriptContext Default = new();
 }
 
-/// <param name="Type">"trigger" | "view" | "index".</param>
+/// <param name="Type">SQLite: "trigger" | "view" | "index". SQL Server identity rebuilds (see <see cref="DependentTypes"/>):
+/// "trigger" (<paramref name="Sql"/> = stored definition, empty when unreadable), "foreignKey" (an inbound FK of another
+/// table), "permission", "notCarried" (something the rebuild cannot recreate: listed in the warnings) and "blocker"
+/// (refuses the rebuild, <paramref name="Detail"/> says why), plus the storage features of
+/// <see cref="DependentTypes.UnsupportedStorage"/> (columnstore/XML/spatial/full-text indexes, partitioning, filegroup,
+/// compression, change tracking, CDC), which also refuse it.</param>
 /// <param name="OnTable">True for a trigger/index defined on the table itself (dropped with it); false for an object of
 /// another table/view whose SQL references the table.</param>
-public sealed record DependentObject(string Type, string Name, string Sql, bool OnTable);
+/// <param name="OwnerSchema">Inbound foreign key: schema of the referencing table.</param>
+/// <param name="OwnerTable">Inbound foreign key: the referencing table.</param>
+/// <param name="ForeignKey">Inbound foreign key: its columns (of the referencing table), the referenced columns of this table and actions.</param>
+/// <param name="Disabled">Trigger or foreign key is disabled (recreated disabled).</param>
+/// <param name="Detail">Permission: state ("GRANT" | "GRANT_WITH_GRANT_OPTION" | "DENY"); foreign key: "untrusted"; trigger:
+/// "ordered" (sp_settriggerorder); notCarried/blocker: the message.</param>
+/// <param name="Column">Column-level permission: the column (current name).</param>
+public sealed record DependentObject(string Type, string Name, string Sql, bool OnTable,
+    string? OwnerSchema = null, string? OwnerTable = null, ForeignKeyModel? ForeignKey = null, bool Disabled = false,
+    string? Detail = null, string? Column = null);
+
+/// <summary>Values of <see cref="DependentObject.Type"/>.</summary>
+public static class DependentTypes
+{
+    public const string Trigger = "trigger", View = "view", Index = "index", ForeignKey = "foreignKey", Permission = "permission",
+        NotCarried = "notCarried", Blocker = "blocker";
+
+    /// <summary>
+    /// SQL Server storage features of the table that the table model does not hold, so an identity rebuild (DROP TABLE +
+    /// CREATE) would silently lose them (features-r1-02); each one refuses the rebuild. <see cref="DependentObject.Name"/> is
+    /// the index (or the table for table-level features), <see cref="DependentObject.Detail"/> the index type, data space
+    /// or compression. "otherIndex" covers any other index type the designer does not model (e.g. nonclustered hash).
+    /// </summary>
+    public const string ColumnstoreIndex = "columnstoreIndex", XmlIndex = "xmlIndex", SpatialIndex = "spatialIndex", OtherIndex = "otherIndex",
+        FulltextIndex = "fulltextIndex", Partitioning = "partitioning", Filegroup = "filegroup", Compression = "compression",
+        ChangeTracking = "changeTracking", Cdc = "cdc";
+
+    /// <summary>The kinds above.</summary>
+    public static readonly IReadOnlySet<string> UnsupportedStorage = new HashSet<string>(StringComparer.Ordinal)
+    {
+        ColumnstoreIndex, XmlIndex, SpatialIndex, OtherIndex, FulltextIndex, Partitioning, Filegroup, Compression, ChangeTracking, Cdc,
+    };
+}
 
 // ------------------------------------------------------------------ apply
 

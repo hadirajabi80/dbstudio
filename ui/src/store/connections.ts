@@ -9,7 +9,11 @@ interface ConnectionsState {
   error: string | null;
   load(): Promise<void>;
   save(input: ConnectionInput, id?: string): Promise<ConnectionProfile>;
-  remove(id: string): Promise<void>;
+  /**
+   * DELETE /connections/{id}. The engine answers 409 TX_OPEN while a session of the connection has an open
+   * transaction; `force` (after the user confirmed rolling back) deletes anyway.
+   */
+  remove(id: string, opts?: { force?: boolean }): Promise<void>;
   test(req: TestConnectionRequest): ReturnType<typeof api.testConnection>;
   /** Locally mark a connection as used (the engine updates lastUsedAt itself on session open). */
   touch(id: string): void;
@@ -44,8 +48,9 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
     set({ connections: idx >= 0 ? list.map((c) => (c.id === saved.id ? saved : c)) : [...list, saved] });
     return saved;
   },
-  async remove(id) {
-    await api.deleteConnection(id);
+  async remove(id, opts = {}) {
+    // DELETE …?force=true rolls back and closes sessions the caller could not close first (else 409 TX_OPEN).
+    await api.deleteConnection(id, { force: opts.force === true });
     set({ connections: get().connections.filter((c) => c.id !== id) });
   },
   test: (req) => api.testConnection(req),

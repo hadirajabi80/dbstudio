@@ -60,7 +60,8 @@ public sealed record ExecuteRequestDto(
     string? Label,
     ExecuteSource? Source,
     bool? ConfirmedDestructive,
-    List<DbStudio.Core.Params.QueryParam>? Params = null);
+    List<DbStudio.Core.Params.QueryParam>? Params = null,
+    bool? SkipHistory = null);
 
 public sealed record ExecuteResponse(string ExecutionId, string StartedAt);
 
@@ -78,7 +79,8 @@ public sealed record QueryExportRequest(string? SessionId, string? Sql, string? 
 
 public sealed record QueryExportResponse(string ExportId);
 
-public sealed record HistoryUpdateRequest(bool Pinned);
+/// <summary>PUT /history/{id}: partial; null/missing fields are left unchanged.</summary>
+public sealed record HistoryUpdateRequest(bool? Pinned);
 
 public sealed record DiagnosticsRequest(Dialect Dialect, string? Sql, string? ConnectionId);
 

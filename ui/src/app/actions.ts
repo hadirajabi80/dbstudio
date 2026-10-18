@@ -7,6 +7,7 @@ import { serializeRows, type CopyFormat } from '../lib/serialize';
 import { computeView } from '../lib/filter';
 import { selectTopSql } from '../lib/sql';
 import { getPlatform } from '../platform';
+import { effectiveViewportHeight } from './zoom';
 import { dbKey, useCatalog } from '../store/catalog';
 import { dialectOf, getConnection, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
@@ -15,9 +16,13 @@ import { createExecution, isRunning, type ExecutionState, type ResultSetState } 
 import { useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
 import { useTabs, type ConsoleTab } from '../store/tabs';
-import { toast, useUi } from '../store/ui';
+import { SHORT_WINDOW, toast, useUi } from '../store/ui';
 import { displayShortcut } from '../commands/keys';
+import { pluralize } from '../components/common/text';
 import { getTabView } from '../components/layout/tabViews';
+import { runEditTab } from '../designer/editRun';
+import { peekEditSession } from '../designer/editSession';
+import { EDIT_RUN_STOP_REASON, useDesignerUi } from '../designer/store';
 import { getEditor } from './editors';
 
 let localSeq = 0;
@@ -52,14 +57,40 @@ export function effectiveMaxRows(tab: ConsoleTab): number {
 
 export interface RunOptions {
   maxRows?: number;
+  /**
+   * The user explicitly allowed this run to change data. Only ever set from an explicit confirmation (the destructive
+   * statement dialog on a writable connection, or the armed read-only override); never implied.
+   */
   confirmedDestructive?: boolean;
   /** Bind values already collected (e.g. on a retry); skips the parameters dialog. */
   params?: QueryParam[];
+  /** Run the batches as given even in an "Edit:" tab (the atomic designer apply is skipped). */
+  plain?: boolean;
+}
+
+/**
+ * READ_ONLY refusal: the engine rejected a statement on a connection marked read-only. There is no one-click
+ * "Run anyway": the danger button only enables after ticking "Allow this statement to write to <name>", and Cancel
+ * has the focus. Returns true when the user armed and confirmed the override.
+ */
+export async function askReadOnlyOverride(connectionName: string, detail: string, what = 'statement'): Promise<boolean> {
+  const r = await useUi.getState().askConfirmAck({
+    title: 'Read-only connection',
+    message: `“${connectionName}” is marked read-only, and the engine refused a ${what} that changes data. Change the connection settings to allow writes permanently.`,
+    items: [detail],
+    confirmLabel: 'Run with writes',
+    danger: true,
+    ack: { label: `Allow this ${what} to write to “${connectionName}”`, required: true },
+  });
+  return r.ok && r.ack;
 }
 
 export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch[], opts: RunOptions = {}): Promise<void> {
   const tab = consoleTab(tabId);
   if (!tab) return;
+  // F4 "Edit:" consoles on SQLite apply the whole script atomically through the designer (a failing CREATE must not
+  // leave the object dropped). The registration is persisted in the tab, so a tab restored after a restart does too.
+  if (!opts.plain && peekEditSession(tabId) && (await runEditTab(tabId))) return;
   if (batches.length === 0 || batches.every((b) => !b.sql.trim())) return;
   const ui = useUi.getState();
   if (!tab.connectionId) {
@@ -102,9 +133,10 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
   const localId = `l${++localSeq}`;
   useResults.getState().begin(createExecution({
     localId, tabId, connectionId: conn.id, sessionId: useSessions.getState().byTab[tabId] ?? null, label, batches, maxRows,
-    confirmedDestructive: confirmed,
+    confirmedDestructive: confirmed, params: params ?? null,
   }));
   if (!useUi.getState().resultsVisible) useUi.getState().toggle('resultsVisible');
+  noteFirstRun(tabId);
 
   try {
     const session = await useSessions.getState().ensure(tabId, conn.id, effectiveDatabase(conn.id, tab.database), tab.txMode);
@@ -118,19 +150,15 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
   } catch (e) {
     if (isApiError(e, 'READ_ONLY') && !confirmed) {
       useResults.getState().fail(localId, errorMessage(e), 'READ_ONLY');
-      const ok = await useUi.getState().askConfirm({
-        title: 'Read-only connection',
-        message: `“${conn.name}” is marked read-only and the engine refused a statement that changes data.`,
-        items: [errorMessage(e)],
-        confirmLabel: 'Run anyway',
-        danger: true,
-      });
-      if (ok) await runInTab(tabId, label, batches, { ...opts, confirmedDestructive: true, params: params ?? [] });
+      if (await askReadOnlyOverride(conn.name, errorMessage(e))) {
+        await runInTab(tabId, label, batches, { ...opts, confirmedDestructive: true, params: params ?? [] });
+      }
       return;
     }
     if (isApiError(e, 'SESSION_LIMIT')) {
-      useResults.getState().fail(localId, `${errorMessage(e)} Close idle consoles on “${conn.name}” and run again.`, 'SESSION_LIMIT');
-      offerCloseIdle(conn.id);
+      // The toast carries the advice and the action; the message pane shows the engine's text once.
+      useResults.getState().fail(localId, errorMessage(e), 'SESSION_LIMIT');
+      offerCloseIdle(conn.id, () => void runInTab(tabId, label, batches, { ...opts, confirmedDestructive: confirmed, params: params ?? [] }));
       return;
     }
     const hint = isApiError(e, 'SESSION_BUSY') ? 'The session is busy with another statement.' : undefined;
@@ -142,6 +170,16 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
 export function runActive(label: RunLabel): void {
   const tabId = useTabs.getState().activeId;
   if (!tabId || !consoleTab(tabId)) return;
+  if (peekEditSession(tabId)) {
+    void runEditTab(tabId).then((handled) => {
+      if (!handled) runTargetOf(tabId, label);
+    });
+    return;
+  }
+  runTargetOf(tabId, label);
+}
+
+function runTargetOf(tabId: string, label: RunLabel): void {
   const ed = getEditor(tabId);
   const target = ed?.getRunTarget(label);
   if (!target) {
@@ -154,19 +192,36 @@ export function runActive(label: RunLabel): void {
 export async function rerun(tabId: string, opts: RunOptions = {}): Promise<void> {
   const e = useResults.getState().executions[useResults.getState().byTab[tabId]];
   if (!e) return;
-  await runInTab(tabId, e.label, e.batches, { confirmedDestructive: e.confirmedDestructive, ...opts });
+  // A re-run asks again: a write override confirmed for one run is never carried over implicitly.
+  await runInTab(tabId, e.label, e.batches, { plain: true, ...opts });
 }
 
-export async function cancelTab(tabId: string | null = useTabs.getState().activeId): Promise<void> {
-  if (!tabId) return;
+/**
+ * Why the running query of a tab cannot be cancelled, or null when it can (or nothing runs). An "Edit:" console's
+ * atomic apply (designer/editRun.ts) is one engine request without a session: it cannot be stopped, so the Stop button
+ * is disabled with this reason as its tooltip.
+ */
+export function cancelBlockedReason(tabId: string | null = useTabs.getState().activeId): string | null {
+  return tabId && useDesignerUi.getState().editRunInFlight[tabId] ? EDIT_RUN_STOP_REASON : null;
+}
+
+/** Cancel the running query of a tab. Returns the reason when it cannot be cancelled (see cancelBlockedReason). */
+export async function cancelTab(tabId: string | null = useTabs.getState().activeId): Promise<string | null> {
+  if (!tabId) return null;
+  const blocked = cancelBlockedReason(tabId);
+  if (blocked) {
+    toast('info', 'This change cannot be stopped', `${blocked}.`);
+    return blocked;
+  }
   const s = useSessions.getState().forTab(tabId);
   const e = useResults.getState().executions[useResults.getState().byTab[tabId]];
-  if (!s || !isRunning(e)) return;
+  if (!s || !isRunning(e)) return null;
   try {
     await api.cancel(s.sessionId);
   } catch (err) {
     toast('error', 'Cancel failed', errorMessage(err));
   }
+  return null;
 }
 
 export async function setTxMode(tabId: string, mode: TxMode): Promise<void> {
@@ -378,7 +433,7 @@ export async function exportResultSet(exec: ExecutionState, rs: ResultSetState, 
         const path = await platform.showSaveDialog({ title: 'Export result set', defaultPath: name, filters });
         if (!path) return;
         const r = await api.exportResultSet(exec.executionId, rs.id, { format, path, options: { header: true, nullAs } });
-        toast('success', `Exported ${'rows' in r ? r.rows : rs.rowCount} rows`, 'path' in r ? r.path : undefined);
+        toast('success', `Exported ${pluralize('rows' in r ? r.rows : rs.rowCount, 'row')}`, 'path' in r ? r.path : undefined);
         return;
       }
       const r = await api.exportResultSet(exec.executionId, rs.id, { format, path: null, options: { header: true, nullAs } });
@@ -441,21 +496,46 @@ export function idleSessionTabs(connectionId: string): string[] {
     .map(([tabId]) => tabId);
 }
 
-/** SESSION_LIMIT: offer to release the sessions of idle consoles on that connection. */
-export function offerCloseIdle(connectionId: string): void {
+/** Sessions on the connection no open tab owns and that are safe to close (no transaction, not running). */
+export function releasableOrphans(connectionId: string): string[] {
+  return useSessions.getState().orphans(connectionId).filter((s) => !s.txOpen && s.state !== 'executing').map((s) => s.sessionId);
+}
+
+/**
+ * SESSION_LIMIT: offer to release the sessions of idle consoles and unused (orphaned) sessions on that connection,
+ * then run again (`rerun`).
+ */
+export function offerCloseIdle(connectionId: string, rerun?: () => void): void {
   const idle = idleSessionTabs(connectionId);
+  const orphans = releasableOrphans(connectionId);
+  const n = idle.length + orphans.length;
   const limit = useSettings.getState().settings.connections.maxSessionsPerProfile;
-  toast('warning', `Session limit reached (${limit} per connection)`, idle.length ? `${idle.length} idle console(s) hold a session.` : 'Close a console on this connection first.',
-    idle.length
+  const held = [idle.length ? pluralize(idle.length, 'idle console') : '', orphans.length ? pluralize(orphans.length, 'unused session') : '']
+    .filter(Boolean).join(' and ');
+  const conn = getConnection(connectionId)?.name ?? 'this connection';
+  toast('warning', `Session limit reached (${limit} per connection)`,
+    n ? `${held} on “${conn}” hold a session.` : `Close a console on “${conn}” first.`,
+    n
       ? {
-          label: `Release ${idle.length} idle`,
+          label: rerun ? `Release ${pluralize(n, 'unused session')} and run again` : `Release ${pluralize(n, 'unused session')}`,
           run: () => {
-            void Promise.all(idle.map((t) => useSessions.getState().close(t, true).catch(() => undefined))).then(() =>
-              toast('success', `Released ${idle.length} idle session(s)`, 'Run the statement again.'),
-            );
+            void Promise.all([
+              ...idle.map((t) => useSessions.getState().close(t, true).catch(() => undefined)),
+              ...orphans.map((sid) => useSessions.getState().closeSession(sid, false).catch(() => undefined)),
+            ]).then(() => {
+              if (rerun) rerun();
+              else toast('success', `Released ${pluralize(n, 'session')}`, 'Run the statement again.');
+            });
           },
         }
       : undefined);
+}
+
+/** Short windows: after the first run of a console, give the results 60 % of the height (unless the user chose). */
+function noteFirstRun(tabId: string): void {
+  if (typeof window === 'undefined' || effectiveViewportHeight() >= SHORT_WINDOW) return;
+  const ui = useUi.getState();
+  if (ui.tabSplits[tabId] === undefined) ui.setTabSplit(tabId, 0.6);
 }
 
 /** Explorer "Disconnect": closes every session of the connection and drops its cached catalog. */

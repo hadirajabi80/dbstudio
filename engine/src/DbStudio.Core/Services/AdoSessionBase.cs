@@ -62,6 +62,18 @@ public sealed class BatchContext
 
     /// <summary>Set by the base class when an error was raised by a cancellation the engine itself triggered (row cap).</summary>
     internal bool SuppressErrors { get; set; }
+
+    /// <summary>
+    /// True when the driver finished executing the batch (every result consumed, reader closed) although a cancel was
+    /// requested meanwhile: the statement ran to completion (and auto-commit committed it), so the batch is reported
+    /// Ok with a warning instead of Cancelled. Providers that see a late cancel acknowledgement must not turn such a
+    /// batch into Cancelled.
+    /// </summary>
+    public bool CompletedDespiteCancel { get; set; }
+
+    /// <summary>True when the engine began the manual-mode transaction for this batch (lazy begin, see
+    /// <see cref="AdoSessionBase"/>.RequiresTransaction).</summary>
+    public bool BeganTransaction { get; internal set; }
 }
 
 /// <summary>
@@ -120,7 +132,6 @@ public abstract class AdoSessionBase : IDbSession
         ConnectionId = profile.Id;
         TxMode = options.TxMode;
         CurrentDatabase = server.Database ?? options.Database;
-        CommandTimeoutSeconds = Math.Max(0, profile.GetInt("commandTimeout", 0));
     }
 
     // ------------------------------------------------------------------ IDbSession
@@ -133,6 +144,13 @@ public abstract class AdoSessionBase : IDbSession
     /// <summary>True when an engine-owned transaction (<see cref="Transaction"/>) or a server-side transaction
     /// (<see cref="ServerTxOpen"/>, e.g. a user-typed BEGIN TRAN in auto mode) is open.</summary>
     public virtual bool TxOpen => Transaction is not null || ServerTxOpen;
+
+    /// <summary>
+    /// True when the connection broke while a transaction was open, so the server rolled it back. Recorded before the
+    /// transaction state is cleared; the session manager reports it instead of silently reconnecting.
+    /// </summary>
+    public bool LostTransaction { get; private set; }
+
     public string? CurrentDatabase { get; protected set; }
     public ServerInfo Server { get; protected set; }
 
@@ -154,8 +172,23 @@ public abstract class AdoSessionBase : IDbSession
     /// </summary>
     protected bool ServerTxOpen { get; set; }
 
-    /// <summary>CommandTimeout applied to every command (profile prop "commandTimeout", default 0 = infinite).</summary>
-    protected int CommandTimeoutSeconds { get; set; }
+    private int? _commandTimeoutSeconds;
+
+    /// <summary>
+    /// CommandTimeout applied to every command: profile prop "commandTimeout", else <see cref="DefaultCommandTimeoutSeconds"/>.
+    /// </summary>
+    protected int CommandTimeoutSeconds
+    {
+        get => _commandTimeoutSeconds ??= Math.Max(0, Profile.GetInt("commandTimeout", DefaultCommandTimeoutSeconds));
+        set => _commandTimeoutSeconds = Math.Max(0, value);
+    }
+
+    /// <summary>
+    /// Dialect default of <see cref="CommandTimeoutSeconds"/> when the profile sets no "commandTimeout". Default 0
+    /// (infinite: server statements may legitimately run long). SQLite overrides it with the busy timeout because its
+    /// driver retries a locked database until CommandTimeout, and 0 would wait forever.
+    /// </summary>
+    protected virtual int DefaultCommandTimeoutSeconds => 0;
 
     /// <summary>Rows per <c>exec.rows</c> frame (default 200).</summary>
     protected virtual int RowBatchSize => 200;
@@ -195,6 +228,33 @@ public abstract class AdoSessionBase : IDbSession
     /// </summary>
     protected virtual void ConfigureCommand(DbCommand command, BatchContext context) { }
 
+    /// <summary>
+    /// True when <paramref name="exception"/> means the driver aborted the statement because of our cancel, as opposed
+    /// to a genuine error raised while a cancel was pending. Only consulted after a cancel was requested. Default:
+    /// <see cref="OperationCanceledException"/>. SQLite adds SQLITE_INTERRUPT (and a lock wait cut short by the cancel),
+    /// SQL Server "Operation cancelled by user", Oracle ORA-01013.
+    /// </summary>
+    protected virtual bool IsCancellationException(Exception exception) => exception is OperationCanceledException;
+
+    /// <summary>
+    /// Manual mode: whether the batch needs the engine transaction, begun lazily before the first such batch. Default:
+    /// every batch except pure queries, session statements (SET/USE/PRAGMA) and transaction control (a user-typed
+    /// BEGIN/COMMIT runs as typed and is tracked through <see cref="ServerTxOpen"/>), so a SELECT-only run neither
+    /// opens a transaction nor holds read locks until commit. A write keyword anywhere (SELECT ... FOR UPDATE) counts.
+    /// A savepoint (SAVEPOINT x / SAVE TRANSACTION x) also needs it: outside a transaction SQLite's SAVEPOINT opens its
+    /// own one that RELEASE commits, SQL Server raises Msg 628 and Oracle auto-commits, so the edit-grid's
+    /// "SAVEPOINT; DML; RELEASE" would commit behind the user's back (or fail) instead of staying pending until Commit.
+    /// </summary>
+    protected virtual bool RequiresTransaction(BatchContext context) =>
+        !context.Classification.IsQueryOnly || context.Classification.HasSavepoint;
+
+    /// <summary>
+    /// When true, placeholders without a value fail the run with VALIDATION "Missing value for parameter @x" before
+    /// anything executes. Only for dialects whose placeholders are unambiguous (SQLite); a T-SQL <c>@name</c> may be a
+    /// procedure parameter or an EXEC argument name. Default false.
+    /// </summary>
+    protected virtual bool RejectUnboundParameters => false;
+
     /// <summary>M1.5: binder for <see cref="ExecuteRequest.Params"/>; null = the provider does not support parameters.</summary>
     protected virtual IParamBinder? ParamBinder => null;
 
@@ -205,9 +265,93 @@ public abstract class AdoSessionBase : IDbSession
     protected virtual void BindParameters(DbCommand command, BatchContext context)
     {
         var parameters = context.Request.Params;
-        if (parameters is not { Count: > 0 }) return;
+        if (parameters is not { Count: > 0 })
+        {
+            if (RejectUnboundParameters && ParamBinder is { } b && FindUnbound(b, context.Batch, [], new ParamBindCursor()) is { } missing)
+                throw missing.ToException();
+            return;
+        }
         var binder = ParamBinder ?? throw new EngineException(400, ErrorCodes.NotSupported, "This provider does not support query parameters.");
+        var text = command.CommandText;
         context.Parameters = binder.Bind(command, parameters, _bindCursor);
+        if (RejectUnboundParameters && context.Parameters.Missing.Count > 0)
+        {
+            var first = context.Parameters.Missing[0];
+            var unnamed = first.StartsWith('?');
+            var placeholder = binder.FindPlaceholders(text)
+                .Where(p => unnamed ? p.Name is null : p.Name is not null && p.Name.Equals(first, StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            throw new UnboundParameter(unnamed ? "?" : PlaceholderText(text, placeholder, first), context.Batch, placeholder.Offset).ToException();
+        }
+    }
+
+    /// <summary>
+    /// Pre-flight check of a whole request (before anything runs): the first placeholder without a value (a name that
+    /// is not among the params, or a <c>?</c> beyond the positional params), as a VALIDATION error with its document
+    /// position; null when everything is bound or the provider does not use <see cref="RejectUnboundParameters"/>.
+    /// </summary>
+    public ErrorInfo? FindUnboundParameter(IReadOnlyList<SqlBatch> batches, IReadOnlyList<QueryParam>? parameters)
+    {
+        if (!RejectUnboundParameters || ParamBinder is not { } binder) return null;
+        var cursor = new ParamBindCursor();
+        foreach (var batch in batches)
+        {
+            if (FindUnbound(binder, batch, parameters ?? [], cursor) is { } missing) return missing.ToError();
+        }
+        return null;
+    }
+
+    private static UnboundParameter? FindUnbound(IParamBinder binder, SqlBatch batch, IReadOnlyList<QueryParam> parameters, ParamBindCursor cursor)
+    {
+        var named = new HashSet<string>(parameters.Select(p => p.BareName), StringComparer.OrdinalIgnoreCase);
+        var positional = parameters.Count(p => p.IsPositional);
+        foreach (var ph in binder.FindPlaceholders(batch.Sql))
+        {
+            if (ph.Name is null)
+            {
+                if (cursor.NextPositional++ >= positional) return new UnboundParameter("?", batch, ph.Offset);
+            }
+            else if (!named.Contains(ph.Name))
+            {
+                return new UnboundParameter(PlaceholderText(batch.Sql, ph, ph.Name), batch, ph.Offset);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The placeholder as typed ("@id", ":id", "$id", "?2") for messages.</summary>
+    private static string PlaceholderText(string sql, ParamPlaceholder placeholder, string bareName)
+    {
+        var start = placeholder.Offset;
+        if (start < 0 || start >= sql.Length || char.IsLetterOrDigit(sql[start])) return "@" + bareName;
+        var end = start + 1;
+        while (end < sql.Length && (char.IsLetterOrDigit(sql[end]) || sql[end] is '_' or '$')) end++;
+        return sql[start..end];
+    }
+
+    private sealed record UnboundParameter(string Text, SqlBatch Batch, int Offset)
+    {
+        private (int Line, int Col) Position()
+        {
+            var (line, col) = SqlTokenizer.LineColAt(Batch.Sql, Math.Clamp(Offset, 0, Batch.Sql.Length));
+            return (ToDocumentLine(Batch, line), ToDocumentCol(Batch, line, col));
+        }
+
+        private string Message => Text == "?"
+            ? "Missing value for a positional parameter (?): supply one value per ? placeholder."
+            : $"Missing value for parameter {Text}";
+
+        public ErrorInfo ToError()
+        {
+            var (line, col) = Position();
+            return new ErrorInfo(ErrorCodes.Validation, Message, line, col, Detail: "params");
+        }
+
+        public EngineException ToException()
+        {
+            var (line, col) = Position();
+            return EngineException.Validation(Message, new { field = "params", name = Text, line, col });
+        }
     }
 
     /// <summary>
@@ -543,6 +687,22 @@ public abstract class AdoSessionBase : IDbSession
     /// <summary>Marks the session broken (e.g. from a driver event). The session manager reopens it on next use.</summary>
     protected void MarkBroken() => Interlocked.Exchange(ref _state, StateBroken);
 
+    /// <summary>
+    /// The connection broke, so the server rolled back whatever transaction was open. Records
+    /// <see cref="LostTransaction"/> first (the session manager reports it on the next use), then clears the state.
+    /// </summary>
+    private async ValueTask ForgetTransactionAfterBreakAsync()
+    {
+        if (TxOpen) LostTransaction = true;
+        var tx = Transaction;
+        Transaction = null;
+        ServerTxOpen = false;
+        if (tx is not null)
+        {
+            try { await tx.DisposeAsync().ConfigureAwait(false); } catch { /* the connection is gone */ }
+        }
+    }
+
     // ------------------------------------------------------------------ transactions / database
 
     public async Task SetTransactionModeAsync(TransactionMode mode, CancellationToken ct)
@@ -570,8 +730,7 @@ public abstract class AdoSessionBase : IDbSession
         }
         catch (Exception ex) when (ex is not OperationCanceledException && IsConnectionBroken(ex))
         {
-            Transaction = null;
-            ServerTxOpen = false;
+            await ForgetTransactionAfterBreakAsync().ConfigureAwait(false);
             MarkBroken();
             throw;
         }
@@ -590,8 +749,7 @@ public abstract class AdoSessionBase : IDbSession
         }
         catch (Exception ex) when (ex is not OperationCanceledException && IsConnectionBroken(ex))
         {
-            Transaction = null;
-            ServerTxOpen = false;
+            await ForgetTransactionAfterBreakAsync().ConfigureAwait(false);
             MarkBroken();
             throw;
         }
@@ -749,15 +907,7 @@ public abstract class AdoSessionBase : IDbSession
             }
             cts.Dispose();
             var broken = IsConnectionBroken(null);
-            if (broken)
-            {
-                if (Transaction is not null)
-                {
-                    try { await Transaction.DisposeAsync().ConfigureAwait(false); } catch { /* connection is gone */ }
-                    Transaction = null;
-                }
-                ServerTxOpen = false;
-            }
+            if (broken) await ForgetTransactionAfterBreakAsync().ConfigureAwait(false);
             Interlocked.CompareExchange(ref _state, broken ? StateBroken : StateIdle, StateExecuting);
         }
     }
@@ -780,11 +930,11 @@ public abstract class AdoSessionBase : IDbSession
             await ExecuteBatchCoreAsync(ctx, cts).ConfigureAwait(false);
         }
 
-        // Hooks see a free connection; Transaction may have been ended by a COMMIT/ROLLBACK inside the batch.
-        if (Transaction is not null && Transaction.Connection is null) Transaction = null;
-
         if (!IsConnectionBroken(ctx.Exception))
         {
+            // Hooks see a free connection; Transaction may have been ended by a COMMIT/ROLLBACK inside the batch.
+            if (Transaction is not null && Transaction.Connection is null) Transaction = null;
+
             try
             {
                 await OnBatchCompletedAsync(ctx).ConfigureAwait(false);
@@ -807,6 +957,11 @@ public abstract class AdoSessionBase : IDbSession
                 }
             }
 
+            if (ctx.Status == BatchStatus.Ok && ctx.CompletedDespiteCancel)
+                await sink.Message(ctx.Index, MessageSeverity.Warning, LateCancelMessage(ctx), null, null, MessageSource.Engine).ConfigureAwait(false);
+
+            await EndUnusedTransactionAsync(ctx).ConfigureAwait(false);
+
             try
             {
                 var serverTx = await QueryServerTransactionOpenAsync(ctx, CancellationToken.None).ConfigureAwait(false);
@@ -817,14 +972,53 @@ public abstract class AdoSessionBase : IDbSession
                 await sink.Message(ctx.Index, MessageSeverity.Warning, $"Could not determine the transaction state: {ex.Message}", null, null, MessageSource.Engine).ConfigureAwait(false);
             }
         }
-        else
+        else if (TxOpen)
         {
-            if (ctx.Status != BatchStatus.Cancelled)
-                await sink.Message(ctx.Index, MessageSeverity.Error, "The connection to the server was lost.", null, null, MessageSource.Engine).ConfigureAwait(false);
+            // RunExecutionAsync clears the transaction state and records LostTransaction; say so in the batch that broke.
+            ctx.Status = BatchStatus.Error;
+            await sink.Error(ctx.Index, new ErrorInfo(ErrorCodes.SessionBroken,
+                "The connection to the server was lost; your open transaction was rolled back by the server and its uncommitted changes are gone.",
+                FirstCodeLine(ctx.Batch, Dialect))).ConfigureAwait(false);
+        }
+        else if (ctx.Status != BatchStatus.Cancelled)
+        {
+            await sink.Message(ctx.Index, MessageSeverity.Error, "The connection to the server was lost.", null, null, MessageSource.Engine).ConfigureAwait(false);
         }
 
         await sink.BatchEnded(ctx.Index, sw.ElapsedMilliseconds, ctx.Status).ConfigureAwait(false);
         return ctx.Status;
+    }
+
+    /// <summary>Warning for a batch that ran to completion although a cancel was requested meanwhile.</summary>
+    private string LateCancelMessage(BatchContext ctx)
+    {
+        const string prefix = "Cancel arrived after the statement completed";
+        if (ctx.Classification.IsQueryOnly) return prefix + ".";
+        return TxOpen
+            ? prefix + "; its changes are part of the open transaction (commit or roll back)."
+            : prefix + "; its changes were committed.";
+    }
+
+    /// <summary>
+    /// Manual mode: a transaction begun for this batch whose single DML/DDL/SAVEPOINT statement was cancelled or failed
+    /// changed nothing; roll it back so the session does not report a pending transaction (and SQLite releases its locks).
+    /// </summary>
+    private async ValueTask EndUnusedTransactionAsync(BatchContext ctx)
+    {
+        if (!ctx.BeganTransaction || Transaction is null || ctx.Status is not (BatchStatus.Cancelled or BatchStatus.Error)) return;
+        if (ctx.RecordsAffected > 0) return;
+        var statements = ctx.Classification.Statements;
+        if (statements.Count != 1) return;
+        if (statements[0].Category is not (StatementCategory.Dml or StatementCategory.Ddl) && !ctx.Classification.HasSavepoint) return;
+        try
+        {
+            await RollbackCoreAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The server may already have ended it (SQL Server XACT_ABORT); the state query below settles TxOpen.
+            if (Transaction is not null && Transaction.Connection is null) Transaction = null;
+        }
     }
 
     private async Task ExecuteBatchCoreAsync(BatchContext ctx, CancellationTokenSource cts)
@@ -832,10 +1026,16 @@ public abstract class AdoSessionBase : IDbSession
         var ct = cts.Token;
         DbCommand? cmd = null;
         DbDataReader? reader = null;
+        var completed = false; // the driver ran the whole batch (all results consumed, reader closed)
         try
         {
-            if (TxMode == TransactionMode.Manual && Transaction is null)
+            // Lazy begin: queries and session statements run outside the transaction; a user-typed BEGIN/COMMIT/ROLLBACK
+            // is the server's. A SAVEPOINT / SAVE TRANSACTION does begin it (see RequiresTransaction).
+            if (TxMode == TransactionMode.Manual && Transaction is null && !ServerTxOpen && RequiresTransaction(ctx))
+            {
                 Transaction = await BeginTransactionAsync(ct).ConfigureAwait(false);
+                ctx.BeganTransaction = true;
+            }
 
             cmd = CreateCommand(ctx.Batch.Sql);
             ctx.Command = cmd;
@@ -856,7 +1056,9 @@ public abstract class AdoSessionBase : IDbSession
                     var continueBatch = await ReadResultSetAsync(reader, ctx, ct).ConfigureAwait(false);
                     if (!continueBatch) { stop = true; break; }
                 }
-            } while (await reader.NextResultAsync(ct).ConfigureAwait(false));
+                // No token: a cancelled token makes NextResultAsync throw without asking the driver, which would label a
+                // statement that already ran (and auto-committed) as cancelled. CancelCommand aborts what still runs.
+            } while (await reader.NextResultAsync(CancellationToken.None).ConfigureAwait(false));
 
             if (stop)
             {
@@ -866,6 +1068,8 @@ public abstract class AdoSessionBase : IDbSession
 
             await CloseReaderAsync(reader, ctx).ConfigureAwait(false);
             reader = null;
+            completed = !stop;
+            if (completed && (_cancelRequested || ct.IsCancellationRequested)) ctx.CompletedDespiteCancel = true;
             if (!stop) await ReportRowsAffectedAsync(ctx, ctx.RecordsAffected).ConfigureAwait(false);
             if (!stop && ctx.Parameters.Bound.Count > 0)
             {
@@ -878,19 +1082,29 @@ public abstract class AdoSessionBase : IDbSession
             await FlushRowsAsync().ConfigureAwait(false);
             if (reader is not null)
             {
+                // Statements of the batch that finished before the failure (SQL Server/SQLite multi-statement batches).
+                try { ctx.RecordsAffected = reader.RecordsAffected; } catch { /* unknown */ }
                 try { await reader.DisposeAsync().ConfigureAwait(false); } catch { /* reader may be unusable after cancel */ }
                 reader = null;
             }
 
+            var cancelSeen = _cancelRequested || ct.IsCancellationRequested;
             if (ctx.SuppressErrors && !_cancelRequested)
             {
                 ctx.Status = BatchStatus.Ok;
             }
-            else if (_cancelRequested || ct.IsCancellationRequested)
+            else if (cancelSeen && completed)
+            {
+                // The statement ran to completion before the cancel took effect (it failed afterwards, e.g. reading
+                // output parameters): its changes stand, so report it as done rather than cancelled.
+                ctx.CompletedDespiteCancel = true;
+                ctx.Status = BatchStatus.Ok;
+            }
+            else if (cancelSeen && IsCancellationException(ex))
             {
                 ctx.Exception = ex;
                 ctx.Status = BatchStatus.Cancelled;
-                await ctx.Sink.Message(ctx.Index, MessageSeverity.Warning, "Query was cancelled.", null, null, MessageSource.Engine).ConfigureAwait(false);
+                await ReportCancelledAsync(ctx).ConfigureAwait(false);
             }
             else
             {
@@ -914,6 +1128,22 @@ public abstract class AdoSessionBase : IDbSession
                 try { await cmd.DisposeAsync().ConfigureAwait(false); } catch { /* ignore */ }
             }
         }
+    }
+
+    /// <summary>
+    /// The driver aborted the batch because of the cancel. Statements of the batch that finished before it (multi-statement
+    /// batches) keep their effect: report their row count and where their changes went.
+    /// </summary>
+    private async ValueTask ReportCancelledAsync(BatchContext ctx)
+    {
+        var text = "Query was cancelled.";
+        if (ctx.RecordsAffected > 0 && !ctx.Classification.IsQueryOnly)
+        {
+            await ReportRowsAffectedAsync(ctx, ctx.RecordsAffected).ConfigureAwait(false);
+            text += $" Statements that completed before the cancel changed {ctx.RecordsAffected} row(s); "
+                    + (TxOpen ? "those changes are part of the open transaction." : "those changes were committed.");
+        }
+        await ctx.Sink.Message(ctx.Index, MessageSeverity.Warning, text, null, null, MessageSource.Engine).ConfigureAwait(false);
     }
 
     private static async Task CloseReaderAsync(DbDataReader reader, BatchContext ctx)
@@ -1028,13 +1258,9 @@ public abstract class AdoSessionBase : IDbSession
                 _currentCommand = null;
             }
             cts.Dispose();
-            if (Transaction is not null && Transaction.Connection is null) Transaction = null;
             var broken = IsConnectionBroken(null);
-            if (broken)
-            {
-                Transaction = null;
-                ServerTxOpen = false;
-            }
+            if (broken) await ForgetTransactionAfterBreakAsync().ConfigureAwait(false);
+            else if (Transaction is not null && Transaction.Connection is null) Transaction = null;
             Interlocked.CompareExchange(ref _state, broken ? StateBroken : StateIdle, StateExecuting);
         }
     }

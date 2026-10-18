@@ -8,7 +8,7 @@ import {
   bindNameOf, friendlyParam, DIALECT_LABEL, localName, membersOf, objectLabel, pkMembers, proceduresClassName, routineFnName, routineSqlName,
   typeNameOf, type Member,
 } from '../shape';
-import { crudSql, qi, rewriteQuery, trimStatement, type ParamStyle } from '../sqlgen';
+import { crudSql, defaultsNote, qi, rewriteQuery, trimStatement, type ParamStyle } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, dq, Writer } from '../writer';
 
@@ -261,6 +261,7 @@ function dapperRepository(w: Writer, t: CgTable, typeName: string, members: Memb
     w.indent().line(`(await db.QueryAsync<${typeName}>(new CommandDefinition(SelectSql, cancellationToken: ct))).AsList();`).dedent();
     if (crud.insert) {
       w.blank();
+      summary(w, defaultsNote(crud.insert, !!crud.update));
       if (identity && crud.insert.returningKind === 'outBind') {
         w.allman(`public async Task<${insertType}> InsertAsync(${typeName} entity, CancellationToken ct = default)`, () => {
           w.line('var p = new DynamicParameters(entity);');
@@ -509,6 +510,7 @@ function adoRepository(w: Writer, t: CgTable, typeName: string, members: Member[
     });
     if (crud.insert) {
       w.blank();
+      summary(w, defaultsNote(crud.insert, !!crud.update));
       w.allman(`public async Task<${insertType}> InsertAsync(${typeName} entity, CancellationToken ct = default)`, () => {
         newCmd('InsertSql');
         bindEntity(crud.insert!.params);
@@ -713,6 +715,8 @@ function efConfiguration(w: Writer, t: CgTable, typeName: string, members: Membe
         if (!m.nullable && !isValueType(m.type, o)) calls.push('.IsRequired()');
         if (m.col.identity) calls.push('.ValueGeneratedOnAdd()');
         else if (m.col.computed) calls.push('.ValueGeneratedOnAddOrUpdate()');
+        // A server default: EF Core leaves the column out of the INSERT while the property holds its CLR default.
+        else if (m.col.hasDefault && t.kind === 'table' && !pk.includes(m)) calls.push('.ValueGeneratedOnAdd()');
         if (m.type.logical === 'rowversion') calls.push('.IsRowVersion()');
         const cm = commentText(m.col.comment);
         if (cm && t.kind === 'table') calls.push(`.HasComment(${dq(cm)})`);

@@ -2,16 +2,17 @@ import { http, HttpResponse } from 'msw';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ColumnInfo, ColumnKind, ExecuteRequest } from '../../api/types';
 import { newCondition, newGroup } from '../../filter/model';
-import { useGridMockEngine, until } from '../../mocks/m15/testServer';
+import type { ExecParam } from '../../filter/wire';
+import { installGridMockEngine, until } from '../../mocks/m15/testServer';
 import { useConnections } from '../../store/connections';
 import { useFilters } from '../../store/filters';
 import { useResults, viewKey } from '../../store/results';
 import { createExecution } from '../../store/resultsReducer';
 import { useSessions } from '../../store/sessions';
 import { useTabs } from '../../store/tabs';
-import { applyServerFilter, originalBatch, serverFilterAvailability } from './serverFilter';
+import { applyServerFilter, originalBatch, originalParams, serverFilterAvailability } from './serverFilter';
 
-const mock = useGridMockEngine();
+const mock = installGridMockEngine();
 const bodies: ExecuteRequest[] = [];
 
 const col = (name: string, kind: ColumnKind, ordinal: number): ColumnInfo => ({
@@ -19,9 +20,9 @@ const col = (name: string, kind: ColumnKind, ordinal: number): ColumnInfo => ({
 });
 const COLS = [col('Id', 'int', 0), col('Total', 'decimal', 1)];
 
-function seedExec(tabId: string, sql: string) {
+function seedExec(tabId: string, sql: string, params: ExecParam[] = []) {
   const localId = `l-${tabId}-${Math.random()}`;
-  const e = createExecution({ localId, tabId, connectionId: 'c_prod', sessionId: null, label: 'statement', batches: [{ sql, line: 3, col: 1 }], maxRows: 1000 });
+  const e = createExecution({ localId, tabId, connectionId: 'c_prod', sessionId: null, label: 'statement', batches: [{ sql, line: 3, col: 1 }], maxRows: 1000, params });
   useResults.getState().begin({ ...e, status: 'ok', resultSets: [{ id: 0, batchIndex: 0, columns: COLS, rows: { length: 0 } as never, rowCount: 0, truncated: false, elapsedMs: 1, done: true, rev: 1 }] });
   return useResults.getState().executions[localId];
 }
@@ -67,5 +68,34 @@ describe('apply filter on server (console results)', () => {
     expect(bodies[1].batches[0].sql).toBe('SELECT * FROM dbo.Orders ORDER BY Total DESC');
     expect(bodies[1].params ?? []).toEqual([]);
     expect(useFilters.getState().serverFilters[tab]).toBeUndefined();
+  });
+
+  it('re-runs a parameterized statement with its own binds plus the filter binds, and sends them again on Clear (code-04)', async () => {
+    const tab = useTabs.getState().newConsole({ connectionId: 'c_prod' });
+    await useSessions.getState().ensure(tab, 'c_prod', null, 'auto');
+    const sql = 'SELECT Id, Total FROM dbo.Orders WHERE Id > @minId';
+    const minId: ExecParam = { name: 'minId', kind: 'int', value: 10 };
+    const exec = seedExec(tab, sql, [minId]);
+    expect(serverFilterAvailability(exec, COLS, 'tsql')).toEqual({ available: true, reason: null });
+    const n = bodies.length;
+    await applyServerFilter(exec, COLS, 'tsql', newGroup('and', [newCondition('Total', 'gt', ['5'])]), '', []);
+    await until(() => bodies.length === n + 1);
+    expect(bodies[n].batches[0].sql).toContain('WHERE Id > @minId');
+    expect(bodies[n].params).toEqual([minId, { name: 'fp1', kind: 'int', value: 5 }]);
+    const next = useResults.getState().executions[useResults.getState().byTab[tab]];
+    expect(next.params).toEqual([minId, { name: 'fp1', kind: 'int', value: 5 }]);
+    // Re-filtering from the filtered result still knows which binds are the user's.
+    expect(originalParams(next)).toEqual([minId]);
+    await applyServerFilter(next, COLS, 'tsql', null, '', [], true);
+    await until(() => bodies.length === n + 2);
+    expect(bodies[n + 1].batches[0].sql).toBe(sql);
+    expect(bodies[n + 1].params).toEqual([minId]);
+  });
+
+  it('is disabled with a reason when the original had parameters but their values were not kept', () => {
+    const tab = useTabs.getState().newConsole({ connectionId: 'c_prod' });
+    const a = serverFilterAvailability(seedExec(tab, 'SELECT * FROM dbo.Orders WHERE Id > @minId'), COLS, 'tsql');
+    expect(a.available).toBe(false);
+    expect(a.reason).toMatch(/bind parameters/);
   });
 });

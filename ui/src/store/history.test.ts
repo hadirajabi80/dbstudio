@@ -1,10 +1,10 @@
 // 1.1.3 history filter chips: Connection (multi), Status, When, Only pinned; engine params + client-side safety net.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HistoryEntry } from '../api/types';
-import { useMockEngine } from '../test/mockServer';
+import { installMockEngine } from '../test/mockServer';
 import { applyHistoryFilters, EMPTY_HISTORY_FILTERS, historyRange, useHistory } from './history';
 
-const mock = useMockEngine();
+const mock = installMockEngine();
 
 const now = new Date('2026-10-14T15:00:00');
 const h = (id: number, connectionId: string, status: HistoryEntry['status'], daysAgo: number, pinned = false): HistoryEntry => ({

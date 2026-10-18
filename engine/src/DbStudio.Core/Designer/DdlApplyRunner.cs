@@ -21,14 +21,39 @@ public sealed class DdlApplyRunner
     /// <summary>Executes one statement (default ExecuteNonQueryAsync). May throw to fail the statement.</summary>
     public Func<DbCommand, CancellationToken, Task>? Execute { get; init; }
 
+    /// <summary>
+    /// CommandTimeout of every statement (default 0 = no limit: a rebuild of a large table may legitimately run long).
+    /// SQLite passes its busy timeout: its driver retries a locked database until CommandTimeout, so 0 would hang forever.
+    /// </summary>
+    public int CommandTimeoutSeconds { get; init; }
+
     /// <summary>Called for each new command (timeouts, BindByName, ...).</summary>
     public Action<DbCommand>? Configure { get; init; }
+
+    /// <summary>"Statement 2 failed: &lt;error&gt;. All changes were rolled back." (also used when a service rewords the error).</summary>
+    public static string FailureMessage(int failedIndex, ErrorInfo error, int executed, bool rolledBack) =>
+        $"Statement {failedIndex + 1} failed: {error.Message.TrimEnd().TrimEnd('.')}."
+        + (rolledBack ? " All changes were rolled back." : executed > 0 ? $" {executed} statement(s) had already run and were committed." : "");
 
     public async Task<DdlApplyResult> RunAsync(DbConnection connection, IReadOnlyList<string> statements, bool transactional, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
         var executed = 0;
-        DbTransaction? tx = transactional ? await connection.BeginTransactionAsync(ct).ConfigureAwait(false) : null;
+        DbTransaction? tx = null;
+        if (transactional)
+        {
+            try
+            {
+                tx = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // SQLite BEGIN IMMEDIATE waits for other connections' write locks (busy timeout).
+                var error = MapError(ex, "BEGIN");
+                throw new DdlFailedException($"Could not start the transaction: {error.Message.TrimEnd().TrimEnd('.')}. Nothing was changed.",
+                    0, 0, true, error);
+            }
+        }
         try
         {
             for (var i = 0; i < statements.Count; i++)
@@ -42,7 +67,7 @@ public sealed class DdlApplyRunner
                     await using var cmd = connection.CreateCommand();
                     cmd.CommandText = sql;
                     cmd.Transaction = tx;
-                    cmd.CommandTimeout = 0;
+                    cmd.CommandTimeout = CommandTimeoutSeconds;
                     Configure?.Invoke(cmd);
                     if (Execute is not null) await Execute(cmd, ct).ConfigureAwait(false);
                     else await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -59,12 +84,26 @@ public sealed class DdlApplyRunner
                         tx = null;
                     }
                     var error = MapError(ex, sql);
-                    var message = $"Statement {i + 1} failed: {error.Message.TrimEnd().TrimEnd('.')}."
-                                  + (rolledBack ? " All changes were rolled back." : executed > 0 ? $" {executed} statement(s) had already run and were committed." : "");
-                    throw new DdlFailedException(message, i, executed, rolledBack, error);
+                    throw new DdlFailedException(FailureMessage(i, error, executed, rolledBack), i, executed, rolledBack, error);
                 }
             }
-            if (tx is not null) await tx.CommitAsync(ct).ConfigureAwait(false);
+            if (tx is not null)
+            {
+                try
+                {
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    // SQLite: COMMIT needs an exclusive lock and gives up after the busy timeout when a console still reads.
+                    try { await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false); } catch (Exception) { /* already ended */ }
+                    await tx.DisposeAsync().ConfigureAwait(false);
+                    tx = null;
+                    var error = MapError(ex, "COMMIT");
+                    throw new DdlFailedException($"Could not commit: {error.Message.TrimEnd().TrimEnd('.')}. All changes were rolled back.",
+                        Math.Max(0, statements.Count - 1), executed, true, error);
+                }
+            }
             return new DdlApplyResult(true, executed, sw.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (tx is not null)

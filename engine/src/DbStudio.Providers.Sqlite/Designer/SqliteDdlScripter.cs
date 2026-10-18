@@ -217,6 +217,8 @@ public sealed partial class SqliteDdlScripter : IDdlScripter
         }
         foreach (var c in d.Dropped)
             warnings.Add($"Column {c.Name} is dropped with its data.");
+        if (original.Columns.Any(c => c.Autoincrement) && desired.Columns.Any(c => c.Autoincrement))
+            ScriptKeepAutoincrementCounter(schema, original.Name, temp, statements);
         statements.Add(new DdlStatement($"DROP TABLE {Qualified(schema, original.Name)}", DdlKinds.Rebuild));
         statements.Add(new DdlStatement($"ALTER TABLE {Qualified(schema, temp)} RENAME TO {Quote(desired.Name)}", DdlKinds.Rebuild));
         foreach (var ix in desired.Indexes)
@@ -242,6 +244,28 @@ public sealed partial class SqliteDdlScripter : IDdlScripter
         statements.Add(new DdlStatement("PRAGMA foreign_key_check", DdlKinds.Pragma));
         statements.Add(new DdlStatement("PRAGMA foreign_keys = ON", DdlKinds.Pragma));
     }
+
+    /// <summary>
+    /// AUTOINCREMENT never reuses an id: its counter lives in <c>sqlite_sequence</c> and the copy only raised the new
+    /// table's counter to max(id). The old counter is read while the old table still exists (DROP TABLE deletes its row)
+    /// and stored as the new table's counter, inserted when the copy left none; the RENAME then moves the row to the
+    /// final name. MAX keeps the higher of the two.
+    /// </summary>
+    private static void ScriptKeepAutoincrementCounter(string? schema, string oldTable, string newTable, List<DdlStatement> statements)
+    {
+        var seq = Qualified(schema, "sqlite_sequence");
+        var oldName = Literal(oldTable);
+        var newName = Literal(newTable);
+        var old = $"(SELECT seq FROM {seq} WHERE name = {oldName})";
+        statements.Add(new DdlStatement(
+            $"INSERT INTO {seq} (name, seq)\nSELECT {newName}, seq FROM {seq}\nWHERE name = {oldName} AND NOT EXISTS (SELECT 1 FROM {seq} WHERE name = {newName})",
+            DdlKinds.Rebuild, "Keeps the AUTOINCREMENT counter, so ids of deleted rows are never reused."));
+        statements.Add(new DdlStatement(
+            $"UPDATE {seq} SET seq = MAX(seq, COALESCE({old}, 0))\nWHERE name = {newName}",
+            DdlKinds.Rebuild));
+    }
+
+    private static string Literal(string value) => "'" + value.Replace("'", "''") + "'";
 
     private static bool UsesDroppedColumn(string sql, TableDiffResult d) => d.Dropped.Any(c => MentionsWord(sql, c.Name));
 
@@ -357,11 +381,15 @@ public sealed partial class SqliteDdlScripter : IDdlScripter
         if (view.Options.CheckOption) warnings.Add("SQLite has no WITH CHECK OPTION; the option is ignored.");
         var statements = new List<DdlStatement>();
         var schema = view.Schema;
-        if (!string.IsNullOrWhiteSpace(view.OriginalName))
-            statements.Add(new DdlStatement($"DROP VIEW IF EXISTS {Qualified(schema, view.OriginalName)}", DdlKinds.Drop));
-        if (!string.Equals(view.OriginalName, view.Name, StringComparison.OrdinalIgnoreCase))
-            statements.Add(new DdlStatement($"DROP VIEW IF EXISTS {Qualified(schema, view.Name)}", DdlKinds.Drop));
+        // SQLite has no CREATE OR REPLACE VIEW: editing the same view drops and recreates it. A new name is never
+        // dropped first, so an existing view or table of that name fails the CREATE; a renamed view is created under the
+        // new name and the old one dropped afterwards, in one transaction. Names compare case-insensitively.
+        var original = string.IsNullOrWhiteSpace(view.OriginalName) ? null : view.OriginalName;
+        var editing = original is not null && original.Equals(view.Name, StringComparison.OrdinalIgnoreCase);
+        if (editing) statements.Add(new DdlStatement($"DROP VIEW IF EXISTS {Qualified(schema, original!)}", DdlKinds.Drop));
         statements.Add(new DdlStatement($"CREATE VIEW {Qualified(schema, view.Name)} AS\n{TrimBody(view.Body)}", DdlKinds.Create));
+        if (original is not null && !editing)
+            statements.Add(new DdlStatement($"DROP VIEW IF EXISTS {Qualified(schema, original)}", DdlKinds.Drop));
         return new DdlScript(statements, false, true, warnings);
     }
 

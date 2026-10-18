@@ -10,6 +10,13 @@ export interface CellColors {
   deletedText: string;
   link: string;
   error: string;
+  /** Background of a row a failed save stopped at (user-02). */
+  errorRow: string;
+  /** Regular text (NULL inside an edited cell: the muted NULL colour is unreadable on the edited background). */
+  fg: string;
+  /** Zebra stripe and hovered row backgrounds (styles-20). */
+  alt: string;
+  hover: string;
 }
 
 /** Resolve a token chain like `var(--cell-edited, var(--warning-soft))` to a canvas-usable colour string. */
@@ -34,9 +41,14 @@ export function cellColors(theme: EffectiveTheme): CellColors {
     editedBar: resolve('var(--warning)'),
     inserted: resolve('var(--cell-inserted, var(--success-soft))'),
     deleted: resolve('var(--cell-deleted, var(--danger-soft))'),
-    deletedText: resolve('var(--danger)'),
+    // --danger-text is the readable (lighter in dark) variant; older token sets only have --danger.
+    deletedText: resolve('var(--danger-text, var(--danger))'),
     link: resolve('var(--accent)'),
     error: resolve('var(--danger)'),
+    errorRow: resolve('var(--danger-soft)'),
+    fg: resolve('var(--fg)'),
+    alt: resolve('var(--bg-grid-alt, var(--bg-panel))'),
+    hover: resolve('var(--bg-hover)'),
   };
   cache.set(theme, c);
   return c;

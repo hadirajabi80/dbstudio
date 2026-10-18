@@ -1,5 +1,6 @@
 // One-time global Monaco setup: worker, the three DbStudio SQL languages, lexer-driven tokens, themes and the
 // language feature providers. Providers resolve per-model state through the registry (multi-editor safe).
+// Colours (themes, run flash) come from the design tokens in ui/src/theme, never from literals here.
 import * as monaco from './monaco';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import type { Dialect } from '../api/types';
@@ -7,9 +8,11 @@ import { getSpec, type CompletionItem, type CompletionKind, type LexState } from
 import { tokenizeLine } from './tokens-core';
 import { bindingByUri, bindingFor, bindingForEditor } from './registry';
 import { objectUri, parseObjectUri, objectSummary } from './object-uri';
-import { formatRange, formatSql } from '../format';
+import { formatRange, formatSql, type FormatWarning } from '../format';
 import { snippetPickerItems } from '../snippets';
 import { getEditorConfig } from './config';
+import { FORMAT_MARKER_OWNER } from './actions';
+import { buildMonacoTheme } from '../theme/monacoTheme';
 
 export const LANGUAGE_IDS: Record<Dialect, string> = {
   tsql: 'dbstudio-tsql',
@@ -62,88 +65,17 @@ function installStyles(): void {
   const st = document.createElement('style');
   st.id = 'dbstudio-editor-styles';
   st.textContent = `
-.dbstudio-run-flash { background: rgba(255, 196, 0, 0.28); transition: background 0.4s ease-out; }
-.vs-dark .dbstudio-run-flash, .monaco-editor.vs-dark .dbstudio-run-flash { background: rgba(255, 196, 0, 0.18); }
+.dbstudio-run-flash { background: var(--run-flash); transition: background 0.4s ease-out; }
 .dbstudio-run-flash-off { background: transparent; transition: background 0.5s ease-out; }
 .dbstudio-param-hint { color: var(--fg-muted, currentColor); opacity: 0.8; font-style: italic; }
 `;
   document.head.appendChild(st);
 }
 
+/** Both DbStudio themes, built from the design tokens (theme/monacoTheme.ts) before the first editor paints. */
 function defineThemes(): void {
-  monaco.editor.defineTheme(THEME_IDS.light, {
-    base: 'vs', inherit: true,
-    rules: [
-      { token: '', foreground: '1f2328' },
-      { token: 'keyword', foreground: '0033b3', fontStyle: 'bold' },
-      { token: 'keyword.contextual', foreground: '0033b3' },
-      { token: 'keyword.batch', foreground: '9b2393', fontStyle: 'bold' },
-      { token: 'type', foreground: '1a7f8e' },
-      { token: 'predefined', foreground: '795e26' },
-      { token: 'identifier', foreground: '1f2328' },
-      { token: 'identifier.quote', foreground: '7a3e9d' },
-      { token: 'string', foreground: '067d17' },
-      { token: 'number', foreground: '1750eb' },
-      { token: 'comment', foreground: '8c8c8c', fontStyle: 'italic' },
-      { token: 'variable', foreground: '871094' },
-      { token: 'operator', foreground: '3a3a3a' },
-      { token: 'delimiter', foreground: '3a3a3a' },
-      { token: 'delimiter.parenthesis', foreground: '3a3a3a' },
-    ],
-    colors: {
-      'editor.background': '#ffffff',
-      'editor.foreground': '#1f2328',
-      'editor.lineHighlightBackground': '#f5f8fe',
-      'editor.selectionBackground': '#a6c8ff',
-      'editor.inactiveSelectionBackground': '#d6e4fb',
-      'editorLineNumber.foreground': '#adb5bd',
-      'editorLineNumber.activeForeground': '#495057',
-      'editorCursor.foreground': '#1f2328',
-      'editorIndentGuide.background1': '#eceff3',
-      'editorWhitespace.foreground': '#d0d7de',
-      'editorBracketMatch.background': '#e2e6ff',
-      'editorBracketMatch.border': '#9aa8ff',
-    },
-  });
-  monaco.editor.defineTheme(THEME_IDS.dark, {
-    base: 'vs-dark', inherit: true,
-    rules: [
-      { token: '', foreground: 'd4d4d4' },
-      { token: 'keyword', foreground: '6ca6e8', fontStyle: 'bold' },
-      { token: 'keyword.contextual', foreground: '6ca6e8' },
-      { token: 'keyword.batch', foreground: 'c586c0', fontStyle: 'bold' },
-      { token: 'type', foreground: '4ec9b0' },
-      { token: 'predefined', foreground: 'dcdcaa' },
-      { token: 'identifier', foreground: 'd4d4d4' },
-      { token: 'identifier.quote', foreground: 'd7ba7d' },
-      { token: 'string', foreground: 'ce9178' },
-      { token: 'number', foreground: 'b5cea8' },
-      { token: 'comment', foreground: '7f9f7f', fontStyle: 'italic' },
-      { token: 'variable', foreground: '9cdcfe' },
-      { token: 'operator', foreground: 'c8c8c8' },
-      { token: 'delimiter', foreground: 'b4b4b4' },
-      { token: 'delimiter.parenthesis', foreground: 'c8c8c8' },
-    ],
-    colors: {
-      'editor.background': '#1e1f22',
-      'editor.foreground': '#d4d4d4',
-      'editor.lineHighlightBackground': '#26282e',
-      'editor.selectionBackground': '#214283',
-      'editor.inactiveSelectionBackground': '#2b3a55',
-      'editorLineNumber.foreground': '#5c6370',
-      'editorLineNumber.activeForeground': '#a9b1bd',
-      'editorCursor.foreground': '#e6e6e6',
-      'editorIndentGuide.background1': '#2c2f36',
-      'editorWhitespace.foreground': '#3b3f46',
-      'editorBracketMatch.background': '#3b4252',
-      'editorBracketMatch.border': '#6c7a96',
-      'editorSuggestWidget.background': '#25272c',
-      'editorSuggestWidget.border': '#3a3d44',
-      'editorSuggestWidget.selectedBackground': '#2f4a73',
-      'editorHoverWidget.background': '#25272c',
-      'editorHoverWidget.border': '#3a3d44',
-    },
-  });
+  monaco.editor.defineTheme(THEME_IDS.light, buildMonacoTheme('light'));
+  monaco.editor.defineTheme(THEME_IDS.dark, buildMonacoTheme('dark'));
 }
 
 function registerLanguage(dialect: Dialect): void {
@@ -212,15 +144,31 @@ function registerLanguage(dialect: Dialect): void {
     },
   });
 
-  // Formatting (WP-H): Shift+Alt+F / Ctrl+K Ctrl+F and the context menu. The SqlEditor actions bound to the same
-  // keys add cursor preservation and warnings; these providers make Monaco's own Format commands work too.
+  // Formatting (WP-H). "Format Document" (Shift+Alt+F, editor context menu) is Monaco's own command running this
+  // provider: Monaco diffs the result into minimal edits, so the cursor stays put, and the statements the formatter
+  // left verbatim are flagged with the same markers as the toolbar/palette path (actions.formatDocument).
+  // "Format SQL (Selection or Statement)" (Ctrl+K Ctrl+F) stays a SqlEditor action: it also formats the statement
+  // at the cursor when nothing is selected.
   const fmtOptions = (model: monaco.editor.ITextModel) => bindingFor(model)?.formatOptions?.() ?? getEditorConfig().format;
   monaco.languages.registerDocumentFormattingEditProvider(id, {
     displayName: 'DbStudio SQL formatter',
     provideDocumentFormattingEdits(model) {
       const text = model.getValue();
       const r = formatSql(text, dialect, fmtOptions(model));
-      return r.text === text ? [] : [{ range: model.getFullModelRange(), text: r.text }];
+      // warning lines refer to the formatted text: mark them once Monaco has applied the edits
+      const mark = () => { if (!model.isDisposed()) monaco.editor.setModelMarkers(model, FORMAT_MARKER_OWNER, formatWarningMarkers(model, r.warnings)); };
+      monaco.editor.setModelMarkers(model, FORMAT_MARKER_OWNER, []);
+      if (r.text === text) {
+        mark();
+        return [];
+      }
+      const sub = model.onDidChangeContent(() => {
+        if (model.getValue() !== r.text) return;
+        sub.dispose();
+        mark();
+      });
+      setTimeout(() => sub.dispose(), 2000); // edits dropped (stale request, cancelled): never mark later typing
+      return [{ range: model.getFullModelRange(), text: r.text }];
     },
   });
   monaco.languages.registerDocumentRangeFormattingEditProvider(id, {
@@ -283,6 +231,17 @@ function registerLanguage(dialect: Dialect): void {
       if (!monaco.editor.getModel(uri)) monaco.editor.createModel(objectSummary(d.ref, b), id, uri);
       return { uri, range: new monaco.Range(1, 1, 1, 1) };
     },
+  });
+}
+
+/** Same markers as actions.formatDocument: one warning per statement the formatter left verbatim. */
+function formatWarningMarkers(model: monaco.editor.ITextModel, warnings: FormatWarning[]): monaco.editor.IMarkerData[] {
+  return warnings.map((w) => {
+    const line = Math.min(Math.max(1, w.line), model.getLineCount());
+    return {
+      severity: monaco.MarkerSeverity.Warning, message: w.message, source: 'formatter', code: 'FORMAT_SKIPPED',
+      startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: model.getLineMaxColumn(line),
+    };
   });
 }
 

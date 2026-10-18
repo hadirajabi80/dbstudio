@@ -16,7 +16,7 @@ public sealed class EngineEnv : IAsyncDisposable
     public string Dir { get; } = Path.Combine(Path.GetTempPath(), "dbstudio-core-tests", Guid.NewGuid().ToString("N"));
     public AppPaths Paths { get; }
     public RecordingPublisher Events { get; } = new();
-    public ProviderRegistry Providers { get; } = new([new SqliteProvider()]);
+    public ProviderRegistry Providers { get; }
     public ConnectionStore Connections { get; }
     public ResultStore Results { get; }
     public HistoryService History { get; }
@@ -25,16 +25,23 @@ public sealed class EngineEnv : IAsyncDisposable
     public ExecutionService Executions { get; }
     public ExportService Exports { get; }
 
-    public EngineEnv(long resultCap = ResultStore.DefaultCapBytes)
+    public ClientPresence? Presence { get; }
+
+    /// <param name="extraProviders">Test doubles registered next to the SQLite provider.</param>
+    /// <param name="presence">Live UI clients (orphaned-session tests).</param>
+    public EngineEnv(long resultCap = ResultStore.DefaultCapBytes, IReadOnlyList<DbStudio.Core.Providers.IDbProvider>? extraProviders = null,
+        ClientPresence? presence = null, TimeSpan? orphanGrace = null)
     {
+        Providers = new([new SqliteProvider(), .. extraProviders ?? []]);
+        Presence = presence;
         Paths = new AppPaths(Dir);
         Connections = new ConnectionStore(Paths, new InMemorySecretStore(), Providers);
         Results = new ResultStore(resultCap);
         History = new HistoryService(Paths);
-        Sessions = new SessionManager(Providers, Connections, Events, Results);
+        Sessions = new SessionManager(Providers, Connections, Events, Results, presence: presence, orphanGrace: orphanGrace);
         Catalog = new CatalogService(Providers, Connections, Events);
         Executions = new ExecutionService(Sessions, Results, History, Catalog, Connections, Events);
-        Exports = new ExportService(Sessions, Results, Events);
+        Exports = new ExportService(Sessions, Results, Events, history: History);
     }
 
     public ConnectionProfile AddSqlite(string file = "db.sqlite", bool readOnly = false) =>

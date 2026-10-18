@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useCatalog } from '../../store/catalog';
 import { useConnections } from '../../store/connections';
 import { useTabs } from '../../store/tabs';
-import { useMockEngine } from '../../test/mockServer';
+import { installMockEngine } from '../../test/mockServer';
 import { Explorer, useExplorer } from './Explorer';
 
-const mock = useMockEngine();
+const mock = installMockEngine();
 
 function row(label: string) {
   return screen.getAllByRole('treeitem').find((el) => el.querySelector('.tree-label')?.textContent === label);

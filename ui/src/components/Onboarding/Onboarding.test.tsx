@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useConnections } from '../../store/connections';
 import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
-import { useMockEngine } from '../../test/mockServer';
+import { installMockEngine } from '../../test/mockServer';
 import { Welcome } from './Welcome';
 
-const mock = useMockEngine();
+const mock = installMockEngine();
 
 describe('onboarding', () => {
   beforeEach(async () => {

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
+import { focusFirst, useRestoreFocus } from './focus';
 
 interface DialogProps {
   title: ReactNode;
@@ -13,16 +14,21 @@ interface DialogProps {
   ariaLabel?: string;
 }
 
+/**
+ * The first form field of the body: one selector list, so querySelector returns whichever field comes first in
+ * document order. The custom Select's trigger is a button[role=combobox] (styles-r1-04), so it counts as a field.
+ */
+const FIRST_FIELD = ['input', 'select', 'textarea', '[role="combobox"]'].map((f) => `.dialog-body ${f}:not([disabled])`).join(', ');
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Modal dialog: role=dialog + aria-modal, focus trapped, Esc closes, initial focus on the first input. */
 export function Dialog({ title, onClose, children, footer, width = 520, className, onSubmit, ariaLabel }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
+  useRestoreFocus(true, ref);
   useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>('[data-autofocus], .dialog-body input, .dialog-body select, .dialog-body textarea, button.btn-primary');
-    first?.focus();
-    return () => prev?.focus?.();
+    // An explicit [data-autofocus] wins over document order (danger confirmations focus Cancel, not the checkbox).
+    focusFirst(ref.current, ['[data-autofocus]', FIRST_FIELD, 'button.btn-primary']);
   }, []);
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

@@ -607,8 +607,8 @@ FROM dbo.Events
 WHERE EventId = ?
 """
 _EVENT_INSERT = """
-INSERT INTO dbo.Events (EventId, OccurredAt, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, IsActive, Location)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO dbo.Events (EventId, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, Location)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 _EVENT_UPDATE = """
 UPDATE dbo.Events
@@ -661,8 +661,9 @@ class EventRepository:
         return [self._from_row(r) for r in rows]
 
     def insert(self, e: Event) -> None:
+        """Insert a row. OccurredAt and IsActive are not inserted, so the server defaults apply; change them with update."""
         cur = self._conn.cursor()
-        cur.execute(_EVENT_INSERT, e.event_id, e.occurred_at, e.day, e.at, e.kind, e.payload, e.snapshot, e.spec, e.score, e.ratio, e.flags, e.big, e.price, e.is_active, e.location)
+        cur.execute(_EVENT_INSERT, e.event_id, e.day, e.at, e.kind, e.payload, e.snapshot, e.spec, e.score, e.ratio, e.flags, e.big, e.price, e.location)
 
     def update(self, e: Event) -> bool:
         cur = self._conn.cursor()

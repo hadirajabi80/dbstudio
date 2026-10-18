@@ -545,8 +545,8 @@ const eventGetSQL = `SELECT EventId, OccurredAt, Day, At, Kind, Payload, Snapsho
 FROM dbo.Events
 WHERE EventId = @p1`
 
-const eventInsertSQL = `INSERT INTO dbo.Events (EventId, OccurredAt, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, IsActive, Location)
-VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15)`
+const eventInsertSQL = `INSERT INTO dbo.Events (EventId, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, Location)
+VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13)`
 
 const eventUpdateSQL = `UPDATE dbo.Events
 SET OccurredAt = @p1, Day = @p2, At = @p3, Kind = @p4, Payload = @p5, Snapshot = @p6, Spec = @p7, Score = @p8, Ratio = @p9, Flags = @p10, Big = @p11, Price = @p12, IsActive = @p13, Location = @p14
@@ -593,8 +593,9 @@ func (s *EventStore) List(ctx context.Context) ([]Event, error) {
 }
 
 // Insert adds a row.
+// OccurredAt and IsActive are not inserted, so the server defaults apply; change them with update.
 func (s *EventStore) Insert(ctx context.Context, e *Event) error {
-	_, err := s.db.ExecContext(ctx, eventInsertSQL, e.EventID, e.OccurredAt, e.Day, e.At, e.Kind, e.Payload, e.Snapshot, e.Spec, e.Score, e.Ratio, e.Flags, e.Big, e.Price, e.IsActive, e.Location)
+	_, err := s.db.ExecContext(ctx, eventInsertSQL, e.EventID, e.Day, e.At, e.Kind, e.Payload, e.Snapshot, e.Spec, e.Score, e.Ratio, e.Flags, e.Big, e.Price, e.Location)
 	return err
 }
 

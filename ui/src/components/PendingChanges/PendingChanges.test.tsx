@@ -1,14 +1,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { CellValue, ColumnInfo, ColumnKind } from '../../api/types';
-import { useGridMockEngine, until } from '../../mocks/m15/testServer';
+import { installGridMockEngine, until } from '../../mocks/m15/testServer';
 import { useConnections } from '../../store/connections';
 import { pendingCount, useEdits } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
 import { PendingChangesDialog } from './PendingChanges';
+import { runSql, setSqlRunner } from '../DataTab/runner';
 import { buildStatements, submitChanges, type EditContext } from './submit';
 
-const mock = useGridMockEngine({ frameDelay: 0 }, true);
+const mock = installGridMockEngine({ frameDelay: 0 }, true);
 
 const col = (name: string, kind: ColumnKind, ordinal: number): ColumnInfo => ({
   name, ordinal, dbType: kind, kind, nullable: true, size: null, precision: null, scale: null, table: 'people', schema: 'main', isKey: name === 'Id',
@@ -55,7 +56,7 @@ describe('pending changes: preview → submit in a transaction → refetch', () 
     expect(screen.getByText("INSERT INTO people (Name) VALUES ('Barbara') RETURNING Id")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Show parameters'));
     expect(screen.getByText('UPDATE people SET Name = @p1, Total = @p2 WHERE Id = @p3')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Submit \(3\)/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Save \(3\)/ })).toBeEnabled();
   });
 
   it('edit 2 cells in one row → one UPDATE with 2 SET items', () => {
@@ -113,7 +114,7 @@ describe('pending changes: preview → submit in a transaction → refetch', () 
     fireEvent.click(screen.getByLabelText(/Verify unchanged values/));
     expect(screen.getByText("UPDATE people SET Name = 'Grace H.' WHERE Id = 2 AND Name = 'Grace'")).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
     });
     await until(() => useEdits.getState().get(KEY).issues.length > 0);
     expect(await screen.findByRole('alert')).toHaveTextContent(/changed or deleted by someone else/);
@@ -126,9 +127,87 @@ describe('pending changes: preview → submit in a transaction → refetch', () 
     expect(mock.ctx.engine.tables.get('people')!.rows[1][1]).toBe('Grace H.');
   });
 
+  it('manual mode with an open transaction: a failing UPDATE rolls back only to the savepoint (code-01)', async () => {
+    // The mock engine has no savepoints: record them and let everything else run on the mock.
+    const seen: string[] = [];
+    setSqlRunner(async (sid, sql, params, opts) => {
+      seen.push(sql);
+      if (/^(SAVEPOINT|ROLLBACK TO SAVEPOINT|RELEASE SAVEPOINT) dbs_edit$/.test(sql)) {
+        return { executionId: null, status: 'ok', resultSets: [], affected: 0, affectedReported: false, error: null, messages: [], outParams: [], elapsedMs: 0, txOpen: true };
+      }
+      return runSql(sid, sql, params, opts);
+    });
+    try {
+      // The console is in manual mode and the user already changed a row without committing.
+      const s = await useSessions.getState().ensure('tab-pc', 'c_shop', null, 'manual');
+      const own = await runSql(s.sessionId, 'UPDATE people SET Name = @p1 WHERE Id = @p2', [{ name: 'p1', kind: 'string', value: 'Ada (mine)' }, { name: 'p2', kind: 'int', value: 1 }]);
+      expect(own.txOpen).toBe(true);
+      await until(() => useSessions.getState().forTab('tab-pc')?.txOpen === true);
+      mock.ctx.engine.log = [];
+      seen.length = 0;
+
+      // Now a grid edit that conflicts (0 rows affected).
+      useEdits.getState().setCell(KEY, 1, 1, 'Grace H.', 'Grace');
+      mock.ctx.engine.conflictOn = /WHERE Id = @p2$/;
+      const r = await submitChanges(ctx(), { verifyUnchanged: false });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/affected 0 rows.*earlier uncommitted changes/);
+      expect(seen).toEqual(['SAVEPOINT dbs_edit', 'UPDATE people SET Name = @p1 WHERE Id = @p2', 'ROLLBACK TO SAVEPOINT dbs_edit']);
+      // No full ROLLBACK and no tx-mode switch: the user's own uncommitted UPDATE survives in the open transaction.
+      expect(mock.hits('/rollback', 'POST')).toHaveLength(0);
+      expect(mock.hits('/tx-mode', 'POST')).toHaveLength(0);
+      expect(mock.ctx.engine.log.some((l) => /^ROLLBACK$/i.test(l.sql.trim()))).toBe(false);
+      expect(mock.ctx.engine.tables.get('people')!.rows[0][1]).toBe('Ada (mine)');
+      expect(useSessions.getState().forTab('tab-pc')?.txOpen).toBe(true);
+      expect(pendingCount(useEdits.getState().get(KEY).pending)).toBe(1);
+    } finally {
+      setSqlRunner(null);
+    }
+  });
+
+  it('T-SQL insert: the new key comes back from SELECT * FROM @ins and drives the refetch (features-10)', async () => {
+    const seen: { sql: string; params: unknown[] }[] = [];
+    const ok = (resultSets: { columns: ColumnInfo[]; rows: CellValue[][]; truncated: boolean }[] = []) => ({
+      executionId: null, status: 'ok' as const, resultSets, affected: 1, affectedReported: true, error: null, messages: [], outParams: [], elapsedMs: 0, txOpen: true,
+    });
+    setSqlRunner(async (_sid, sql, params) => {
+      seen.push({ sql, params });
+      if (sql.startsWith('DECLARE @ins')) return ok([{ columns: [{ ...COLUMNS[0], dbType: 'int' }], rows: [[42]], truncated: false }]);
+      if (sql.startsWith('SELECT')) return ok([{ columns: COLUMNS, rows: [[42, 'Barbara', null]], truncated: false }]);
+      return ok();
+    });
+    try {
+      const id = useEdits.getState().addInsert(KEY, 3);
+      useEdits.getState().setInsertCell(KEY, id, 1, 'Barbara');
+      const tctx: EditContext = {
+        ...ctx(), dialect: 'tsql',
+        target: { schema: 'dbo', name: 'people', keyColumns: ['Id'], identityColumns: ['Id'], defaultSchema: 'dbo' },
+        columns: COLUMNS.map((c) => (c.name === 'Id' ? { ...c, dbType: 'int' } : c)),
+      };
+      const r = await submitChanges(tctx, { verifyUnchanged: false });
+      expect(r).toMatchObject({ ok: true, executed: 1 });
+      expect(seen[0].sql).toBe('DECLARE @ins TABLE (Id int);\nINSERT INTO dbo.people (Name) OUTPUT INSERTED.Id INTO @ins VALUES (@p1);\nSELECT * FROM @ins;');
+      const refetch = seen.find((s) => s.sql.startsWith('SELECT'))!;
+      expect(JSON.stringify(refetch.params)).toContain('42');
+      expect(useEdits.getState().get(KEY).committed.appended).toEqual([[42, 'Barbara', null]]);
+    } finally {
+      setSqlRunner(null);
+    }
+  });
+
+  it('auto mode: the submit opened the transaction, so a failure is a full ROLLBACK', async () => {
+    useEdits.getState().setCell(KEY, 1, 1, 'Grace H.', 'Grace');
+    mock.ctx.engine.conflictOn = /WHERE Id = @p2$/;
+    const r = await submitChanges(ctx(), { verifyUnchanged: false });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/Nothing was saved\.$/);
+    expect(mock.hits('/rollback', 'POST')).toHaveLength(1);
+    expect(mock.ctx.engine.log.some((l) => /SAVEPOINT/.test(l.sql))).toBe(false);
+  });
+
   it('empty state', () => {
     render(<PendingChangesDialog ctx={ctx()} onClose={() => {}} />);
     expect(screen.getByText('Edit a cell to start')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Submit/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Save/ })).toBeDisabled();
   });
 });

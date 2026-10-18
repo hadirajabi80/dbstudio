@@ -197,6 +197,12 @@ export interface SessionInfo {
   /** M1.5: from the last ExecuteRequest.source. */
   tabId?: string | null;
   label?: string | null;
+  /**
+   * B1 (logic-08): the UI window that owns the session (created or last used it) has no live WebSocket. The engine
+   * closes it (rolling back) after settings `connections.orphanGraceSeconds` unless that window reconnects or another
+   * window uses the session.
+   */
+  orphan?: boolean;
 }
 
 /** line/col are 1-based positions of the batch's first character in the editor document. */
@@ -212,6 +218,8 @@ export interface ExecuteRequest {
   confirmedDestructive?: boolean;
   /** M1.5 (A2): bind values. Bound by name (`@id`, `:id`, `$id`) or by position when the name is numeric or the SQL uses `?`. */
   params?: QueryParam[] | null;
+  /** B1 (logic-19): do not record this run in history (describe probes, COUNT(*) helpers). Default false. */
+  skipHistory?: boolean;
 }
 export interface ExecuteResponse { executionId: string; startedAt: string }
 
@@ -320,7 +328,8 @@ export type WsEventType = WsEvent['type'];
 export type WsEventOf<T extends WsEventType> = Extract<WsEvent, { type: T }>;
 
 /** Client → server frames. */
-export type WsClientFrame = { type: 'auth'; token: string } | { type: 'ping' };
+/** B1 (logic-08): `clientId` names this UI window (see api/clientId.ts); sessions it owns outlive a disconnect only for the grace period. */
+export type WsClientFrame = { type: 'auth'; token: string; clientId?: string } | { type: 'ping' };
 
 // ---------- M1.5 ----------
 // Additive wire types of docs/PLAN-M1.5.md (sections 1, 2 and 3.7–3.9). Authored by WP-F; the engine DTOs live in
@@ -358,12 +367,24 @@ export interface Snippet {
   body: string;
   description?: string | null;
 }
-export interface GridSettings { density: 'comfortable' | 'compact'; pageSize: number; verifyUnchanged: boolean }
-export interface ConnectionsSettings { maxSessionsPerProfile: number }
+export interface GridSettings {
+  density: 'comfortable' | 'compact';
+  pageSize: number;
+  verifyUnchanged: boolean;
+  /** user-02: open the SQL preview before saving grid edits (default false: Ctrl+S saves directly, like Navicat). */
+  showSqlBeforeSave?: boolean;
+}
+export interface ConnectionsSettings {
+  maxSessionsPerProfile: number;
+  /** B1 (logic-08): seconds a session survives its window's disconnect before the engine closes it (0 = never). Default 90. */
+  orphanGraceSeconds?: number;
+}
 
 // ----- Error details -----
 /** `detail` of a 429 SESSION_LIMIT error. */
 export interface SessionLimitDetail { connectionId: string; limit: number; open: number }
+/** B1 (logic-21): `detail` of a 409 TX_OPEN from DELETE /connections/{id} (retry with `force` to roll them back). */
+export interface ConnectionTxOpenDetail { sessions: { sessionId: string; label?: string | null; tabId?: string | null }[] }
 /** `detail` of a 409 DDL_FAILED error from POST .../designer/apply. */
 export interface DdlFailedDetail {
   failedIndex: number;

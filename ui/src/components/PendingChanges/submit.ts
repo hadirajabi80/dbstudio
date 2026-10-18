@@ -2,11 +2,12 @@
 // the affected rows so identities, defaults and trigger effects show up (PLAN-M1.5 A1).
 import type { CellValue, ColumnInfo, Dialect } from '../../api/types';
 import {
-  generateChanges, refetchSql, type ColumnValue, type GenStatement, type RowChange, type TableTarget,
+  generateChanges, refetchSql, releaseSavepointSql, rollbackToSavepointSql, savepointSql, type ColumnValue, type GenStatement, type RowChange,
+  type TableTarget,
 } from '../../data/sqlgen';
 import { useEdits, type Pending, type RowIssue } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
-import { getSqlRunner } from '../DataTab/runner';
+import { getSqlRunner, type SqlRunner } from '../DataTab/runner';
 
 export interface EditContext {
   gridKey: string;
@@ -59,20 +60,30 @@ export function buildRowChanges(ctx: EditContext, p: Pending): RowChange[] {
 }
 
 export function buildStatements(ctx: EditContext, p: Pending, verifyUnchanged: boolean): GenStatement[] {
-  return generateChanges(buildRowChanges(ctx, p), ctx.target, ctx.dialect, { verifyUnchanged, sqliteVersion: ctx.sqliteVersion });
+  return generateChanges(buildRowChanges(ctx, p), ctx.target, ctx.dialect, { verifyUnchanged, sqliteVersion: ctx.sqliteVersion, columns: ctx.columns });
 }
 
 export interface SubmitResult {
   ok: boolean;
-  /** Statements executed successfully before a failure (all rolled back). */
+  /** Statements executed successfully before a failure (all undone: full rollback, or back to the savepoint). */
   executed: number;
   error: string | null;
   issues: RowIssue[];
-  /** Changes stay in an open transaction (the session was already in manual mode). */
+  /** The saved changes wait in an open transaction (manual mode), as the engine reported it after this submit's
+   *  statements; never assumed from the transaction mode alone. */
   leftOpen: boolean;
 }
 
-/** Run every statement in one transaction; on any error or conflict roll back and keep the buffer. */
+/**
+ * Run every statement in one transaction; on any error or conflict undo them and keep the buffer.
+ *
+ * - Session in auto mode: switch to manual for the submit, COMMIT on success, full ROLLBACK on failure, back to auto.
+ * - Session in manual mode with an open transaction: the user may have uncommitted work in that transaction, so a
+ *   savepoint is set first and a failure rolls back only to it; the transaction stays open.
+ * - Session in manual mode with nothing open (fresh console, or just after Commit): this submit's statements open the
+ *   transaction, so it owns it as the auto path does (no savepoint, full ROLLBACK on failure), but it stays in manual
+ *   mode and does not commit: the saved changes wait for the user's Commit (code-r1-01).
+ */
 export function submitChanges(ctx: EditContext, opts: { verifyUnchanged: boolean }): Promise<SubmitResult> {
   return ctx.exclusive ? ctx.exclusive(() => submitNow(ctx, opts)) : submitNow(ctx, opts);
 }
@@ -84,32 +95,67 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
   if (stmts.length === 0) return { ok: true, executed: 0, error: null, issues: [], leftOpen: false };
   edits.setStatus(ctx.gridKey, 'submitting');
   const sessions = useSessions.getState();
-  const run = getSqlRunner();
+  const runner = getSqlRunner();
   let executed = 0;
   let wasAuto = true;
+  /** This submit opened the transaction (auto mode, or manual mode with nothing open): a failure is a full ROLLBACK. */
+  let ownsTx = true;
+  let sid: string | null = null;
+  /** A savepoint protects the user's own uncommitted work (manual mode with an open transaction). */
+  let savepoint = false;
+  /** Transaction state the engine reported after the latest statement of this submit (null = not reported yet). */
+  let txOpen: boolean | null = null;
+  const source = { tabId: ctx.tabId, title: ctx.tabTitle ?? `Edit ${ctx.target.name}` };
+  const run: SqlRunner = async (...args) => {
+    const res = await runner(...args);
+    if (typeof res.txOpen === 'boolean') txOpen = res.txOpen;
+    return res;
+  };
+  /** Undo this submit: back to the savepoint (user's open transaction) or a full rollback (the submit opened it). */
+  const undo = async (): Promise<string> => {
+    if (ownsTx) {
+      await rollbackQuietly(ctx.tabId);
+      if (wasAuto) await restoreAuto(ctx.tabId);
+      return 'Nothing was saved.';
+    }
+    if (!savepoint || !sid) return 'Nothing was saved.';
+    const note = await rollbackToSavepoint(run, sid, ctx, source);
+    return note ?? 'Nothing was saved; the open transaction keeps your earlier uncommitted changes.';
+  };
   try {
     const session = await sessions.ensure(ctx.tabId, ctx.connectionId, ctx.database, 'auto');
     wasAuto = session.txMode === 'auto';
+    // The store follows the engine's session.changed events. With nothing open a savepoint protects nothing (SQL Server
+    // even refuses SAVE TRANSACTION outside a transaction): the submit owns the transaction its statements open.
+    ownsTx = wasAuto || !session.txOpen;
+    sid = session.sessionId;
     if (wasAuto) await sessions.setTxMode(ctx.tabId, 'manual');
-    const sid = session.sessionId;
+    else if (!ownsTx) {
+      const sp = await run(sid, savepointSql(ctx.dialect), [], { label: 'data', source, confirmedDestructive: true, skipHistory: true });
+      if (sp.status !== 'ok' || sp.error) {
+        const message = `Could not set a savepoint in the open transaction: ${sp.error?.message ?? sp.status}. Nothing was run.`;
+        useEdits.getState().setStatus(ctx.gridKey, 'idle', message, []);
+        return { ok: false, executed: 0, error: message, issues: [], leftOpen: false };
+      }
+      savepoint = true;
+    }
     const inserted = new Map<string, ColumnValue[]>();
-    const source = { tabId: ctx.tabId, title: ctx.tabTitle ?? `Edit ${ctx.target.name}` };
     const fail = async (message: string, issue: RowIssue | null): Promise<SubmitResult> => {
-      await rollbackQuietly(ctx.tabId);
-      if (wasAuto) await restoreAuto(ctx.tabId);
+      const tail = await undo();
       const issues = issue ? [issue] : [];
-      useEdits.getState().setStatus(ctx.gridKey, 'idle', message, issues);
-      return { ok: false, executed, error: message, issues, leftOpen: false };
+      const full = `${message} ${tail}`;
+      useEdits.getState().setStatus(ctx.gridKey, 'idle', full, issues);
+      return { ok: false, executed, error: full, issues, leftOpen: false };
     };
 
     for (const st of stmts) {
       const res = await run(sid, st.sql, st.params, { label: 'data', maxRows: 100, source, confirmedDestructive: true });
       if (res.status !== 'ok' || res.error) {
-        return fail(`${describe(st)} failed: ${res.error?.message ?? res.status}. Nothing was saved.`, { ref: st.ref, kind: 'error', message: res.error?.message ?? 'Failed' });
+        return fail(`${describe(st)} failed: ${res.error?.message ?? res.status}.`, { ref: st.ref, kind: 'error', message: res.error?.message ?? 'Failed' });
       }
       if (st.expectOne && res.affectedReported && res.affected === 0) {
         return fail(
-          `${describe(st)} affected 0 rows: the row was changed or deleted by someone else. Nothing was saved.`,
+          `${describe(st)} affected 0 rows: the row was changed or deleted by someone else.`,
           { ref: st.ref, kind: 'conflict', message: 'Changed by someone else (0 rows affected)' },
         );
       }
@@ -127,7 +173,13 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
     if (wasAuto) {
       await sessions.commit(ctx.tabId);
       await restoreAuto(ctx.tabId);
+    } else if (savepoint) {
+      const release = releaseSavepointSql(ctx.dialect);
+      if (release) await run(sid, release, [], { label: 'data', source, skipHistory: true });
     }
+    // Whether the changes wait for a Commit: what the engine reported after this submit's statements (the refetch
+    // below only reads). Unknown (no report) falls back to the session's state.
+    const leftOpen = !wasAuto && (txOpen ?? useSessions.getState().forTab(ctx.tabId)?.txOpen ?? false);
 
     // Refetch updated + inserted rows by key.
     const p = buf.pending;
@@ -182,13 +234,25 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
     // Inserts we could not identify are still saved; show them as typed.
     for (const ins of p.inserts) if (!fetchKeys.some((k) => k.ref === ins.id)) appended.push(ins.values);
     useEdits.getState().commit(ctx.gridKey, { patched, hidden: Object.keys(p.deletes).map(Number), appended });
-    return { ok: true, executed, error: null, issues: [], leftOpen: !wasAuto };
+    return { ok: true, executed, error: null, issues: [], leftOpen };
   } catch (e) {
-    await rollbackQuietly(ctx.tabId);
-    if (wasAuto) await restoreAuto(ctx.tabId);
-    const message = e instanceof Error ? e.message : String(e);
+    const tail = await undo().catch(() => '');
+    const message = `${e instanceof Error ? e.message : String(e)}${tail ? ` ${tail}` : ''}`;
     useEdits.getState().setStatus(ctx.gridKey, 'idle', message);
     return { ok: false, executed, error: message, issues: [], leftOpen: false };
+  }
+}
+
+/** ROLLBACK TO the edit savepoint; returns a warning when it could not be restored (null = restored). */
+async function rollbackToSavepoint(run: SqlRunner, sid: string, ctx: EditContext, source: { tabId: string; title: string }): Promise<string | null> {
+  try {
+    const r = await run(sid, rollbackToSavepointSql(ctx.dialect), [], { label: 'data', source, confirmedDestructive: true, skipHistory: true });
+    if (r.status === 'ok' && !r.error) return null;
+    // e.g. SQL Server ended the whole transaction on a severe error (XACT_ABORT, deadlock): there is nothing to restore.
+    if (r.txOpen === false) return 'The server rolled back the whole open transaction, including earlier uncommitted changes.';
+    return `Could not roll back to the savepoint (${r.error?.message ?? r.status}): check the open transaction before committing.`;
+  } catch (e) {
+    return `Could not roll back to the savepoint (${e instanceof Error ? e.message : String(e)}): check the open transaction before committing.`;
   }
 }
 

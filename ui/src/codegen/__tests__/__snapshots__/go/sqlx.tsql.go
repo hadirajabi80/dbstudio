@@ -469,8 +469,8 @@ const eventGetSQL = `SELECT EventId, OccurredAt, Day, At, Kind, Payload, Snapsho
 FROM dbo.Events
 WHERE EventId = ?`
 
-const eventInsertSQL = `INSERT INTO dbo.Events (EventId, OccurredAt, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, IsActive, Location)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+const eventInsertSQL = `INSERT INTO dbo.Events (EventId, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, Location)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 const eventUpdateSQL = `UPDATE dbo.Events
 SET OccurredAt = ?, Day = ?, At = ?, Kind = ?, Payload = ?, Snapshot = ?, Spec = ?, Score = ?, Ratio = ?, Flags = ?, Big = ?, Price = ?, IsActive = ?, Location = ?
@@ -506,8 +506,9 @@ func (s *EventStore) List(ctx context.Context) ([]Event, error) {
 }
 
 // Insert adds a row.
+// OccurredAt and IsActive are not inserted, so the server defaults apply; change them with update.
 func (s *EventStore) Insert(ctx context.Context, e *Event) error {
-	_, err := s.db.ExecContext(ctx, s.db.Rebind(eventInsertSQL), e.EventID, e.OccurredAt, e.Day, e.At, e.Kind, e.Payload, e.Snapshot, e.Spec, e.Score, e.Ratio, e.Flags, e.Big, e.Price, e.IsActive, e.Location)
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(eventInsertSQL), e.EventID, e.Day, e.At, e.Kind, e.Payload, e.Snapshot, e.Spec, e.Score, e.Ratio, e.Flags, e.Big, e.Price, e.Location)
 	return err
 }
 

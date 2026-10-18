@@ -1,27 +1,37 @@
 // The results/data grid (glide-data-grid): client filter + sort view, in-place editing with a pending buffer,
 // quick filters from cells, FK navigation markers. Used by console result sets and Data tabs.
 import {
-  CompactSelection, DataEditor, GridCellKind, GridColumnIcon, type DataEditorRef, type DrawCellCallback, type EditableGridCell,
-  type GridCell, type GridColumn, type GridSelection, type Item, type Theme,
+  CompactSelection, DataEditor, GridCellKind, GridColumnIcon, drawTextCell, type DataEditorRef, type DrawCellCallback, type EditableGridCell,
+  type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item, type Theme,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CellValue, ColumnInfo, ColumnKind, Dialect } from '../../api/types';
+import { api } from '../../api/client';
+import type { CellValue, ColumnInfo, Dialect } from '../../api/types';
 import { copyText } from '../../app/actions';
+import { displayShortcut } from '../../commands/keys';
 import { compileFilter, computeView } from '../../filter/evaluate';
 import { appendAnd, type FilterGroup, type GridViewModel, type SortKey } from '../../filter/model';
-import { formatCell, isBinary, isNumericKind, isTruncated, rawText } from '../../lib/format';
-import { COPY_FORMAT_LABELS, serializeRows, type CopyFormat } from '../../lib/serialize';
+import { base64ToHex, formatCell, isBinary, isNumericKind, isPartial, isTruncated, rawText } from '../../lib/format';
+import { COPY_FORMAT_LABELS, serializeComplete, type CellFetcher, type CellLocator, type CopyFormat } from '../../lib/serialize';
 import { editedValue, sameValue, useEditBuffer, useEdits, type PendingInsert } from '../../store/edits';
 import { useSettings } from '../../store/settings';
+import { toast } from '../../store/ui';
 import { makeGridTheme } from '../../theme/gridTheme';
 import type { EffectiveTheme } from '../../theme/useTheme';
+import { isHidden } from '../common/focus';
 import { showContextMenu, type MenuItem } from '../common/Menu';
+import { commandMenuItems } from '../layout/commandMenu';
+import { GRID_CELL_EDIT_MENU, GRID_CELL_PENDING_MENU, GRID_COPY_AS_MENU, GRID_EXPORT_MENU } from '../ResultsPane/toolbarModel';
+import { aggregateCells, type SelectionAggregates } from './aggregate';
 import { cellColors } from './cellColors';
+import { exportRowsToFile, type FileFormat } from './clientExport';
+import { canvasMeasure, distributeSpare, ellipsize, naturalWidths, type ColumnWidth } from './columnWidth';
 import { registerGridController, setActiveGridKey, type GridController } from './controller';
 import type { Editability, FkLink } from './editability';
 import { editText, isEditableKind, parseEdit } from './editValue';
-import { hiddenPredicate, overlayRows, type OverlayRows } from './overlay';
+import { attachOverlayEditorSupport, commitOpenEditor, hasOpenEditor } from './overlayEditor';
+import { hiddenPredicate, overlayRows } from './overlay';
 import { cellEqualsCondition, quickFilterOptions } from './quickFilter';
 import './grid.css';
 
@@ -70,8 +80,19 @@ export interface DataGridProps {
   onShowDistinct?(col: number, pos: { clientX: number; clientY: number }): void;
   /** Extra items for the cell context menu (export, …). */
   extraCellMenu?: MenuItem[];
-  /** Extra controller methods (server filter, refresh). */
+  /** Extra controller methods (server filter, refresh, export). */
   controllerExtras?: Partial<GridController>;
+  /**
+   * Where a source row's cells live in the engine result store (full values of truncated cells for copy). null when
+   * the row did not come from a stored result (submitted edits, appended rows).
+   */
+  cellSource?(sourceRow: number, col: number): CellLocator | null;
+  /** Fetches a full cell value (default GET /executions/{xid}/resultsets/{rs}/cell). */
+  fetchCell?: CellFetcher;
+  /** Count / Sum / Avg / Min / Max of a multi-cell selection (null when fewer than 2 cells are selected). */
+  onAggregates?(agg: SelectionAggregates | null): void;
+  /** Hide the trailing "+ New" row (e.g. while a filter matches nothing and an empty-state message is shown). */
+  hideTrailingRow?: boolean;
 }
 
 function headerIcon(c: ColumnInfo, fk: boolean): GridColumnIcon {
@@ -88,17 +109,14 @@ function headerIcon(c: ColumnInfo, fk: boolean): GridColumnIcon {
   }
 }
 
-const KIND_MIN: Partial<Record<ColumnKind, number>> = { bool: 64, int: 70, date: 100, datetime: 170, datetimeoffset: 200, guid: 290 };
-
-function estimateWidth(c: ColumnInfo, rows: OverlayRows, opts: { nullText: string; dateFormat: 'iso' | 'locale' }): number {
-  let maxLen = c.name.length + 4;
-  const n = Math.min(rows.length, 200);
-  for (let i = 0; i < n; i++) {
-    const t = formatCell(rows.get(i)?.[c.ordinal] ?? null, c, opts);
-    if (t.length > maxLen) maxLen = t.length;
-  }
-  const px = Math.round(maxLen * 7.1 + 28);
-  return Math.max(KIND_MIN[c.kind] ?? 60, Math.min(px, 420));
+/**
+ * Same column list (identity, or the same names and types: a Data tab's next page brings an equal but new array, and
+ * the measured widths must not jump while scrolling).
+ */
+export function sameColumns(a: readonly ColumnInfo[], b: readonly ColumnInfo[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((c, i) => c.name === b[i].name && c.kind === b[i].kind && c.dbType === b[i].dbType);
 }
 
 /** Recompute the sort/filter index at most every `ms` while rows are streaming in. */
@@ -120,7 +138,28 @@ function useThrottledRev(rev: number, done: boolean, ms = 400): number {
   return v;
 }
 
+/** Size of an element, tracked with a ResizeObserver (null until measured). */
+function useElementSize(ref: React.RefObject<HTMLElement>): { width: number; height: number } | null {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      const r = e.contentRect;
+      setSize((s) => (s && Math.abs(s.width - r.width) < 1 && Math.abs(s.height - r.height) < 1 ? s : { width: r.width, height: r.height }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return size;
+}
+
 const NO_SORT: SortKey[] = [];
+const KEYBINDINGS = { activateCell: ' |Enter|shift+Enter|F2' };
+/** Width of the FK chevron hit area at the right edge of a cell. */
+const FK_HIT = 18;
+const MAX_AGG_CELLS = 2_000_000;
+const defaultFetch: CellFetcher = (l) => api.cell(l.executionId, l.resultSetId, l.row, l.col);
 
 export function DataGrid(p: DataGridProps) {
   const { gridKey, columns, rows, view, dialect, theme, nullText, dateFormat, editability, fks = [] } = p;
@@ -137,8 +176,15 @@ export function DataGrid(p: DataGridProps) {
   const nullColor = gridTheme.textLight ?? 'gray';
   const mutedColor = gridTheme.textMedium ?? 'gray';
   const editable = !!editability?.editable;
+  const trailing = editable && !p.hideTrailingRow;
   const density = useSettings((st) => st.settings.grid?.density ?? 'comfortable');
+  const rowHeight = density === 'compact' ? 24 : 28;
+  const headerHeight = 28;
   const pending = buffer.pending;
+  /** Rows a failed save reported (error or conflict), by source row index or insert id: outlined in red (user-02). */
+  const issues = useMemo(() => new Map(buffer.issues.map((i) => [i.ref, i])), [buffer.issues]);
+  const size = useElementSize(hostRef);
+  const [hoverRow, setHoverRow] = useState(-1);
 
   const overlay = useMemo(() => overlayRows(rows, buffer.committed), [rows, p.rev, buffer.committed]); // eslint-disable-line react-hooks/exhaustive-deps
   const sort = p.serverSort ? NO_SORT : view.sort;
@@ -167,6 +213,21 @@ export function DataGrid(p: DataGridProps) {
     [index, viewLen, inserts],
   );
 
+  // A failed save marks the row it stopped at: bring that row into view (the toast says what went wrong).
+  useEffect(() => {
+    const first = buffer.issues[0];
+    if (!first) return;
+    let row = -1;
+    if (/^\d+$/.test(first.ref)) {
+      const src = Number(first.ref);
+      row = index ? index.indexOf(src) : src < viewLen ? src : -1;
+    } else {
+      const i = inserts.findIndex((x) => x.id === first.ref);
+      if (i >= 0) row = viewLen + i;
+    }
+    if (row >= 0) ref.current?.scrollTo(0, row, 'vertical');
+  }, [buffer.issues]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const valueAt = useCallback(
     (r: RowRef, col: number): CellValue => {
       if (r.ins) return r.ins.values[col] ?? null;
@@ -183,17 +244,45 @@ export function DataGrid(p: DataGridProps) {
     return m;
   }, [fks]);
 
-  // ---------------------------------------------------------------- columns
-  const [widths, setWidths] = useState<Record<number, number>>({});
-  const [autoWidths, setAutoWidths] = useState<Record<number, number> | null>(null);
+  // Overlay editor: Mod+S routing through the portal, commit before modals, commit on theme switch (styles-19).
+  useEffect(() => attachOverlayEditorSupport(), []);
+  const firstTheme = useRef(true);
   useEffect(() => {
-    if (autoWidths && Object.keys(autoWidths).length === columns.length) return;
+    if (firstTheme.current) {
+      firstTheme.current = false;
+      return;
+    }
+    // The open editor captured the old theme's colours: commit it so it re-opens with the new ones.
+    void commitOpenEditor();
+  }, [theme]);
+
+  // ---------------------------------------------------------------- columns
+  const fontFamily = gridTheme.fontFamily ?? 'monospace';
+  const cellFont = `${gridTheme.baseFontStyle ?? '13px'} ${fontFamily}`;
+  const headerFont = `${gridTheme.headerFontStyle ?? '600 12px'} ${fontFamily}`;
+  const [widths, setWidths] = useState<Record<number, number>>({});
+  // Measured widths belong to the columns they were measured for (styles-r1-01): a different column list makes them
+  // stale and they are measured again in the same effect, so columns and rows arriving in one update still get
+  // measured widths (a separate "reset" effect used to run after the measurement and wipe it).
+  const [natural, setNatural] = useState<{ columns: readonly ColumnInfo[]; widths: ColumnWidth[] } | null>(null);
+  const naturalFresh = natural && sameColumns(natural.columns, columns) ? natural.widths : null;
+  useEffect(() => {
+    if (natural && sameColumns(natural.columns, columns)) return;
     if (overlay.length === 0 && !p.done) return;
-    const w: Record<number, number> = {};
-    columns.forEach((c, i) => (w[i] = estimateWidth({ ...c, ordinal: i }, overlay, fmt)));
-    setAutoWidths(w);
-  }, [overlay, overlay.length, p.done, columns, autoWidths, fmt]);
-  useEffect(() => setAutoWidths(null), [columns]);
+    setNatural({
+      columns,
+      widths: naturalWidths(columns, overlay, (v, c) => formatCell(v, c, fmt), {
+        font: cellFont, headerFont, padding: gridTheme.cellHorizontalPadding ?? 8, extraRight: (i) => (fkByCol.has(i) ? 12 : 0),
+      }),
+    });
+  }, [overlay, overlay.length, p.done, columns, natural, fmt, cellFont, headerFont, gridTheme.cellHorizontalPadding, fkByCol]);
+  const markerWidth = Math.max(44, String(rowCount).length * 8 + 20);
+  // Hand unused width to truncated columns (recomputed in 40 px steps of the host width).
+  const hostW = size ? Math.floor(size.width / 40) * 40 : 0;
+  const autoWidths = useMemo(
+    () => (naturalFresh ? (hostW ? distributeSpare(naturalFresh, hostW - markerWidth - 16) : naturalFresh.map((n) => n.width)) : null),
+    [naturalFresh, hostW, markerWidth],
+  );
 
   const shownSort = p.serverSort ? p.serverSort.sort : view.sort;
   const gridColumns = useMemo<GridColumn[]>(
@@ -230,7 +319,8 @@ export function DataGrid(p: DataGridProps) {
     ([col, row]: Item): GridCell => {
       const r = rowRef(row);
       const c = columns[col];
-      const align = c && isNumericKind(c.kind) ? 'right' : 'left';
+      const isBool = c?.kind === 'bool';
+      const align = c && isNumericKind(c.kind) ? 'right' : isBool ? 'center' : 'left';
       if (!r || !c) return { kind: GridCellKind.Text, data: '', displayData: '', allowOverlay: false, readonly: true };
       const v = valueAt(r, col);
       const canEdit = canEditCell(r, col);
@@ -240,10 +330,10 @@ export function DataGrid(p: DataGridProps) {
         const identity = editability?.target?.identityColumns?.some((x) => x.toLowerCase() === c.name.toLowerCase());
         return {
           kind: GridCellKind.Text, data: '', displayData: identity ? '(auto)' : 'DEFAULT', allowOverlay: canEdit, readonly: !canEdit,
-          contentAlign: align, copyData: '', themeOverride: { textDark: nullColor, baseFontStyle: 'italic 12px' },
+          contentAlign: align, copyData: '', themeOverride: { textDark: nullColor, baseFontStyle: 'italic 13px' },
         };
       }
-      if (c.kind === 'bool' && (v === null || typeof v === 'boolean' || typeof v === 'number') && (canEdit || v !== null)) {
+      if (isBool && (v === null || typeof v === 'boolean' || typeof v === 'number') && (canEdit || v !== null)) {
         return {
           kind: GridCellKind.Boolean, data: v === null ? null : !!v, allowOverlay: false, readonly: !canEdit, copyData: v === null ? '' : String(!!v),
           contentAlign: 'center', themeOverride: editedTheme,
@@ -252,7 +342,8 @@ export function DataGrid(p: DataGridProps) {
       if (v === null || v === undefined) {
         return {
           kind: GridCellKind.Text, data: '', displayData: nullText, allowOverlay: canEdit, readonly: !canEdit, contentAlign: align,
-          copyData: '', themeOverride: { textDark: nullColor, baseFontStyle: 'italic 12px', ...editedTheme },
+          // NULL typed into an edited cell reads in the normal text colour (the muted one is too faint on --cell-edited)
+          copyData: '', themeOverride: { textDark: isEdited ? colors.fg : nullColor, baseFontStyle: 'italic 13px', ...editedTheme },
         };
       }
       if (typeof v === 'boolean') {
@@ -274,17 +365,43 @@ export function DataGrid(p: DataGridProps) {
     (row: number): Partial<Theme> | undefined => {
       const r = rowRef(row);
       if (!r) return undefined;
+      if (issues.has(r.ins ? r.ins.id : String(r.src))) return { bgCell: colors.errorRow };
       if (r.ins) return { bgCell: colors.inserted };
       if (pending.deletes[r.src]) return { bgCell: colors.deleted, textDark: colors.deletedText };
+      if (row === hoverRow) return { bgCell: colors.hover };
+      if (row % 2 === 1) return { bgCell: colors.alt };
       return undefined;
     },
-    [rowRef, colors, pending.deletes],
+    [rowRef, colors, pending.deletes, hoverRow, issues],
   );
+
+  /** Truncated display strings per (font, width, text): binary search once, not on every frame. */
+  const ellipsisCache = useRef(new Map<string, string>());
+  useEffect(() => ellipsisCache.current.clear(), [cellFont]);
 
   const drawCell = useCallback<DrawCellCallback>(
     (args, drawContent) => {
-      drawContent();
-      const { ctx, rect, col, row } = args;
+      const { ctx, rect, col, row, cell } = args;
+      // Overflowing text gets an ellipsis instead of being clipped mid-glyph (styles-15).
+      if (cell.kind === GridCellKind.Text && cell.displayData.length > 3) {
+        const th = args.theme;
+        const font = `${th.baseFontStyle} ${th.fontFamily}`;
+        const avail = rect.width - th.cellHorizontalPadding * 2 - 1;
+        if (canvasMeasure(cell.displayData, font) > avail || cell.displayData.includes('\n')) {
+          const key = `${font}\u0001${Math.round(avail)}\u0001${cell.displayData}`;
+          const cache = ellipsisCache.current;
+          let shown = cache.get(key);
+          if (shown === undefined) {
+            shown = ellipsize(cell.displayData, avail, font);
+            if (cache.size > 5000) cache.clear();
+            cache.set(key, shown);
+          }
+          ctx.save();
+          ctx.font = font;
+          drawTextCell({ ctx, rect, theme: th } as Parameters<typeof drawTextCell>[0], shown, cell.contentAlign);
+          ctx.restore();
+        } else drawContent();
+      } else drawContent();
       const r = rowRef(row);
       if (!r) return;
       // glide caches canvas state between cells: never leak our styles into the next cell
@@ -295,39 +412,46 @@ export function DataGrid(p: DataGridProps) {
         ctx.restore();
       }
       function decorate(r: RowRef) {
-      const edited = r.ins ? false : editedValue(pending, r.src, col) !== undefined;
-      if (edited) {
-        ctx.fillStyle = colors.editedBar;
-        ctx.fillRect(rect.x, rect.y + 1, 3, rect.height - 2);
-      }
-      if (r.ins && col === 0) {
-        ctx.fillStyle = colors.link;
-        ctx.fillRect(rect.x, rect.y + 1, 3, rect.height - 2);
-      }
-      if (!r.ins && pending.deletes[r.src]) {
-        ctx.strokeStyle = colors.deletedText;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        const y = Math.round(rect.y + rect.height / 2) + 0.5;
-        ctx.moveTo(rect.x + 4, y);
-        ctx.lineTo(rect.x + rect.width - 4, y);
-        ctx.stroke();
-      }
-      if (fkByCol.has(col) && valueAt(r, col) !== null) {
-        // small "go to" chevron at the right edge of FK cells
-        const x = rect.x + rect.width - 9;
-        const y = rect.y + rect.height / 2;
-        ctx.strokeStyle = colors.link;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(x - 3, y - 3);
-        ctx.lineTo(x + 1, y);
-        ctx.lineTo(x - 3, y + 3);
-        ctx.stroke();
-      }
+        const edited = r.ins ? false : editedValue(pending, r.src, col) !== undefined;
+        if (edited) {
+          ctx.fillStyle = colors.editedBar;
+          ctx.fillRect(rect.x, rect.y + 1, 3, rect.height - 2);
+        }
+        if (r.ins && col === 0) {
+          ctx.fillStyle = colors.link;
+          ctx.fillRect(rect.x, rect.y + 1, 3, rect.height - 2);
+        }
+        if (issues.has(r.ins ? r.ins.id : String(r.src))) {
+          // the row a failed save stopped at: red frame across the row, and a thick bar at its start
+          ctx.fillStyle = colors.error;
+          ctx.fillRect(rect.x, rect.y, rect.width, 1);
+          ctx.fillRect(rect.x, rect.y + rect.height - 1, rect.width, 1);
+          if (col === 0) ctx.fillRect(rect.x, rect.y, 3, rect.height);
+        }
+        if (!r.ins && pending.deletes[r.src]) {
+          ctx.strokeStyle = colors.deletedText;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          const y = Math.round(rect.y + rect.height / 2) + 0.5;
+          ctx.moveTo(rect.x + 4, y);
+          ctx.lineTo(rect.x + rect.width - 4, y);
+          ctx.stroke();
+        }
+        if (fkByCol.has(col) && valueAt(r, col) !== null) {
+          // small "go to" chevron at the right edge of FK cells (a click on it navigates)
+          const x = rect.x + rect.width - 9;
+          const y = rect.y + rect.height / 2;
+          ctx.strokeStyle = colors.link;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x - 3, y - 3);
+          ctx.lineTo(x + 1, y);
+          ctx.lineTo(x - 3, y + 3);
+          ctx.stroke();
+        }
       }
     },
-    [rowRef, pending, colors, fkByCol, valueAt],
+    [rowRef, pending, colors, fkByCol, valueAt, issues],
   );
 
   // ---------------------------------------------------------------- selection
@@ -349,6 +473,42 @@ export function DataGrid(p: DataGridProps) {
     return Array.from({ length: range.height }, (_, i) => range.y + i);
   };
 
+  // Selection aggregates (prop-01), computed after the selection settles.
+  const onAggregates = p.onAggregates;
+  useEffect(() => {
+    if (!onAggregates) return;
+    const t = setTimeout(() => {
+      let cells: { visRows: number[] | null; y0: number; h: number; cols: number[] } | null = null;
+      const all = columns.map((_, i) => i);
+      if (selection.rows.length) cells = { visRows: selection.rows.toArray(), y0: 0, h: 0, cols: all };
+      else if (selection.columns.length) cells = { visRows: null, y0: 0, h: rowCount, cols: selection.columns.toArray() };
+      else if (selection.current) {
+        const r = selection.current.range;
+        cells = { visRows: null, y0: r.y, h: r.height, cols: Array.from({ length: r.width }, (_, i) => r.x + i) };
+      }
+      const n = cells ? (cells.visRows ? cells.visRows.length : cells.h) * cells.cols.length : 0;
+      if (!cells || n < 2) {
+        onAggregates(null);
+        return;
+      }
+      const c = cells;
+      function* iterate() {
+        let seen = 0;
+        const rowsList = c.visRows ?? Array.from({ length: c.h }, (_, i) => c.y0 + i);
+        for (const vr of rowsList) {
+          const r = rowRef(vr);
+          if (!r) continue;
+          for (const col of c.cols) {
+            if (++seen > MAX_AGG_CELLS) return;
+            yield { value: valueAt(r, col), kind: columns[col]?.kind ?? 'other' };
+          }
+        }
+      }
+      onAggregates(aggregateCells(iterate()));
+    }, 60);
+    return () => clearTimeout(t);
+  }, [selection, rowRef, valueAt, columns, rowCount, onAggregates]);
+
   const setView = p.onViewChange;
 
   const toggleSort = (col: number, additive: boolean) => {
@@ -361,26 +521,68 @@ export function DataGrid(p: DataGridProps) {
   };
   const setSort = (next: SortKey[]) => (p.serverSort ? p.serverSort.onSortChange(next) : setView({ sort: next }));
 
-  const block = (): { rows: CellValue[][]; columns: ColumnInfo[] } => {
-    const all = columns.map((c, i) => ({ ...c, ordinal: i }));
-    const rowsOf = (list: number[], cols: number[]) =>
-      list.map((vr) => rowRef(vr)).filter((r): r is RowRef => !!r).map((r) => cols.map((c) => valueAt(r, c)));
-    if (selection.rows.length > 0) return { rows: rowsOf(selection.rows.toArray(), all.map((_, i) => i)), columns: all };
-    if (selection.columns.length > 0) {
-      const cols = selection.columns.toArray();
-      return { rows: rowsOf(Array.from({ length: rowCount }, (_, i) => i), cols), columns: cols.map((c) => all[c]) };
-    }
+  /** The selected block: rows (with their refs, for full-value lookup) and columns. `all` = every visible row. */
+  const block = (all = false): { refs: RowRef[]; rows: CellValue[][]; columns: ColumnInfo[]; colIdx: number[] } => {
+    const allCols = columns.map((c, i) => ({ ...c, ordinal: i }));
+    const take = (list: number[], cols: number[]) => {
+      const refs = list.map((vr) => rowRef(vr)).filter((r): r is RowRef => !!r);
+      return { refs, rows: refs.map((r) => cols.map((c) => valueAt(r, c))), columns: cols.map((c) => allCols[c]), colIdx: cols };
+    };
+    const everything = () => take(Array.from({ length: rowCount }, (_, i) => i), allCols.map((_, i) => i));
+    if (all) return everything();
+    if (selection.rows.length > 0) return take(selection.rows.toArray(), allCols.map((_, i) => i));
+    if (selection.columns.length > 0) return take(Array.from({ length: rowCount }, (_, i) => i), selection.columns.toArray());
     const range = selection.current?.range;
-    if (!range) return { rows: [], columns: all };
-    const cols = Array.from({ length: range.width }, (_, i) => range.x + i);
-    return { rows: rowsOf(Array.from({ length: range.height }, (_, i) => range.y + i), cols), columns: cols.map((c) => all[c]) };
+    if (!range) return everything();
+    return take(Array.from({ length: range.height }, (_, i) => range.y + i), Array.from({ length: range.width }, (_, i) => range.x + i));
   };
 
-  const copyAs = (format: CopyFormat) => {
-    const b = block();
+  const locateFor = (refs: RowRef[], colIdx: number[]) => (row: number, col: number): CellLocator | null => {
+    const r = refs[row];
+    if (!r || r.ins || !p.cellSource) return null;
+    // Committed (refetched) rows are not the stored values any more.
+    if (buffer.committed.patched[r.src]) return null;
+    return p.cellSource(r.src, colIdx[col]);
+  };
+
+  /** Client-side export of every visible row (filtered / sorted / edited view) with full values of truncated cells. */
+  const exportVisible = async (format: FileFormat, o: { baseName: string; note?: string | null }) => {
+    const b = block(true);
+    await exportRowsToFile(format, b.columns, b.rows, { baseName: o.baseName, dialect, locate: locateFor(b.refs, b.colIdx), note: o.note, fetch: p.fetchCell });
+  };
+
+  const copyAs = async (format: CopyFormat, all = false) => {
+    const b = block(all);
     if (b.rows.length === 0) return;
-    void copyText(serializeRows(format, b.columns, b.rows, { dialect, header: format !== 'tsv' || b.rows.length > 1 || b.columns.length > 1 }),
-      `Copied ${b.rows.length} row${b.rows.length === 1 ? '' : 's'} as ${COPY_FORMAT_LABELS[format]}`);
+    const header = format !== 'tsv' || b.rows.length > 1 || b.columns.length > 1;
+    const out = await serializeComplete(format, b.columns, b.rows, {
+      dialect, header, locate: locateFor(b.refs, b.colIdx), fetch: p.fetchCell ?? defaultFetch,
+    });
+    if (!out.ok) {
+      toast('warning', `Cannot copy as ${COPY_FORMAT_LABELS[format]}`, out.message);
+      return;
+    }
+    await copyText(out.text, `Copied ${b.rows.length} row${b.rows.length === 1 ? '' : 's'} as ${COPY_FORMAT_LABELS[format]}`);
+    if (out.warning) toast('warning', 'Some values were copied truncated', out.warning);
+  };
+
+  /** Single value: the full text when the grid only has a prefix. */
+  const copyValue = async (r: RowRef, col: number) => {
+    const v = valueAt(r, col);
+    if (isPartial(v) && r.src !== undefined && !buffer.committed.patched[r.src] && p.cellSource) {
+      const loc = p.cellSource(r.src, col);
+      if (loc) {
+        try {
+          const full = await (p.fetchCell ?? defaultFetch)(loc);
+          await copyText(full.kind === 'binary' ? `0x${base64ToHex(full.value)}` : full.value, 'Copied value');
+          return;
+        } catch {
+          /* fall back to the prefix with a warning */
+        }
+      }
+    }
+    await copyText(rawText(v) ?? '', 'Copied value');
+    if (isPartial(v)) toast('warning', 'The value was copied truncated', 'Open it in the value viewer or use Export for the full value.');
   };
 
   const addCondition = (cond: ReturnType<typeof cellEqualsCondition>) => {
@@ -453,6 +655,21 @@ export function DataGrid(p: DataGridProps) {
     edits.getState().toggleDelete(gridKey, src);
   };
 
+  /** Open the in-place editor on the focused cell, as F2 does (context menu "Edit cell"). */
+  const editFocusedCell = () => {
+    ref.current?.focus();
+    setTimeout(() => {
+      const canvas = hostRef.current?.querySelector<HTMLCanvasElement>('canvas[data-testid="data-grid-canvas"]');
+      canvas?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', code: 'F2', bubbles: true, cancelable: true }));
+    }, 0);
+  };
+
+  /** Commit the open editor, then run the parent's submit (Ctrl+S / Save while typing must not lose the value). */
+  const submit = async () => {
+    await commitOpenEditor();
+    p.onSubmit?.();
+  };
+
   // ---------------------------------------------------------------- menus
   const filterSubmenu = (col: number, v: CellValue): MenuItem[] => [
     ...quickFilterOptions(columns[col], col, v).map((o) => ({ label: o.label, onClick: () => addCondition(o.make()) })),
@@ -465,30 +682,27 @@ export function DataGrid(p: DataGridProps) {
     if (!r) return;
     const v = valueAt(r, col);
     const fk = fkByCol.get(col);
+    const args = { gridKey };
     const items: MenuItem[] = [
-      { label: 'Copy value', shortcut: 'Ctrl+C', onClick: () => void copyText(rawText(v) ?? '') },
-      { label: 'Copy selection as', submenu: (Object.keys(COPY_FORMAT_LABELS) as CopyFormat[]).map((f) => ({ label: COPY_FORMAT_LABELS[f], onClick: () => copyAs(f) })) },
+      { label: 'Copy value', shortcut: displayShortcut('Mod+C'), onClick: () => void copyValue(r, col) },
+      { label: 'Copy selection as', submenu: commandMenuItems(GRID_COPY_AS_MENU, args) },
       { label: 'View value', onClick: () => p.onOpenViewer?.(selInfo(col, row)) },
       { separator: true },
-      { label: 'Filter', shortcut: 'Ctrl+Shift+F', submenu: filterSubmenu(col, v) },
+      { label: 'Filter', shortcut: displayShortcut('Mod+Shift+F'), submenu: filterSubmenu(col, v) },
     ];
     if (fk && v !== null && r.src !== undefined && p.onNavigateFk) {
-      items.push({ label: `Go to referenced row (${fk.refTable})`, shortcut: 'Ctrl+Click', onClick: () => p.onNavigateFk!(fk, fk.ordinals.map((o) => valueAt(r, o))) });
+      items.push({ label: `Go to referenced row (${fk.refTable})`, shortcut: displayShortcut('Mod+Click'), onClick: () => p.onNavigateFk!(fk, fk.ordinals.map((o) => valueAt(r, o))) });
     }
     if (editable) {
-      const canEdit = canEditCell(r, col);
-      items.push(
-        { separator: true },
-        { label: 'Edit cell', shortcut: 'F2', disabled: !canEdit, onClick: () => ref.current?.focus() },
-        { label: 'Set to NULL', shortcut: 'Ctrl+0', disabled: !canEdit || (!columns[col].nullable && !r.ins), onClick: () => setValue(r, col, null) },
-        { label: 'Insert row', shortcut: 'Insert', onClick: insertRow },
-        { label: r.src !== undefined && pending.deletes[r.src] ? 'Restore row' : 'Delete row', shortcut: 'Delete', onClick: () => deleteSelectedRows() },
-        {
-          label: 'Revert row', disabled: r.ins !== undefined || !(r.src !== undefined && (pending.updates[r.src] || pending.deletes[r.src])),
-          onClick: () => r.src !== undefined && edits.getState().revertRow(gridKey, r.src),
-        },
-      );
+      items.push({ separator: true }, ...commandMenuItems(GRID_CELL_EDIT_MENU, args), {
+        label: 'Revert row', disabled: r.ins !== undefined || !(r.src !== undefined && (pending.updates[r.src] || pending.deletes[r.src])),
+        onClick: () => r.src !== undefined && edits.getState().revertRow(gridKey, r.src),
+      });
+      const pendingItems = commandMenuItems(GRID_CELL_PENDING_MENU, args);
+      if (pendingItems.length) items.push({ separator: true }, ...pendingItems);
     }
+    const exportItems = commandMenuItems(GRID_EXPORT_MENU, { gridKey, all: true });
+    if (exportItems.length) items.push({ separator: true }, { label: 'Export', submenu: exportItems });
     if (p.extraCellMenu?.length) items.push({ separator: true }, ...p.extraCellMenu);
     showContextMenu(pos, items);
   };
@@ -510,6 +724,38 @@ export function DataGrid(p: DataGridProps) {
     ]);
   };
 
+  /**
+   * Shift+F10 / the ContextMenu key (design-04): the same menus as a right-click, anchored at the focused cell (the
+   * header menu when a column, not a cell, is the target). Falls back to the centre of the canvas.
+   */
+  const openKeyboardMenu = () => {
+    const canvas = hostRef.current?.querySelector<HTMLElement>('canvas[data-testid="data-grid-canvas"]') ?? hostRef.current;
+    const centre = () => {
+      const r = canvas?.getBoundingClientRect();
+      return r ? { clientX: Math.round(r.left + r.width / 2), clientY: Math.round(r.top + r.height / 2) } : { clientX: 200, clientY: 200 };
+    };
+    const at = (col: number, row: number) => {
+      const b = ref.current?.getBounds(col, row);
+      return b && b.width > 0 && b.height > 0 ? { clientX: Math.round(b.x + Math.min(b.width / 2, 24)), clientY: Math.round(b.y + b.height) } : centre();
+    };
+    const cur = selection.current?.cell;
+    if (cur && rowRef(cur[1])) {
+      cellMenu(cur[0], cur[1], at(cur[0], cur[1]));
+      return;
+    }
+    const headerCol = selection.columns.first();
+    if (headerCol !== undefined && columns[headerCol]) {
+      headerMenu(headerCol, at(headerCol, -1));
+      return;
+    }
+    const firstRow = selection.rows.first() ?? (rowCount > 0 ? 0 : undefined);
+    if (firstRow !== undefined && rowRef(firstRow)) {
+      // Nothing focused yet: the first cell of the (selected) row becomes the focused cell.
+      setSelection((s) => ({ ...s, current: { cell: [0, firstRow], range: { x: 0, y: firstRow, width: 1, height: 1 }, rangeStack: [] } }));
+      cellMenu(0, firstRow, at(0, firstRow));
+    } else if (columns.length) headerMenu(0, at(0, -1));
+  };
+
   const quickFilterAtCell = () => {
     const cell = selection.current?.cell;
     if (!cell) return;
@@ -522,11 +768,11 @@ export function DataGrid(p: DataGridProps) {
   };
 
   // ---------------------------------------------------------------- controller (commands)
-  const latest = useRef({ quickFilterAtCell, setNullOnSelection, insertRow, deleteSelectedRows, p, editable, buffer });
-  latest.current = { quickFilterAtCell, setNullOnSelection, insertRow, deleteSelectedRows, p, editable, buffer };
+  const latest = useRef({ quickFilterAtCell, setNullOnSelection, insertRow, deleteSelectedRows, p, editable, buffer, copyAs, submit, editFocusedCell, shownSort, setSort, columns, exportVisible });
+  latest.current = { quickFilterAtCell, setNullOnSelection, insertRow, deleteSelectedRows, p, editable, buffer, copyAs, submit, editFocusedCell, shownSort, setSort, columns, exportVisible };
   useEffect(() => {
     const L = () => latest.current;
-    return registerGridController({
+    const base: GridController = {
       key: gridKey,
       get editable() {
         return L().editable;
@@ -534,7 +780,7 @@ export function DataGrid(p: DataGridProps) {
       openFilter: (column) => L().p.onOpenFilter?.(column),
       quickFilterCell: () => L().quickFilterAtCell(),
       clearFilter: () => L().p.onViewChange({ filter: null, quickFilter: '' }),
-      submit: () => L().p.onSubmit?.(),
+      submit: () => void L().submit(),
       undo: () => useEdits.getState().undo(gridKey),
       redo: () => useEdits.getState().redo(gridKey),
       setNull: () => L().setNullOnSelection(),
@@ -544,8 +790,39 @@ export function DataGrid(p: DataGridProps) {
       toggleRecordView: () => L().p.onToggleRecord?.(),
       loadMore: () => L().p.onReachEnd?.(),
       hasPending: () => Object.keys(L().buffer.pending.updates).length + L().buffer.pending.inserts.length + Object.keys(L().buffer.pending.deletes).length > 0,
-      ...L().p.controllerExtras,
-    } as GridController);
+      commitEdit: async () => {
+        await commitOpenEditor();
+      },
+      editCell: () => L().editFocusedCell(),
+      copyAs: (format, all) => void L().copyAs(format, all),
+      clearSort: () => L().setSort([]),
+      hasSort: () => L().shownSort.length > 0,
+      copyColumnNames: () => void copyText(L().columns.map((c) => c.name).join(', '), 'Copied column names'),
+      exportVisible: (format, o) => L().exportVisible(format, o),
+      focus: () => {
+        const host = hostRef.current;
+        const canvas = host?.querySelector<HTMLElement>('canvas[data-testid="data-grid-canvas"]');
+        if (!host || !canvas || !host.isConnected || isHidden(host)) return false;
+        ref.current?.focus();
+        // glide focuses its accessible cell when it has one, else the canvas; make sure focus landed in the grid.
+        if (!host.contains(document.activeElement)) canvas.focus({ preventScroll: true });
+        return host.contains(document.activeElement);
+      },
+    };
+    // Extras (server filter, refresh, export, …) are read on every access: they change with the parent's state
+    // (e.g. applyServerFilter is only offered while available) and must never run a stale closure.
+    const ctrl = new Proxy(base, {
+      get(target, prop, receiver) {
+        const extras = L().p.controllerExtras as Record<PropertyKey, unknown> | undefined;
+        if (extras && prop in extras) return extras[prop];
+        return Reflect.get(target, prop, receiver);
+      },
+      has(target, prop) {
+        const extras = L().p.controllerExtras as Record<PropertyKey, unknown> | undefined;
+        return (!!extras && prop in extras && extras[prop] !== undefined) || prop in target;
+      },
+    });
+    return registerGridController(ctrl);
   }, [gridKey]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -553,7 +830,7 @@ export function DataGrid(p: DataGridProps) {
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.shiftKey && k === 'c') {
       e.preventDefault();
-      copyAs('csv');
+      void copyAs('csv');
     } else if (ctrl && e.shiftKey && k === 'f') {
       e.preventDefault();
       quickFilterAtCell();
@@ -565,16 +842,18 @@ export function DataGrid(p: DataGridProps) {
       p.onToggleRecord?.();
     } else if (ctrl && k === 's' && p.onSubmit) {
       e.preventDefault();
-      p.onSubmit();
+      void submit();
     } else if (editable && ctrl && !e.shiftKey && k === 'z') {
       e.preventDefault();
       useEdits.getState().undo(gridKey);
     } else if (editable && ctrl && (k === 'y' || (e.shiftKey && k === 'z'))) {
       e.preventDefault();
       useEdits.getState().redo(gridKey);
-    } else if (editable && ctrl && k === '0') {
+    } else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey && !ctrl && !e.altKey)) {
+      // Keyboard context menu (design-04): the menu of the focused cell, anchored at the cell.
       e.preventDefault();
-      setNullOnSelection();
+      e.stopPropagation();
+      openKeyboardMenu();
     } else if (editable && e.key === 'Insert') {
       e.preventDefault();
       insertRow();
@@ -582,6 +861,24 @@ export function DataGrid(p: DataGridProps) {
       p.onReachEnd?.();
     }
   };
+
+  const fkTip = `Open the referenced row (click the arrow, or ${displayShortcut('Mod+Click')} the cell)`;
+  const onItemHovered = (args: GridMouseEventArgs) => {
+    const row = args.kind === 'cell' ? args.location[1] : -1;
+    setHoverRow((h) => (h === row ? h : row));
+    const host = hostRef.current;
+    if (!host) return;
+    const overArrow = args.kind === 'cell' && fkByCol.has(args.location[0]) && args.localEventX >= args.bounds.width - FK_HIT;
+    const hovered = args.kind === 'cell' ? rowRef(row) : null;
+    const issue = hovered ? issues.get(hovered.ins ? hovered.ins.id : String(hovered.src)) : undefined;
+    const tip = overArrow ? fkTip : issue ? `Not saved: ${issue.message}` : '';
+    if (host.title !== tip) host.title = tip;
+    host.classList.toggle('fk-hover', overArrow);
+  };
+
+  // Stop drawing column lines below the last row: the canvas is only as tall as its content (styles-20).
+  const contentHeight = headerHeight + (rowCount + (trailing ? 1 : 0)) * rowHeight + 16;
+  const height = size && size.height > contentHeight ? contentHeight : '100%';
 
   return (
     <div
@@ -591,6 +888,7 @@ export function DataGrid(p: DataGridProps) {
       data-editable={editable || undefined}
       onFocusCapture={() => setActiveGridKey(gridKey)}
       onPointerDownCapture={(e) => (altDown.current = e.altKey)}
+      onPointerLeave={() => setHoverRow(-1)}
       onKeyDown={onKeyDown}
     >
       <DataEditor
@@ -602,10 +900,11 @@ export function DataGrid(p: DataGridProps) {
         drawCell={drawCell}
         theme={gridTheme}
         width="100%"
-        height="100%"
-        rowMarkers={{ kind: 'clickable-number', width: Math.max(44, String(rowCount).length * 8 + 20) }}
-        rowHeight={density === 'compact' ? 24 : 28}
-        headerHeight={28}
+        height={height}
+        keybindings={KEYBINDINGS}
+        rowMarkers={{ kind: 'clickable-number', width: markerWidth }}
+        rowHeight={rowHeight}
+        headerHeight={headerHeight}
         smoothScrollX
         smoothScrollY
         getCellsForSelection
@@ -618,6 +917,7 @@ export function DataGrid(p: DataGridProps) {
           const cell = s.current?.cell;
           p.onSelectCell?.(cell ? selInfo(cell[0], cell[1]) : null);
         }}
+        onItemHovered={onItemHovered}
         onColumnResize={(_c, w, colIndex) => setWidths((prev) => ({ ...prev, [colIndex]: w }))}
         onHeaderClicked={(col, ev) => {
           ev.preventDefault();
@@ -645,7 +945,10 @@ export function DataGrid(p: DataGridProps) {
             return;
           }
           const fk = fkByCol.get(col);
-          if ((ev.ctrlKey || ev.metaKey) && fk && p.onNavigateFk && valueAt(r, col) !== null) {
+          if (!fk || !p.onNavigateFk || valueAt(r, col) === null) return;
+          // The chevron is a link: a plain click on it navigates; Ctrl/Cmd+click works anywhere in the cell.
+          const onArrow = ev.localEventX >= ev.bounds.width - FK_HIT;
+          if (onArrow || ev.ctrlKey || ev.metaKey) {
             ev.preventDefault();
             p.onNavigateFk(fk, fk.ordinals.map((o) => valueAt(r, o)));
           }
@@ -663,8 +966,8 @@ export function DataGrid(p: DataGridProps) {
           deleteSelectedRows(list);
           return false;
         }}
-        trailingRowOptions={editable ? { hint: 'New', sticky: false, tint: true } : undefined}
-        onRowAppended={editable ? () => {
+        trailingRowOptions={trailing ? { hint: 'New', sticky: false, tint: true } : undefined}
+        onRowAppended={trailing ? () => {
           edits.getState().addInsert(gridKey, columns.length);
           return undefined;
         } : undefined}
@@ -687,11 +990,11 @@ export function DataGrid(p: DataGridProps) {
 }
 
 /** Value of a row ref for consumers outside the grid (record view, viewer). */
-export function rowValue(overlay: OverlayRows, pendingUpdates: Record<number, Record<number, CellValue>>, r: RowRef, col: number): CellValue {
+export function rowValue(overlay: { get(i: number): readonly CellValue[] | undefined }, pendingUpdates: Record<number, Record<number, CellValue>>, r: RowRef, col: number): CellValue {
   if (r.ins) return r.ins.values[col] ?? null;
   const e = pendingUpdates[r.src];
   if (e && col in e) return e[col];
   return overlay.get(r.src)?.[col] ?? null;
 }
 
-export { sameValue };
+export { hasOpenEditor, sameValue };

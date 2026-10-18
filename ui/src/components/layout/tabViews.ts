@@ -27,7 +27,24 @@ export interface TabViewDef {
   beforeClose?: (tab: ViewTab) => boolean | Promise<boolean>;
   /** Called after the tab closed (release sessions, caches). */
   onClosed?: (tab: ViewTab) => void;
+  /**
+   * Focus the view's primary element (data tab: grid canvas; designer: first column cell; codegen: Language select)
+   * when the tab was opened from a command or the keyboard. Return false when nothing could be focused yet (the
+   * shell retries briefly, then falls back to `PRIMARY_FOCUS_SELECTORS` inside the tab container).
+   */
+  focusPrimary?: (tab: ViewTab, container: HTMLElement) => boolean;
 }
+
+/** Shell fallback for views without `focusPrimary`, in priority order. */
+export const PRIMARY_FOCUS_SELECTORS: readonly string[] = [
+  '[data-primary-focus]',
+  '[data-testid="data-grid-canvas"]',
+  '[role="grid"] [tabindex="0"]',
+  '.cg-options select',
+  'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea:not([disabled]), select:not([disabled])',
+  '[role="tree"], [tabindex="0"]',
+  'button:not([disabled])',
+];
 
 const views = new Map<string, TabViewDef>();
 const listeners = new Set<() => void>();

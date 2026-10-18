@@ -64,12 +64,24 @@ function queryName(title: string): string {
   return base ? base.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('') + 'Query' : 'Query';
 }
 
+/**
+ * Primary focus of a "Generate code" tab (design-15): the Language select (a custom Select: its trigger is a
+ * `button[role=combobox]`, the first one in the options row). False while the lazily loaded panel is not rendered
+ * yet, so the shell retries.
+ */
+export function focusCodegenPrimary(_tab: unknown, container: HTMLElement): boolean {
+  const trigger = container.querySelector<HTMLElement>('.cg-options [role="combobox"]:not([disabled])');
+  if (!trigger) return false;
+  trigger.focus();
+  return document.activeElement === trigger;
+}
+
 let registered = false;
 
 export function registerCodegenCommands(): void {
   if (registered) return;
   registered = true;
-  registerTabView(CODEGEN_VIEW, { component: CodegenTab, icon: 'Code2' });
+  registerTabView(CODEGEN_VIEW, { component: CodegenTab, icon: 'Code2', focusPrimary: focusCodegenPrimary });
   registerTabView(CODEGEN_FILE_VIEW, { component: GeneratedFileTab, icon: 'FileCode2' });
   registerCommands(CODEGEN_COMMANDS);
 }

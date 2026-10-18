@@ -1,8 +1,10 @@
 import { Settings as SettingsIcon } from 'lucide-react';
 import { lazy, Suspense, useState, type ComponentType, type ReactNode } from 'react';
+import { displayShortcut } from '../../commands/keys';
 import { useSettings, type FullSettings } from '../../store/settings';
 import { useUi } from '../../store/ui';
 import { Dialog } from '../common/Dialog';
+import { Select as StyledSelect } from '../common/Select';
 
 // WP-H's snippet editor, when present (ui/src/components/SnippetsSettings/*.tsx exporting a component).
 const snippetModules = import.meta.glob('../SnippetsSettings/SnippetsSettings.tsx') as Record<string, () => Promise<Record<string, unknown>>>;
@@ -38,13 +40,7 @@ function Row({ label, htmlFor, hint, children }: { label: string; htmlFor?: stri
 }
 
 function Select<T extends string>({ id, value, options, onChange }: { id: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
-  return (
-    <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value as T)}>
-      {options.map(([v, l]) => (
-        <option key={v} value={v}>{l}</option>
-      ))}
-    </select>
-  );
+  return <StyledSelect id={id} value={value} options={options.map(([v, l]) => ({ value: v, label: l }))} onChange={onChange} />;
 }
 
 function Num({ id, value, min, max, onChange }: { id: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
@@ -124,7 +120,7 @@ function Inner() {
               </Row>
               <Row label="Statements">
                 <Check id="set-blank" checked={s.editor.blankLineSplitsStatements} onChange={(v) => up({ editor: { blankLineSplitsStatements: v } })}>
-                  A blank line ends a statement (Ctrl+Enter runs the paragraph under the cursor)
+                  A blank line ends a statement ({displayShortcut('Mod+Enter')} runs the paragraph under the cursor)
                 </Check>
               </Row>
             </>
@@ -141,7 +137,10 @@ function Inner() {
               <Row label="Data tab page size" htmlFor="set-page"><Num id="set-page" value={s.grid.pageSize} min={50} max={100000} onChange={(v) => up({ grid: { pageSize: v } })} /></Row>
               <Row label="Data editing">
                 <Check id="set-verify" checked={s.grid.verifyUnchanged} onChange={(v) => up({ grid: { verifyUnchanged: v } })}>
-                  Verify unchanged values when submitting edits (optimistic concurrency)
+                  Verify unchanged values when saving edits (optimistic concurrency)
+                </Check>
+                <Check id="set-showsql" checked={!!s.grid.showSqlBeforeSave} onChange={(v) => up({ grid: { showSqlBeforeSave: v } })}>
+                  Show the SQL before saving edits (off: {displayShortcut('Mod+S')} saves directly)
                 </Check>
               </Row>
             </>

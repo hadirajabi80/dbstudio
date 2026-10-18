@@ -4,6 +4,7 @@ import type { ColumnInfo } from '../../api/types';
 import { kindClass, resolveColumn, type FilterCondition, type FilterValue } from '../../filter/model';
 import { OPERATOR_INFO, PERIOD_UNITS, arityOf, defaultOperator, operatorsFor } from '../../filter/operators';
 import { conditionProblem, splitList } from '../../filter/values';
+import { Select } from '../common/Select';
 
 interface Props {
   cond: FilterCondition;
@@ -36,10 +37,14 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
   const problem = col ? conditionProblem(cond, col.kind) : 'Column is not in this result';
   const filled = cond.values.some((v) => v !== null && String(v).trim() !== '');
   const showProblem = problem && (filled || arity === 'two');
-  const firstRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  /** Incomplete and not yet flagged (e.g. "Id equals …" just added): shown as a draft that does not filter yet. */
+  const draft = !!problem && !showProblem && cond.enabled !== false;
+  const firstRef = useRef<HTMLButtonElement>(null);
+  const valueRef = useRef<HTMLInputElement>(null);
 
+  // A new condition: the column is usually already right (focused grid column), so the value gets the focus.
   useEffect(() => {
-    if (autoFocus) firstRef.current?.focus();
+    if (autoFocus) (valueRef.current ?? firstRef.current)?.focus();
   }, [autoFocus]);
 
   // Local text for operands, committed after a short pause (live filtering of large results stays smooth).
@@ -118,7 +123,7 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
     ) : null;
 
   return (
-    <div className={`fb-cond${cond.enabled === false ? ' disabled' : ''}${showProblem ? ' invalid' : ''}`} role="group" aria-label={`Condition on ${cond.column || 'column'}`}>
+    <div className={`fb-cond${cond.enabled === false ? ' disabled' : ''}${showProblem ? ' invalid' : ''}${draft ? ' draft' : ''}`} role="group" aria-label={`Condition on ${cond.column || 'column'}`}>
       <input
         type="checkbox"
         className="fb-check"
@@ -127,30 +132,31 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
         aria-label="Enable condition"
         onChange={(e) => onChange({ ...cond, enabled: e.target.checked })}
       />
-      <select
-        ref={firstRef as React.RefObject<HTMLSelectElement>}
-        className="input xs fb-col"
+      <Select
+        triggerRef={firstRef}
+        size="xs"
+        className="fb-col"
         aria-label="Column"
-        value={ci >= 0 ? ci : ''}
-        onChange={(e) => changeColumn(Number(e.target.value))}
-      >
-        {ci < 0 && <option value="">{cond.column || 'column'} (missing)</option>}
-        {columns.map((c, i) => (
-          <option key={i} value={i}>
-            {c.name || `column${i + 1}`}
-          </option>
-        ))}
-      </select>
-      <select className="input xs fb-op" aria-label="Operator" value={cond.op} onChange={(e) => changeOp(e.target.value as FilterCondition['op'])}>
-        {(ops.includes(cond.op) ? ops : [cond.op, ...ops]).map((op) => (
-          <option key={op} value={op}>
-            {OPERATOR_INFO[op].label}
-          </option>
-        ))}
-      </select>
+        value={ci}
+        placeholder={`${cond.column || 'column'} (missing)`}
+        options={columns.map((c, i) => ({ value: i, label: c.name || `column${i + 1}`, hint: c.dbType || undefined }))}
+        onChange={(i) => changeColumn(i)}
+        menuMinWidth={200}
+      />
+      <Select
+        size="xs"
+        className="fb-op"
+        aria-label="Operator"
+        value={cond.op}
+        options={(ops.includes(cond.op) ? ops : [cond.op, ...ops]).map((op) => ({ value: op, label: OPERATOR_INFO[op].label }))}
+        onChange={(op) => changeOp(op)}
+        searchable={false}
+        menuMinWidth={160}
+      />
       {arity === 'one' || arity === 'list' ? (
         <span className="fb-value">
           <input
+            ref={valueRef}
             className="input xs"
             aria-label="Value"
             value={texts[0] ?? ''}
@@ -164,7 +170,7 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
         </span>
       ) : arity === 'two' ? (
         <span className="fb-value two">
-          <input className="input xs" aria-label="From" value={texts[0] ?? ''} placeholder={placeholder(0)} spellCheck={false}
+          <input ref={valueRef} className="input xs" aria-label="From" value={texts[0] ?? ''} placeholder={placeholder(0)} spellCheck={false}
             onChange={(e) => setText(0, e.target.value)} onBlur={() => commit(texts, true)} onKeyDown={keyDown} />
           {dateInput(0)}
           <span className="fb-and">and</span>
@@ -174,15 +180,19 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
         </span>
       ) : arity === 'period' ? (
         <span className="fb-value period">
-          <input className="input xs narrow" type="number" min={1} aria-label="Count" value={texts[0] ?? ''} onChange={(e) => setText(0, e.target.value)}
+          <input ref={valueRef} className="input xs narrow" type="number" min={1} aria-label="Count" value={texts[0] ?? ''} onChange={(e) => setText(0, e.target.value)}
             onBlur={() => commit(texts, true)} onKeyDown={keyDown} />
-          <select className="input xs" aria-label="Unit" value={texts[1] || 'days'} onChange={(e) => {
-            const next = [texts[0] ?? '7', e.target.value];
-            setTexts(next);
-            commit(next, true);
-          }}>
-            {PERIOD_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <Select
+            size="xs"
+            aria-label="Unit"
+            value={texts[1] || 'days'}
+            options={PERIOD_UNITS.map((u) => ({ value: u as string, label: u }))}
+            onChange={(u) => {
+              const next = [texts[0] ?? '7', u];
+              setTexts(next);
+              commit(next, true);
+            }}
+          />
         </span>
       ) : null}
       {cls === 'string' && arity !== 'none' && (
@@ -198,6 +208,7 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
       )}
       {serverMode && cond.op === 'regex' && <span className="fb-hint" title="Regular expressions are applied in the grid on top of the server result">in grid</span>}
       {showProblem && <span className="fb-problem" role="note">{problem}</span>}
+      {draft && <span className="fb-hint fb-draft-hint" title="This condition is not applied until it is complete">incomplete</span>}
       <button className="icon-btn xs fb-remove" title="Remove condition" aria-label="Remove condition" onClick={onRemove}>
         <X size={12} />
       </button>

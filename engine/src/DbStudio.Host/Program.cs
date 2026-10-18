@@ -93,6 +93,7 @@ try
     services.AddSingleton<SettingsService>();
     services.AddSingleton<HistoryService>();
     services.AddSingleton(new ResultStore());
+    services.AddSingleton(new ClientPresence()); // B1 (logic-08): live UI clients, fed by the WebSocket hub
     services.AddSingleton<WsHub>();
     services.AddSingleton<IEventPublisher>(sp => sp.GetRequiredService<WsHub>());
     services.AddSingleton<SessionManager>();

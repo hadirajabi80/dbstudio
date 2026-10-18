@@ -1,13 +1,15 @@
 // "Generate code" tab (docs/PLAN-M1.5.md 1.4): language / flavor / naming options over a read-only preview of the
 // generated files. Everything is generated in the renderer from the catalog (instant, no network) except the
-// optional describe of a query and "Run to infer result columns" for procedures.
-import { Code2, Copy, Download, ExternalLink, FlaskConical, LoaderCircle, MousePointerClick } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+// describe of a query, the column defaults of tables (GET /catalog/object, so inserts leave defaulted columns to the
+// server) and the result columns of SQL Server procedures (described without running them; "Run to infer" executes
+// the procedure in a rolled-back transaction as an explicit fallback).
+import { Code2, Copy, Download, ExternalLink, FlaskConical, LoaderCircle, MousePointerClick, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import type { ColumnInfo, Dialect } from '../../api/types';
+import type { CellValue, ColumnInfo, Dialect, ObjectDetails, ObjectRef, QueryParam } from '../../api/types';
 import { catalogDatabase, copyText, effectiveDatabase } from '../../app/actions';
 import {
-  detectQueryParams, findCatalogObject, flavorsFor, fromCatalogObject, fromColumnInfos, generate, LANGUAGES, languageInfo, normalizeOptions,
+  detectQueryParams, findCatalogObject, flavorsFor, fromCatalogObject, fromColumnInfos, generate, inferQueryParamTypes, LANGUAGES, languageInfo, normalizeOptions,
   queryObject, withLanguage, type CgObject, type CgRoutine, type CodegenOptions, type QueryParamType,
 } from '../../codegen';
 import { routineSqlName } from '../../codegen/shape';
@@ -22,8 +24,10 @@ import { useSessions } from '../../store/sessions';
 import { useSettings } from '../../store/settings';
 import { useTabs } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
+import { Select } from '../common/Select';
 import type { TabViewProps } from '../layout/tabViews';
 import { CodeView } from './CodeView';
+import { DESCRIBE_PROC_SQL, parseDescribeRows } from './describeProc';
 import { openGeneratedFile, type CodegenFileState, type CodegenTabState, type CodegenTarget } from './open';
 import './codegen.css';
 
@@ -46,8 +50,35 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
   const [fileIdx, setFileIdx] = useState(0);
   const [described, setDescribed] = useState<Record<number, ColumnInfo[] | string>>({});
   const [inferring, setInferring] = useState<string | null>(null);
+  /** Column details (defaults) of the table targets, by refKey; null = not available. */
+  const [details, setDetails] = useState<Record<string, ObjectDetails | null>>({});
+  const detailsAsked = useRef(new Set<string>());
+  /** Describe of a T-SQL procedure in flight, or why it gave no columns, by routineKey. */
+  const [describeState, setDescribeState] = useState<Record<string, { busy: true } | { busy: false; reason: string }>>({});
+  const describeTried = useRef(new Set<string>());
 
   const updateState = (p: Partial<CodegenTabState>) => useTabs.getState().updateView(tab.id, { state: { ...st, ...p } });
+  /** Merge one routine's columns into the tab's latest state (describes finish one after another). */
+  const patchInferred = (key: string, cols: ColumnInfo[]) => {
+    const cur = useTabs.getState().tabs.find((t) => t.id === tab.id) as { state?: unknown } | undefined;
+    const s = (cur?.state as CodegenTabState | undefined) ?? st;
+    useTabs.getState().updateView(tab.id, { state: { ...s, inferred: { ...(s.inferred ?? {}), [key]: cols } } });
+  };
+
+  // Column defaults of the tables (a NOT NULL column with a DEFAULT is left out of generated INSERTs).
+  useEffect(() => {
+    if (!cid) return;
+    for (const t of st.targets) {
+      if (t.kind !== 'object' || t.ref.type !== 'table') continue;
+      const k = refKey(t.ref);
+      if (detailsAsked.current.has(k)) continue;
+      detailsAsked.current.add(k);
+      api
+        .objectDetails(cid, st.database, t.ref)
+        .then((d) => setDetails((x) => ({ ...x, [k]: d })))
+        .catch(() => setDetails((x) => ({ ...x, [k]: null })));
+    }
+  }, [cid, st.database, st.targets]);
 
   // Make sure the schemas of the targets are loaded.
   useEffect(() => {
@@ -80,7 +111,7 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
     st.targets.forEach((t, i) => {
       if (t.kind === 'object') {
         const o = findCatalogObject(snapshot, t.ref);
-        const cg = o ? fromCatalogObject(o, t.ref.schema ?? snapshot?.defaultSchema ?? null) : null;
+        const cg = o ? fromCatalogObject(o, t.ref.schema ?? snapshot?.defaultSchema ?? null, details[refKey(t.ref)] ?? null) : null;
         if (!cg) {
           missing.push(t.ref.name);
           return;
@@ -90,11 +121,12 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
       } else {
         const cols = t.columns ?? (Array.isArray(described[i]) ? (described[i] as ColumnInfo[]) : null);
         if (typeof described[i] === 'string') queryErrors.push(`${t.name}: ${described[i]}`);
-        objects.push(queryObject(t.name, t.sql, dialect, cols ? fromColumnInfos(cols) : [], t.paramTypes ?? {}));
+        // Parameter types the user picked win over the ones inferred from the compared columns.
+        objects.push(queryObject(t.name, t.sql, dialect, cols ? fromColumnInfos(cols) : [], { ...inferQueryParamTypes(t.sql, dialect, snapshot), ...(t.paramTypes ?? {}) }));
       }
     });
     return { objects, missing, queryErrors };
-  }, [st.targets, st.inferred, snapshot, described, dialect]);
+  }, [st.targets, st.inferred, snapshot, described, dialect, details]);
 
   const files = useMemo(() => {
     try {
@@ -112,6 +144,39 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
 
   const set = (p: Partial<CodegenOptions>) => setOpts({ ...opts, ...p });
 
+  /** SQL Server describes the procedure's first result set from its definition: nothing is executed. */
+  const describe = async (r: CgRoutine) => {
+    if (!cid) return;
+    const key = routineKey(r, dialect);
+    const name = routineSqlName(r, dialect, quoteIdent);
+    setDescribeState((s) => ({ ...s, [key]: { busy: true } }));
+    let reason: string | null = null;
+    try {
+      const res = await runQuery(`${tab.id}:describe`, cid, st.database, DESCRIBE_PROC_SQL, { params: [{ name: 'name', kind: 'string', value: name }] });
+      const out = res ? parseDescribeRows(res.columns, res.rows) : { ok: false as const, reason: 'no answer from the server' };
+      if (out.ok) patchInferred(key, out.columns);
+      else reason = out.reason;
+    } catch (e) {
+      reason = errorMessage(e);
+    }
+    setDescribeState((s) => {
+      const next = { ...s };
+      if (reason === null) delete next[key];
+      else next[key] = { busy: false, reason };
+      return next;
+    });
+  };
+
+  // Describe the SQL Server procedures whose result shape is not known yet, one after another (one session).
+  const pendingDescribe = routines.filter((r) => !st.inferred?.[routineKey(r, dialect)] && !describeTried.current.has(routineKey(r, dialect)));
+  useEffect(() => {
+    if (!cid || dialect !== 'tsql' || !pendingDescribe.length) return;
+    for (const r of pendingDescribe) describeTried.current.add(routineKey(r, dialect));
+    void (async () => {
+      for (const r of pendingDescribe) await describe(r);
+    })();
+  }, [cid, dialect, pendingDescribe.map((r) => routineKey(r, dialect)).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const infer = async (r: CgRoutine) => {
     if (!cid) return;
     const name = routineSqlName(r, dialect, quoteIdent);
@@ -119,18 +184,27 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
     const sql = `EXEC ${name}${args.length ? ' ' + args.join(', ') : ''}`;
     const ok = await useUi.getState().askConfirm({
       title: 'Run the procedure to infer its result columns?',
-      message: `DbStudio runs ${name} with NULL parameters inside a transaction and rolls it back afterwards, then reads the shape of its first result set.`,
+      message:
+        `Use this only when SQL Server cannot describe ${name} without running it. DbStudio runs it with NULL parameters inside a transaction, rolls it back and reads the shape of its first result set. ` +
+        'Side effects outside the transaction are NOT rolled back: e-mail (sp_send_dbmail), sequence values, linked-server calls, xp_ procedures, file or network access.',
       items: [sql],
       confirmLabel: 'Run and roll back',
+      danger: true,
     });
     if (!ok) return;
     setInferring(r.name);
     const tabId = `${tab.id}:infer`;
     try {
-      const cols = await runForColumns(tabId, cid, st.database, sql);
+      const res = await runQuery(tabId, cid, st.database, sql, { txMode: 'manual', rollback: true, destructive: true, maxRows: 1 });
+      const cols = res?.columns ?? null;
       if (!cols) toast('info', `${name} returned no result set`);
       else {
-        updateState({ inferred: { ...(st.inferred ?? {}), [routineKey(r, dialect)]: cols } });
+        patchInferred(routineKey(r, dialect), cols);
+        setDescribeState((s) => {
+          const next = { ...s };
+          delete next[routineKey(r, dialect)];
+          return next;
+        });
         toast('success', `Inferred ${cols.length} result columns of ${name}`);
       }
     } catch (e) {
@@ -156,34 +230,35 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
       <div className="cg-options" role="group" aria-label="Code generation options">
         <label className="cg-field">
           Language
-          <select className="input sm" value={opts.language} onChange={(e) => setOpts(withLanguage(opts, e.target.value as CodegenOptions['language']))}>
-            {LANGUAGES.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ))}
-          </select>
+          <Select
+            size="sm"
+            value={opts.language}
+            options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))}
+            onChange={(language) => setOpts(withLanguage(opts, language))}
+            searchable={false}
+          />
         </label>
         <label className="cg-field">
           Flavor
-          <select className="input sm" value={flavors.some((f) => f.id === opts.flavor) ? opts.flavor : flavors[0]?.id} onChange={(e) => set({ flavor: e.target.value })} title={flavors.find((f) => f.id === opts.flavor)?.description}>
-            {flavors.map((f) => (
-              <option key={f.id} value={f.id} title={f.description}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+          <Select
+            size="sm"
+            value={flavors.some((f) => f.id === opts.flavor) ? opts.flavor : flavors[0]?.id}
+            options={flavors.map((f) => ({ value: f.id, label: f.label, title: f.description }))}
+            onChange={(flavor) => set({ flavor })}
+            title={flavors.find((f) => f.id === opts.flavor)?.description}
+            searchable={false}
+          />
         </label>
         {info.naming.length > 1 && (
           <label className="cg-field">
             Naming
-            <select className="input sm" value={opts.naming && info.naming.includes(opts.naming) ? opts.naming : info.naming[0]} onChange={(e) => set({ naming: e.target.value as CodegenOptions['naming'] })}>
-              {info.naming.map((n) => (
-                <option key={n} value={n}>
-                  {({ pascal: 'PascalCase', camel: 'camelCase', snake: 'snake_case', asIs: 'As in database' } as const)[n]}
-                </option>
-              ))}
-            </select>
+            <Select
+              size="sm"
+              value={opts.naming && info.naming.includes(opts.naming) ? opts.naming : info.naming[0]}
+              options={info.naming.map((n) => ({ value: n, label: ({ pascal: 'PascalCase', camel: 'camelCase', snake: 'snake_case', asIs: 'As in database' } as const)[n] }))}
+              onChange={(naming) => set({ naming })}
+              searchable={false}
+            />
           </label>
         )}
         {info.namespaceLabel && (
@@ -204,7 +279,7 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
             <Check label="Nullable reference types" checked={opts.nullableReferenceTypes} onChange={(v) => set({ nullableReferenceTypes: v })} />
             {opts.flavor !== 'efcore' && <Check label="Data annotations" checked={opts.dataAnnotations} onChange={(v) => set({ dataAnnotations: v })} />}
             <Check label="Records" checked={opts.records} onChange={(v) => set({ records: v })} title="record types with init-only properties" />
-            <Check label="required members" checked={opts.requiredMembers} onChange={(v) => set({ requiredMembers: v })} title="required instead of = &quot;&quot; for non-null strings" />
+            <Check label="Required members" checked={opts.requiredMembers} onChange={(v) => set({ requiredMembers: v })} title="required instead of = &quot;&quot; for non-null strings" />
             <Check label="DateOnly / TimeOnly" checked={opts.dateOnly} onChange={(v) => set({ dateOnly: v })} />
           </>
         )}
@@ -212,17 +287,21 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
           <>
             <label className="cg-field">
               NULL as
-              <select className="input sm" value={opts.goNullable} onChange={(e) => set({ goNullable: e.target.value as CodegenOptions['goNullable'] })}>
-                <option value="pointer">*T pointers</option>
-                <option value="sqlNull">sql.NullT</option>
-              </select>
+              <Select<CodegenOptions['goNullable']>
+                size="sm"
+                value={opts.goNullable}
+                options={[{ value: 'pointer', label: '*T pointers' }, { value: 'sqlNull', label: 'sql.NullT' }]}
+                onChange={(goNullable) => set({ goNullable })}
+              />
             </label>
             <label className="cg-field">
               Decimals as
-              <select className="input sm" value={opts.goDecimal} onChange={(e) => set({ goDecimal: e.target.value as CodegenOptions['goDecimal'] })}>
-                <option value="float64">float64</option>
-                <option value="string">string</option>
-              </select>
+              <Select<CodegenOptions['goDecimal']>
+                size="sm"
+                value={opts.goDecimal}
+                options={[{ value: 'float64', label: 'float64' }, { value: 'string', label: 'string' }]}
+                onChange={(goDecimal) => set({ goDecimal })}
+              />
             </label>
             <Check label="json tags" checked={opts.goJsonTags} onChange={(v) => set({ goJsonTags: v })} />
           </>
@@ -231,32 +310,39 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
           <>
             <label className="cg-field">
               NULL as
-              <select className="input sm" value={opts.tsNullable} onChange={(e) => set({ tsNullable: e.target.value as CodegenOptions['tsNullable'] })}>
-                <option value="union">T | null</option>
-                <option value="optional">optional (?)</option>
-              </select>
+              <Select<CodegenOptions['tsNullable']>
+                size="sm"
+                value={opts.tsNullable}
+                options={[{ value: 'union', label: 'T | null' }, { value: 'optional', label: 'optional (?)' }]}
+                onChange={(tsNullable) => set({ tsNullable })}
+              />
             </label>
             <label className="cg-field">
               Dates as
-              <select className="input sm" value={opts.tsDate} onChange={(e) => set({ tsDate: e.target.value as CodegenOptions['tsDate'] })}>
-                <option value="string">string (ISO)</option>
-                <option value="Date">Date</option>
-              </select>
+              <Select<CodegenOptions['tsDate']>
+                size="sm"
+                value={opts.tsDate}
+                options={[{ value: 'string', label: 'string (ISO)' }, { value: 'Date', label: 'Date' }]}
+                onChange={(tsDate) => set({ tsDate })}
+              />
             </label>
             <label className="cg-field">
               Decimals as
-              <select className="input sm" value={opts.tsDecimal} onChange={(e) => set({ tsDecimal: e.target.value as CodegenOptions['tsDecimal'] })}>
-                <option value="number">number</option>
-                <option value="string">string</option>
-              </select>
+              <Select<CodegenOptions['tsDecimal']>
+                size="sm"
+                value={opts.tsDecimal}
+                options={[{ value: 'number', label: 'number' }, { value: 'string', label: 'string' }]}
+                onChange={(tsDecimal) => set({ tsDecimal })}
+              />
             </label>
             <label className="cg-field">
               BIGINT as
-              <select className="input sm" value={opts.tsBigint} onChange={(e) => set({ tsBigint: e.target.value as CodegenOptions['tsBigint'] })}>
-                <option value="number">number</option>
-                <option value="string">string</option>
-                <option value="bigint">bigint</option>
-              </select>
+              <Select<CodegenOptions['tsBigint']>
+                size="sm"
+                value={opts.tsBigint}
+                options={[{ value: 'number', label: 'number' }, { value: 'string', label: 'string' }, { value: 'bigint', label: 'bigint' }]}
+                onChange={(tsBigint) => set({ tsBigint })}
+              />
             </label>
           </>
         )}
@@ -278,7 +364,7 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
         <div className="cg-params" aria-label="Query parameters">
           {queries.map(({ t, i }) => {
             if (t.kind !== 'query') return null;
-            const params = detectQueryParams(t.sql, dialect, t.paramTypes ?? {});
+            const params = detectQueryParams(t.sql, dialect, { ...inferQueryParamTypes(t.sql, dialect, snapshot), ...(t.paramTypes ?? {}) });
             return (
               <div key={i} className="cg-param-row">
                 <span className="cg-field">
@@ -288,18 +374,15 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
                 {params.map((p) => (
                   <label key={p.name} className="cg-field">
                     <span className="mono">{p.positional ? `? #${p.name.slice(1)}` : p.name}</span>
-                    <select
-                      className="input sm"
+                    <Select<QueryParamType>
+                      size="sm"
                       value={p.type}
-                      onChange={(e) => {
-                        const targets = st.targets.map((x, k) => (k === i && x.kind === 'query' ? { ...x, paramTypes: { ...(x.paramTypes ?? {}), [p.name]: e.target.value as QueryParamType } } : x));
+                      options={PARAM_TYPES.map((pt) => ({ value: pt, label: pt }))}
+                      onChange={(type) => {
+                        const targets = st.targets.map((x, k) => (k === i && x.kind === 'query' ? { ...x, paramTypes: { ...(x.paramTypes ?? {}), [p.name]: type } } : x));
                         updateState({ targets });
                       }}
-                    >
-                      {PARAM_TYPES.map((pt) => (
-                        <option key={pt}>{pt}</option>
-                      ))}
-                    </select>
+                    />
                   </label>
                 ))}
               </div>
@@ -310,14 +393,38 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
 
       {(routines.length > 0 || missing.length > 0 || queryErrors.length > 0) && (
         <div className="cg-notes">
-          {routines.map((r) => (
-            <span key={r.name} className="cg-field">
-              {r.resultColumns ? `${r.name}: ${r.resultColumns.length} result columns` : `${r.name}: result shape unknown`}
-              <button type="button" className="btn btn-xs" disabled={!!inferring} onClick={() => void infer(r)} title="Runs the procedure with NULL parameters in a rolled-back transaction">
-                {inferring === r.name ? <LoaderCircle size={12} className="spin" /> : <FlaskConical size={12} />} Run to infer result columns
-              </button>
-            </span>
-          ))}
+          {routines.map((r) => {
+            const key = routineKey(r, dialect);
+            const ds = describeState[key];
+            if (ds?.busy) {
+              return (
+                <span key={key} className="cg-field">
+                  <LoaderCircle size={12} className="spin" aria-hidden="true" /> {r.name}: reading the result columns…
+                </span>
+              );
+            }
+            if (r.resultColumns) {
+              return (
+                <span key={key} className="cg-field">
+                  {r.name}: {r.resultColumns.length} result columns
+                  <button type="button" className="icon-btn" aria-label={`Read the result columns of ${r.name} again`} title="Read the result columns again (nothing runs)" onClick={() => void describe(r)}>
+                    <RefreshCw size={12} />
+                  </button>
+                </span>
+              );
+            }
+            return (
+              <span key={key} className="cg-field">
+                {r.name}: result shape unknown{ds && !ds.busy ? ` — ${ds.reason}` : ''}
+                <button type="button" className="btn btn-xs" onClick={() => void describe(r)} title="Ask SQL Server for the first result set (nothing runs)">
+                  <RefreshCw size={12} /> Describe
+                </button>
+                <button type="button" className="btn btn-xs" disabled={!!inferring} onClick={() => void infer(r)} title="Fallback: runs the procedure with NULL parameters in a rolled-back transaction">
+                  {inferring === r.name ? <LoaderCircle size={12} className="spin" /> : <FlaskConical size={12} />} Run to infer…
+                </button>
+              </span>
+            );
+          })}
           {missing.length > 0 && <span className="muted">Not in the loaded catalog (yet): {missing.join(', ')}</span>}
           {queryErrors.map((e) => (
             <span key={e} className="cg-error">
@@ -398,20 +505,37 @@ function routineKey(r: CgRoutine, dialect: Dialect): string {
   return routineSqlName(r, dialect, (s) => s).toLowerCase();
 }
 
+function refKey(ref: ObjectRef): string {
+  return `${ref.type}|${ref.schema ?? ''}|${ref.name}`;
+}
+
 async function saveFile(f: { path: string; language: string; content: string }) {
   const ext = f.path.split('.').pop() ?? 'txt';
   const saved = await getPlatform().saveFile({ suggestedName: f.path, content: f.content, mime: 'text/plain', filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
   if (saved) toast('success', `Saved ${typeof saved === 'string' ? saved : f.path}`);
 }
 
-/** Runs `sql` on a manual-transaction session, rolls back, and returns the first result set's columns. */
-async function runForColumns(tabId: string, connectionId: string, database: string | null, sql: string): Promise<ColumnInfo[] | null> {
-  const session = await useSessions.getState().ensure(tabId, connectionId, effectiveDatabase(connectionId, database), 'manual');
-  const localId = `cg${Date.now().toString(36)}`;
+interface RunQueryOptions {
+  txMode?: 'auto' | 'manual';
+  params?: QueryParam[];
+  /** Roll the session's transaction back afterwards ("Run to infer"). */
+  rollback?: boolean;
+  destructive?: boolean;
+  maxRows?: number;
+}
+
+/** Runs `sql` on a private session of this tab and returns the first result set (columns and rows), or null. */
+async function runQuery(tabId: string, connectionId: string, database: string | null, sql: string, o: RunQueryOptions = {}): Promise<{ columns: ColumnInfo[]; rows: CellValue[][] } | null> {
+  const session = await useSessions.getState().ensure(tabId, connectionId, effectiveDatabase(connectionId, database), o.txMode ?? 'auto');
+  const localId = `cg${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const batches = [{ sql, line: 1, col: 1 }];
-  useResults.getState().begin(createExecution({ localId, tabId, connectionId, sessionId: session.sessionId, label: 'statement', batches, maxRows: 1, confirmedDestructive: true }));
+  const maxRows = o.maxRows ?? 1000;
+  const destructive = !!o.destructive;
+  useResults.getState().begin(createExecution({ localId, tabId, connectionId, sessionId: session.sessionId, label: 'statement', batches, maxRows, confirmedDestructive: destructive }));
   try {
-    const res = await api.execute(session.sessionId, { batches, maxRows: 1, stopOnError: true, label: 'statement', source: { tabId, title: 'Infer result columns' }, confirmedDestructive: true });
+    const res = await api.execute(session.sessionId, {
+      batches, maxRows, stopOnError: true, label: 'statement', source: { tabId, title: 'Result columns' }, confirmedDestructive: destructive, params: o.params ?? null,
+    });
     useResults.getState().attach(localId, res.executionId);
     const exec = await new Promise<ReturnType<typeof useResults.getState>['executions'][string]>((resolve) => {
       const check = () => {
@@ -424,13 +548,16 @@ async function runForColumns(tabId: string, connectionId: string, database: stri
       const unsub = useResults.subscribe(check);
       check();
     });
-    if (exec.status === 'error') throw new Error(exec.messages.find((m) => m.severity === 'error')?.text ?? 'The procedure failed');
-    return exec.resultSets[0]?.columns ?? null;
+    if (exec.status === 'error') throw new Error(exec.messages.find((m) => m.severity === 'error')?.text ?? 'The statement failed');
+    const rs = exec.resultSets[0];
+    return rs ? { columns: rs.columns, rows: rs.rows.toArray() } : null;
   } finally {
-    try {
-      await useSessions.getState().rollback(tabId);
-    } catch {
-      /* nothing to roll back */
+    if (o.rollback) {
+      try {
+        await useSessions.getState().rollback(tabId);
+      } catch {
+        /* nothing to roll back */
+      }
     }
     void useSessions.getState().close(tabId, true).catch(() => undefined);
     useResults.getState().clearTab(tabId);

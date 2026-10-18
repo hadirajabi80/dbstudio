@@ -48,6 +48,14 @@
 .cg-field .input {
   width: auto;
 }
+/* one control height across the option bars (selects, text fields and buttons line up with the checkboxes) */
+.cg-options .input,
+.cg-params .input {
+  height: var(--input-h);
+}
+.cg-notes .btn {
+  height: var(--input-h-sm);
+}
 .cg-field .mono,
 .cg .input.mono {
   font-family: var(--font-mono);

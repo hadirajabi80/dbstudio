@@ -33,7 +33,16 @@ export interface RunOptions {
   source?: { tabId: string; title: string };
   confirmedDestructive?: boolean;
   signal?: AbortSignal;
+  /** Internal statements (describe probes, COUNT, savepoints): not recorded in the query history. */
+  skipHistory?: boolean;
+  /** Safety net when exec.done never arrives (default 15 min; the socket-loss check normally fires first). */
+  timeoutMs?: number;
 }
+
+/** Shown when the WebSocket drops while a statement is running: its outcome can no longer be observed. */
+export const ENGINE_LOST_MESSAGE = 'Connection to the engine was lost — retry';
+export const ENGINE_LOST_CODE = 'ENGINE_DISCONNECTED';
+const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 
 export type SqlRunner = (sessionId: string, sql: string, params: ExecParam[], opts?: RunOptions) => Promise<QueryOutcome>;
 
@@ -47,7 +56,18 @@ export const runSql: SqlRunner = async (sessionId, sql, params, opts = {}) => {
   const early: WsEvent[] = [];
   let xid: string | null = null;
   let finish: (() => void) | null = null;
-  const done = new Promise<void>((r) => (finish = r));
+  let finished = false;
+  const done = new Promise<void>((r) => (finish = () => {
+    finished = true;
+    r();
+  }));
+  /** Ends the wait with an error (socket lost / timeout) so callers and the tab's exclusive chain never hang. */
+  const abandon = (message: string, code: string) => {
+    if (finished) return;
+    out.status = 'error';
+    if (!out.error) out.error = { message, code, line: null };
+    finish?.();
+  };
 
   const apply = (ev: WsEvent) => {
     switch (ev.type) {
@@ -95,8 +115,16 @@ export const runSql: SqlRunner = async (sessionId, sql, params, opts = {}) => {
   });
   const onAbort = () => void api.cancel(sessionId).catch(() => undefined);
   opts.signal?.addEventListener('abort', onAbort);
+  const lost = (s: string) => s === 'reconnecting' || s === 'closed' || s === 'unauthorized';
+  const offStatus = engineSocket.onStatus((s) => {
+    if (lost(s)) abandon(ENGINE_LOST_MESSAGE, ENGINE_LOST_CODE);
+  });
+  const timer = setTimeout(() => {
+    void api.cancel(sessionId).catch(() => undefined);
+    abandon('The engine did not finish the statement in time — retry', 'TIMEOUT');
+  }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
-    const req: ExecuteRequest = {
+    const req: ExecuteRequest & { skipHistory?: boolean } = {
       batches: [{ sql, line: 1, col: 1 }],
       maxRows: opts.maxRows ?? 0,
       stopOnError: true,
@@ -104,17 +132,22 @@ export const runSql: SqlRunner = async (sessionId, sql, params, opts = {}) => {
       ...(params.length ? { params } : {}),
       ...(opts.source ? { source: opts.source } : {}),
       ...(opts.confirmedDestructive ? { confirmedDestructive: true } : {}),
+      ...(opts.skipHistory ? { skipHistory: true } : {}),
     };
     const res = await api.execute(sessionId, req);
     xid = res.executionId;
     out.executionId = xid;
     for (const ev of early.splice(0)) if ((ev as { executionId?: string }).executionId === xid) apply(ev);
+    // Already disconnected: exec.done can never reach us.
+    if (lost(engineSocket.status)) abandon(ENGINE_LOST_MESSAGE, ENGINE_LOST_CODE);
     await done;
   } catch (e) {
     out.status = 'error';
     out.error = { message: errorMessage(e), code: isApiError(e) ? e.code : null, line: null };
   } finally {
     off();
+    offStatus();
+    clearTimeout(timer);
     opts.signal?.removeEventListener('abort', onAbort);
   }
   out.resultSets = [...sets.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);

@@ -17,9 +17,13 @@ public sealed class ExportService
     private readonly ResultStore _results;
     private readonly IEventPublisher _events;
     private readonly ILogger _log;
+    private readonly HistoryService? _history;
 
-    public ExportService(SessionManager sessions, ResultStore results, IEventPublisher events, ILogger<ExportService>? log = null)
+    /// <param name="history">Query exports are recorded in history with label "export" (B1, code-02).</param>
+    public ExportService(SessionManager sessions, ResultStore results, IEventPublisher events, ILogger<ExportService>? log = null,
+        HistoryService? history = null)
     {
+        _history = history;
         _sessions = sessions;
         _results = results;
         _events = events;
@@ -69,13 +73,17 @@ public sealed class ExportService
         return rows;
     }
 
-    /// <summary>Starts an unlimited streaming export of <paramref name="sql"/> on the session; returns the export id.</summary>
+    /// <summary>
+    /// Starts an unlimited streaming export of <paramref name="sql"/> on the session; returns the export id. Only a single
+    /// query is accepted (403 READ_ONLY for data changes on read-only connections, else 400 VALIDATION).
+    /// </summary>
     public string StartQueryExport(string sessionId, string sql, string format, string path, ExportOptions options)
     {
         if (string.IsNullOrWhiteSpace(sql)) throw EngineException.Validation("sql is required.", new { field = "sql" });
         if (!ExportFormats.IsKnown(format)) throw EngineException.Validation($"Unknown export format '{format}'.", new { field = "format" });
         path = ValidatePath(path);
         var h = _sessions.Get(sessionId);
+        ReadOnlyGuard.EnforceExportQuery(h, sql);
         var exportId = Ids.New("e");
         if (!h.TryReserve(exportId))
             throw new EngineException(409, ErrorCodes.SessionBusy, "The session is already executing a statement.");
@@ -99,6 +107,8 @@ public sealed class ExportService
 
     private async Task RunQueryExportAsync(SessionHandle h, string exportId, string sql, string format, string path, ExportOptions options)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+        var sw = Stopwatch.StartNew();
         var partial = path + ".partial";
         ExportSink? sink = null;
         var status = ExecutionStatus.Error;
@@ -142,6 +152,17 @@ public sealed class ExportService
             error = ex.Message;
         }
         _events.Publish(new ExportDoneEvent(exportId, path, sink?.RowsWritten ?? 0, status, error));
+
+        if (_history is null) return;
+        try
+        {
+            await _history.AddAsync(h.Profile.Id, h.Session.CurrentDatabase, sql, startedAt, sw.ElapsedMilliseconds, status,
+                null, sink?.RowsWritten, error, "export").ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not record export {ExportId} in history", exportId);
+        }
     }
 
     /// <summary>Writes the first result set of an execution to a file and reports progress.</summary>

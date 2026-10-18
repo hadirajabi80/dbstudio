@@ -1,9 +1,11 @@
 import { Activity, Database, History } from 'lucide-react';
-import { useState, type KeyboardEvent } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { displayShortcut } from '../../commands/keys';
-import { useSessions } from '../../store/sessions';
+import { useCatalog } from '../../store/catalog';
+import { activityCounts, useSessions } from '../../store/sessions';
 import { DOCK_MAX, DOCK_MIN, useUi, type DockPanel } from '../../store/ui';
 import { Splitter } from '../common/Splitter';
+import { pluralize } from '../common/text';
 import { ConnectionsPanel } from '../ConnectionsPanel/ConnectionsPanel';
 import { Explorer } from '../Explorer/Explorer';
 import { HistoryPanel } from '../HistoryPanel/HistoryPanel';
@@ -14,13 +16,20 @@ const TABS: { id: DockPanel; label: string; Icon: typeof Database; shortcut?: st
   { id: 'connections', label: 'Connections', Icon: Activity },
 ];
 
-/** Left dock: Explorer | History | Connections, tabbed, 220–480 px, collapsible (Ctrl+B). */
+/** Width when the user never resized the dock: follows the window. */
+const AUTO_WIDTH = `clamp(${DOCK_MIN}px, 22vw, ${DOCK_MAX}px)`;
+
+/** Left dock: Explorer | History | Connections, tabbed, clamp(200px, 22vw, 480px), collapsible (Ctrl+B). */
 export function Dock() {
   const visible = useUi((s) => s.explorerVisible);
   const width = useUi((s) => s.explorerWidth);
   const dock = useUi((s) => s.dock);
   const setLayout = useUi((s) => s.setLayout);
-  const nSessions = useSessions((s) => Object.keys(s.sessions).length);
+  const sessions = useSessions((s) => s.sessions);
+  const catalogConns = useCatalog((s) => s.conns);
+  // Engine-wide (GET /sessions is refreshed on session.changed), the same numbers as the status bar.
+  const nSessions = useMemo(() => activityCounts(sessions, catalogConns).sessions, [sessions, catalogConns]);
+  const asideRef = useRef<HTMLElement>(null);
   const [start, setStart] = useState(width);
   if (!visible) return null;
 
@@ -37,7 +46,14 @@ export function Dock() {
 
   return (
     <>
-      <aside className="dock" style={{ width }} aria-label="Side panel">
+      <aside
+        ref={asideRef}
+        className="dock"
+        style={{ width: width > 0 ? Math.max(DOCK_MIN, Math.min(DOCK_MAX, width)) : AUTO_WIDTH }}
+        aria-label="Side panel"
+        data-region="dock"
+        tabIndex={-1}
+      >
         <div className="dock-tabs" role="tablist" aria-label="Side panel" onKeyDown={onKeyDown}>
           {TABS.map((t) => (
             <button
@@ -53,7 +69,11 @@ export function Dock() {
             >
               <t.Icon size={14} strokeWidth={1.75} />
               <span>{t.label}</span>
-              {t.id === 'connections' && nSessions > 0 && <span className="dock-badge">{nSessions}</span>}
+              {t.id === 'connections' && nSessions > 0 && (
+                <span className="dock-badge" aria-label={pluralize(nSessions, 'open session')} title={pluralize(nSessions, 'open session')}>
+                  {nSessions}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -66,9 +86,10 @@ export function Dock() {
       <Splitter
         direction="vertical"
         ariaLabel="Resize side panel"
-        onDragStart={() => setStart(width)}
+        onDragStart={() => setStart(asideRef.current?.offsetWidth ?? (width || DOCK_MIN))}
         onDrag={(d) => setLayout({ explorerWidth: Math.max(DOCK_MIN, Math.min(DOCK_MAX, start + d)) })}
-        onDoubleClick={() => setLayout({ explorerWidth: 280 })}
+        // Double-click: back to the automatic width (22% of the window).
+        onDoubleClick={() => setLayout({ explorerWidth: 0 })}
       />
     </>
   );

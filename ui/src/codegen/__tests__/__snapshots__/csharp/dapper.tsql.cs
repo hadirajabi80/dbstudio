@@ -525,8 +525,8 @@ public sealed class EventRepository(IDbConnection db) : IEventRepository
         """;
 
     private const string InsertSql = """
-        INSERT INTO dbo.Events (EventId, OccurredAt, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, IsActive, Location)
-        VALUES (@EventId, @OccurredAt, @Day, @At, @Kind, @Payload, @Snapshot, @Spec, @Score, @Ratio, @Flags, @Big, @Price, @IsActive, @Location)
+        INSERT INTO dbo.Events (EventId, Day, At, Kind, Payload, Snapshot, Spec, Score, Ratio, Flags, Big, Price, Location)
+        VALUES (@EventId, @Day, @At, @Kind, @Payload, @Snapshot, @Spec, @Score, @Ratio, @Flags, @Big, @Price, @Location)
         """;
 
     private const string UpdateSql = """
@@ -546,6 +546,7 @@ public sealed class EventRepository(IDbConnection db) : IEventRepository
     public async Task<IReadOnlyList<Event>> ListAsync(CancellationToken ct = default) =>
         (await db.QueryAsync<Event>(new CommandDefinition(SelectSql, cancellationToken: ct))).AsList();
 
+    /// <summary>OccurredAt and IsActive are not inserted, so the server defaults apply; change them with update.</summary>
     public Task<int> InsertAsync(Event entity, CancellationToken ct = default) =>
         db.ExecuteAsync(new CommandDefinition(InsertSql, entity, cancellationToken: ct));
 

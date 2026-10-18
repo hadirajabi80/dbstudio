@@ -14,6 +14,7 @@ namespace DbStudio.Core.Services;
 /// <param name="Label">"statement" | "selection" | "script" (M1.5: also "filter" | "data" | "multi" | "explain").</param>
 /// <param name="ConfirmedDestructive">The user confirmed running non-queries (required on read-only connections).</param>
 /// <param name="Params">M1.5 bind values.</param>
+/// <param name="SkipHistory">B1 (logic-19): do not record the run in history (UI describe probes, COUNT queries).</param>
 public sealed record ExecuteCommand(
     IReadOnlyList<SqlBatch> Batches,
     int MaxRows,
@@ -22,7 +23,8 @@ public sealed record ExecuteCommand(
     bool ConfirmedDestructive = false,
     string? TabId = null,
     string? Title = null,
-    IReadOnlyList<QueryParam>? Params = null);
+    IReadOnlyList<QueryParam>? Params = null,
+    bool SkipHistory = false);
 
 /// <summary>M1.5 explain request (POST /sessions/{sid}/explain).</summary>
 public sealed record ExplainCommand(
@@ -84,6 +86,7 @@ public sealed partial class ExecutionService
         Validate(cmd);
         ParamValues.Validate(cmd.Params);
         EnforceReadOnly(h, cmd.Batches, cmd.ConfirmedDestructive);
+        EnforceBoundParameters(h, cmd.Batches, cmd.Params);
 
         var executionId = Ids.New("x");
         if (!h.TryReserve(executionId))
@@ -124,26 +127,27 @@ public sealed partial class ExecutionService
         if (title is not null) h.Label = title;
     }
 
-    private static void EnforceReadOnly(SessionHandle h, IReadOnlyList<SqlBatch> batches, bool confirmedDestructive)
+    private static void EnforceReadOnly(SessionHandle h, IReadOnlyList<SqlBatch> batches, bool confirmedDestructive) =>
+        ReadOnlyGuard.Enforce(h, batches, confirmedDestructive);
+
+    /// <summary>logic-16: 400 VALIDATION "Missing value for parameter @id" (field, line, col) before anything runs.</summary>
+    private static void EnforceBoundParameters(SessionHandle h, IReadOnlyList<SqlBatch> batches, IReadOnlyList<QueryParam>? parameters)
     {
-        if (!h.Profile.ReadOnly || confirmedDestructive) return;
-        foreach (var batch in batches)
-        {
-            var classification = StatementClassifier.Classify(batch.Sql, h.Dialect);
-            if (classification.IsQueryOnly) continue;
-            var kind = classification.Statements.FirstOrDefault(s => s.Category is not (StatementCategory.Query or StatementCategory.Session or StatementCategory.Transaction))?.Kind
-                       ?? classification.PrimaryKind ?? "statement";
-            throw new EngineException(403, ErrorCodes.ReadOnly,
-                $"The connection '{h.Profile.Name}' is read-only: {kind} is not allowed.",
-                new { line = batch.Line, kind });
-        }
+        if (h.Session.FindUnboundParameter(batches, parameters) is not { } missing) return;
+        throw EngineException.Validation(missing.Message, new { field = "params", line = missing.Line, col = missing.Col });
     }
+
+    /// <summary>Names the sessions holding the lock a statement gave up waiting for (logic-02).</summary>
+    private ErrorInfo DescribeError(SessionHandle h, ErrorInfo error) =>
+        LockWait.IsLockError(error.Code)
+            ? error with { Message = LockWait.Describe(_sessions.DescribeLockHolders(h.Profile, h.Id, h.OwnerClientId)) }
+            : error;
 
     private async Task RunAsync(SessionHandle h, string executionId, ExecuteCommand cmd, DateTimeOffset startedAt)
     {
         var sw = Stopwatch.StartNew();
         var store = _results.Begin(h.Id, executionId, h.Dialect);
-        var sink = new EventExecutionSink(executionId, _events, store, cmd.Batches.Count);
+        var sink = new EventExecutionSink(executionId, _events, store, cmd.Batches.Count, e => DescribeError(h, e));
         ExecutionSummary summary;
         try
         {
@@ -154,7 +158,8 @@ public sealed partial class ExecutionService
             if (reconnectMessage is not null)
                 _events.Publish(new ExecMessageEvent(executionId, 0, MessageSeverity.Warning, reconnectMessage, null, null, MessageSource.Engine));
 
-            var request = new ExecuteRequest(cmd.Batches, cmd.MaxRows, cmd.StopOnError, h.Options.CaptureServerOutput, cmd.Label, cmd.Params);
+            var request = new ExecuteRequest(cmd.Batches, cmd.MaxRows, cmd.StopOnError, h.Options.CaptureServerOutput, cmd.Label, cmd.Params,
+                WritesConfirmed: cmd.ConfirmedDestructive && h.Profile.ReadOnly);
             summary = await h.Session.ExecuteAsync(request, sink, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -184,7 +189,7 @@ public sealed partial class ExecutionService
         _sessions.PublishChanged(h);
 
         InvalidateCatalog(h, cmd, sink);
-        await RecordHistoryAsync(h, cmd, startedAt, summary, sink).ConfigureAwait(false);
+        if (!cmd.SkipHistory) await RecordHistoryAsync(h, cmd, startedAt, summary, sink).ConfigureAwait(false);
     }
 
     private void InvalidateCatalog(SessionHandle h, ExecuteCommand cmd, EventExecutionSink sink)
@@ -222,7 +227,9 @@ public sealed partial class ExecutionService
 }
 
 /// <summary>Forwards execution events to the WebSocket publisher and the result store.</summary>
-internal sealed class EventExecutionSink(string executionId, IEventPublisher events, StoredExecution store, int batchCount)
+/// <param name="describeError">Optional rewording of batch errors (lock waits name the blocking sessions).</param>
+internal sealed class EventExecutionSink(string executionId, IEventPublisher events, StoredExecution store, int batchCount,
+    Func<ErrorInfo, ErrorInfo>? describeError = null)
     : IExecutionSink, IExecutionDiagnosticsSink
 {
     private readonly BatchStatus?[] _statuses = new BatchStatus?[batchCount];
@@ -274,6 +281,10 @@ internal sealed class EventExecutionSink(string executionId, IEventPublisher eve
 
     public ValueTask Error(int batchIndex, ErrorInfo error)
     {
+        if (describeError is not null)
+        {
+            try { error = describeError(error); } catch (Exception) { /* keep the provider's wording */ }
+        }
         FirstError ??= error.Message;
         events.Publish(new ExecErrorEvent(executionId, batchIndex, error.Code, error.Message, error.Line, error.Col, error.Detail));
         return ValueTask.CompletedTask;

@@ -85,6 +85,78 @@ describe('safety', () => {
     expect(r.text).toContain('GO\n\nSELECT 2');
   });
 
+  it('resynchronises after an unbalanced statement: later statements on the same line are formatted', () => {
+    const r = formatSql('select a from t;  select (b from u;  select c from v;', 'sqlite');
+    expect(r.text).toBe('SELECT a\nFROM t;\n\nselect (b from u;\nSELECT c\nFROM v;');
+    expect(r.warnings).toEqual([{ line: 1, message: 'Statement at line 1 left unformatted: unbalanced parentheses.' }]);
+    expect(formatSql(r.text, 'sqlite').text).toBe(r.text);
+  });
+
+  it('resynchronises on a statement keyword in column 1 (no `;`), never on an indented one', () => {
+    const r = formatSql('select case when a then 1 from t\nselect b from u', 'tsql');
+    expect(r.text).toBe('select case when a then 1 from t\nSELECT b\nFROM u');
+    // …but not while a parenthesis of the broken statement is open: that keyword starts a subquery
+    expect(formatSql('select (a from t\nselect b from u', 'tsql').text).toBe('select (a from t\nselect b from u');
+    // inside an unclosed block the indented statements stay where they are
+    const block = 'begin\n  select (1 from t;\n  select 2;\n';
+    expect(formatSql(block, 'tsql').text).toBe(block.replace(/\n$/, '') + '\n');
+  });
+
+  it('never resynchronises inside parentheses opened by the broken statement (logic-r1-05)', () => {
+    const sql = 'select (a from t where x in (\nselect 1 from z\nselect c from v';
+    const r = formatSql(sql, 'sqlite');
+    expect(r.text).toBe(sql);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0].line).toBe(1);
+    // once the parentheses of the chunk are closed again, a column-1 keyword is a cut point as before
+    expect(formatSql('select (a from t)) x\nselect b from u', 'tsql').text).toBe('select (a from t)) x\nSELECT b\nFROM u');
+  });
+
+  it('never resynchronises inside a routine body: the whole broken procedure stays as typed (logic-r1-05)', () => {
+    const sql = 'CREATE PROCEDURE p AS\nBEGIN\n  SELECT (1 FROM t;\n  SELECT 2;\nEND';
+    const r = formatSql(sql, 'tsql');
+    expect(r.text).toBe(sql);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0].line).toBe(1);
+    // the same inside a GO batch: the statements after the separator are still formatted
+    const batch = `${sql}\nGO\nselect a from t`;
+    const b = formatSql(batch, 'tsql');
+    expect(b.text).toBe(`${sql}\nGO\n\nSELECT a\nFROM t`);
+    expect(b.warnings).toHaveLength(1);
+    // PL/SQL and SQLite routines end at the END of their block; what follows the routine is formatted again
+    const trig = 'CREATE TRIGGER tr AFTER INSERT ON t\nBEGIN\n  UPDATE u SET a = (1;\nEND;\nselect x from y;';
+    const s = formatSql(trig, 'sqlite');
+    expect(s.text.startsWith('CREATE TRIGGER tr AFTER INSERT ON t\nBEGIN\n  UPDATE u SET a = (1;\nEND;')).toBe(true);
+    expect(s.warnings).toHaveLength(1);
+    const ora = 'CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  IF x THEN\n    SELECT (1 INTO v FROM dual;\n  END IF;\nEND;\n/';
+    const o = formatSql(ora, 'plsql');
+    expect(o.text).toBe(ora);
+    expect(o.warnings).toHaveLength(1);
+  });
+
+  it('warns about CASE without END and keeps the statement verbatim', () => {
+    const r = formatSql('SELECT CASE WHEN a THEN 1 FROM t', 'sqlite');
+    expect(r.text).toBe('SELECT CASE WHEN a THEN 1 FROM t');
+    expect(r.warnings[0].message).toContain('CASE without END');
+  });
+
+  it('keeps `;` with its statement after a trailing comment', () => {
+    expect(fmt('select a from t -- trailing\n;', 'sqlite')).toBe('SELECT a\nFROM t; -- trailing');
+    // a comment after the `;` on its line: nothing moves (it would merge the two comments)
+    expect(fmt('select a from t -- one\n; -- two', 'sqlite')).toBe('SELECT a\nFROM t -- one\n    ; -- two');
+    const r = formatSql('select a from t -- trailing\n;', 'sqlite');
+    expect(mapOffset(r, 'select a from t -- trailing\n'.length)).toBe('SELECT a\nFROM t'.length);
+  });
+
+  it('re-indents block comment continuation lines relative to the comment start', () => {
+    const sql = 'select a,\n            /* x\n               y\n                 z */\n    b from t';
+    expect(fmt(sql, 'sqlite')).toBe('SELECT\n    a,\n    /* x\n       y\n         z */\n    b\nFROM t');
+  });
+
+  it("MERGE … USING ( gets a space before the parenthesis", () => {
+    expect(fmt('merge t as tgt using(select 1 as a) as s on tgt.a = s.a when matched then delete;')).toContain('USING (\n');
+  });
+
   it('unterminated string → verbatim', () => {
     const r = formatSql("select 'abc", 'tsql');
     expect(r.text).toBe("select 'abc");
@@ -210,6 +282,10 @@ describe('large inputs', () => {
     const src = lines.join('\n');
     const r = formatSql(src, 'tsql'); // warm up (JIT) and correctness
     expect(r.warnings).toEqual([]);
+    // Two more warm-up runs: after a single one V8 is still tiering the layout code up, and the timed runs measured
+    // JIT warm-up (~150 ms) instead of the formatter (~60 ms steady state on the QA machine). Budget and input unchanged.
+    formatSql(src, 'tsql');
+    formatSql(src, 'tsql');
     // median of 5 runs: robust against a busy machine
     const times: number[] = [];
     for (let i = 0; i < 5; i++) {

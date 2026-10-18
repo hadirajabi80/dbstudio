@@ -2,8 +2,10 @@
 //   Navigation: arrows, Home/End, Ctrl+Home/End, Tab/Shift+Tab (next/previous cell), Page Up/Down.
 //   Editing: Enter/F2 or typing starts editing a text cell; Enter commits and moves down, Tab commits and moves right,
 //            Esc cancels. Space/Enter toggles Null / PK / Identity cells.
-//   Rows: Insert adds a column below, Del removes the column, Alt+Up/Down reorders, Ctrl+D duplicates.
-import { KeyRound, Plus } from 'lucide-react';
+//   Rows: Insert appends a column at the end (like the "add column" row: on SQLite a column added last is a plain
+//         ALTER TABLE … ADD COLUMN, anywhere else forces a table rebuild), Alt+Insert inserts one below the current
+//         row, Del removes the column, Alt+Up/Down reorders, Ctrl+D duplicates.
+import { Check, ChevronDown, KeyRound, Plus } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { DesignerFeatures, DesignerType, Dialect, TableColumnModel, TableModel } from '../../api/types';
 
@@ -71,9 +73,11 @@ export function ColumnGrid(p: ColumnGridProps) {
     if (cell.row > table.columns.length) setCell((c) => ({ ...c, row: table.columns.length }));
   }, [table.columns.length, cell.row]);
 
+  // The properties strip follows the grid cursor; the row count is a dependency too, because "Add column" on the
+  // add row keeps cell.row (the new column takes the add row's index).
   useEffect(() => {
     if (cell.row < table.columns.length && cell.row !== p.active) p.onActiveChange(cell.row);
-  }, [cell.row]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cell.row, table.columns.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     if (!focusPending.current) return;
@@ -125,12 +129,16 @@ export function ColumnGrid(p: ColumnGridProps) {
     }
   };
 
-  const startEdit = (initial?: string) => {
+  const startEdit = (initial?: string) => editAt(cell.row, cell.col, initial);
+
+  /** Start editing a text/type cell (the type chevron opens the type list of a row that is not the cursor's yet). */
+  const editAt = (row: number, col: number, initial?: string) => {
     if (p.readOnly) return;
-    const def = cols[cell.col];
-    if (cell.row >= table.columns.length || def.kind === 'check') return;
+    const def = cols[col];
+    if (row >= table.columns.length || !def || def.kind === 'check') return;
     focusPending.current = true;
-    beginEdit({ row: cell.row, col: cell.col, value: initial ?? valueOf(cell.row, def.key), typed: initial !== undefined });
+    if (row !== cell.row || col !== cell.col) setCell({ row, col });
+    beginEdit({ row, col, value: initial ?? valueOf(row, def.key), typed: initial !== undefined });
   };
 
   /** Commit the edit of cell `at` (captured when editing started, so a click elsewhere cannot retarget it). */
@@ -146,6 +154,14 @@ export function ColumnGrid(p: ColumnGridProps) {
     else if (def.key === 'type') p.onChange(row, { type: value.trim() });
     else if (def.key === 'default') p.onChange(row, { default: value.trim() ? value : null });
     else if (def.key === 'comment') p.onChange(row, { comment: value.trim() ? value : null });
+  };
+
+  /** Add a column at `at` and start naming it. */
+  const addAt = (at: number) => {
+    p.onAdd(at);
+    focusPending.current = true;
+    setCell({ row: at, col: 0 });
+    beginEdit({ row: at, col: 0, value: '' });
   };
 
   const onCellKey = (e: KeyboardEvent<HTMLTableCellElement>) => {
@@ -192,18 +208,12 @@ export function ColumnGrid(p: ColumnGridProps) {
         c = cols.length - 1;
       }
       if (handled) moveTo(r, c);
-    } else if (onAddRow && (k === 'Enter' || k === ' ' || k === 'Insert')) {
-      if (!p.readOnly) {
-        p.onAdd(table.columns.length);
-        focusPending.current = true;
-        setCell({ row: table.columns.length, col: 0 });
-        beginEdit({ row: table.columns.length, col: 0, value: '' });
-      }
-    } else if (k === 'Insert' && !p.readOnly) {
-      p.onAdd(row + 1);
-      focusPending.current = true;
-      setCell({ row: row + 1, col: 0 });
-      beginEdit({ row: row + 1, col: 0, value: '' });
+    } else if ((onAddRow && (k === 'Enter' || k === ' ')) || (k === 'Insert' && (onAddRow || !e.altKey))) {
+      // Enter / Space on the add row, and plain Insert anywhere: a new column at the end.
+      if (!p.readOnly) addAt(table.columns.length);
+    } else if (k === 'Insert' && e.altKey && !p.readOnly) {
+      // Alt+Insert: a new column right below the current one.
+      addAt(row + 1);
     } else if (k === 'Delete' && !onAddRow && !p.readOnly) {
       p.onRemove(row);
       moveTo(Math.min(row, table.columns.length - 1), col);
@@ -322,7 +332,7 @@ export function ColumnGrid(p: ColumnGridProps) {
                     onClick={() => !disabled && toggle(row, def.key)}
                   >
                     <span className={`dz-mark${on ? ' on' : ''}`} aria-hidden="true">
-                      {on ? def.key === 'pk' ? <KeyRound size={11} /> : '✓' : ''}
+                      {on ? def.key === 'pk' ? <KeyRound size={11} strokeWidth={2.5} /> : <Check size={12} strokeWidth={3} /> : null}
                     </span>
                     {def.key === 'pk' && on && pk.length > 1 && <span className="dz-pk-order">{pk.indexOf(c.name) + 1}</span>}
                   </td>
@@ -330,7 +340,7 @@ export function ColumnGrid(p: ColumnGridProps) {
               }
               if (isEditing) {
                 return (
-                  <td key={def.key} {...common} className="dz-editing">
+                  <td key={def.key} {...common} className={`dz-editing${def.key === 'name' || def.kind === 'type' || def.key === 'default' ? ' dz-mono' : ''}`}>
                     {def.kind === 'type' ? (
                       <TypeEditor
                         initial={editing.value}
@@ -362,7 +372,31 @@ export function ColumnGrid(p: ColumnGridProps) {
                   onDoubleClick={() => startEdit()}
                   title={v || undefined}
                 >
-                  {computed ? <span className="dz-muted">AS ({c.computed!.expression})</span> : v || (def.key === 'name' ? 'name' : def.key === 'type' ? 'type' : '')}
+                  {def.kind === 'type' && !computed ? (
+                    <span className="dz-type-cell">
+                      <span className="dz-type-text">{v || 'type'}</span>
+                      {!p.readOnly && (
+                        <button
+                          type="button"
+                          className="dz-type-chevron"
+                          tabIndex={-1}
+                          aria-label={`Choose the type of ${c.name || `column ${row + 1}`}`}
+                          title="Choose a type (or start typing)"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            editAt(row, col);
+                          }}
+                        >
+                          <ChevronDown size={12} aria-hidden="true" />
+                        </button>
+                      )}
+                    </span>
+                  ) : computed ? (
+                    <span className="dz-muted">AS ({c.computed!.expression})</span>
+                  ) : (
+                    v || (def.key === 'name' ? 'name' : '')
+                  )}
                 </td>
               );
             })}
@@ -385,15 +419,11 @@ export function ColumnGrid(p: ColumnGridProps) {
               if (cell.row !== table.columns.length && !editing) setCell({ row: table.columns.length, col: 0 });
             }}
             onClick={() => {
-              if (p.readOnly) return;
-              p.onAdd(table.columns.length);
-              focusPending.current = true;
-              setCell({ row: table.columns.length, col: 0 });
-              beginEdit({ row: table.columns.length, col: 0, value: '' });
+              if (!p.readOnly) addAt(table.columns.length);
             }}
-            aria-label="Add column (Enter)"
+            aria-label="Add column (Enter or Insert); Alt+Insert inserts below the current column"
           >
-            {p.readOnly ? '' : 'Add column (Enter or Insert)'}
+            {p.readOnly ? '' : 'Add column (Enter or Insert) · Alt+Insert inserts below'}
           </td>
         </tr>
       </tbody>

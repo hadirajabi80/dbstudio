@@ -27,9 +27,11 @@ public static class ConnectionEndpoints
             return updated;
         });
 
-        g.MapDelete("/{id}", async (string id, ConnectionStore store, CatalogService catalog, SessionManager sessions, Core.Filters.FilterStore filters) =>
+        // logic-21: 409 TX_OPEN (listing the sessions) while one of its sessions has an open transaction, unless force=true.
+        g.MapDelete("/{id}", async (string id, bool? force, ConnectionStore store, CatalogService catalog, SessionManager sessions, Core.Filters.FilterStore filters) =>
         {
             store.Get(id); // 404 when unknown
+            sessions.EnsureNoOpenTransactions(id, force ?? false);
             await sessions.CloseAllForConnectionAsync(id);
             store.Delete(id);
             catalog.Forget(id);

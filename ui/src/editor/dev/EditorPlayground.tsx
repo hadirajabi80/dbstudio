@@ -2,6 +2,7 @@
 // with a dialect switcher, theme toggle, two editors side by side (multi-instance check) and a run log.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogSnapshot, Dialect, ObjectRef, RunLabel, Settings, SqlBatch } from '../../api/types';
+import { Select } from '../../components/common/Select';
 import { SqlEditor } from '../SqlEditor';
 import type { SqlEditorHandle } from '../SqlEditor.types';
 import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
@@ -93,11 +94,13 @@ export function EditorPlayground() {
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 12px', borderBottom: `1px solid ${border}`, flexWrap: 'wrap' }}>
         <strong>Editor playground</strong>
         <label>Dialect{' '}
-          <select value={dialect} onChange={(e) => { const d = e.target.value as Dialect; setDialect(d); setTexts({ a: SAMPLES[d], b: 'SELECT * FROM ' }); }}>
-            <option value="tsql">SQL Server (T-SQL)</option>
-            <option value="plsql">Oracle (PL/SQL)</option>
-            <option value="sqlite">SQLite</option>
-          </select>
+          <Select<Dialect>
+            size="sm"
+            style={{ width: 'auto' }}
+            value={dialect}
+            options={[{ value: 'tsql', label: 'SQL Server (T-SQL)' }, { value: 'plsql', label: 'Oracle (PL/SQL)' }, { value: 'sqlite', label: 'SQLite' }]}
+            onChange={(d) => { setDialect(d); setTexts({ a: SAMPLES[d], b: 'SELECT * FROM ' }); }}
+          />
         </label>
         <button onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>Theme: {theme}</button>
         <label><input type="checkbox" checked={twoEditors} onChange={(e) => setTwoEditors(e.target.checked)} /> second editor</label>

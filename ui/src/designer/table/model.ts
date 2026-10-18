@@ -18,6 +18,17 @@ export function blankColumn(dialect: Dialect, name: string, type = DEFAULT_COLUM
   };
 }
 
+/**
+ * The clustered flag of a new primary key. SQL Server clusters it unless an index already is. SQLite (rowid B-tree) and
+ * Oracle (heap) have no option, and their designer models always carry clustered: true: the engine reads existing keys
+ * that way and warns about 'ignored clustered options' for any other value (SqliteDdlScripter.CollectModelWarnings),
+ * so a new key must match it or a plain new table shows a spurious warning.
+ */
+export function defaultPkClustered(dialect: Dialect, t?: Pick<TableModel, 'indexes'>): boolean {
+  if (dialect !== 'tsql') return true;
+  return !t?.indexes.some((i) => i.clustered);
+}
+
 /** A new table: one surrogate key column, as most tables start. */
 export function newTableModel(dialect: Dialect, schema: string | null, name = ''): TableModel {
   const id = {
@@ -31,7 +42,7 @@ export function newTableModel(dialect: Dialect, schema: string | null, name = ''
     comment: null,
     options: { withoutRowid: false, strict: false, tablespace: null },
     columns: [id],
-    primaryKey: { name: null, columns: [id.name], clustered: dialect === 'tsql' },
+    primaryKey: { name: null, columns: [id.name], clustered: defaultPkClustered(dialect) },
     uniques: [],
     indexes: [],
     foreignKeys: [],
@@ -113,7 +124,7 @@ export function updateColumn(t: TableModel, index: number, patch: Partial<TableC
   if (patch.autoincrement) columns = columns.map((c, i) => (i !== index && c.autoincrement ? { ...c, autoincrement: false } : c));
   let next: TableModel = { ...t, columns };
   if (patch.name !== undefined && patch.name !== old.name) next = renameReferences(next, old.name, patch.name);
-  if (col.autoincrement && dialect === 'sqlite') next = { ...next, primaryKey: { name: next.primaryKey?.name ?? null, columns: [col.name], clustered: false } };
+  if (col.autoincrement && dialect === 'sqlite') next = { ...next, primaryKey: { name: next.primaryKey?.name ?? null, columns: [col.name], clustered: defaultPkClustered(dialect) } };
   if (patch.nullable === true && next.primaryKey?.columns.includes(col.name)) {
     next = { ...next, columns: next.columns.map((c, i) => (i === index ? { ...c, nullable: false } : c)) };
   }
@@ -137,7 +148,7 @@ export function togglePrimaryKey(t: TableModel, index: number, dialect: Dialect)
   const cols = t.primaryKey?.columns ?? [];
   const inPk = cols.includes(col.name);
   const nextCols = inPk ? without(cols, col.name) : [...cols, col.name];
-  const pk = nextCols.length ? { name: t.primaryKey?.name ?? null, columns: nextCols, clustered: t.primaryKey?.clustered ?? dialect === 'tsql' } : null;
+  const pk = nextCols.length ? { name: t.primaryKey?.name ?? null, columns: nextCols, clustered: t.primaryKey?.clustered ?? defaultPkClustered(dialect, t) } : null;
   const columns = t.columns.map((c, i) => (i === index && !inPk ? { ...c, nullable: false } : i === index && inPk ? { ...c, autoincrement: false } : c));
   return { ...t, primaryKey: pk, columns };
 }
@@ -237,13 +248,15 @@ export interface ValidationIssue {
   message: string;
   /** Column index the issue belongs to (grid highlight). */
   column?: number;
+  /** Header field the issue belongs to. */
+  field?: 'name';
 }
 
 const INTEGER_TYPES = /^(tinyint|smallint|int|integer|bigint|number|numeric|decimal)\b/i;
 
 export function validateTable(t: TableModel, dialect: Dialect): ValidationIssue[] {
   const out: ValidationIssue[] = [];
-  if (!t.name.trim()) out.push({ severity: 'error', message: 'The table needs a name.' });
+  if (!t.name.trim()) out.push({ severity: 'error', message: 'The table needs a name.', field: 'name' });
   if (!t.columns.length) out.push({ severity: 'error', message: 'Add at least one column.' });
   const seen = new Map<string, number>();
   t.columns.forEach((c, i) => {
@@ -269,6 +282,16 @@ export function validateTable(t: TableModel, dialect: Dialect): ValidationIssue[
 
 export function hasErrors(issues: ValidationIssue[]): boolean {
   return issues.some((i) => i.severity === 'error');
+}
+
+/**
+ * Issues worth showing yet: everything for an existing table or once Apply was tried; on a new table the "needs a
+ * name" error waits until the Name field was left (a pristine form opens without a red banner). Issues of columns
+ * and constraints only arise from the user's own edits, so they show right away.
+ */
+export function visibleIssues(issues: ValidationIssue[], s: { existing: boolean; nameTouched: boolean; applyTried: boolean }): ValidationIssue[] {
+  if (s.existing || s.applyTried) return issues;
+  return issues.filter((i) => i.field !== 'name' || s.nameTouched);
 }
 
 /** Canonical JSON for dirty checks (key order independent). */

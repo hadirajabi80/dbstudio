@@ -12,18 +12,22 @@ import { useCommandContext } from '../../commands/useCommands';
 import { isTabular, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
 import { dialectOf, useConnections } from '../../store/connections';
-import { useSessions } from '../../store/sessions';
+import { connectionActivity, useSessions, type ConnectionActivity } from '../../store/sessions';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
 import { ColumnIcon, DatabaseIcon, ObjectIcon, ProviderIcon } from '../common/icons';
+import { activityTitle } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
-import { activeChips, TYPE_CHIPS, useExplorer } from './explorerStore';
+import { activeChips, ALL_CONNECTIONS, chipsFor, TYPE_CHIPS, useExplorer } from './explorerStore';
 import { buildTree, databasesOf, nodeId, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
 
 export { useExplorer } from './explorerStore';
 
 const ROW_H = 24;
+
+/** Focus requests (filter box, tree) already acted on. */
+const consumed = { filter: 0, tree: 0 };
 
 /** Trigger lazy loads for expanded nodes whose data is missing (never auto-retries errors). */
 function useLazyLoads(connections: ConnectionProfile[]) {
@@ -145,16 +149,23 @@ export function Explorer() {
   const typesFor = useMemo(() => {
     const cache = new Map<string, ReturnType<typeof typesOfChips>>();
     return (cid: string) => {
-      if (!cache.has(cid)) cache.set(cid, typesOfChips(chipsMap[cid] ?? chipsMap['*'] ?? []));
+      if (!cache.has(cid)) cache.set(cid, typesOfChips(chipsFor({ chips: chipsMap, chipScope }, cid)));
       return cache.get(cid)!;
     };
-  }, [chipsMap]);
+  }, [chipsMap, chipScope]);
 
   const rows = useMemo(
     () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns }),
     [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns],
   );
-  const activeConnections = useMemo(() => new Set(Object.values(sessions).map((s) => s.connectionId)), [sessions]);
+  // One definition of "connected" (shared with the status bar): an open session or a loaded catalog.
+  const activityOf = useMemo(() => {
+    const m = new Map<string, ConnectionActivity>();
+    return (cid: string) => {
+      if (!m.has(cid)) m.set(cid, connectionActivity(cid, sessions, (id) => conns[id]?.status));
+      return m.get(cid)!;
+    };
+  }, [sessions, conns]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -168,14 +179,19 @@ export function Explorer() {
     return () => ro.disconnect();
   }, [connections.length]);
 
+  // A request is consumed once: remounting the panel (switching dock tabs) must not steal focus again.
   useEffect(() => {
-    if (focusFilterSeq) {
+    if (focusFilterSeq && focusFilterSeq !== consumed.filter) {
+      consumed.filter = focusFilterSeq;
       filterRef.current?.focus();
       filterRef.current?.select();
     }
   }, [focusFilterSeq]);
   useEffect(() => {
-    if (focusTreeSeq) listRef.current?.focus();
+    if (focusTreeSeq && focusTreeSeq !== consumed.tree) {
+      consumed.tree = focusTreeSeq;
+      listRef.current?.focus();
+    }
   }, [focusTreeSeq]);
 
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 10);
@@ -234,6 +250,11 @@ export function Explorer() {
         for (let i = idx - 1; i >= 0; i--) if (rows[i].depth < r.depth) { move(i); break; }
       }
     } else if (e.key === 'Enter' && r) { e.preventDefault(); activateRow(r, toggleRow); }
+    else if (e.key === 'Delete' && r && r.kind === 'object') {
+      // Drop… asks first (statement preview, Cancel focused).
+      e.preventDefault();
+      runCommand('explorer.drop', targetOfRow(r));
+    }
     else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && r) {
       e.preventDefault();
       const el = listRef.current?.querySelector<HTMLElement>(`[data-id="${CSS.escape(r.id)}"]`);
@@ -259,7 +280,10 @@ export function Explorer() {
 
   const nothingOpen = !filter && connections.length > 0 && Object.keys(conns).length === 0 && !connections.some((c) => expanded.has(nodeId.conn(c.id)));
   const recentConn = [...connections].sort((a, b) => (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? ''))[0];
-  const scopedName = chipScope !== '*' ? connections.find((c) => c.id === chipScope)?.name : null;
+  const scopedName = chipScope !== ALL_CONNECTIONS ? connections.find((c) => c.id === chipScope)?.name ?? null : null;
+  const selectedTarget = ex().selectedTarget;
+  const selectedConn = selectedTarget && 'connectionId' in selectedTarget ? connections.find((c) => c.id === selectedTarget.connectionId) : undefined;
+  const offerScope = chipScope === ALL_CONNECTIONS && chips.length > 0 && !!selectedConn && connections.length > 1;
 
   return (
     <div className="explorer dock-panel" aria-label="Database explorer" data-command-scope="explorer">
@@ -327,7 +351,7 @@ export function Explorer() {
               <Columns3 size={14} strokeWidth={1.75} />
             </button>
           </div>
-          <div className="chip-row" role="group" aria-label={`Object types${scopedName ? ` for ${scopedName}` : ''}`}>
+          <div className="chip-row" role="group" aria-label={`Object types${scopedName ? ` in ${scopedName}` : ' in every connection'}`}>
             {TYPE_CHIPS.map((c) => (
               <button key={c.id} className={`chip${chips.includes(c.id) ? ' on' : ''}`} aria-pressed={chips.includes(c.id)} onClick={() => ex().toggleChip(c.id)}>
                 {c.label}
@@ -338,6 +362,24 @@ export function Explorer() {
                 Clear
               </button>
             )}
+            {scopedName !== null ? (
+              <button
+                className="chip chip-scope on"
+                onClick={() => ex().scopeChipsTo(ALL_CONNECTIONS)}
+                title={`The type filter applies only to ${scopedName}. Click to apply it to every connection.`}
+                aria-label={`Type filter only in ${scopedName}; remove to apply it to every connection`}
+              >
+                in {scopedName} <X size={12} aria-hidden="true" />
+              </button>
+            ) : offerScope ? (
+              <button
+                className="chip chip-scope-offer"
+                onClick={() => ex().scopeChipsTo(selectedConn!.id)}
+                title={`Apply the type filter only to ${selectedConn!.name}`}
+              >
+                only in {selectedConn!.name}
+              </button>
+            ) : null}
           </div>
         </div>
       )}
@@ -371,7 +413,7 @@ export function Explorer() {
                   row={r}
                   top={(first + i) * ROW_H}
                   selected={r.id === selected}
-                  active={r.kind === 'connection' && !!r.connectionId && (activeConnections.has(r.connectionId) || conns[r.connectionId]?.status === 'ready')}
+                  activity={r.kind === 'connection' && r.connectionId ? activityOf(r.connectionId) : null}
                   onSelect={() => select(r)}
                   onToggle={() => toggleRow(r)}
                   onActivate={() => activateRow(r, toggleRow)}
@@ -402,14 +444,15 @@ interface RowProps {
   row: TreeRow;
   top: number;
   selected: boolean;
-  active: boolean;
+  activity: ConnectionActivity;
   onSelect: () => void;
   onToggle: () => void;
   onActivate: () => void;
   onMenu: (e: ReactMouseEvent) => void;
 }
 
-function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActivate, onMenu }: RowProps) {
+function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onActivate, onMenu }: RowProps) {
+  const active = !!activity;
   const conn = useConnections((s) => (r.kind === 'connection' ? s.connections.find((c) => c.id === r.connectionId) : undefined));
   const draggable = r.kind === 'object' || r.kind === 'column';
   let icon: ReactNode = null;
@@ -482,7 +525,14 @@ function TreeRowView({ row: r, top, selected, active, onSelect, onToggle, onActi
       </span>
       {conn?.readOnly && <Lock size={11} className="tree-lock" aria-label="Read-only" />}
       {r.busy && <LoaderCircle size={12} className="spin tree-spinner" aria-label="Loading" />}
-      {active && !r.busy && <span className="conn-active-dot" title="Connected" />}
+      {active && !r.busy && (
+        <span
+          className={`conn-active-dot${activity?.kind === 'session' ? ' has-session' : ' catalog-only'}`}
+          title={activityTitle(activity)}
+          role="img"
+          aria-label={activityTitle(activity)}
+        />
+      )}
       {r.detail && <span className="tree-detail">{r.detail}</span>}
       {r.count !== undefined && r.kind !== 'object' && <span className="tree-count">{r.count.toLocaleString()}</span>}
       {r.kind === 'connection' && r.connectionId && (

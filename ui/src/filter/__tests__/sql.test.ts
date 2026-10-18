@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ColumnInfo, ColumnKind, Dialect } from '../../api/types';
+import type { CellValue, ColumnInfo, ColumnKind, Dialect } from '../../api/types';
 import { newCondition, newGroup, type FilterOp, type FilterValue } from '../model';
+import { computeView } from '../evaluate';
 import { analyzeSelect, rewriteWithPredicate } from '../rewrite';
 import { buildPredicate, inlineParams, splitForServer } from '../sql';
 
@@ -191,5 +192,88 @@ describe('server rewrite', () => {
     expect(analyzeSelect('SELECT * INTO #t FROM Orders', 'tsql').ok).toBe(false);
     expect(analyzeSelect('SELECT * FROM Orders FOR JSON PATH', 'tsql').ok).toBe(false);
     expect(() => rewriteWithPredicate('DELETE FROM t', 'sqlite', W)).toThrow(/single SELECT/);
+  });
+});
+
+describe('precedence (code-03): compound parts are always parenthesized', () => {
+  const orOfGroups = () => newGroup('or', [
+    newGroup('and', [newCondition('Name', 'eq', ['Paris']), newCondition('Total', 'gt', [10])]),
+    newGroup('and', [newCondition('Name', 'eq', ['Rome']), newCondition('Total', 'lt', [5])]),
+  ]);
+
+  it('OR of groups combined with quick search: the OR is wrapped before AND-ing the search', () => {
+    const r = buildPredicate(orOfGroups(), COLS, 'sqlite', { alias: 'q', quick: 'zz' });
+    expect(r.where).toBe(
+      '((q.Name = @fp1 COLLATE NOCASE AND q.Total > @fp2) OR (q.Name = @fp3 COLLATE NOCASE AND q.Total < @fp4))'
+      + " AND (q.Name LIKE '%' || @fp5 || '%' ESCAPE '\\' OR q.Doc LIKE '%' || @fp5 || '%' ESCAPE '\\')",
+    );
+  });
+
+  it('OR of groups inside an AND keeps its own parentheses', () => {
+    const tree = newGroup('and', [orOfGroups(), newCondition('Id', 'gt', [0])]);
+    expect(buildPredicate(tree, COLS, 'tsql', { alias: 'q' }).where).toBe(
+      '((q.Name = @fp1 AND q.Total > @fp2) OR (q.Name = @fp3 AND q.Total < @fp4)) AND q.Id > @fp5',
+    );
+  });
+
+  it('a compound date range next to an OR is wrapped', () => {
+    const tree = newGroup('or', [newCondition('OrderDate', 'onDate', ['2026-01-03']), newCondition('Id', 'eq', [1])]);
+    expect(buildPredicate(tree, COLS, 'tsql', { alias: 'q' }).where).toBe('(q.OrderDate >= @fp1 AND q.OrderDate < @fp2) OR q.Id = @fp3');
+  });
+});
+
+describe('client/server parity for mixed-precision date ranges (logic-17)', () => {
+  const D = [col('CreatedAt', 'datetime')];
+  const rows: CellValue[][] = [
+    ['2024-01-01T09:59:59'], ['2024-01-01T10:00:00'], ['2024-01-01T23:00:00'], ['2024-01-02T00:00:00'],
+    ['2024-01-02T15:30:00'], ['2024-01-02T23:59:59'], ['2024-01-03T00:00:00'], ['2024-01-04T08:00:00'],
+  ];
+  const clientCount = (values: string[]) =>
+    computeView({ length: rows.length, get: (i) => rows[i] }, D, { quickFilter: '', filter: newGroup('and', [newCondition('CreatedAt', 'between', values)]), sort: [] })!.length;
+  /** Evaluates the generated T-SQL/Oracle predicate (>=, <, BETWEEN on ISO values) like the server would. */
+  const serverCount = (d: Dialect, values: string[]) => {
+    const r = buildPredicate(newGroup('and', [newCondition('CreatedAt', 'between', values)]), D, d, { alias: null });
+    const p = (name: string) => String(r.params.find((x) => x.name === name)!.value).replace(' ', 'T');
+    const ph = d === 'plsql' ? ':' : '@';
+    const conds = r.where!.split(' AND ').reduce<string[]>((acc, part) => {
+      if (acc.length && /BETWEEN [^ ]+$/.test(acc[acc.length - 1])) acc[acc.length - 1] += ` AND ${part}`;
+      else acc.push(part);
+      return acc;
+    }, []);
+    return rows.filter(([v]) => conds.every((c) => {
+      const cell = String(v);
+      let m = new RegExp(String.raw`BETWEEN ${ph}(\w+) AND ${ph}(\w+)$`).exec(c);
+      if (m) return cell >= p(m[1]) && cell <= p(m[2]);
+      m = new RegExp(String.raw`(>=|<) ${ph}(\w+)$`).exec(c);
+      if (!m) throw new Error(`unexpected predicate ${c}`);
+      return m[1] === '>=' ? cell >= p(m[2]) : cell < p(m[2]);
+    })).length;
+  };
+
+  it('a date-only upper bound includes that whole day on the server, as in the grid', () => {
+    const values = ['2024-01-01 10:00', '2024-01-02'];
+    expect(clientCount(values)).toBe(5);
+    for (const d of ['tsql', 'plsql'] as const) expect(serverCount(d, values), d).toBe(5);
+    const t = buildPredicate(newGroup('and', [newCondition('CreatedAt', 'between', values)]), D, 'tsql', { alias: 'q' });
+    expect(t.where).toBe('q.CreatedAt >= @fp1 AND q.CreatedAt < @fp2');
+    expect(t.params.map((x) => x.value)).toEqual(['2024-01-01T10:00:00', '2024-01-03T00:00:00']);
+    const s = buildPredicate(newGroup('and', [newCondition('CreatedAt', 'between', values)]), D, 'sqlite', { alias: 'q' });
+    expect(s.where).toBe('datetime(q.CreatedAt) >= @fp1 AND datetime(q.CreatedAt) < @fp2');
+    expect(s.params.map((x) => x.value)).toEqual(['2024-01-01 10:00:00', '2024-01-03']);
+  });
+
+  it('full datetime bounds stay an inclusive BETWEEN on both sides', () => {
+    const values = ['2024-01-01 10:00', '2024-01-02 15:30'];
+    expect(clientCount(values)).toBe(serverCount('tsql', values));
+    expect(buildPredicate(newGroup('and', [newCondition('CreatedAt', 'between', values)]), D, 'tsql').where).toBe('CreatedAt BETWEEN @fp1 AND @fp2');
+  });
+
+  it('PL/SQL quotes every result column, date predicates included, and the hoisted ORDER BY', () => {
+    const cols = [col('D', 'datetime'), col('CITY', 'string')];
+    const r = buildPredicate(newGroup('and', [newCondition('D', 'gte', ['2024-01-01']), newCondition('CITY', 'eq', ['x'], 1)]), cols, 'plsql', { alias: 'q' });
+    expect(r.where).toBe('q."D" >= :fp1 AND UPPER(q."CITY") = UPPER(:fp2)');
+    expect(rewriteWithPredicate('SELECT * FROM t ORDER BY City, t.Code DESC', 'plsql', 'x = 1').orderBy).toBe('q."CITY", q."CODE" DESC');
+    expect(rewriteWithPredicate('SELECT * FROM t ORDER BY "City"', 'plsql', 'x = 1').orderBy).toBe('q."City"');
+    expect(rewriteWithPredicate('SELECT * FROM t ORDER BY City', 'tsql', 'x = 1').orderBy).toBe('q.City');
   });
 });

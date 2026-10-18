@@ -56,6 +56,10 @@ public sealed class BatchClassification(IReadOnlyList<StatementClassification> s
     public bool IsQueryOnly { get; } = !containsWriteKeyword && statements.All(s =>
         s.Category is StatementCategory.Query or StatementCategory.Session or StatementCategory.Transaction);
 
+    /// <summary>True when a statement sets a savepoint (SAVEPOINT x / T-SQL SAVE TRAN[SACTION] x). A savepoint only means
+    /// something inside a transaction, so manual mode begins the engine transaction for it (see AdoSessionBase).</summary>
+    public bool HasSavepoint => Statements.Any(s => s.Category == StatementCategory.Transaction && s.Kind is "SAVEPOINT" or "SAVE TRANSACTION");
+
     public bool HasDml => Statements.Any(s => s.Category == StatementCategory.Dml || s.Kind == "SELECT INTO");
     public bool HasDdl => Statements.Any(s => s.Ddl is not null);
     public bool IsDestructive => Statements.Any(s => s.IsDestructive);

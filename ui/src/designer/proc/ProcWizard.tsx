@@ -1,17 +1,20 @@
 // "New procedure…" wizard (docs/PLAN-M1.5.md 1.3.3): schema, name, parameters, return type, Oracle package member.
 // Create opens a new console with the dialect template inserted as a Monaco snippet (Tab through the placeholders).
 import { Plus, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { catalogDatabase, newConsole } from '../../app/actions';
 import { Dialog } from '../../components/common/Dialog';
+import { Select } from '../../components/common/Select';
 import { useCatalog } from '../../store/catalog';
 import { dbKey } from '../../store/catalog';
+import { useTabs } from '../../store/tabs';
 import { toast } from '../../store/ui';
 import { useDesignerUi, type WizardRequest } from '../store';
 import { insertSnippetInTab } from '../snippet';
 import {
-  DEFAULT_PARAM_TYPE, DEFAULT_RETURN_TYPE, defaultName, kindsFor, routineSnippet, type ParamDirection, type RoutineKind, type WizardParam, type WizardSpec,
+  DEFAULT_PARAM_TYPE, DEFAULT_RETURN_TYPE, defaultName, defaultTiming, kindsFor, routineSnippet, triggerTimings, type ParamDirection, type RoutineKind,
+  type TriggerTiming, type WizardParam, type WizardSpec,
 } from './templates';
 
 const KIND_LABEL: Record<RoutineKind, string> = { procedure: 'Procedure', function: 'Function', package: 'Package', trigger: 'Trigger' };
@@ -25,7 +28,7 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
   const [params, setParams] = useState<WizardParam[]>([]);
   const [returns, setReturns] = useState(DEFAULT_RETURN_TYPE[req.dialect]);
   const [table, setTable] = useState(req.table ?? '');
-  const [timing, setTiming] = useState<'BEFORE' | 'AFTER' | 'INSTEAD OF'>(req.dialect === 'plsql' ? 'BEFORE' : 'AFTER');
+  const [timing, setTiming] = useState<TriggerTiming>(defaultTiming(req.dialect, false));
   const [events, setEvents] = useState<('INSERT' | 'UPDATE' | 'DELETE')[]>(['INSERT']);
   const [pkgMember, setPkgMember] = useState(!!req.packageName);
   const [pkgName, setPkgName] = useState(req.packageName ?? '');
@@ -34,12 +37,29 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
   const db = useCatalog((s) => s.dbs[dbKey(req.connectionId, catalogDatabase(req.connectionId, req.database))]);
   const schemas = db?.snapshot?.schemas.map((s) => s.name) ?? (req.schema ? [req.schema] : []);
   const objects = useMemo(() => db?.snapshot?.schemas.find((s) => s.name === (schema || db?.defaultSchema))?.objects ?? [], [db, schema]);
-  const tables = objects.filter((o) => o.t === 'table' || o.t === 'view').map((o) => o.n);
+  const tableNames = objects.filter((o) => o.t === 'table').map((o) => o.n);
+  const viewNames = objects.filter((o) => o.t === 'view').map((o) => o.n);
+  const onView = viewNames.includes(table) && !tableNames.includes(table);
+  const timings = triggerTimings(req.dialect, onView);
+  const nameRef = useRef<HTMLInputElement>(null);
   const packages = objects.filter((o) => o.t === 'package').map((o) => o.n);
 
+  // Name first: the Dialog focuses its first field (the Schema select); this effect runs after the Dialog's.
   useEffect(() => {
-    if (!table && tables.length && kind === 'trigger') setTable(tables[0]);
-  }, [kind, tables.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    nameRef.current?.focus();
+  }, []);
+
+  // The catalog may arrive after the wizard opened: keep the timing valid for a view or a table.
+  useEffect(() => {
+    if (!timings.includes(timing)) setTiming(defaultTiming(req.dialect, onView));
+  }, [onView]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Picking a view switches to INSTEAD OF (the only timing a view takes); back on a table the default returns. */
+  const chooseTable = (t: string) => {
+    setTable(t);
+    const view = viewNames.includes(t) && !tableNames.includes(t);
+    if (!triggerTimings(req.dialect, view).includes(timing)) setTiming(defaultTiming(req.dialect, view));
+  };
 
   const memberMode = req.dialect === 'plsql' && pkgMember && (kind === 'procedure' || kind === 'function');
   const isRoutine = kind === 'procedure' || kind === 'function' || kind === 'package';
@@ -64,6 +84,7 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
       }
       const snippet = routineSnippet(spec);
       const id = newConsole(req.connectionId, req.database, '');
+      useTabs.getState().rename(id, `New: ${memberMode ? pkgName : spec.name}`);
       void insertSnippetInTab(id, snippet);
       close();
     } catch (e) {
@@ -113,13 +134,12 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
               Schema
             </label>
             <div className="form-control">
-              <select id="dz-w-schema" className="input" value={schema} onChange={(e) => setSchema(e.target.value)}>
-                {(schemas.length ? schemas : [schema]).map((s) => (
-                  <option key={s} value={s}>
-                    {s || '(default)'}
-                  </option>
-                ))}
-              </select>
+              <Select
+                id="dz-w-schema"
+                value={schema}
+                options={(schemas.length ? schemas : [schema]).map((s) => ({ value: s, label: s || '(default)' }))}
+                onChange={(v) => setSchema(v)}
+              />
             </div>
           </>
         )}
@@ -127,7 +147,7 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
           Name
         </label>
         <div className="form-control">
-          <input id="dz-w-name" className="input mono" data-autofocus value={name} placeholder={defaultName(kind, req.dialect)} onChange={(e) => setName(e.target.value)} />
+          <input ref={nameRef} id="dz-w-name" className="input mono" data-autofocus value={name} placeholder={defaultName(kind, req.dialect)} onChange={(e) => setName(e.target.value)} />
         </div>
         {req.dialect === 'plsql' && (kind === 'procedure' || kind === 'function') && (
           <>
@@ -138,12 +158,14 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
                 Add to an existing package
               </label>
               {pkgMember && (
-                <select className="input" style={{ width: 'auto' }} aria-label="Package" value={pkgName} onChange={(e) => setPkgName(e.target.value)}>
-                  <option value="">(choose)</option>
-                  {packages.map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </select>
+                <Select
+                  style={{ width: 'auto', minWidth: 180 }}
+                  mono
+                  aria-label="Package"
+                  value={pkgName}
+                  options={[{ value: '', label: '(choose)' }, ...packages.map((p) => ({ value: p, label: p }))]}
+                  onChange={(v) => setPkgName(v)}
+                />
               )}
             </div>
           </>
@@ -164,20 +186,32 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
               Table
             </label>
             <div className="form-control">
-              <input id="dz-w-table" className="input mono" list="dz-w-tables" value={table} onChange={(e) => setTable(e.target.value)} />
-              <datalist id="dz-w-tables">
-                {tables.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
+              {tableNames.length + viewNames.length > 0 ? (
+                <Select
+                  id="dz-w-table"
+                  mono
+                  value={table}
+                  options={[
+                    { value: '', label: '(choose a table)' },
+                    ...(table && !tableNames.includes(table) && !viewNames.includes(table) ? [{ value: table, label: table }] : []),
+                    ...tableNames.map((t) => ({ value: t, label: t, group: 'Tables' })),
+                    ...viewNames.map((t) => ({ value: t, label: t, group: 'Views (INSTEAD OF)' })),
+                  ]}
+                  onChange={chooseTable}
+                />
+              ) : (
+                <input id="dz-w-table" className="input mono" value={table} placeholder="table_name" onChange={(e) => chooseTable(e.target.value)} />
+              )}
             </div>
             <span className="form-label">Fires</span>
             <div className="form-control" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select className="input" style={{ width: 'auto' }} aria-label="Timing" value={timing} onChange={(e) => setTiming(e.target.value as typeof timing)}>
-                {(req.dialect === 'tsql' ? ['AFTER', 'INSTEAD OF'] : ['BEFORE', 'AFTER', 'INSTEAD OF']).map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </select>
+              <Select<typeof timing>
+                style={{ width: 'auto', minWidth: 120 }}
+                aria-label="Timing"
+                value={timing}
+                options={timings.map((t) => ({ value: t, label: t }))}
+                onChange={setTiming}
+              />
               {(['INSERT', 'UPDATE', 'DELETE'] as const).map((ev) => (
                 <label key={ev} className="check">
                   <input
@@ -217,11 +251,12 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
                           <input className="input mono" aria-label={`Parameter ${i + 1} type`} value={p.type} onChange={(e) => setParam(i, { type: e.target.value })} />
                         </td>
                         <td>
-                          <select className="input" aria-label={`Parameter ${i + 1} direction`} value={p.direction} onChange={(e) => setParam(i, { direction: e.target.value as ParamDirection })}>
-                            <option value="in">IN</option>
-                            <option value="out">OUT</option>
-                            <option value="inout">IN OUT</option>
-                          </select>
+                          <Select<ParamDirection>
+                            aria-label={`Parameter ${i + 1} direction`}
+                            value={p.direction}
+                            options={[{ value: 'in', label: 'IN' }, { value: 'out', label: 'OUT' }, { value: 'inout', label: 'IN OUT' }]}
+                            onChange={(direction) => setParam(i, { direction })}
+                          />
                         </td>
                         <td>
                           <input className="input mono" aria-label={`Parameter ${i + 1} default`} value={p.default} disabled={p.direction !== 'in'} onChange={(e) => setParam(i, { default: e.target.value })} />

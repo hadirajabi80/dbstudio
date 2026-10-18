@@ -86,7 +86,7 @@ public sealed class SqliteProviderTests(SqliteFixture fixture) : IClassFixture<S
         var rs = Assert.Single(sink.ResultSets);
         Assert.Equal(ShopSchema.OrderCount, rs.RowCount);
         Assert.Equal("customers", rs.Columns[0].Table);
-        Assert.True(session.TxOpen);
+        Assert.False(session.TxOpen); // B1 logic-03: a SELECT-only run does not open the manual transaction
         await session.RollbackAsync(CancellationToken.None);
     }
 

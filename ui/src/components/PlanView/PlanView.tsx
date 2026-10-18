@@ -6,6 +6,7 @@ import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ExecPlanPayload } from '../../api/types';
 import { dialectLabel, formatCost, formatPct, formatRows, planRows, planSummary, planToText, prettyXml, visibleRows, type PlanRow } from './model';
 import './PlanView.css';
+import { pluralize } from '../common/text';
 
 export interface PlanViewProps {
   plan: ExecPlanPayload | null;
@@ -82,10 +83,10 @@ export function PlanView({ plan, status = plan ? 'done' : 'running', error, sql,
         <ListTree size={16} strokeWidth={1.5} className="pv-icon" aria-hidden />
         <span className="pv-title" title={sql}>Explain plan</span>
         {plan && <span className="pv-chip">{dialectLabel(plan.dialect)} · {plan.mode === 'actual' ? 'Actual' : 'Estimated'}</span>}
-        {plan && <span className="pv-meta">{summary.nodes} node{summary.nodes === 1 ? '' : 's'}</span>}
+        {plan && <span className="pv-meta">{pluralize(summary.nodes, 'node')}</span>}
         {plan && summary.warnings > 0 && (
           <span className="pv-meta pv-warn-count" title="Nodes with warnings">
-            <AlertTriangle size={14} strokeWidth={1.5} aria-hidden /> {summary.warnings} warning{summary.warnings === 1 ? '' : 's'}
+            <AlertTriangle size={14} strokeWidth={1.5} aria-hidden /> {pluralize(summary.warnings, 'warning')}
           </span>
         )}
         <span className="flex-1" />

@@ -1,0 +1,26 @@
+/* Result-set chrome of a console (styles-03). Sizes and tokens only: colours come from theme/tokens.css. */
+
+/* The result-set toolbar is an OverflowToolbar: one row that never wraps or scrolls; what does not fit collapses into
+   its "…" menu (lowest priority first). */
+.resultset-toolbar.overflow-toolbar {
+  height: auto;
+  min-height: 30px;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow: hidden;
+  gap: 4px;
+  padding: 3px 6px;
+  background: transparent;
+}
+.resultset-toolbar.overflow-toolbar > .ovf-item {
+  gap: 4px;
+}
+/* The "…" button matches the small icon buttons, so collapsing items never makes the row taller. */
+.resultset-toolbar.overflow-toolbar > .ovf-more {
+  width: var(--input-h-sm, 24px);
+  height: var(--input-h-sm, 24px);
+}
+/* The search box narrows with the window. */
+.resultset-toolbar .rs-quick {
+  width: clamp(120px, 22vw, 220px);
+}

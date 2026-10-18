@@ -1,6 +1,7 @@
 using DbStudio.Core.Designer;
 using DbStudio.Core.Services;
 using DbStudio.Host.Contracts;
+using DbStudio.Host.Infrastructure;
 
 namespace DbStudio.Host.Endpoints;
 
@@ -34,10 +35,10 @@ public static class DesignerEndpoints
             return designer.ScriptViewAsync(id, req.Database, view, ct);
         });
 
-        g.MapPost("/apply", async (string id, DdlApplyRequestDto? req, DesignerService designer, CancellationToken ct) =>
+        g.MapPost("/apply", async (HttpContext http, string id, DdlApplyRequestDto? req, DesignerService designer, CancellationToken ct) =>
         {
             if (req?.Statements is null) throw EngineException.Validation("statements is required.", new { field = "statements" });
-            var result = await designer.ApplyAsync(id, new DdlApplyRequest(req.Database, req.Statements, req.Transactional ?? true, req.Schema), ct);
+            var result = await designer.ApplyAsync(id, new DdlApplyRequest(req.Database, req.Statements, req.Transactional ?? true, req.Schema), http.ClientId(), ct);
             return new DdlApplyResponse(result.Ok, result.Executed, result.ElapsedMs);
         });
 

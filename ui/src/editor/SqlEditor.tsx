@@ -10,14 +10,15 @@ import { createIntel, type Intel } from '../intel';
 import { intelOptionsFromSettings } from './settings';
 import type { SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from './monaco-setup';
+import { baseMonacoOptions, remeasureAfterFonts } from './monacoOptions';
 import { bindModel, setActiveBinding, type ModelBinding } from './registry';
-import { formatDocument, formatSelection, openSnippetPicker, runExplain } from './actions';
+import { dismissEditorPopups, formatDocument, formatSelection, openSnippetPicker, runExplain } from './actions';
 import { getEditorConfig } from './config';
 import { guardEditorSuggest } from './suggest-guard';
 import { paramHintText, statementParams } from './param-hint';
 import { snippetSource } from '../snippets';
 import { postfixSource } from '../intel/complete/postfix';
-import { displayShortcut } from '../commands/keys';
+import { displayShortcut, isAltGraphCharacter, isMac } from '../commands/keys';
 import { resolveRunTarget } from './run-target';
 import { LatestRequest, MARKER_OWNERS, serverMarkers, softMarkers, type MarkerSeverities } from './markers-core';
 
@@ -144,13 +145,18 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     const t = runTarget(label);
     if (!t) return;
     flash(t.range);
-    if (t.batches.length) propsRef.current.onRun(t.label, t.batches);
+    if (!t.batches.length) return;
+    if (edRef.current) dismissEditorPopups(edRef.current);
+    propsRef.current.onRun(t.label, t.batches);
   };
 
   useImperativeHandle(ref, () => ({
     focus: () => edRef.current?.focus(),
     getRunTarget: (label: RunLabel) => {
       const t = runTarget(label);
+      // Every caller takes the statement away from the editor (run from the toolbar or Ctrl+Enter in a console,
+      // multi-run, code, parameters): close the suggest list and parameter hints first (styles-r1-05).
+      if (t && edRef.current) dismissEditorPopups(edRef.current);
       return t ? { batches: t.batches, text: t.text } : null;
     },
     insertText: (text: string) => {
@@ -198,11 +204,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     intel.setExtraCompletionSources([snippetSource(dialect, () => propsRef.current.snippets ?? getEditorConfig().snippets), postfixSource]);
 
     const ed = monaco.editor.create(host.current, {
+      ...baseMonacoOptions(),
       model,
       theme: p.theme === 'dark' ? THEME_IDS.dark : THEME_IDS.light,
       readOnly: !!p.readOnly,
       fontSize: p.settings?.fontSize ?? 14,
-      fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace",
       fontLigatures: false,
       automaticLayout: true,
       minimap: { enabled: false },
@@ -220,7 +226,6 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       suggest: { showWords: false, snippetsPreventQuickSuggestions: false, localityBonus: false, shareSuggestSelections: false, showStatusBar: false, preview: false, filterGraceful: true, insertMode: 'replace' },
       parameterHints: { enabled: true, cycle: true },
       hover: { enabled: 'on', delay: 350 },
-      bracketPairColorization: { enabled: false },
       guides: { indentation: true },
       'semanticHighlighting.enabled': false,
       unicodeHighlight: { ambiguousCharacters: false },
@@ -228,6 +233,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     });
     edRef.current = ed;
     guardEditorSuggest(ed);
+    remeasureAfterFonts();
 
     const binding: ModelBinding = {
       uri: uriRef.current,
@@ -279,9 +285,18 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     // Ctrl+Shift+L is Explain (actual) in M1.5 (PLAN-M1.5 section 3 reserved shortcuts); lower case keeps its palette entry
     subs.push(ed.addAction({ id: 'dbstudio.lowerCase', label: 'Transform to Lower Case', run: (x) => x.trigger('dbstudio', 'editor.action.transformToLowercase', {}) }));
     // M1.5 (WP-H): formatter, snippets, explain. KeyMod.CtrlCmd = Ctrl on Windows/Linux, Cmd on macOS.
-    subs.push(ed.addAction({
-      id: 'dbstudio.formatDocument', label: 'Format SQL (Document)', keybindings: [K.Shift | K.Alt | C.KeyF],
-      contextMenuGroupId: '1_modification', contextMenuOrder: 1, precondition: '!editorReadonly', run: () => { doFormat(false); },
+    // Format Document (Shift+Alt+F, context menu) is Monaco's built-in command over the DbStudio formatting
+    // provider (monaco-setup.ts); a second custom action would list the same command twice.
+    // Ctrl+Alt+L (⌘⌥L, DataGrip's "Reformat code", user-01) runs the same command. Inside a console the registry's
+    // format.document gets the key first (capture phase); this covers the other editors (designers, wizards). A key
+    // handler rather than a Monaco keybinding, so AltGr+L ("ł" on Polish keyboards) still types its character.
+    subs.push(ed.onKeyDown((e) => {
+      const be = e.browserEvent;
+      if (e.keyCode !== C.KeyL || !(isMac() ? be.metaKey : be.ctrlKey) || !be.altKey || be.shiftKey || isAltGraphCharacter(be)) return;
+      if (ed.getRawOptions().readOnly) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void ed.getAction('editor.action.formatDocument')?.run();
     }));
     subs.push(ed.addAction({
       id: 'dbstudio.formatSelection', label: 'Format SQL (Selection or Statement)', keybindings: [K.chord(K.CtrlCmd | C.KeyK, K.CtrlCmd | C.KeyF)],

@@ -1,6 +1,6 @@
 // Sandboxed preload: exposes window.dbstudio (the DbStudioBridge contract from ui/src/platform/bridge.ts).
 // Only `electron` may be required at runtime; esbuild inlines ../shared/channels.
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron';
 import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand } from '../../../ui/src/platform/bridge';
 import { desktopOs, htmlPlatformClasses, htmlPlatformVars, type DesktopPlatformInfo } from '../main/platform';
 import { APP_VERSION_ARG, IPC } from '../shared/channels';
@@ -34,6 +34,11 @@ const bridge: DbStudioBridge = {
   loadWorkspace: () => ipcRenderer.invoke(IPC.loadWorkspace) as Promise<unknown | null>,
   saveWorkspace: (data: unknown) => ipcRenderer.invoke(IPC.saveWorkspace, data) as Promise<void>,
   setTitle: (title: string) => { ipcRenderer.send(IPC.setTitle, title); },
+  // Page zoom in the renderer itself (no IPC): Chromium scales devicePixelRatio, so canvases stay sharp.
+  setZoomFactor: (factor: number) => {
+    if (typeof factor !== 'number' || !Number.isFinite(factor)) return;
+    webFrame.setZoomFactor(Math.max(0.6, Math.min(2, factor)));
+  },
 };
 
 contextBridge.exposeInMainWorld('dbstudio', bridge);

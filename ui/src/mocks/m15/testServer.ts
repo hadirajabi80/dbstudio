@@ -11,7 +11,7 @@ import { createGridHandlers, FilterStoreMock, GridMockEngine } from './grid';
 
 export const GRID_ENGINE_URL = 'http://engine.test';
 
-export function useGridMockEngine(opts: MockEngineOptions = { frameDelay: 0 }, withSocket = false) {
+export function installGridMockEngine(opts: MockEngineOptions = { frameDelay: 0 }, withSocket = false) {
   const ctx = { engine: new GridMockEngine(opts), filters: new FilterStoreMock(), requests: [] as { method: string; url: URL; body?: unknown }[] };
   const server = setupServer(...createGridHandlers(ctx.filters), ...createHandlers(ctx.engine));
   server.events.on('request:start', ({ request }) => {

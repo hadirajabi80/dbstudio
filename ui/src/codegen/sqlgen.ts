@@ -47,6 +47,25 @@ export interface InsertSql extends BoundSql {
   returningKind: 'row' | 'outBind' | 'none';
   /** Oracle OUT bind placeholder name for `returning`. */
   returningBind: string | null;
+  /**
+   * Writable columns left out because the server fills them (a DEFAULT): binding the model's value would write
+   * false / 0 / DateTime.MinValue / NULL instead of the default. Primary key columns are always bound.
+   */
+  defaulted: CgColumn[];
+}
+
+/** Columns an INSERT leaves to their server default (writable, not part of the key). */
+export function serverDefaulted(t: CgTable, c: CgColumn): boolean {
+  return !!c.hasDefault && !t.primaryKey.includes(c.name);
+}
+
+/** Doc sentence for an insert that omits defaulted columns (null when none are). */
+export function defaultsNote(ins: Pick<InsertSql, 'defaulted'>, update: boolean): string | null {
+  if (!ins.defaulted.length) return null;
+  const names = ins.defaulted.map((c) => c.name);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const one = names.length === 1;
+  return `${list} ${one ? 'is' : 'are'} not inserted, so the server default${one ? ' applies' : 's apply'}${update ? `; change ${one ? 'it' : 'them'} with update` : ''}.`;
 }
 
 export interface CrudSql {
@@ -130,7 +149,9 @@ export function crudSql(t: CgTable, dialect: Dialect, o: CrudOptions): CrudSql {
 
   let insert: InsertSql | null = null;
   if (t.kind === 'table') {
-    const ins = t.columns.filter((c) => isWritable(c, dialect));
+    const writable = t.columns.filter((c) => isWritable(c, dialect));
+    const ins = writable.filter((c) => !serverDefaulted(t, c));
+    const defaulted = writable.filter((c) => serverDefaulted(t, c));
     const identity = t.columns.find((c) => c.identity) ?? null;
     const params: CgColumn[] = [];
     const values = ins.map((c, i) => {
@@ -159,7 +180,7 @@ export function crudSql(t: CgTable, dialect: Dialect, o: CrudOptions): CrudSql {
     } else {
       sql = `${head}${nl}${vals}`;
     }
-    insert = { sql, params, returning: identity && mode === 'auto' ? identity : null, returningKind, returningBind };
+    insert = { sql, params, returning: identity && mode === 'auto' ? identity : null, returningKind, returningBind, defaulted };
   }
 
   return { table, selectAll, selectByPk, insert, update, delete: del, pk };
@@ -167,7 +188,7 @@ export function crudSql(t: CgTable, dialect: Dialect, o: CrudOptions): CrudSql {
 
 // ---------------- query parameters ----------------
 
-interface ParamToken {
+export interface ParamToken {
   start: number;
   end: number;
   /** Name without prefix; positional `?` → p1, p2, ... */
@@ -194,7 +215,7 @@ function declaredTsqlVariables(sql: string): Set<string> {
   return out;
 }
 
-function paramTokens(sql: string, dialect: Dialect): ParamToken[] {
+export function paramTokens(sql: string, dialect: Dialect): ParamToken[] {
   const toks = tokenize(sql, getSpec(dialect));
   const declared = dialect === 'tsql' ? declaredTsqlVariables(sql) : new Set<string>();
   const out: ParamToken[] = [];

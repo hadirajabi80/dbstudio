@@ -4,6 +4,7 @@ import { api, errorMessage } from '../../api/client';
 import type { DdlResponse, ObjectDetails } from '../../api/types';
 import { copyText, newConsole, selectTop } from '../../app/actions';
 import { runCommand } from '../../commands/registry';
+import { commandView } from '../../commands/useCommands';
 import type { ObjectTarget } from '../../commands/types';
 import { FormattedToggle } from '../../editor/FormattedDdl';
 import { useFormattedDdl } from '../../editor/formatted-ddl';
@@ -99,7 +100,7 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
           </button>
         )}
         {codegenable && (
-          <button className="btn btn-xs" onClick={() => runCommand('codegen.open', target)} title="Generate C#, Go, TypeScript, Java or Python code (Ctrl+Alt+G)">
+          <button className="btn btn-xs" onClick={() => runCommand('codegen.open', target)} title={commandView('codegen.open', target, 'Generate C#, Go, TypeScript, Java or Python code').tooltip}>
             <Code2 size={12} /> Generate code
           </button>
         )}

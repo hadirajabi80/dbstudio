@@ -81,7 +81,7 @@
 .pc-kind {
   flex-shrink: 0;
   width: 54px;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   padding-top: 1px;
@@ -158,4 +158,17 @@
 .pc-empty-title {
   font-weight: 600;
   color: var(--fg, var(--text));
+}
+
+/* Save (n) ▾ of the result / Data-tab toolbars (PendingBar.tsx, user-02): one joined split button */
+.pending-save > .btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.pending-save > .split-caret {
+  width: auto;
+  padding: 0 4px;
+  border-left-color: var(--accent-hover);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }

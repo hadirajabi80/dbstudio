@@ -75,7 +75,7 @@ public sealed class SqlServerDdlScripter : IDdlScripter
 
         if (diff.Matched.Any(m => m.IdentityChanged) || diff.Added.Any(a => a.Identity is not null))
         {
-            ScriptRebuild(diff, statements, warnings);
+            ScriptRebuild(diff, context, statements, warnings);
             warnings.Insert(0, "Identity columns cannot be altered in place: the table is rebuilt (new table, copy with IDENTITY_INSERT, drop, rename).");
             return new TableScript(statements, true, true, warnings, diff.Changes);
         }
@@ -185,13 +185,51 @@ public sealed class SqlServerDdlScripter : IDdlScripter
             statements.Add(CommentSql(schema, desired.Name, c.Name, null, c.Comment));
     }
 
-    private static void ScriptRebuild(TableDiffResult d, List<DdlStatement> statements, List<string> warnings)
+    /// <summary>
+    /// Identity rebuild, like SSMS: new table, copy with IDENTITY_INSERT, drop the foreign keys of other tables that
+    /// reference it, drop the old table, rename, then recreate defaults, keys, checks, indexes, MS_Description comments,
+    /// the inbound foreign keys, the triggers (from their stored definitions) and the permissions. Needs the dependents
+    /// read by the designer database (<see cref="DdlScriptContext.Dependents"/>); refuses the rebuild with a validation
+    /// error when they are unknown or something could not be scripted, instead of dropping objects it cannot restore:
+    /// schema-bound objects, and storage the model does not hold (columnstore/XML/spatial/full-text indexes, partitioning,
+    /// a non-default filegroup, compression, change tracking, CDC; features-r1-02), each named in the message.
+    /// What cannot be carried over (other extended properties, trigger order) is listed in the warnings.
+    /// </summary>
+    private static void ScriptRebuild(TableDiffResult d, DdlScriptContext context, List<DdlStatement> statements, List<string> warnings)
     {
         var original = d.Original!;
         var desired = d.Desired;
         var schema = desired.Schema!;
         var temp = Table(schema, desired.Name + RebuildSuffix);
         var oldTable = Table(original.Schema!, original.Name);
+
+        const string refused = "The table cannot be rebuilt safely: ";
+        if (context.Dependents is not { } dependents)
+            throw new ArgumentException(refused + "the foreign keys, triggers and permissions that depend on it are unknown. Reload the table designer and try again.");
+        if (dependents.FirstOrDefault(x => x.Type == DependentTypes.Blocker) is { } blocker)
+            throw new ArgumentException(refused + (blocker.Detail ?? $"{blocker.Name} depends on it."));
+        // Storage features the model does not hold (features-r1-02): CREATE TABLE [x__new] would come back without them.
+        var storage = dependents.Where(x => DependentTypes.UnsupportedStorage.Contains(x.Type)).Select(x => DescribeStorage(original.Name, x)).Distinct().ToList();
+        if (storage.Count == 1)
+            throw new ArgumentException($"{refused}{storage[0]}; DbStudio cannot recreate it in a rebuild. Change the identity in a script instead.");
+        if (storage.Count > 1)
+            throw new ArgumentException($"{refused}DbStudio cannot recreate these in a rebuild: {string.Join("; ", storage)}. Change the identity in a script instead.");
+
+        // Old column name -> new column name of the columns that survive (inbound FKs and column permissions follow renames).
+        var renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in d.Matched) renamed.TryAdd(m.Old.Name, m.New.Name);
+        var inbound = dependents.Where(x => x.Type == DependentTypes.ForeignKey && x.ForeignKey is not null).ToList();
+        foreach (var fk in inbound)
+        {
+            var lost = fk.ForeignKey!.RefColumns.FirstOrDefault(c => !renamed.ContainsKey(c));
+            if (lost is not null)
+                throw new ArgumentException(refused + $"column {lost} is referenced by foreign key {fk.Name} of {Table(fk.OwnerSchema ?? schema, fk.OwnerTable ?? "")}; drop that foreign key first.");
+        }
+        var triggers = dependents.Where(x => x.Type == DependentTypes.Trigger).ToList();
+        if (triggers.FirstOrDefault(t => string.IsNullOrWhiteSpace(t.Sql)) is { } hidden)
+            throw new ArgumentException(refused + $"the definition of trigger {hidden.Name} is encrypted or not visible (VIEW DEFINITION), so it could not be recreated.");
+        if (triggers.Count > 0 && (!original.Name.Equals(desired.Name, StringComparison.OrdinalIgnoreCase) || !original.Schema!.Equals(schema, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException(refused + "its triggers name the table in their definition. Rename or move the table in a separate step.");
 
         ScriptCreate(desired, temp, statements, includeConstraints: false);
         statements[^1] = statements[^1] with { Kind = DdlKinds.Rebuild };
@@ -206,8 +244,14 @@ public sealed class SqlServerDdlScripter : IDdlScripter
                 DdlKinds.Rebuild));
             if (insertIdentity) statements.Add(new DdlStatement($"SET IDENTITY_INSERT {temp} OFF", DdlKinds.Rebuild));
         }
-        statements.Add(new DdlStatement($"DROP TABLE {oldTable}", DdlKinds.Rebuild,
-            "Fails while foreign keys of other tables reference it; triggers and permissions of the old table are not recreated."));
+        foreach (var fk in inbound)
+        {
+            var child = Table(fk.OwnerSchema ?? schema, fk.OwnerTable!);
+            statements.Add(new DdlStatement($"ALTER TABLE {child} DROP CONSTRAINT {Q(fk.Name)}", DdlKinds.Drop,
+                $"Foreign key {fk.Name} of {child} references the table: it is dropped here and recreated after the rebuild."));
+        }
+        var triggerNote = triggers.Count == 0 ? "" : $" Its triggers ({string.Join(", ", triggers.Select(t => t.Name))}) are recreated after the rename.";
+        statements.Add(new DdlStatement($"DROP TABLE {oldTable}", DdlKinds.Rebuild, ("The old table is dropped; its rows were copied above." + triggerNote).Trim()));
         statements.Add(new DdlStatement($"EXEC sys.sp_rename {L(Unquoted(schema, desired.Name + RebuildSuffix))}, {L(desired.Name)}", DdlKinds.Rebuild));
         var table = Table(schema, desired.Name);
         foreach (var c in desired.Columns.Where(c => c.Default is not null && c.Computed is null))
@@ -217,8 +261,68 @@ public sealed class SqlServerDdlScripter : IDdlScripter
         foreach (var ck in desired.Checks.Select((c, i) => (c, i))) statements.Add(new DdlStatement($"ALTER TABLE {table} ADD {CheckSql(desired, ck.c, ck.i + 1)}", DdlKinds.Alter));
         foreach (var fk in desired.ForeignKeys) statements.Add(new DdlStatement($"ALTER TABLE {table} ADD {ForeignKeySql(desired, fk)}", DdlKinds.Alter));
         foreach (var ix in desired.Indexes) statements.Add(new DdlStatement(CreateIndexSql(table, ix), DdlKinds.Index));
-        AddComments(desired, statements);
+        AddComments(desired, statements); // MS_Description of the table and its columns, from the model
+
+        // Inbound foreign keys, after the keys and unique indexes they reference; same trust and enabled state as before.
+        foreach (var dep in inbound)
+        {
+            var child = Table(dep.OwnerSchema ?? schema, dep.OwnerTable!);
+            var fk = dep.ForeignKey! with { RefSchema = schema, RefTable = desired.Name, RefColumns = dep.ForeignKey!.RefColumns.Select(c => renamed[c]).ToList() };
+            var check = dep.Disabled || dep.Detail == "untrusted" ? "WITH NOCHECK" : "WITH CHECK";
+            statements.Add(new DdlStatement($"ALTER TABLE {child} {check} ADD {ForeignKeySql(desired, fk)}", DdlKinds.Alter));
+            if (dep.Disabled) statements.Add(new DdlStatement($"ALTER TABLE {child} NOCHECK CONSTRAINT {Q(dep.Name)}", DdlKinds.Alter));
+        }
+
+        // Triggers: their stored definitions, each a batch of its own.
+        foreach (var trigger in triggers)
+        {
+            statements.Add(new DdlStatement(trigger.Sql.Trim(), DdlKinds.Create, $"Recreates trigger {trigger.Name} from its stored definition."));
+            if (trigger.Disabled) statements.Add(new DdlStatement($"DISABLE TRIGGER {Table(schema, trigger.Name)} ON {table}", DdlKinds.Alter));
+            if (trigger.Detail == "ordered") warnings.Add($"The firing order of trigger {trigger.Name} (sp_settriggerorder) is not carried over.");
+        }
+
+        // Permissions on the table and its columns.
+        foreach (var p in dependents.Where(x => x.Type == DependentTypes.Permission))
+        {
+            string? column = null;
+            if (p.Column is not null && !renamed.TryGetValue(p.Column, out column))
+            {
+                warnings.Add($"{p.Sql} on dropped column {p.Column} for {p.Name} is not carried over.");
+                continue;
+            }
+            var verb = p.Detail == "DENY" ? "DENY" : "GRANT";
+            var columns = column is null ? "" : $" ({Q(column)})";
+            var withGrant = p.Detail == "GRANT_WITH_GRANT_OPTION" ? " WITH GRANT OPTION" : "";
+            statements.Add(new DdlStatement($"{verb} {p.Sql}{columns} ON {table} TO {Q(p.Name)}{withGrant}", DdlKinds.Alter));
+        }
+
+        foreach (var n in dependents.Where(x => x.Type == DependentTypes.NotCarried)) warnings.Add(n.Detail ?? $"{n.Name} is not carried over.");
         foreach (var c in d.Dropped) warnings.Add($"Column {c.Name} is dropped with its data.");
+    }
+
+    /// <summary>
+    /// "Orders has a columnstore index IX_cs", "index PK_Orders of Orders uses PAGE compression", ... for a storage
+    /// dependent (<see cref="DependentObject.Name"/> empty = the table itself).
+    /// </summary>
+    internal static string DescribeStorage(string table, DependentObject x)
+    {
+        var name = x.Name;
+        var detail = string.IsNullOrWhiteSpace(x.Detail) ? null : x.Detail.Trim();
+        var subject = name.Length == 0 ? table : $"index {name} of {table}";
+        return x.Type switch
+        {
+            DependentTypes.ColumnstoreIndex => $"{table} has a columnstore index {name}".TrimEnd(),
+            DependentTypes.XmlIndex => $"{table} has an XML index {name}".TrimEnd(),
+            DependentTypes.SpatialIndex => $"{table} has a spatial index {name}".TrimEnd(),
+            DependentTypes.OtherIndex => $"{table} has a {(detail ?? "special").Replace('_', ' ').ToLowerInvariant()} index {name}".TrimEnd(),
+            DependentTypes.FulltextIndex => detail is null ? $"{table} has a full-text index" : $"{table} has a full-text index (catalog {detail})",
+            DependentTypes.Partitioning => $"{subject} is partitioned on {detail ?? "a partition scheme"}",
+            DependentTypes.Filegroup => $"{subject} is stored on filegroup {detail ?? "other than the default"}",
+            DependentTypes.Compression => $"{subject} uses {detail ?? "data"} compression",
+            DependentTypes.ChangeTracking => $"{table} has change tracking enabled",
+            DependentTypes.Cdc => $"{table} is tracked by change data capture (CDC)",
+            _ => $"{subject} uses a storage option ({x.Type})",
+        };
     }
 
     // ------------------------------------------------------------------ builders
@@ -367,16 +471,24 @@ public sealed class SqlServerDdlScripter : IDdlScripter
         var statements = new List<DdlStatement>();
         var warnings = new List<string>();
         if (view.Options.Force) warnings.Add("FORCE is an Oracle option; ignored.");
-        var isRename = view.OriginalName is not null && !view.OriginalName.Equals(view.Name, StringComparison.Ordinal);
-        if (isRename)
-            statements.Add(new DdlStatement($"EXEC sys.sp_rename {L(Unquoted(schema, view.OriginalName!))}, {L(view.Name)}", DdlKinds.Rename));
-        var head = SupportsCreateOrAlter(context.ServerVersion) ? "CREATE OR ALTER VIEW"
-            : view.OriginalName is null ? "CREATE VIEW" : "ALTER VIEW";
+        // Editing the same view (names compare case-insensitively, like the default collation) alters it in place. A new
+        // name is a plain CREATE VIEW, so an existing view of that name fails on the server instead of being replaced;
+        // a renamed view is created under the new name first and the old one dropped afterwards (same transaction).
+        var original = view.OriginalName;
+        var editing = original is not null && original.Equals(view.Name, StringComparison.OrdinalIgnoreCase);
+        if (editing && !original!.Equals(view.Name, StringComparison.Ordinal))
+            statements.Add(new DdlStatement($"EXEC sys.sp_rename {L(Unquoted(schema, original))}, {L(view.Name)}", DdlKinds.Rename)); // case-only rename
+        var head = !editing ? "CREATE VIEW" : SupportsCreateOrAlter(context.ServerVersion) ? "CREATE OR ALTER VIEW" : "ALTER VIEW";
         var sb = new StringBuilder().Append(head).Append(' ').Append(Table(schema, view.Name));
         if (view.Options.SchemaBinding) sb.Append("\nWITH SCHEMABINDING");
         sb.Append("\nAS\n").Append(TrimBody(view.Body));
         if (view.Options.CheckOption) sb.Append("\nWITH CHECK OPTION");
-        statements.Add(new DdlStatement(sb.ToString(), view.OriginalName is null ? DdlKinds.Create : DdlKinds.Alter));
+        statements.Add(new DdlStatement(sb.ToString(), editing ? DdlKinds.Alter : DdlKinds.Create));
+        if (original is not null && !editing)
+        {
+            statements.Add(new DdlStatement($"DROP VIEW {Table(schema, original)}", DdlKinds.Drop));
+            warnings.Add($"{Table(schema, original)} is replaced by a new view {Table(schema, view.Name)}: permissions granted on the old view are not carried over.");
+        }
         return new DdlScript(statements, false, true, warnings);
     }
 

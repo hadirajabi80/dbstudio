@@ -5,6 +5,7 @@ import type {
 } from '../api/types';
 import { serializeRows } from '../lib/serialize';
 import { MockEngine } from './engine';
+import { createM15Handlers } from './m15/m15Handlers';
 
 const P = '*/api/v1';
 
@@ -211,5 +212,8 @@ export function createHandlers(engine: MockEngine) {
       });
       return ok({ diagnostics, engine: 'mock' });
     }),
+
+    // M1.5: explain, describe, designer, query export
+    ...createM15Handlers(engine),
   ];
 }

@@ -13,10 +13,13 @@ public static class HistoryAndSqlEndpoints
             HistoryService history, CancellationToken ct) =>
             history.SearchAsync(connectionId, q, limit ?? 200, before, ParseFilter(status, from, to, pinned), ct));
 
+        // Partial update (logic-24d): a missing "pinned" leaves the flag unchanged.
         g.MapPut("/{id:long}", async (long id, HistoryUpdateRequest? req, HistoryService history, CancellationToken ct) =>
         {
-            if (req is null) throw EngineException.Validation("pinned is required.", new { field = "pinned" });
-            if (!await history.SetPinnedAsync(id, req.Pinned, ct)) throw EngineException.NotFound($"History entry {id}");
+            var found = req?.Pinned is { } pinned
+                ? await history.SetPinnedAsync(id, pinned, ct)
+                : await history.ExistsAsync(id, ct);
+            if (!found) throw EngineException.NotFound($"History entry {id}");
             return Results.NoContent();
         });
 

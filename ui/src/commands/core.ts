@@ -7,8 +7,11 @@ import {
   insertIntoActiveEditor, newConsole, openObject, openSampleDatabase, openSqlFile, openSqliteFile, reopenSql, rerun, rollbackTab,
   runActive, saveActiveFile, selectTop, setTxMode,
 } from '../app/actions';
-import { getEditor } from '../app/editors';
+import { canDrop, copyDdl, dropObject, generateSqlInto, truncateTable, type SqlTemplate } from '../app/objectActions';
+import { currentZoom, setZoom } from '../app/zoom';
+import { pluralize } from '../components/common/text';
 import { useExplorer } from '../components/Explorer/explorerStore';
+import { cycleRegion, focusEditorRegion, focusExplorer, focusResults } from '../components/layout/regions';
 import { isTabular, qualifiedName } from '../lib/sql';
 import { getPlatform } from '../platform';
 import { dbKey, useCatalog } from '../store/catalog';
@@ -16,7 +19,7 @@ import { dialectOf, getConnection, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
 import { useResults } from '../store/results';
 import { isRunning } from '../store/resultsReducer';
-import { useSessions } from '../store/sessions';
+import { isForeignSession, useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
 import { getActiveConsole, useTabs } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
@@ -61,12 +64,6 @@ function tabIdOf(args: unknown): string | null {
   return isTabTarget(args) ? args.tabId : useTabs.getState().activeId;
 }
 
-let zoom = 1;
-function setZoom(z: number) {
-  zoom = Math.max(0.6, Math.min(2, Math.round(z * 10) / 10));
-  (document.documentElement.style as CSSStyleDeclaration & { zoom: string }).zoom = String(zoom);
-}
-
 function anchorOf(selector: string) {
   const el = document.querySelector<HTMLElement>(selector);
   if (!el) return null;
@@ -78,9 +75,11 @@ function isEntry(a: unknown): boolean {
   return !!a && typeof a === 'object' && typeof (a as HistoryEntry).sql === 'string' && typeof (a as HistoryEntry).id === 'number';
 }
 
+/** The session a command targets; never one another live window is using (listed read-only, logic-r1-03). */
 function sessionOf(a: unknown): SessionInfo | undefined {
   const sid = a && typeof a === 'object' ? (a as { sessionId?: unknown }).sessionId : undefined;
-  return typeof sid === 'string' ? useSessions.getState().sessions[sid] : undefined;
+  const s = typeof sid === 'string' ? useSessions.getState().sessions[sid] : undefined;
+  return s && !isForeignSession(s) ? s : undefined;
 }
 
 // ---------- the list ----------
@@ -92,38 +91,38 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'file.open', title: 'Open SQL file…', category: 'File', shortcut: 'Mod+O', icon: 'FolderOpen', run: () => void openSqlFile() },
   { id: 'file.openSqlite', title: 'Open a SQLite database file…', category: 'File', icon: 'File', run: () => void openSqliteFile() },
   { id: 'file.sampleDb', title: 'Open the sample database', category: 'File', keywords: 'try demo shop', icon: 'Sparkles', run: () => void openSampleDatabase() },
-  { id: 'file.save', title: 'Save', category: 'File', shortcut: 'Mod+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(false) },
-  { id: 'file.saveAs', title: 'Save as…', category: 'File', shortcut: 'Mod+Shift+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(true) },
+  { id: 'file.save', title: 'Save', category: 'File', icon: 'Save', shortcut: 'Mod+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(false) },
+  { id: 'file.saveAs', title: 'Save as…', category: 'File', icon: 'Save', shortcut: 'Mod+Shift+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(true) },
 
   // Tabs
   {
-    id: 'tab.close', title: 'Close tab', category: 'Tabs', shortcut: 'Mod+W', when: (a?: unknown) => !!tabIdOf(a),
+    id: 'tab.close', title: 'Close tab', category: 'Tabs', icon: 'X', shortcut: 'Mod+W', when: (a?: unknown) => !!tabIdOf(a),
     run: (a?: unknown) => { const id = tabIdOf(a); if (id) void closeTab(id); },
   },
   {
-    id: 'tab.closeOthers', title: 'Close other tabs', category: 'Tabs', when: (a?: unknown) => !!tabIdOf(a) && useTabs.getState().tabs.length > 1,
+    id: 'tab.closeOthers', title: 'Close other tabs', category: 'Tabs', icon: 'X', when: (a?: unknown) => !!tabIdOf(a) && useTabs.getState().tabs.length > 1,
     run: (a?: unknown) => {
       const id = tabIdOf(a);
       if (id) for (const t of useTabs.getState().tabs.filter((x) => x.id !== id)) void closeTab(t.id);
     },
   },
   {
-    id: 'tab.rename', title: 'Rename tab', category: 'Tabs', when: (a?: unknown) => useTabs.getState().tabs.find((t) => t.id === tabIdOf(a))?.kind === 'console',
+    id: 'tab.rename', title: 'Rename tab', category: 'Tabs', icon: 'TextCursorInput', when: (a?: unknown) => useTabs.getState().tabs.find((t) => t.id === tabIdOf(a))?.kind === 'console',
     run: (a?: unknown) => useUi.getState().setRenamingTab(tabIdOf(a)),
   },
-  { id: 'tab.reopenClosed', title: 'Reopen closed tab', category: 'Tabs', shortcut: 'Mod+Shift+T', when: () => useTabs.getState().closed.length > 0, run: () => void useTabs.getState().reopenClosed() },
+  { id: 'tab.reopenClosed', title: 'Reopen closed tab', category: 'Tabs', icon: 'Undo2', shortcut: 'Mod+Shift+T', when: () => useTabs.getState().closed.length > 0, run: () => void useTabs.getState().reopenClosed() },
   {
-    id: 'tab.duplicate', title: 'Duplicate console', category: 'Tabs',
+    id: 'tab.duplicate', title: 'Duplicate console', category: 'Tabs', icon: 'Copy',
     when: (a?: unknown) => useTabs.getState().tabs.find((t) => t.id === tabIdOf(a))?.kind === 'console',
     run: (a?: unknown) => {
       const t = useTabs.getState().tabs.find((x) => x.id === tabIdOf(a));
       if (t?.kind === 'console') newConsole(t.connectionId, t.database, t.text);
     },
   },
-  { id: 'tab.mruNext', title: 'Switch to previously used tab', category: 'Tabs', shortcut: 'MacCtrl+Tab', when: () => useTabs.getState().tabs.length > 1, run: () => useTabs.getState().activateMru(1) },
-  { id: 'tab.mruPrev', title: 'Switch tabs (reverse order of use)', category: 'Tabs', shortcut: 'MacCtrl+Shift+Tab', when: () => useTabs.getState().tabs.length > 1, run: () => useTabs.getState().activateMru(-1) },
-  { id: 'tab.next', title: 'Next tab', category: 'Tabs', shortcut: 'Mod+PageDown', altShortcuts: ['Mod+Alt+ArrowRight'], run: () => useTabs.getState().activateRelative(1) },
-  { id: 'tab.prev', title: 'Previous tab', category: 'Tabs', shortcut: 'Mod+PageUp', altShortcuts: ['Mod+Alt+ArrowLeft'], run: () => useTabs.getState().activateRelative(-1) },
+  { id: 'tab.mruNext', title: 'Switch to previously used tab', category: 'Tabs', icon: 'ArrowRightLeft', shortcut: 'MacCtrl+Tab', when: () => useTabs.getState().tabs.length > 1, run: () => useTabs.getState().activateMru(1) },
+  { id: 'tab.mruPrev', title: 'Switch tabs (reverse order of use)', category: 'Tabs', icon: 'ArrowRightLeft', shortcut: 'MacCtrl+Shift+Tab', when: () => useTabs.getState().tabs.length > 1, run: () => useTabs.getState().activateMru(-1) },
+  { id: 'tab.next', title: 'Next tab', category: 'Tabs', icon: 'ArrowRightLeft', shortcut: 'Mod+PageDown', altShortcuts: ['Mod+Alt+ArrowRight'], run: () => useTabs.getState().activateRelative(1) },
+  { id: 'tab.prev', title: 'Previous tab', category: 'Tabs', icon: 'ArrowRightLeft', shortcut: 'Mod+PageUp', altShortcuts: ['Mod+Alt+ArrowLeft'], run: () => useTabs.getState().activateRelative(-1) },
   ...Array.from({ length: 9 }, (_, i): Command<never> => ({
     id: `tab.goto${i + 1}`, title: i === 8 ? 'Go to last tab' : `Go to tab ${i + 1}`, category: 'Tabs', shortcut: `Mod+${i + 1}`, palette: false,
     run: () => useTabs.getState().activateIndex(i),
@@ -134,26 +133,40 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'view.goToObject', title: 'Go to database object…', category: 'View', shortcut: 'Mod+P', keywords: 'quick open search table', icon: 'Search', run: () => useUi.getState().openPalette('objects') },
   { id: 'view.shortcuts', title: 'Keyboard shortcuts', category: 'Help', shortcut: 'F1', altShortcuts: ['Mod+K Mod+S'], keywords: 'keys keybindings help', icon: 'Keyboard', run: () => useUi.getState().setShortcutsOpen(true) },
   { id: 'view.toggleSidebar', title: 'Toggle side panel', category: 'View', shortcut: 'Mod+B', icon: 'PanelLeft', run: () => useUi.getState().toggle('explorerVisible') },
-  { id: 'view.explorer', title: 'Show database explorer', category: 'View', shortcut: 'Mod+Shift+E', icon: 'Database', run: () => { useUi.getState().showDock('explorer'); useExplorer.getState().focusTree(); } },
-  { id: 'view.history', title: 'Show query history', category: 'View', shortcut: 'Mod+Shift+H', icon: 'History', run: () => useUi.getState().showDock('history', true) },
-  { id: 'connections.showActive', title: 'Show active connections', category: 'Connections', keywords: 'sessions', icon: 'Activity', run: () => useUi.getState().showDock('connections') },
-  { id: 'view.toggleResults', title: 'Toggle results pane', category: 'View', shortcut: 'Mod+R', run: () => useUi.getState().toggle('resultsVisible') },
-  { id: 'view.maximizeResults', title: 'Maximize / restore results pane', category: 'View', shortcut: 'Mod+Shift+R', run: () => useUi.getState().setResultsMaximized(!useUi.getState().resultsMaximized) },
-  { id: 'view.focusEditor', title: 'Focus editor', category: 'View', when: () => !!getActiveConsole(), run: () => getEditor(useTabs.getState().activeId)?.focus() },
-  { id: 'view.zoomIn', title: 'Zoom in', category: 'View', shortcut: 'Mod+=', run: () => setZoom(zoom + 0.1) },
-  { id: 'view.zoomOut', title: 'Zoom out', category: 'View', shortcut: 'Mod+-', run: () => setZoom(zoom - 0.1) },
-  { id: 'view.zoomReset', title: 'Reset zoom', category: 'View', shortcut: 'Mod+0', run: () => setZoom(1) },
-  { id: 'view.settings', title: 'Settings…', category: 'Preferences', shortcut: 'Mod+,', icon: 'Settings', keywords: 'preferences options', run: () => useUi.getState().setSettingsOpen(true) },
-  { id: 'view.toggleTheme', title: 'Toggle light / dark theme', category: 'Preferences', run: () => useSettings.getState().update({ theme: currentTheme() === 'dark' ? 'light' : 'dark' }) },
-  { id: 'view.themeLight', title: 'Theme: Light', category: 'Preferences', run: () => useSettings.getState().update({ theme: 'light' }) },
-  { id: 'view.themeDark', title: 'Theme: Dark', category: 'Preferences', run: () => useSettings.getState().update({ theme: 'dark' }) },
-  { id: 'view.themeSystem', title: 'Theme: Follow system', category: 'Preferences', run: () => useSettings.getState().update({ theme: 'system' }) },
+  // Showing a panel focuses its search box (type to filter right away); Alt+1 focuses the explorer tree itself.
+  { id: 'view.explorer', title: 'Show database explorer', category: 'View', shortcut: 'Mod+Shift+E', icon: 'Database', run: () => { useUi.getState().showDock('explorer'); useExplorer.getState().focusFilter(); } },
   {
-    id: 'view.toggleDensity', title: 'Toggle compact density', category: 'Preferences', keywords: 'row height grid',
+    id: 'view.history', title: 'Show query history', category: 'View', shortcut: 'Mod+Shift+H', icon: 'History',
+    run: () => {
+      const ui = useUi.getState();
+      const showing = ui.explorerVisible && ui.dock === 'history';
+      ui.showDock('history', true);
+      if (!showing) useHistory.getState().requestFocus();
+    },
+  },
+  { id: 'connections.showActive', title: 'Show active connections', category: 'Connections', keywords: 'sessions', icon: 'Activity', run: () => useUi.getState().showDock('connections') },
+  { id: 'view.toggleResults', title: 'Toggle results pane', category: 'View', icon: 'Rows2', shortcut: 'Mod+R', run: () => useUi.getState().toggle('resultsVisible') },
+  { id: 'view.maximizeResults', title: 'Maximize / restore results pane', category: 'View', icon: 'Maximize2', shortcut: 'Mod+Shift+R', run: () => useUi.getState().setResultsMaximized(!useUi.getState().resultsMaximized) },
+  // Keyboard regions: Alt+1/2/3 and F6 / Shift+F6 (dock → editor → results → status bar).
+  { id: 'view.focusExplorer', title: 'Focus explorer', category: 'View', shortcut: 'Alt+1', icon: 'Database', keywords: 'tree side panel keyboard', run: () => void focusExplorer() },
+  { id: 'view.focusEditor', title: 'Focus editor', category: 'View', shortcut: 'Alt+2', icon: 'SquareTerminal', keywords: 'keyboard', when: () => useTabs.getState().tabs.length > 0, run: () => void focusEditorRegion() },
+  { id: 'view.focusResults', title: 'Focus results', category: 'View', shortcut: 'Alt+3', icon: 'Rows3', keywords: 'grid keyboard result set', when: () => !!getActiveConsole(), run: () => void focusResults() },
+  { id: 'view.nextRegion', title: 'Focus next region', category: 'View', shortcut: 'F6', keywords: 'keyboard panel cycle', icon: 'ArrowRightLeft', run: () => cycleRegion(1) },
+  { id: 'view.prevRegion', title: 'Focus previous region', category: 'View', shortcut: 'Shift+F6', keywords: 'keyboard panel cycle', icon: 'ArrowRightLeft', run: () => cycleRegion(-1) },
+  { id: 'view.zoomIn', title: 'Zoom in', category: 'View', shortcut: 'Mod+=', icon: 'ZoomIn', run: () => setZoom(currentZoom() + 0.1) },
+  { id: 'view.zoomOut', title: 'Zoom out', category: 'View', shortcut: 'Mod+-', icon: 'ZoomOut', run: () => setZoom(currentZoom() - 0.1) },
+  { id: 'view.zoomReset', title: 'Reset zoom', category: 'View', shortcut: 'Mod+0', icon: 'Search', run: () => setZoom(1) },
+  { id: 'view.settings', title: 'Settings…', category: 'Preferences', shortcut: 'Mod+,', icon: 'Settings', keywords: 'preferences options', run: () => useUi.getState().setSettingsOpen(true) },
+  { id: 'view.toggleTheme', title: 'Toggle light / dark theme', category: 'Preferences', icon: 'SunMoon', run: () => useSettings.getState().update({ theme: currentTheme() === 'dark' ? 'light' : 'dark' }) },
+  { id: 'view.themeLight', title: 'Theme: Light', category: 'Preferences', icon: 'Sun', run: () => useSettings.getState().update({ theme: 'light' }) },
+  { id: 'view.themeDark', title: 'Theme: Dark', category: 'Preferences', icon: 'Moon', run: () => useSettings.getState().update({ theme: 'dark' }) },
+  { id: 'view.themeSystem', title: 'Theme: Follow system', category: 'Preferences', icon: 'Monitor', run: () => useSettings.getState().update({ theme: 'system' }) },
+  {
+    id: 'view.toggleDensity', title: 'Toggle compact density', category: 'Preferences', icon: 'Rows3', keywords: 'row height grid',
     run: () => useSettings.getState().update({ grid: { density: useSettings.getState().settings.grid.density === 'compact' ? 'comfortable' : 'compact' } }),
   },
   {
-    id: 'prefs.toggleConfirmDestructive', title: 'Toggle confirmation of destructive statements', category: 'Preferences',
+    id: 'prefs.toggleConfirmDestructive', title: 'Toggle confirmation of destructive statements', category: 'Preferences', icon: 'ShieldAlert',
     run: () => {
       const v = !useSettings.getState().settings.confirmDestructive;
       useSettings.getState().update({ confirmDestructive: v });
@@ -167,7 +180,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'run.cancel', title: 'Cancel running query', category: 'Query', shortcut: 'Shift+F5', icon: 'CircleStop', when: () => runningInActive(), run: () => void cancelTab() },
   { id: 'run.multi', title: 'Run on multiple connections…', category: 'Query', shortcut: 'Mod+Alt+Enter', icon: 'Layers', keywords: 'parity compare', when: () => !!getActiveConsole(), run: () => useUi.getState().openMultiRun(getActiveConsole()!.id) },
   {
-    id: 'run.rerunNoLimit', title: 'Re-run last query without row limit', category: 'Query',
+    id: 'run.rerunNoLimit', title: 'Re-run last query without row limit', category: 'Query', icon: 'RefreshCw',
     when: () => { const t = getActiveConsole(); return !!t && !!useResults.getState().byTab[t.id]; },
     run: () => { const t = getActiveConsole(); if (t) void rerun(t.id, { maxRows: 0 }); },
   },
@@ -182,7 +195,7 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: () => void rollbackTab(),
   },
   {
-    id: 'tx.toggleMode', title: 'Toggle auto-commit / manual transaction', category: 'Transaction', when: () => !!consoleWithConnection(),
+    id: 'tx.toggleMode', title: 'Toggle auto-commit / manual transaction', category: 'Transaction', icon: 'ArrowRightLeft', when: () => !!consoleWithConnection(),
     run: () => {
       const t = getActiveConsole()!;
       const mode = useSessions.getState().forTab(t.id)?.txMode ?? t.txMode;
@@ -231,7 +244,7 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: () => void disconnectAll(),
   },
   {
-    id: 'connections.connectFolder', title: 'Connect all in folder', category: 'Connections', palette: false,
+    id: 'connections.connectFolder', title: 'Connect all in folder', category: 'Connections', icon: 'Plug', palette: false,
     when: (a?: unknown) => !!a && typeof a === 'object' && typeof (a as { folder?: unknown }).folder === 'string',
     run: (a?: unknown) => {
       const ids = connectAllInFolder((a as { folder: string }).folder);
@@ -239,7 +252,7 @@ export const CORE_COMMANDS: Command<never>[] = [
     },
   },
   {
-    id: 'connections.newInFolder', title: 'New connection in folder…', category: 'Connections', palette: false,
+    id: 'connections.newInFolder', title: 'New connection in folder…', category: 'Connections', icon: 'Plus', palette: false,
     run: (a?: unknown) => useUi.getState().openConnectionDialog({ mode: 'new', folder: (a as { folder?: string } | undefined)?.folder ?? null, connectAfter: true }),
   },
   {
@@ -247,12 +260,40 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: async (a?: unknown) => {
       const cid = connectionIdOf(a)!;
       const c = getConnection(cid);
-      const ok = await useUi.getState().askConfirm({ title: 'Delete connection', message: `Delete “${c?.name ?? cid}”? Its saved password is removed too.`, confirmLabel: 'Delete', danger: true });
+      // Engine-wide list (sessions of reloaded windows included), like Disconnect.
+      await useSessions.getState().refreshAll();
+      const { sessions, byTab } = useSessions.getState();
+      const tabs = useTabs.getState().tabs.filter((t) => t.connectionId === cid);
+      const consoles = tabs.filter((t) => t.kind === 'console');
+      const txOf = (tabId: string) => !!sessions[byTab[tabId]]?.txOpen;
+      const owned = new Set(Object.values(byTab));
+      const strayTx = Object.values(sessions).filter((s) => s.connectionId === cid && s.txOpen && !owned.has(s.sessionId));
+      const nTx = consoles.filter((t) => txOf(t.id)).length + strayTx.length;
+      const items = [
+        ...consoles.map((t) => `Console “${t.title}”${txOf(t.id) ? ' — uncommitted transaction, rolled back' : ''}`),
+        ...strayTx.map((s) => `Session ${s.label ?? s.sessionId} — uncommitted transaction, rolled back`),
+        ...tabs.filter((t) => t.kind !== 'console').map((t) => `Tab “${t.title}” (closed)`),
+      ];
+      const parts = [`Delete “${c?.name ?? cid}”? Its saved password is removed too.`];
+      if (consoles.length) parts.push(`${pluralize(consoles.length, 'console')} use it and stay open without a connection.`);
+      if (nTx) parts.push(`${pluralize(nTx, 'open transaction')} will be rolled back.`);
+      const ok = await useUi.getState().askConfirm({
+        title: 'Delete connection', message: parts.join(' '), items: items.length ? items : undefined,
+        confirmLabel: nTx ? 'Roll back and delete' : 'Delete', danger: true,
+      });
       if (!ok) return;
       try {
         await useSessions.getState().closeConnection(cid, true);
-        await useConnections.getState().remove(cid);
+        await useConnections.getState().remove(cid, { force: true });
         useCatalog.getState().forget(cid);
+        useExplorer.getState().forgetConnection(cid);
+        for (const t of tabs) {
+          if (t.kind === 'console') {
+            useTabs.getState().setConnection(t.id, null);
+            useResults.getState().clearTab(t.id);
+          } else useTabs.getState().close(t.id);
+        }
+        toast('info', `Deleted ${c?.name ?? 'the connection'}`);
       } catch (e) {
         toast('error', 'Delete failed', e instanceof Error ? e.message : String(e));
       }
@@ -300,15 +341,36 @@ export const CORE_COMMANDS: Command<never>[] = [
     },
   },
   {
-    id: 'explorer.copyQualifiedName', title: 'Copy qualified name', category: 'Database', when: (a?: unknown) => !!objectTargetOf(a),
+    id: 'explorer.copyQualifiedName', title: 'Copy qualified name', category: 'Database', icon: 'ClipboardCopy', when: (a?: unknown) => !!objectTargetOf(a),
     run: (a?: unknown) => { const t = objectTargetOf(a)!; void copyText(qualifiedName(t.ref, dialectOf(t.connectionId), { always: true })); },
   },
-  { id: 'explorer.focusFilter', title: 'Filter explorer', category: 'Database', shortcut: 'Mod+F', scope: 'explorer', run: () => useExplorer.getState().focusFilter() },
-  { id: 'explorer.refresh', title: 'Refresh selected node', category: 'Database', shortcut: 'F5', scope: 'explorer', palette: false, run: () => void runCommand('connections.refreshCatalog') },
+  {
+    id: 'explorer.copyDdl', title: 'Copy DDL', category: 'Database', icon: 'ClipboardCopy', keywords: 'create script definition clipboard',
+    when: (a?: unknown) => !!objectTargetOf(a),
+    run: (a?: unknown) => { const t = objectTargetOf(a)!; void copyDdl(t.connectionId, t.database, t.ref); },
+  },
+  ...(['select', 'insert', 'update', 'delete'] as SqlTemplate[]).map((k): Command<never> => ({
+    id: `explorer.generate${k[0].toUpperCase()}${k.slice(1)}`, title: `Generate ${k.toUpperCase()} statement`, category: 'Database',
+    icon: k === 'select' ? 'Search' : k === 'insert' ? 'Plus' : k === 'update' ? 'Pencil' : 'Trash2', keywords: 'generate sql template statement',
+    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && isTabular(t.ref.type) && (k === 'select' || t.ref.type !== 'mview'); },
+    run: (a?: unknown) => { const t = objectTargetOf(a)!; generateSqlInto(k, t.connectionId, t.database, t.ref); },
+  })),
+  {
+    id: 'explorer.truncate', title: 'Truncate table…', category: 'Database', icon: 'Eraser', keywords: 'empty delete all rows',
+    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && t.ref.type === 'table' && !getConnection(t.connectionId)?.readOnly; },
+    run: (a?: unknown) => { const t = objectTargetOf(a)!; void truncateTable(t.connectionId, t.database, t.ref); },
+  },
+  {
+    id: 'explorer.drop', title: 'Drop…', category: 'Database', icon: 'Trash2', keywords: 'delete remove object table view',
+    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && canDrop(t.ref.type, dialectOf(t.connectionId)) && !getConnection(t.connectionId)?.readOnly; },
+    run: (a?: unknown) => { const t = objectTargetOf(a)!; void dropObject(t.connectionId, t.database, t.ref); },
+  },
+  { id: 'explorer.focusFilter', title: 'Filter explorer', category: 'Database', icon: 'Filter', shortcut: 'Mod+F', scope: 'explorer', run: () => useExplorer.getState().focusFilter() },
+  { id: 'explorer.refresh', title: 'Refresh selected node', category: 'Database', icon: 'RefreshCw', shortcut: 'F5', scope: 'explorer', palette: false, run: () => void runCommand('connections.refreshCatalog') },
   { id: 'explorer.collapseAll', title: 'Collapse all explorer nodes', category: 'Database', icon: 'ChevronsDownUp', run: () => useExplorer.getState().collapseAll() },
 
   // History
-  { id: 'history.focusFilter', title: 'Search query history', category: 'History', shortcut: 'Mod+F', scope: 'history', run: () => useHistory.getState().requestFocus() },
+  { id: 'history.focusFilter', title: 'Search query history', category: 'History', icon: 'Search', shortcut: 'Mod+F', scope: 'history', run: () => useHistory.getState().requestFocus() },
   { id: 'history.reload', title: 'Reload query history', category: 'History', icon: 'RefreshCw', run: () => void useHistory.getState().load() },
   {
     id: 'history.clear', title: 'Clear query history…', category: 'History', icon: 'Trash',
@@ -319,20 +381,20 @@ export const CORE_COMMANDS: Command<never>[] = [
   },
 
   // History entries (context menu of a history item; args: HistoryEntry)
-  { id: 'history.openEntry', title: 'Open in new console', category: 'History', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => { const h = a as HistoryEntry; reopenSql(h.sql, h.connectionId, h.database); } },
-  { id: 'history.insertEntry', title: 'Insert into current editor', category: 'History', palette: false, when: (a?: unknown) => isEntry(a) && !!getActiveConsole(), run: (a?: unknown) => insertIntoActiveEditor((a as HistoryEntry).sql) },
-  { id: 'history.copyEntry', title: 'Copy SQL', category: 'History', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void copyText((a as HistoryEntry).sql) },
-  { id: 'history.togglePin', title: 'Pin / unpin', category: 'History', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().togglePin((a as HistoryEntry).id).catch(() => toast('error', 'Pin failed')) },
-  { id: 'history.deleteEntry', title: 'Delete entry', category: 'History', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().remove((a as HistoryEntry).id).catch(() => toast('error', 'Delete failed')) },
+  { id: 'history.openEntry', title: 'Open in new console', category: 'History', icon: 'SquareTerminal', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => { const h = a as HistoryEntry; reopenSql(h.sql, h.connectionId, h.database); } },
+  { id: 'history.insertEntry', title: 'Insert into current editor', category: 'History', icon: 'TextCursorInput', palette: false, when: (a?: unknown) => isEntry(a) && !!getActiveConsole(), run: (a?: unknown) => insertIntoActiveEditor((a as HistoryEntry).sql) },
+  { id: 'history.copyEntry', title: 'Copy SQL', category: 'History', icon: 'Copy', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void copyText((a as HistoryEntry).sql) },
+  { id: 'history.togglePin', title: 'Pin / unpin', category: 'History', icon: 'Pin', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().togglePin((a as HistoryEntry).id).catch(() => toast('error', 'Pin failed')) },
+  { id: 'history.deleteEntry', title: 'Delete entry', category: 'History', icon: 'Trash2', palette: false, when: (a?: unknown) => isEntry(a), run: (a?: unknown) => void useHistory.getState().remove((a as HistoryEntry).id).catch(() => toast('error', 'Delete failed')) },
 
   // Sessions (active connections panel; args: { sessionId })
   {
-    id: 'sessions.cancel', title: 'Cancel running query', category: 'Connections', palette: false,
+    id: 'sessions.cancel', title: 'Cancel query in session', category: 'Connections', icon: 'CircleStop', palette: false,
     when: (a?: unknown) => { const s = sessionOf(a); return !!s && s.state === 'executing'; },
     run: async (a?: unknown) => { const s = sessionOf(a); if (s) await api.cancel(s.sessionId).catch((e) => toast('error', 'Cancel failed', String(e))); },
   },
   {
-    id: 'sessions.disconnect', title: 'Close session', category: 'Connections', palette: false, when: (a?: unknown) => !!sessionOf(a),
+    id: 'sessions.disconnect', title: 'Close session', category: 'Connections', icon: 'X', palette: false, when: (a?: unknown) => !!sessionOf(a),
     run: async (a?: unknown) => {
       const s = sessionOf(a)!;
       if (s.txOpen) {
@@ -342,6 +404,36 @@ export const CORE_COMMANDS: Command<never>[] = [
       const tab = useSessions.getState().tabOf(s.sessionId);
       await useSessions.getState().closeSession(s.sessionId, true);
       if (tab) useResults.getState().clearTab(tab);
+    },
+  },
+  {
+    // Unused sessions left by a reload or crash (Connections panel): roll their transaction back and close them.
+    id: 'sessions.rollbackClose', title: 'Roll back and close session', category: 'Connections', icon: 'RotateCcw', palette: false,
+    when: (a?: unknown) => !!sessionOf(a)?.txOpen,
+    run: async (a?: unknown) => {
+      const s = sessionOf(a)!;
+      const conn = getConnection(s.connectionId);
+      const ok = await useUi.getState().askConfirm({
+        title: 'Roll back and close?',
+        message: `The session on “${conn?.name ?? s.connectionId}” has an uncommitted transaction. Its changes are discarded.`,
+        confirmLabel: 'Roll back and close', danger: true,
+      });
+      if (!ok) return;
+      try {
+        await useSessions.getState().closeSession(s.sessionId, true);
+        toast('info', 'Transaction rolled back and session closed');
+      } catch (e) {
+        toast('error', 'Could not close the session', e instanceof Error ? e.message : String(e));
+      }
+    },
+  },
+  {
+    id: 'sessions.closeOrphans', title: 'Close unused sessions', category: 'Connections', icon: 'Unplug', keywords: 'orphan leaked reload sessions',
+    when: () => useSessions.getState().orphans().some((s) => !s.txOpen && s.state !== 'executing'),
+    run: async () => {
+      const list = useSessions.getState().orphans().filter((s) => !s.txOpen && s.state !== 'executing');
+      await Promise.all(list.map((s) => useSessions.getState().closeSession(s.sessionId, false).catch(() => undefined)));
+      toast('info', `Closed ${pluralize(list.length, 'unused session')}`);
     },
   },
 

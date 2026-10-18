@@ -7,7 +7,7 @@ import { createHandlers } from '../mocks/handlers';
 export const TEST_ENGINE_URL = 'http://engine.test';
 
 /** Start an MSW node server backed by a fresh MockEngine for the current test file. */
-export function useMockEngine(opts: MockEngineOptions = { frameDelay: 0 }) {
+export function installMockEngine(opts: MockEngineOptions = { frameDelay: 0 }) {
   const ctx = { engine: new MockEngine(opts), requests: [] as { method: string; url: URL }[] };
   const server = setupServer(...createHandlers(ctx.engine));
   server.events.on('request:start', ({ request }) => {

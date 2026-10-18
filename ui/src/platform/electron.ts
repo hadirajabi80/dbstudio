@@ -32,5 +32,6 @@ export function createElectronPlatform(b: DbStudioBridge): Platform {
     loadWorkspace: () => b.loadWorkspace(),
     saveWorkspace: (d) => b.saveWorkspace(d),
     setTitle: (t) => b.setTitle(t),
+    ...(typeof b.setZoomFactor === 'function' ? { setZoomFactor: (f: number) => b.setZoomFactor!(f) } : {}),
   };
 }

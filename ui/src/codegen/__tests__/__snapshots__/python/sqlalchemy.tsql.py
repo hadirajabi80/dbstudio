@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, Numeric, SmallInteger, String, Text, Time, Uuid
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, FetchedValue, Float, ForeignKey, Integer, LargeBinary, Numeric, SmallInteger, String, Text, Time, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import NullType
 
@@ -104,7 +104,7 @@ class Event(Base):
     __table_args__ = {"schema": "dbo", "comment": "Audit trail of things that happened"}
 
     event_id: Mapped[UUID] = mapped_column("EventId", Uuid(), primary_key=True)
-    occurred_at: Mapped[datetime] = mapped_column("OccurredAt", DateTime(timezone=True), comment="When it happened (with offset)")
+    occurred_at: Mapped[datetime] = mapped_column("OccurredAt", DateTime(timezone=True), server_default=FetchedValue(), comment="When it happened (with offset)")
     day: Mapped[date] = mapped_column("Day", Date())
     at: Mapped[time | None] = mapped_column("At", Time())
     kind: Mapped[str] = mapped_column("Kind", String(20))
@@ -116,7 +116,7 @@ class Event(Base):
     flags: Mapped[int] = mapped_column("Flags", SmallInteger())
     big: Mapped[int | None] = mapped_column("Big", BigInteger())
     price: Mapped[Decimal | None] = mapped_column("Price", Numeric())
-    is_active: Mapped[bool] = mapped_column("IsActive", Boolean())
+    is_active: Mapped[bool] = mapped_column("IsActive", Boolean(), server_default=FetchedValue())
     row_ver: Mapped[bytes] = mapped_column("RowVer", LargeBinary())
     location: Mapped[Any] = mapped_column("Location", NullType())
 

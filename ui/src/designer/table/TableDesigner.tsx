@@ -9,6 +9,10 @@ import type {
 } from '../../api/types';
 import { catalogDatabase } from '../../app/actions';
 import { runCommand } from '../../commands/registry';
+import { commandView } from '../../commands/useCommands';
+import { confirmItemList } from '../../components/common/ConfirmDialog';
+import { Select } from '../../components/common/Select';
+import { Kbd } from '../../components/Shortcuts/Kbd';
 import type { TabViewProps } from '../../components/layout/tabViews';
 import { useCatalog, useSnapshot } from '../../store/catalog';
 import { useConnection, useDialect } from '../../store/connections';
@@ -17,14 +21,14 @@ import { toast, useUi } from '../../store/ui';
 import { applySummary, scriptToText, splitForApply } from '../ddl';
 import { DdlPreview, type ApplyFailure } from '../DdlPreview';
 import { registerDesignerActions } from '../actions';
-import { tableTitle, type TableDesignerState } from '../open';
+import { designerKey, tableTitle, type TableDesignerState } from '../open';
 import { ColumnGrid } from './ColumnGrid';
+import { confirmItems, recreatedSummary } from './confirmSummary';
 import { ChecksPanel, ForeignKeysPanel, KeysPanel } from './ConstraintsPanel';
 import {
   addColumn, duplicateColumn, hasErrors, moveColumn, newTableModel, removeColumn, sameModel, togglePrimaryKey, updateColumn,
-  validateTable, withIds,
+  validateTable, visibleIssues, withIds,
 } from './model';
-import '../designer.css';
 
 type Section = 'columns' | 'keys' | 'fks' | 'checks';
 
@@ -78,6 +82,9 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   const [handEdited, setHandEdited] = useState(!!st.preview);
   const [applying, setApplying] = useState(false);
   const [failure, setFailure] = useState<ApplyFailure | null>(null);
+  /** Validation shows after the user left the Name field or tried to apply (not on a pristine new table). */
+  const [nameTouched, setNameTouched] = useState(false);
+  const [applyTried, setApplyTried] = useState(false);
   const lines = useRef<number[]>([]);
 
   // ---------- load ----------
@@ -121,6 +128,8 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   const features = types?.features ?? null;
   const issues = useMemo(() => (desired ? validateTable(desired, dialect) : []), [desired, dialect]);
   const blocking = hasErrors(issues);
+  const shownIssues = visibleIssues(issues, { existing: !!original, nameTouched, applyTried });
+  const shownBlocking = hasErrors(shownIssues);
   const dirty = !!desired && (handEdited || (original ? !sameModel(original, desired) : !sameModel(initialNew.current, desired)));
 
   // ---------- live preview ----------
@@ -177,6 +186,7 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   // ---------- apply ----------
   const apply = useCallback(async () => {
     if (!desired || applying) return;
+    setApplyTried(true);
     if (blocking && !handEdited) {
       toast('warning', 'Fix the problems in the designer first', issues.filter((i) => i.severity === 'error').map((i) => i.message).join('\n'));
       return;
@@ -190,12 +200,14 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
     }
     const destructive = !handEdited && (script?.rebuildRequired || script?.statements.some((s) => s.kind === 'drop'));
     if (destructive) {
+      const recreated = script?.rebuildRequired ? recreatedSummary(script.statements) : '';
       const ok = await askConfirm({
         title: script?.rebuildRequired ? 'Rebuild the table?' : 'Drop columns or constraints?',
         message: script?.rebuildRequired
-          ? `${desired.name} is copied into a new table, the old one is dropped and the copy renamed. Data, indexes and triggers are carried over.`
+          ? `${desired.name} is copied into a new table, the old one is dropped and the copy renamed. Data, indexes and triggers are carried over.${recreated ? ` ${recreated}` : ''}`
           : 'The script drops objects; data in dropped columns is lost.',
-        items: script?.statements.filter((s) => s.kind === 'drop' || s.kind === 'rebuild' || s.warning).map((s) => s.warning ?? s.sql.split('\n')[0]),
+        // SQL first lines as code, the scripter's annotations ("Keeps the AUTOINCREMENT counter…") as notes
+        items: confirmItemList(confirmItems(script?.statements ?? [])),
         confirmLabel: 'Apply',
         danger: true,
       });
@@ -209,7 +221,11 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
       const name = desired.name;
       toast('success', `${original ? 'Altered' : 'Created'} ${name}`, `${r.executed} statement${r.executed === 1 ? '' : 's'} in ${r.elapsedMs} ms`);
       const nextState: TableDesignerState = { ...st, schema: desired.schema, name, desired: undefined, original: undefined, preview: null };
-      useTabs.getState().updateView(tab.id, { title: tableTitle(dialect, desired.schema, name), state: nextState, dirty: false });
+      useTabs.getState().updateView(tab.id, {
+        title: tableTitle(dialect, desired.schema, name), state: nextState, dirty: false,
+        key: designerKey('table', { connectionId: cid, database: st.database, schema: desired.schema }, name),
+      });
+      setApplyTried(false);
       try {
         const m = withIds(await api.designerTable(cid, st.database, desired.schema, name));
         setOriginal(m);
@@ -239,7 +255,8 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   if (!visible && !desired) return null;
   const schemas = (snapshot?.schemas.map((s) => s.name) ?? []).concat(desired?.schema && !snapshot?.schemas.some((s) => s.name === desired.schema) ? [desired.schema] : []);
   const col = desired?.columns[activeCol] ?? null;
-  const errorRows = new Set(issues.filter((i) => i.severity === 'error' && i.column !== undefined).map((i) => i.column!));
+  const errorRows = new Set(shownIssues.filter((i) => i.severity === 'error' && i.column !== undefined).map((i) => i.column!));
+  const nameInvalid = shownIssues.some((i) => i.field === 'name');
   const locked = handEdited || applying;
   const counts = { keys: (desired?.uniques.length ?? 0) + (desired?.indexes.length ?? 0) + (desired?.primaryKey ? 1 : 0), fks: desired?.foreignKeys.length ?? 0, checks: desired?.checks.length ?? 0 };
 
@@ -265,20 +282,21 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
                 placeholder={dialect === 'plsql' ? 'TABLE_NAME' : 'TableName'}
                 disabled={locked}
                 autoFocus={!original}
-                aria-invalid={!desired.name.trim() || undefined}
+                aria-invalid={nameInvalid || undefined}
+                onBlur={() => setNameTouched(true)}
                 onChange={(e) => edit((t) => ({ ...t, name: e.target.value }))}
               />
             </label>
             {dialect !== 'sqlite' || schemas.length > 1 ? (
               <label className="dz-field">
                 Schema
-                <select className="input" value={desired.schema ?? ''} disabled={locked || !!original} onChange={(e) => edit((t) => ({ ...t, schema: e.target.value || null }))}>
-                  {(schemas.length ? schemas : [desired.schema ?? '']).map((s) => (
-                    <option key={s} value={s}>
-                      {s || '(default)'}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={desired.schema ?? ''}
+                  disabled={locked || !!original}
+                  options={(schemas.length ? schemas : [desired.schema ?? '']).map((s) => ({ value: s, label: s || '(default)' }))}
+                  onChange={(v) => edit((t) => ({ ...t, schema: v || null }))}
+                  menuMinWidth={160}
+                />
               </label>
             ) : null}
             {features?.comments !== false && dialect !== 'sqlite' && (
@@ -332,7 +350,13 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
             </button>
           </>
         )}
-        <button type="button" className="btn btn-primary btn-xs" disabled={!desired || applying || (!handEdited && (blocking || !script?.statements.length))} onClick={() => void apply()} title="Apply the DDL (Ctrl+S)">
+        <button
+          type="button"
+          className="btn btn-primary btn-xs"
+          disabled={!desired || applying || (!handEdited && !blocking && !script?.statements.length)}
+          onClick={() => void apply()}
+          title={commandView('designer.apply', undefined, blocking && !handEdited ? 'Apply — shows what to fix first' : 'Apply the DDL').tooltip}
+        >
           {applying ? <LoaderCircle size={12} className="spin" /> : <Play size={12} />} Apply
         </button>
       </div>
@@ -379,10 +403,16 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
                   onActiveChange={setActiveCol}
                   onChange={(i, patch) => edit((t) => updateColumn(t, i, patch, dialect))}
                   onTogglePk={(i) => edit((t) => togglePrimaryKey(t, i, dialect))}
-                  onAdd={(at) => edit((t) => addColumn(t, dialect, at))}
+                  onAdd={(at) => {
+                    edit((t) => addColumn(t, dialect, at));
+                    setActiveCol(Math.max(0, Math.min(at, desired.columns.length)));
+                  }}
                   onRemove={(i) => edit((t) => removeColumn(t, i))}
                   onMove={(i, d) => edit((t) => moveColumn(t, i, d))}
-                  onDuplicate={(i) => edit((t) => duplicateColumn(t, i, dialect))}
+                  onDuplicate={(i) => {
+                    edit((t) => duplicateColumn(t, i, dialect));
+                    setActiveCol(i + 1);
+                  }}
                 />
               )}
               {section === 'keys' && <KeysPanel table={desired} dialect={dialect} features={features} readOnly={locked} catalog={snapshot} onChange={(t) => edit(() => t)} />}
@@ -394,14 +424,14 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
             )}
             {section === 'columns' && (
               <div className="dz-hint">
-                <kbd>Enter</kbd> edit · <kbd>Tab</kbd> next cell · <kbd>Space</kbd> toggle · <kbd>Insert</kbd> add · <kbd>Del</kbd> remove · <kbd>Alt+↑/↓</kbd> reorder ·{' '}
-                <kbd>Ctrl+D</kbd> duplicate · <kbd>Ctrl+S</kbd> apply
+                <kbd>Enter</kbd> edit · <kbd>Tab</kbd> next cell · <kbd>Space</kbd> toggle · <kbd>Insert</kbd> add · <kbd>Alt+Insert</kbd> insert below · <kbd>Del</kbd> remove · <kbd>Alt+↑/↓</kbd> reorder ·{' '}
+                <Kbd shortcut="Mod+D" /> duplicate · <Kbd shortcut={commandView('designer.apply').shortcut ?? 'Mod+S'} /> apply
               </div>
             )}
-            {issues.length > 0 && (
-              <div className={`dz-banner ${blocking ? 'error' : 'warning'}`} role={blocking ? 'alert' : 'status'}>
-                <ul style={{ margin: 0 }}>
-                  {issues.map((i, k) => (
+            {shownIssues.length > 0 && (
+              <div className={`dz-banner ${shownBlocking ? 'error' : 'warning'}`} role={shownBlocking ? 'alert' : 'status'}>
+                <ul className="dz-issues">
+                  {shownIssues.map((i, k) => (
                     <li key={k}>{i.message}</li>
                   ))}
                 </ul>
@@ -412,10 +442,21 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
             tabId={tab.id}
             dialect={dialect}
             theme={theme}
-            text={blocking && !handEdited ? '-- Fix the problems above to see the DDL\n' : text}
+            text={blocking && !handEdited ? '' : text}
             handEdited={handEdited}
             loading={scriptLoading}
-            summary={handEdited ? `${splitForApply(text, dialect).length} statement(s) (edited)` : script ? applySummary(script, dialect) : ''}
+            summary={
+              handEdited
+                ? `${splitForApply(text, dialect).length} statement(s) (edited)`
+                : blocking
+                  ? shownBlocking
+                    ? 'Fix the problems above to see the DDL'
+                    : 'Name the table to see its DDL'
+                  : script
+                    ? applySummary(script, dialect)
+                    : ''
+            }
+            empty={!handEdited && !scriptError && !failure && (blocking || !script?.statements.length)}
             warnings={handEdited ? [] : [...(script?.warnings ?? [])]}
             error={scriptError}
             failure={failure}
@@ -466,7 +507,8 @@ function ColumnProps({ col, dialect, features, readOnly, onChange }: { col: Tabl
           <input
             className="input xs mono"
             style={{ width: 220 }}
-            placeholder="expression (makes the column computed)"
+            placeholder="expression"
+            title="An expression makes the column computed"
             value={col.computed?.expression ?? ''}
             disabled={readOnly}
             onChange={(e) => onChange({ computed: e.target.value ? { expression: e.target.value, persisted: col.computed?.persisted ?? false } : null })}

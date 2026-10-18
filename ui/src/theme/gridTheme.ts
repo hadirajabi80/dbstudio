@@ -28,7 +28,7 @@ export function makeGridTheme(theme: EffectiveTheme): Partial<Theme> {
   const fg = cssVar('--fg', dark ? '#e6e8eb' : '#1c1f24');
   const muted = cssVar('--fg-muted', dark ? '#9aa1ab' : '#5f6673');
   const panel = cssVar('--bg-panel', dark ? '#24272d' : '#ffffff');
-  const border = cssVar('--border', dark ? '#3a3f48' : '#d9dde3');
+  const border = cssVar('--border', dark ? '#41464f' : '#ccd1d9');
   return {
     accentColor: accent,
     accentFg: cssVar('--accent-fg', dark ? '#0b1220' : '#ffffff'),
@@ -51,7 +51,8 @@ export function makeGridTheme(theme: EffectiveTheme): Partial<Theme> {
     bgSearchResult: withAlpha(dark ? '#facc15' : '#fde68a', dark ? 0.3 : 0.7),
     borderColor: withAlpha(border, dark ? 0.7 : 0.8),
     horizontalBorderColor: withAlpha(border, dark ? 0.45 : 0.55),
-    headerBottomBorderColor: cssVar('--border-strong', dark ? '#4d535e' : '#b9bfc9'),
+    // A decorative rule: --border (--border-strong is reserved for control boundaries, styles-r1-07).
+    headerBottomBorderColor: border,
     drilldownBorder: 'rgba(0,0,0,0)',
     linkColor: accent,
     cellHorizontalPadding: 8,

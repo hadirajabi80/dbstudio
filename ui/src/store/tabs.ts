@@ -1,5 +1,18 @@
 import { create } from 'zustand';
-import type { ObjectRef, TxMode } from '../api/types';
+import type { Dialect, ObjectRef, TxMode } from '../api/types';
+
+/**
+ * The object an F4 "Edit:" console edits. Kept in the tab (and so in the workspace) so the atomic apply of SQLite
+ * view/trigger edits and "Compare with server" still work after a restart.
+ */
+export interface ConsoleEdit {
+  connectionId: string;
+  database: string | null;
+  ref: ObjectRef;
+  dialect: Dialect;
+  /** Definition on the server when the tab was opened; fetched again when missing. */
+  serverDdl?: string;
+}
 
 /** Each console tab is bound to its own connection and database (several connections can be open at once). */
 export interface ConsoleTab {
@@ -15,6 +28,8 @@ export interface ConsoleTab {
   txMode: TxMode;
   /** null = settings.results.maxRows; 0 = unlimited. */
   maxRows: number | null;
+  /** Set for F4 "Edit:" consoles (designer/open.ts openEditScript). */
+  edit?: ConsoleEdit | null;
 }
 
 export interface ObjectTab {
@@ -77,6 +92,13 @@ interface TabsState {
   mru: string[];
   /** Recently closed tabs (newest last) for Ctrl+Shift+T. */
   closed: Tab[];
+  /**
+   * A tab opened (or re-activated) by an open call wants its primary element focused once it is shown (the grid of a
+   * data tab, the designer's first cell, the editor of a console). The shell consumes it; `seq` makes repeats distinct.
+   */
+  focusRequest: { tabId: string; seq: number } | null;
+  /** Ask the shell to focus a tab's primary element (keyboard-opened tabs). */
+  requestFocus(tabId: string): void;
   newConsole(opts?: { connectionId?: string | null; database?: string | null; text?: string; title?: string; filePath?: string | null }): string;
   openObject(connectionId: string, database: string | null, ref: ObjectRef, column?: string | null): string;
   openView(opts: OpenViewOptions): string;
@@ -97,6 +119,8 @@ interface TabsState {
   setTxMode(id: string, mode: TxMode): void;
   setMaxRows(id: string, maxRows: number | null): void;
   rename(id: string, title: string): void;
+  /** Mark a console as the "Edit:" script of an object (null: an ordinary console again). */
+  setEdit(id: string, edit: ConsoleEdit | null): void;
   restore(data: WorkspaceData): void;
   serialize(): WorkspaceData;
 }
@@ -114,11 +138,12 @@ export const useTabs = create<TabsState>((set, get) => {
   const patch = (id: string, p: Partial<ConsoleTab> | Partial<ObjectTab> | Partial<ViewTab>) =>
     set({ tabs: get().tabs.map((t) => (t.id === id ? ({ ...t, ...p } as Tab) : t)) });
 
+  let focusSeq = 0;
   const insert = (tab: Tab, activate = true) => {
     const tabs = [...get().tabs];
     const activeIdx = tabs.findIndex((t) => t.id === get().activeId);
     tabs.splice(activeIdx >= 0 ? activeIdx + 1 : tabs.length, 0, tab);
-    if (activate) set({ tabs, activeId: tab.id, mru: touchMru(get().mru, tab.id) });
+    if (activate) set({ tabs, activeId: tab.id, mru: touchMru(get().mru, tab.id), focusRequest: { tabId: tab.id, seq: ++focusSeq } });
     else set({ tabs });
   };
 
@@ -128,6 +153,11 @@ export const useTabs = create<TabsState>((set, get) => {
     seq: 0,
     mru: [],
     closed: [],
+    focusRequest: null,
+
+    requestFocus(tabId) {
+      set({ focusRequest: { tabId, seq: ++focusSeq } });
+    },
 
     newConsole(opts = {}) {
       const seq = get().seq + 1;
@@ -151,6 +181,7 @@ export const useTabs = create<TabsState>((set, get) => {
       if (existing) {
         patch(existing.id, { column: column ?? null });
         get().activate(existing.id);
+        get().requestFocus(existing.id);
         return existing.id;
       }
       const id = newId('o');
@@ -163,7 +194,10 @@ export const useTabs = create<TabsState>((set, get) => {
         const existing = get().tabs.find((t) => t.kind === 'view' && t.view === o.view && t.key === o.key);
         if (existing) {
           if (o.state !== undefined) patch(existing.id, { state: o.state });
-          if (o.activate !== false) get().activate(existing.id);
+          if (o.activate !== false) {
+            get().activate(existing.id);
+            get().requestFocus(existing.id);
+          }
           return existing.id;
         }
       }
@@ -278,6 +312,11 @@ export const useTabs = create<TabsState>((set, get) => {
 
     rename(id, title) {
       patch(id, { title });
+    },
+
+    setEdit(id, edit) {
+      const t = get().tabs.find((x) => x.id === id);
+      if (t?.kind === 'console') patch(id, { edit });
     },
 
     restore(data) {

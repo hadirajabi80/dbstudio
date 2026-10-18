@@ -1,12 +1,15 @@
 // WP-I designer commands (auto-loaded by commands/index.ts) and the designer tab views.
 // Explorer context menus pass a CommandTarget (ObjectTarget / ContainerTarget / ConnectionTarget) as args; the palette
 // and shortcuts run without args and fall back to the explorer selection or the active tab.
+import { targetOf } from '../commands/core';
 import { registerCommands, type Command } from '../commands/registry';
+import { isObjectTarget, isTabTarget } from '../commands/types';
 import { registerTabView } from '../components/layout/tabViews';
 import { useSessions } from '../store/sessions';
 import { getActiveTab, useTabs } from '../store/tabs';
 import { toast } from '../store/ui';
 import { activeDesignerActions } from './actions';
+import { activeEditSession, editSessionOf, restorePersistedEdits } from './editSession';
 import {
   contextOf, editObject, objectOf, openEditScript, openProcedureWizard, openTableDesigner, openViewDesigner, TABLE_VIEW, VIEW_VIEW,
 } from './open';
@@ -17,10 +20,15 @@ const EDITABLE = new Set(['table', 'view', 'mview', 'proc', 'func', 'tablefunc',
 
 const noContext = () => toast('info', 'Pick a connection first', 'Select a database, schema or object in the explorer, or open a console on a connection.');
 
-const activeEdit = () => {
-  const t = getActiveTab();
-  return t?.kind === 'console' ? useDesignerUi.getState().edits[t.id] : undefined;
-};
+/**
+ * Table a new trigger defaults to: only a table node of the explorer (the menu target or the selection). The active tab
+ * is deliberately ignored, so a view or an unrelated designer tab never pre-fills the wizard.
+ */
+export function explorerTable(args?: unknown): string | null {
+  if (isTabTarget(args)) return null;
+  const t = targetOf(args);
+  return isObjectTarget(t) && t.ref.type === 'table' ? t.ref.name : null;
+}
 
 /** Host-handled keys of the column grid, registered so they show in the shortcut sheet. */
 const gridKey = (id: string, title: string, shortcut: string): Command<never> => ({
@@ -74,8 +82,7 @@ export const DESIGNER_COMMANDS: Command<never>[] = [
     id: 'designer.newTrigger', title: 'New trigger…', category: 'Database', icon: 'Zap', keywords: 'create trigger',
     run: (args?: unknown) => {
       const c = contextOf(args);
-      const o = objectOf(args);
-      if (c) openProcedureWizard(c, { kind: 'trigger', table: o && (o.ref.type === 'table' || o.ref.type === 'view') ? o.ref.name : null });
+      if (c) openProcedureWizard(c, { kind: 'trigger', table: explorerTable(args) });
       else noContext();
     },
   },
@@ -108,15 +115,15 @@ export const DESIGNER_COMMANDS: Command<never>[] = [
   },
   {
     id: 'designer.compareWithServer', title: 'Compare with server', category: 'Database', icon: 'GitCompare', keywords: 'diff changes',
-    when: () => !!activeEdit(),
+    when: () => !!activeEditSession(),
     run: () => {
       const t = getActiveTab();
-      if (!t) return;
+      if (!t || !editSessionOf(t.id)) return;
       useDesignerUi.getState().openCompare(t.id);
-      void import('./host').then((m) => m.ensureDesignerHost());
     },
   },
-  gridKey('addColumn', 'Add column', 'Insert'),
+  gridKey('addColumn', 'Add column at the end', 'Insert'),
+  gridKey('insertColumn', 'Insert column below', 'Alt+Insert'),
   gridKey('removeColumn', 'Remove column', 'Delete'),
   gridKey('moveUp', 'Move column up', 'Alt+ArrowUp'),
   gridKey('moveDown', 'Move column down', 'Alt+ArrowDown'),
@@ -136,9 +143,18 @@ export function registerDesignerCommands(): void {
     onClosed: (tab) => void useSessions.getState().close(tab.id, true).catch(() => undefined),
   });
   registerCommands(DESIGNER_COMMANDS);
-  // Forget "edit object" sessions of consoles that were closed.
-  useTabs.subscribe((s) => {
+  // "Edit object" sessions follow the tabs: consoles restored with the workspace (or reopened) get theirs back from
+  // the persisted `edit` field, so Compare and the atomic apply survive a restart; closed consoles forget theirs.
+  const sync = (tabs: ReturnType<typeof useTabs.getState>['tabs']) => {
     const edits = useDesignerUi.getState().edits;
-    for (const id of Object.keys(edits)) if (!s.tabs.some((t) => t.id === id)) useDesignerUi.getState().forgetEdit(id);
+    for (const id of Object.keys(edits)) {
+      const t = tabs.find((x) => x.id === id);
+      if (!t || (t.kind === 'console' && t.edit === null)) useDesignerUi.getState().forgetEdit(id);
+    }
+    restorePersistedEdits(tabs);
+  };
+  sync(useTabs.getState().tabs);
+  useTabs.subscribe((s, prev) => {
+    if (s.tabs !== prev.tabs) sync(s.tabs);
   });
 }

@@ -1,11 +1,16 @@
 // Parameters dialog (PLAN-M1.5 A2): one row per bind (name · type · value) with MRU values per connection.
-// Ctrl+Enter runs. `resolveParams()` is the entry point for the run pipeline.
-import { Braces, History, Play } from 'lucide-react';
+// Ctrl+Enter confirms (Run, or the caller's label: Explain). `resolveParams()` is the entry point for the run pipeline.
+import { Braces, History, ListTree, Play } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import type { Dialect, ParamKind, QueryParam, SqlBatch } from '../../api/types';
-import { paramHistory, recalled, rememberParams, useParams, type ParamRow } from '../../store/params';
+import type { CatalogSnapshot, Dialect, ParamKind, QueryParam, SqlBatch } from '../../api/types';
+import type { QueryParamType } from '../../codegen/model';
+import { inferQueryParamTypes } from '../../codegen/paramTypes';
+import { dbKey, useCatalog } from '../../store/catalog';
+import { paramHistory, recalled, rememberParams, useParams, type ParamRow, type ParamsRequest } from '../../store/params';
+import { useTabs } from '../../store/tabs';
 import { Dialog } from '../common/Dialog';
+import { Select } from '../common/Select';
+import { Kbd } from '../Shortcuts/Kbd';
 import { detectParams } from './detect';
 import './paramsdialog.css';
 
@@ -83,18 +88,81 @@ export function toQueryParams(rows: ParamRow[]): QueryParam[] | null {
   return out;
 }
 
+/** Dialog kind for a type inferred from the compared column (codegen QueryParamType). */
+export function kindOfParamType(t: QueryParamType): ParamKind {
+  switch (t) {
+    case 'int':
+    case 'long':
+      return 'int';
+    case 'decimal':
+    case 'float':
+      return 'decimal';
+    case 'date':
+    case 'datetime':
+      return 'datetime';
+    case 'bool':
+      return 'bool';
+    default:
+      return 'string';
+  }
+}
+
+/** The loaded catalog of the tab's database (else the connection's current or default one), or null. */
+function catalogSnapshot(tabId: string, connectionId: string): CatalogSnapshot | null {
+  const { dbs, conns } = useCatalog.getState();
+  const tab = useTabs.getState().tabs.find((t) => t.id === tabId);
+  const current = conns[connectionId]?.databases?.current ?? null;
+  for (const db of [tab?.connectionId === connectionId ? tab.database : undefined, current, null]) {
+    if (db === undefined) continue;
+    const snap = dbs[dbKey(connectionId, db)]?.snapshot;
+    if (snap) return snap;
+  }
+  return Object.values(dbs).find((d) => d.connectionId === connectionId && d.snapshot)?.snapshot ?? null;
+}
+
+/**
+ * Kinds inferred from the columns each parameter is compared with (`c.Id > ?` → int), keyed like `detectParams`
+ * names them: named binds by name (case-insensitive), positional `?` by their running number across the batches.
+ */
+export function inferredKinds(batches: readonly SqlBatch[], dialect: Dialect, snapshot: CatalogSnapshot | null): Map<string, ParamKind> {
+  const out = new Map<string, ParamKind>();
+  if (!snapshot) return out;
+  let offset = 0;
+  for (const b of batches) {
+    const types = inferQueryParamTypes(b.sql, dialect, snapshot);
+    const local = detectParams([b], dialect);
+    let q = 0;
+    for (const p of local) {
+      const anonymous = p.positional && p.display === '?';
+      // inferQueryParamTypes names positional `?` p1, p2, … per statement, and numbered binds (?2, :1) pN
+      const key = anonymous ? `p${++q}` : /^\d+$/.test(p.name) ? `p${p.name}` : p.name;
+      const t = types[key] ?? Object.entries(types).find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1];
+      const name = anonymous ? String(offset + q) : p.name.toUpperCase();
+      if (t && !out.has(name)) out.set(name, kindOfParamType(t));
+    }
+    offset += q;
+  }
+  return out;
+}
+
+/** The dialog's request; `confirmLabel` names the primary button ("Run", or "Explain" for an estimated plan). */
+type DialogRequest = ParamsRequest & { confirmLabel?: string };
+
 /**
  * Parameters for a run: `undefined` when the SQL has none, `null` when the user cancelled, else the binds.
- * Asks with the dialog unless every value is remembered and "Don't ask again" is on for the tab.
+ * Asks with the dialog unless every value is remembered and "Don't ask again" is on for the tab. Default kinds:
+ * the remembered one, else the type of the compared catalog column (logic-r1-04), else a guess from the name.
  */
 export async function resolveParams(
-  tabId: string, connectionId: string, dialect: Dialect, batches: readonly SqlBatch[], opts: { force?: boolean } = {},
+  tabId: string, connectionId: string, dialect: Dialect, batches: readonly SqlBatch[], opts: { force?: boolean; confirmLabel?: string } = {},
 ): Promise<QueryParam[] | null | undefined> {
   const found = detectParams(batches, dialect);
   if (found.length === 0) return undefined;
+  const inferred = inferredKinds(batches, dialect, catalogSnapshot(tabId, connectionId));
   const rows: ParamRow[] = found.map((p) => {
     const mem = p.positional ? undefined : recalled(connectionId, p.name);
-    return { name: p.name, display: p.display, positional: p.positional, kind: mem?.kind ?? (p.positional ? 'string' : guessKind(p.name)), value: mem?.values[0] ?? '' };
+    const seeded = inferred.get(p.positional && p.display === '?' ? p.name : p.name.toUpperCase());
+    return { name: p.name, display: p.display, positional: p.positional, kind: mem?.kind ?? seeded ?? (p.positional ? 'string' : guessKind(p.name)), value: mem?.values[0] ?? '' };
   });
   const st = useParams.getState();
   const allKnown = rows.every((r) => !r.positional && recalled(connectionId, r.name));
@@ -102,35 +170,22 @@ export async function resolveParams(
     const params = toQueryParams(rows);
     if (params) return params;
   }
-  ensureHost();
-  return new Promise((resolve) => st.open({ tabId, connectionId, dialect, rows, resolve }));
+  return new Promise((resolve) => {
+    const req: DialogRequest = { tabId, connectionId, dialect, rows, resolve, confirmLabel: opts.confirmLabel };
+    st.open(req);
+  });
 }
 
-let hostsMounted = 0;
-
-/** The dialog needs a mounted host; when the shell did not mount <ParamsDialogHost/>, mount one on demand. */
-function ensureHost(): void {
-  if (hostsMounted > 0 || typeof document === 'undefined') return;
-  const el = document.createElement('div');
-  el.id = 'params-dialog-host';
-  document.body.appendChild(el);
-  createRoot(el).render(<ParamsDialogHost />);
-}
-
+/** Rendered by the shell (App, inside #params-dialog-host); shows the pending request of `useParams`. */
 export function ParamsDialogHost() {
   const req = useParams((s) => s.request);
-  useEffect(() => {
-    hostsMounted++;
-    return () => {
-      hostsMounted--;
-    };
-  }, []);
   if (!req) return null;
   return <ParamsDialog key={req.tabId + req.rows.map((r) => r.name).join()} />;
 }
 
 function ParamsDialog() {
-  const req = useParams((s) => s.request)!;
+  const req = useParams((s) => s.request)! as DialogRequest;
+  const confirmLabel = req.confirmLabel ?? 'Run';
   const skip = useParams((s) => s.skip[req.tabId] ?? false);
   const [rows, setRows] = useState<ParamRow[]>(req.rows);
   const [dontAsk, setDontAsk] = useState(skip);
@@ -172,8 +227,8 @@ function ParamsDialog() {
           </label>
           <div className="flex-1" />
           <button className="btn" onClick={() => useParams.getState().close(null)}>Cancel</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={run} title="Run (Ctrl+Enter)">
-            <Play size={13} /> Run
+          <button className="btn btn-primary" disabled={!valid} onClick={run} title={confirmLabel}>
+            {confirmLabel === 'Run' ? <Play size={13} /> : <ListTree size={13} />} {confirmLabel} <Kbd shortcut="Mod+Enter" className="on-accent" />
           </button>
         </>
       }
@@ -205,11 +260,14 @@ function ParamsDialog() {
                 {r.positional ? `? ${r.name}` : r.display}
               </span>
               <span role="cell">
-                <select className="input sm" aria-label={`Type of ${r.display}`} value={r.kind} onChange={(e) => set(i, { kind: e.target.value as ParamKind })}>
-                  {KINDS.filter((k) => !k.oracleOnly || req.dialect === 'plsql').map((k) => (
-                    <option key={k.kind} value={k.kind}>{k.label}</option>
-                  ))}
-                </select>
+                <Select
+                  size="sm"
+                  aria-label={`Type of ${r.display}`}
+                  value={r.kind}
+                  options={KINDS.filter((k) => !k.oracleOnly || req.dialect === 'plsql').map((k) => ({ value: k.kind, label: k.label }))}
+                  onChange={(kind) => set(i, { kind })}
+                  searchable={false}
+                />
               </span>
               <span className="pd-value" role="cell">
                 <input

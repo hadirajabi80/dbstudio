@@ -107,6 +107,8 @@ Options (persisted under `Settings.format`, additive): `keywordCase: 'upper'|'lo
 5. **Comments**: every comment token is attached to a neighbour: a `--` comment on the same line as a preceding token → *trailing* (re-emitted after that token's line, one space); a comment on its own line → *leading* of the next token (emitted on its own line at the indent of the next emitted line; blank-line separation before it preserved up to `maxConsecutiveBlankLines`); a block comment between tokens on one line → inline verbatim; a comment at EOF → trailing of the statement. Multi-line block comments are re-indented only on their first line; inner lines are untouched. Test: every fixture's comment count and text are identical before/after.
 6. **Idempotency and safety guarantees** (tests): `format(format(x)) === format(x)` for every fixture; `tokens(format(x))` without `ws` equals `tokens(x)` without `ws`/`comment` modulo keyword case (nothing added, dropped or reordered); T-SQL fixtures additionally parse to the same ScriptDom tree (`dotnet test` fixture harness in `engine/tests/DbStudio.Core.Tests/FormatterParity`, reading the same fixture folder); each dialect ≥ 40 fixtures incl. the M1 §4.14 inputs, a 600-line Oracle package body, SSMS-generated procedures, `GO 5`, nested comments, `q'[` strings, `(+)` joins, MERGE, window functions, `FOR JSON`, CTE recursive, `INSERT … SELECT`, `CREATE TABLE` with constraints. Performance: 5,000-line file < 150 ms.
 
+   > **Open (M1.5 QA, features-26):** the 600-line Oracle package-body fixture is still outstanding. `ui/src/format/__tests__/fixtures/plsql/33-package-body.sql` has 26 lines; a large real-world package body still has to be added to the formatter suite (and used by checklist 5.4 "Format … the package body fixture").
+
 ---
 
 ### 1.3 Designers: tables, views, procedures (create and edit)
@@ -303,9 +305,9 @@ UI (`ui/src/components/PlanView/`): a tree table (operation, object, est rows, a
 
 **Layout principles.** One window, three regions: left dock (Explorer | History | Connections, tabbed, 220–480 px, collapsible Ctrl+B), center tab strip (consoles, data tabs, designers, object tabs, plan views — all are tabs, draggable, Ctrl+Tab MRU switch, Ctrl+W close, middle-click close, Ctrl+Shift+T reopen closed), bottom of each console the results pane (Ctrl+R toggle, splitter, maximise with Ctrl+Shift+R). One toolbar per console tab (Run, Run script, Cancel, connection pill, database, tx mode, Explain, Format, Code ▾), no global ribbon. Nothing important is more than one click or one shortcut away: every toolbar action also exists in the command palette and (when relevant) in a context menu.
 
-**Density and spacing.** 4 px base scale (`--space-1: 4px` … `--space-8: 32px`). Grid row height 28 px (compact 24 px via setting `ui.density: 'comfortable'|'compact'`), explorer row 24 px, toolbar 36 px, tab strip 34 px, status bar 24 px, inputs 28 px, dialog padding 20 px, panel padding 12 px. Hit targets ≥ 24×24 px.
+**Density and spacing.** 4 px base scale (`--space-1: 4px` … `--space-8: 32px`). Grid row height 28 px (compact 24 px via setting `ui.density: 'comfortable'|'compact'`), explorer row 24 px, toolbar 36 px, tab strip 34 px, status bar 24 px, inputs 28 px (`--input-h`; buttons, selects, search boxes and the toolbar's segmented control too), `--input-h-sm` 24 px only in dense bars (results filter bar, designer cards, inline grid editors), dialog padding 20 px, panel padding 12 px. Hit targets ≥ 24×24 px.
 
-**Typography.** UI: `"Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif`, 13 px base (`--text-sm 12`, `--text-md 13`, `--text-lg 15`, `--text-xl 20` for onboarding), line-height 1.4, weights 400/600 only. Code/grid: `"Cascadia Code", "JetBrains Mono", Consolas, monospace`, 13 px grid / 14 px editor (editor size follows `Settings.editor.fontSize`); numbers in the grid use `font-variant-numeric: tabular-nums`, right-aligned; NULL rendered italic in `--fg-muted`.
+**Typography.** UI: `"Segoe UI Variable Text", "Segoe UI", -apple-system, "SF Pro Text", Inter, system-ui, sans-serif`, 13 px base. Scale (tokens, nothing below 11 px): `--text-xs 11` (status bar, chips, badges, counts, key caps), `--text-sm 12`, `--text-md 13`, `--text-lg 15` (dialog titles, object names, palette input), `--text-xl 20`, `--text-2xl 26` (onboarding headline); line-height 1.4; weights 400/600 only (`--weight-regular` / `--weight-strong`; no 500/700). Code/grid (`--font-mono`, used by every Monaco editor and the grid): `"Cascadia Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, 13 px grid / 14 px editor (editor size follows `Settings.editor.fontSize`); numbers in the grid use `font-variant-numeric: tabular-nums`, right-aligned; NULL rendered italic in `--fg-muted`.
 
 **Color tokens** (`ui/src/theme/tokens.css`, applied on `:root[data-theme=light|dark]`; every component must use tokens, no literal colours in component CSS — lint rule in QA):
 | Token | Light | Dark |
@@ -316,8 +318,8 @@ UI (`ui/src/components/PlanView/`): a tree table (operation, object, est rows, a
 | `--bg-hover` | `#eceef2` | `#30343c` |
 | `--bg-selected` | `#dde8fb` | `#2e4466` |
 | `--bg-grid-alt` | `#fafbfc` | `#22252a` |
-| `--border` | `#d9dde3` | `#3a3f48` |
-| `--border-strong` | `#b9bfc9` | `#4d535e` |
+| `--border` (decorative separators, ≥ 1.5:1) | `#ccd1d9` | `#41464f` |
+| `--border-strong` (**control boundary**, ≥ 3:1) | `#8a919c` | `#6f7682` |
 | `--fg` | `#1c1f24` | `#e6e8eb` |
 | `--fg-muted` | `#5f6673` | `#9aa1ab` |
 | `--fg-disabled` | `#a0a6b0` | `#646a74` |
@@ -331,10 +333,12 @@ UI (`ui/src/components/PlanView/`): a tree table (operation, object, est rows, a
 | `--cell-edited` | `#fde68a` 35% | `#facc15` 25% |
 | `--cell-inserted` | `#bbf7d0` 40% | `#22c55e` 22% |
 | `--cell-deleted` | `#fecaca` 40% | `#ef4444` 22% |
-| Connection colours (palette) | red `#dc2626`, orange `#ea580c`, yellow `#ca8a04`, green `#16a34a`, blue `#2563eb`, purple `#7c3aed`, grey `#6b7280` | same hues at +15% lightness |
-Monaco themes `dbstudio-light/dark` derive editor background from `--bg-panel` and keyword/identifier colours from the same accent family (keywords `--accent`, strings `--success`-adjacent `#047857`/`#6ee7b7`, comments `--fg-muted`, numbers `#9a3412`/`#fdba74`). Glide grid theme object is regenerated from the tokens on theme switch.
+| Connection colours (palette) | red `#dc2626`, orange `#ea580c`, yellow `#b47c03` (stored in profiles as `#ca8a04`), green `#16a34a`, blue `#2563eb`, purple `#7c3aed`, grey `#6b7280` | same hues at +15% lightness |
 
-**Iconography.** `lucide-react` only, 16 px, stroke 1.5, `currentColor`; object-type icons are fixed: table `Table2`, view `Eye`, mview `Layers`, proc `SquareFunction`, func `FunctionSquare`, package `Package`, sequence `Hash`, synonym `Link2`, trigger `Zap`, type `Shapes`, column `Columns3` (PK gets a `Key` badge, FK a `Link` badge), connection by provider (`Server` SQL Server, `Database` Oracle, `FileDatabase`-style `File` SQLite). Icons always have an accessible label (tooltip + `aria-label`); icon-only buttons show tooltip after 500 ms with the shortcut.
+`--border-strong` is the control-boundary token: buttons, inputs, selects, search boxes, segmented controls and the filter/designer controls draw their outline with it (WCAG 1.4.11, ≥ 3:1 on `--bg-panel`). Purely decorative lines (separators, key caps, table header rules, grid header rule) use `--border`. `--border-control` is a deprecated alias of `--border-strong`, kept for one release. Derived tokens keep text on tinted surfaces at ≥ 4.5:1 without changing the table: `--fg-muted-on-selected` (secondary text on `--bg-selected`/`--bg-active` rows; light = `--fg-muted`, dark `#b0b7c1`), `--accent-on-selected` (light = `--accent-hover`, dark `#9ec5ff`), `--danger-text` (danger text on tinted backgrounds; light = `--danger`, dark `#fca5a5`), `--run-flash` (editor flash of the statement just run). `--fg-disabled` is only for disabled controls, never for informative text. `ui/src/theme/tokens.test.ts` holds the contrast matrix of every (foreground, background) pair the UI paints, both themes.
+Monaco themes `dbstudio-light/dark` derive editor background from `--bg-panel` and keyword/identifier colours from the same accent family (keywords `--accent`, strings `--success`-adjacent `#047857`/`#6ee7b7`, comments `--fg-muted`, numbers `#9a3412`/`#fdba74`); both are built from `tokens.css` when Monaco is set up (no literal colours, no first-paint flash), including the suggest/hover/find widgets, the context menu (same look as the app menus) and selected rows (`--bg-selected` with `--fg` text). Every Monaco editor uses `baseMonacoOptions()` (`ui/src/editor/monacoOptions.ts`: light-DOM context views, `--font-mono`, explicit suggest row height). Glide grid theme object is regenerated from the tokens on theme switch.
+
+**Iconography.** `lucide-react` only, 16 px (`--icon-size`), stroke 1.5 (enforced for every icon by the global `svg.lucide` rule in `app.css`), `currentColor`; 14 px (`--icon-size-sm`) is allowed only in the documented dense spots: status bar, chips, tab close buttons, dock tabs, split-button carets and `.btn-xs`; object-type icons are fixed: table `Table2`, view `Eye`, mview `Layers`, proc `SquareFunction`, func `FunctionSquare`, package `Package`, sequence `Hash`, synonym `Link2`, trigger `Zap`, type `Shapes`, column `Columns3` (PK gets a `Key` badge, FK a `Link` badge), connection by provider (`Server` SQL Server, `Database` Oracle, `FileDatabase`-style `File` SQLite). Icons always have an accessible label (tooltip + `aria-label`); icon-only buttons show tooltip after 500 ms with the shortcut.
 
 **Empty states** (each has icon, one-line title, one action button, optional secondary link):
 - No connections: "Add your first connection" → opens dialog. Explorer not connected: "Connect to browse objects" → Connect. Results before any run: "Run a statement with Ctrl+Enter" (+ "Open sample SQLite database"). History empty: "Queries you run appear here". Filter yields nothing: "No rows match — Clear filter". Pending changes none: "Edit a cell to start" (in the preview). Codegen without selection: "Pick an object in the explorer or a result set".
@@ -343,7 +347,7 @@ Monaco themes `dbstudio-light/dark` derive editor background from `--bg-panel` a
 
 **Onboarding (first launch).** Welcome screen in the center area (no modal): headline "Connect to a database", three provider cards (SQL Server / Oracle / SQLite) → opens the connection dialog pre-selected; "Open a SQLite file" (file picker, instantly connected); "Try the sample database" creates `%APPDATA%\DbStudio\sample\shop.sqlite` from the test fixture and opens a console with a sample query; link "Import connections from DBeaver/DataGrip" deferred (shown greyed "coming soon" is NOT allowed — omit entirely). The connection dialog: Test button with inline result (server version, 120 ms), "Connect" saves and opens a console in one step, password-save checkbox with DPAPI note, colour picker with the palette above, folder combobox. After the first successful run, a one-time 3-tip strip under the toolbar (Ctrl+Enter, Ctrl+P, Ctrl+Shift+P) with "Got it". Theme follows OS by default.
 
-**Accessibility basics.** Every interactive element reachable by Tab in reading order; visible 2 px focus ring (`--focus-ring`, offset 1 px) on all focusables including grid cells (glide's focus rect uses the token); contrast ≥ 4.5:1 for text and ≥ 3:1 for icons/borders in both themes (checked with the tokens above); dialogs are `role=dialog` with `aria-modal`, focus trapped, Esc closes, initial focus on the first input; menus are `role=menu` with arrow-key navigation and typeahead; live region (`aria-live=polite`) announces run completion ("12 rows, 15 ms") and errors; grid exposes row/column count and current cell via `aria-rowcount`/`aria-colindex` on glide's accessibility tree; no information conveyed by colour alone (edited cells also get a border, errors an icon, connection colour has a name in the tooltip); respects `prefers-reduced-motion` (no animated spinners beyond opacity); UI zoom Ctrl+=/− applies to everything incl. grid.
+**Accessibility basics.** Every interactive element reachable by Tab in reading order; visible 2 px focus ring (`--focus-ring`, offset 1 px) on all focusables including grid cells (glide's focus rect uses the token) and the SQL editor (an inset ring on the editor area while it has focus); the production marker on Run is an inner red border plus a PROD tag, never the outer ring; contrast ≥ 4.5:1 for text and ≥ 3:1 for icons/borders in both themes (checked with the tokens above); dialogs are `role=dialog` with `aria-modal`, focus trapped, Esc closes, initial focus on the first input; menus are `role=menu` with arrow-key navigation and typeahead; live region (`aria-live=polite`) announces run completion ("12 rows, 15 ms") and errors; grid exposes row/column count and current cell via `aria-rowcount`/`aria-colindex` on glide's accessibility tree; no information conveyed by colour alone (edited cells also get a border, errors an icon, connection colour has a name in the tooltip); respects `prefers-reduced-motion` (no animated spinners beyond opacity); UI zoom Ctrl+=/− applies to everything incl. grid.
 
 ---
 
@@ -417,12 +421,12 @@ Settings additions (`PUT /settings` partial merge, same object on GET): `"format
 ## 5. QA checklists (pass/fail; run after M1.5 on SQLite, then on the Docker SQL Server/Oracle)
 
 ### 5.1 Styles
-- [ ] `grep -rn "#[0-9a-fA-F]\{3,8\}" ui/src --include=*.css --include=*.tsx | grep -v src/theme/` returns nothing (all colours via tokens).
+- [ ] `grep -rn "#[0-9a-fA-F]\{3,8\}" ui/src --include=*.css --include=*.tsx --include=*.ts | grep -v src/theme/` returns nothing outside tests and mock data, and neither does `rgb(`/`rgba(`/`hsl(` (all colours via tokens; automated in `tokens.test.ts`).
 - [ ] Every token in the section 3 table exists in `tokens.css` for both themes with the listed values; switching theme at runtime recolours editor, grid, menus and dialogs without reload.
 - [ ] Contrast (measured with an automated checker on the tokens): `--fg`/`--bg-panel` ≥ 4.5:1, `--fg-muted`/`--bg-panel` ≥ 4.5:1, `--border`/`--bg-panel` ≥ 1.5:1 and `--border-strong` ≥ 3:1, `--accent-fg`/`--accent` ≥ 4.5:1 in both themes.
 - [ ] Font stacks and sizes as specified (UI 13 px, grid 13 px, editor = setting); numeric grid cells right-aligned with tabular numerals; NULL italic muted.
 - [ ] Row heights: grid 28/24 px by density setting, explorer 24 px, toolbar 36 px, status bar 24 px (measure with devtools).
-- [ ] All icons are lucide at 16 px/stroke 1.5; object-type icon mapping matches the table; no emoji glyphs anywhere in the UI.
+- [ ] All icons are lucide at 16 px/stroke 1.5 (14 px only in the dense spots listed under Iconography); object-type icon mapping matches the table; no emoji glyphs anywhere in the UI.
 - [ ] Focus ring visible (2 px, `--focus-ring`) on buttons, inputs, tree rows, tabs, grid cells, menu items in both themes.
 - [ ] Edited/inserted/deleted cells use the `--cell-*` tokens and additionally a border/strikethrough (not colour alone).
 - [ ] Zoom (Ctrl+=/−/0) scales the whole UI including grid and Monaco; no clipped toolbars at 150%.
@@ -457,7 +461,7 @@ Settings additions (`PUT /settings` partial merge, same object on GET): `"format
 ### 5.4 Features (end-to-end on the sample Shop database, then Docker)
 - [ ] Open data tab on `Customers`, filter `Name contains 'a'` server-side, sort by `Id` desc, load more pages, count badge correct.
 - [ ] Edit a customer, insert one, delete one, preview SQL, submit, verify by re-querying.
-- [ ] Design `Orders`: add column `Note nvarchar(200) NULL` (T-SQL) / `NOTE VARCHAR2(200)` (Oracle) / `Note TEXT` (SQLite, native ADD COLUMN) and then change its type (SQLite → rebuild) — data preserved.
+- [ ] Design `Orders`: add column `GiftMessage nvarchar(200) NULL` (T-SQL) / `GIFTMESSAGE VARCHAR2(200)` (Oracle) / `GiftMessage TEXT` (SQLite, native ADD COLUMN) and then change its type (SQLite → rebuild) — data preserved. (The sample `Orders` already has a `Note` column.)
 - [ ] Create a view with the designer, see describe columns update while typing, apply, open it in explorer; edit with F4, apply again.
 - [ ] New procedure wizard → template → fill body → F5 → explorer shows it; F4 reopens with `CREATE OR ALTER`/`OR REPLACE`.
 - [ ] Generate C# Dapper repository + Go struct + TS interface for `Customers` and a parameterized query; C# smoke compiles.
@@ -468,12 +472,12 @@ Settings additions (`PUT /settings` partial merge, same object on GET): `"format
 
 ### 5.5 Code quality
 - [ ] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:intel` and `dotnet test engine` are green; new tests exist for every package's acceptance list (count ≥: filter 60, formatter 120 fixtures+tests, designer/diff 40, scripters 30 golden files, codegen snapshots ≥ 35, grid editing 30, commands coverage 1, plan parsers 12).
-- [ ] No package edited files outside its ownership list (review `git log --stat` per branch); `ui/src/api/types.ts`/`client.ts` changes are only in the M1.5 block authored by WP-F; `IDbProvider.cs` unchanged.
+- [ ] No package edited files outside its ownership list (review `git log --stat` per branch); `ui/src/api/types.ts`/`client.ts` changes are only in the M1.5 block authored by WP-F; `IDbProvider.cs` unchanged except additive default interface members (waiver, round 1 B1): `IDbSession.LostTransaction => false` and `IDbSession.FindUnboundParameter(...) => null`; providers need not implement them.
 - [ ] Formatter, filter model, codegen and designer diff/rewrite modules import nothing from React, Monaco or the DOM (static import check).
 - [ ] No `any` in new TS code except declared driver boundaries (`oxlint` rule on); C# nullable enabled with zero warnings in new files.
 - [ ] Every new engine endpoint validates input (400 `VALIDATION` with a message naming the field) and is covered by an integration test on SQLite; DDL apply never runs user statements on the catalog connection or a tab session.
 - [ ] No secrets or SQL values logged at info level; parameter values appear in logs only at debug.
-- [ ] Bundle: `npm run build` size growth over M1 < 600 KB gzipped (Monaco languages for codegen loaded lazily via dynamic import); the formatter and codegen are code-split chunks.
+- [ ] Bundle: `npm run build` size growth over M1 < 600 KB gzipped (Monaco languages for codegen loaded lazily via dynamic import); the formatter and codegen are code-split chunks. CI enforces this with `.github/scripts/bundle-size.mjs --budget-kb 600` against `.github/bundle-size-baseline.json`, which holds the M1 UI build (commit `bfaac37`); do not re-baseline it to a later build.
 - [ ] Documentation: `docs/PLAN.md` section 3 gets a pointer to this spec's 3.7–3.9 (edit by WP-F), `README.md` feature list updated (WP-J), `docs/qa/m15-walkthrough.md` present.
 
 ### Critical Files for Implementation

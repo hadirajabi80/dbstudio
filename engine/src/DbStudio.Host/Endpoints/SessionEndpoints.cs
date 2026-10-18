@@ -2,6 +2,7 @@ using DbStudio.Core.Export;
 using DbStudio.Core.Models;
 using DbStudio.Core.Services;
 using DbStudio.Host.Contracts;
+using DbStudio.Host.Infrastructure;
 
 namespace DbStudio.Host.Endpoints;
 
@@ -11,11 +12,11 @@ public static class SessionEndpoints
     {
         var g = api.MapGroup("/sessions");
 
-        g.MapPost("", async (CreateSessionRequest? req, SessionManager sessions, CancellationToken ct) =>
+        g.MapPost("", async (HttpContext http, CreateSessionRequest? req, SessionManager sessions, CancellationToken ct) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.ConnectionId))
                 throw EngineException.Validation("connectionId is required.", new { field = "connectionId" });
-            var h = await sessions.CreateAsync(req.ConnectionId, req.Database, req.TxMode, req.CaptureServerOutput, ct);
+            var h = await sessions.CreateAsync(req.ConnectionId, req.Database, req.TxMode, req.CaptureServerOutput, http.ClientId(), ct);
             sessions.PublishChanged(h);
             return h.ToInfo();
         });
@@ -30,54 +31,67 @@ public static class SessionEndpoints
             return Results.NoContent();
         });
 
-        g.MapPost("/{sid}/database", async (string sid, DatabaseRequest? req, SessionManager sessions, CancellationToken ct) =>
+        g.MapPost("/{sid}/database", async (HttpContext http, string sid, DatabaseRequest? req, SessionManager sessions, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req?.Database)) throw EngineException.Validation("database is required.", new { field = "database" });
-            var h = sessions.Get(sid);
+            var h = Touch(http, sessions, sid);
             await h.Session.ChangeDatabaseAsync(req.Database, ct);
             sessions.PublishChanged(h);
             return h.ToInfo();
         });
 
-        g.MapPost("/{sid}/tx-mode", async (string sid, TxModeRequest? req, SessionManager sessions, CancellationToken ct) =>
+        g.MapPost("/{sid}/tx-mode", async (HttpContext http, string sid, TxModeRequest? req, SessionManager sessions, CancellationToken ct) =>
         {
             if (req is null) throw EngineException.Validation("txMode is required.", new { field = "txMode" });
-            var h = sessions.Get(sid);
+            var h = Touch(http, sessions, sid);
             await h.Session.SetTransactionModeAsync(req.TxMode, ct);
             sessions.PublishChanged(h);
             return h.ToInfo();
         });
 
-        g.MapPost("/{sid}/commit", async (string sid, SessionManager sessions, CancellationToken ct) =>
+        g.MapPost("/{sid}/commit", async (HttpContext http, string sid, SessionManager sessions, CancellationToken ct) =>
         {
-            var h = sessions.Get(sid);
+            var h = Touch(http, sessions, sid);
             await h.Session.CommitAsync(ct);
             sessions.PublishChanged(h);
             return h.ToInfo();
         });
 
-        g.MapPost("/{sid}/rollback", async (string sid, SessionManager sessions, CancellationToken ct) =>
+        g.MapPost("/{sid}/rollback", async (HttpContext http, string sid, SessionManager sessions, CancellationToken ct) =>
         {
-            var h = sessions.Get(sid);
+            var h = Touch(http, sessions, sid);
             await h.Session.RollbackAsync(ct);
             sessions.PublishChanged(h);
             return h.ToInfo();
         });
 
-        g.MapPost("/{sid}/execute", (string sid, ExecuteRequestDto? req, ExecutionService executions, SettingsService settings) =>
+        g.MapPost("/{sid}/execute", (HttpContext http, string sid, ExecuteRequestDto? req, ExecutionService executions, SettingsService settings, SessionManager sessions) =>
         {
             if (req?.Batches is null) throw EngineException.Validation("batches is required.", new { field = "batches" });
+            Touch(http, sessions, sid);
             var maxRows = req.MaxRows ?? settings.DefaultMaxRows();
             var label = req.Label is not null && ExecLabels.All.Contains(req.Label) ? req.Label : "statement";
             var started = executions.Start(sid, new ExecuteCommand(
                 req.Batches, maxRows, req.StopOnError ?? true, label, req.ConfirmedDestructive ?? false, req.Source?.TabId, req.Source?.Title,
-                req.Params is { Count: > 0 } ps ? ps : null));
+                req.Params is { Count: > 0 } ps ? ps : null, req.SkipHistory ?? false));
             return Results.Json(new ExecuteResponse(started.ExecutionId, started.StartedAt), CoreJson.Options, statusCode: StatusCodes.Status202Accepted);
         });
 
-        g.MapPost("/{sid}/cancel", (string sid, ExecutionService executions) => new CancelResponse(executions.Cancel(sid)));
+        g.MapPost("/{sid}/cancel", (HttpContext http, string sid, ExecutionService executions, SessionManager sessions) =>
+        {
+            Touch(http, sessions, sid);
+            return new CancelResponse(executions.Cancel(sid));
+        });
 
         return api;
+    }
+
+    /// <summary>The session, now owned by the calling UI client (logic-08: the client that last touched it).</summary>
+    internal static SessionHandle Touch(HttpContext http, SessionManager sessions, string sid)
+    {
+        var h = sessions.Get(sid);
+        sessions.Claim(h, http.ClientId());
+        return h;
     }
 
     public static RouteGroupBuilder MapExecutions(this RouteGroupBuilder api)
@@ -120,9 +134,10 @@ public static class SessionEndpoints
             return Results.Empty;
         });
 
-        api.MapPost("/export", (QueryExportRequest? req, ExportService exports) =>
+        api.MapPost("/export", (HttpContext http, QueryExportRequest? req, ExportService exports, SessionManager sessions) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.SessionId)) throw EngineException.Validation("sessionId is required.", new { field = "sessionId" });
+            Touch(http, sessions, req.SessionId);
             var id = exports.StartQueryExport(req.SessionId, req.Sql ?? "", req.Format ?? ExportFormats.Csv, req.Path ?? "", req.Options ?? new ExportOptions());
             return Results.Json(new QueryExportResponse(id), CoreJson.Options, statusCode: StatusCodes.Status202Accepted);
         });

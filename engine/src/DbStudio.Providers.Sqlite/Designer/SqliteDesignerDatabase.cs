@@ -250,8 +250,12 @@ public sealed partial class SqliteDesignerDatabase : IDesignerDatabase
             var runner = new DdlApplyRunner
             {
                 MapError = (ex, _) => SqliteProvider.ToError(ex),
+                // A console holding a lock must not make the apply hang: wait up to the busy timeout, and let a cancel
+                // (request aborted) end the driver's busy-retry loop, which sqlite3_interrupt alone does not.
+                CommandTimeoutSeconds = SqliteConnections.BusyTimeoutSeconds(profile),
                 Execute = async (cmd, token) =>
                 {
+                    await using var stopWaiting = token.Register(static c => SqliteConnections.StopBusyWait((DbCommand)c!), cmd);
                     if (!ForeignKeyCheckPragma().IsMatch(cmd.CommandText))
                     {
                         await cmd.ExecuteNonQueryAsync(token).ConfigureAwait(false);

@@ -6,7 +6,8 @@
 // - inline: a block comment between two tokens of one line (`SELECT /*+ hint */ a`). Re-emitted in place.
 // - leading: a comment on its own line. Re-emitted on its own line at the indent of the next emitted line,
 //   keeping up to `maxConsecutiveBlankLines` blank lines before it.
-// Comment text is never changed; multi-line block comments are re-indented only on their first line.
+// Comment text is never changed, except that the continuation lines of a multi-line block comment move by as many
+// columns as its first line moved (their indentation relative to the comment start is kept).
 import type { Token } from '../intel/types';
 
 export interface FTok {

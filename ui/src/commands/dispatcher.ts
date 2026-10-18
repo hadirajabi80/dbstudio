@@ -7,7 +7,7 @@
 // Inside Monaco the editor keeps the keys it owns (run, find, undo, zoom, clipboard, ...), so a global command bound
 // to one of those keys does not fire while the editor has focus; the editor binds the matching action itself.
 import { commandsForKey, isChordPrefix, isEnabled, runCommand, type CommandScope } from './registry';
-import { eventStroke, isModifierOnly } from './keys';
+import { eventStroke, isAltGraphCharacter, isModifierOnly } from './keys';
 
 /** Keys Monaco handles itself while it has focus (globally bound commands with these keys stay quiet there). */
 export const EDITOR_OWNED_KEYS = new Set([
@@ -74,6 +74,8 @@ export function resolveKey(key: string, scopes: readonly CommandScope[], opts: {
 
 export function onGlobalKeyDown(e: KeyboardEvent): void {
   if (e.defaultPrevented || e.isComposing) return;
+  // AltGr+L types "ł" on a Polish keyboard: text input, not Ctrl+Alt+L (Format SQL).
+  if (isAltGraphCharacter(e)) return;
   const stroke = eventStroke(e);
   if (isModifierOnly(stroke)) return;
   const target = e.target;

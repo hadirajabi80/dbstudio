@@ -1,5 +1,5 @@
 import { Plug } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { ObjectRef, RunLabel, ServerDiagnostic, SqlBatch } from '../../api/types';
 import { cancelTab, catalogDatabase, openObject, runInTab } from '../../app/actions';
@@ -21,6 +21,44 @@ import { ResultsPane } from '../ResultsPane/ResultsPane';
 import { Toolbar } from '../Toolbar/Toolbar';
 
 const EMPTY_USAGE: Record<string, number> = {};
+
+/** Rows of the results grid that stay visible however small the split (styles-03), capped at this share of the console. */
+const MIN_RESULT_ROWS = 5;
+const MIN_RESULTS_SHARE = 0.68;
+const MAX_RESULTS_SHARE = 0.88;
+const GRID_HEADER_H = 28;
+/** The grid's horizontal scrollbar sits over the last row: keep room for it. */
+const GRID_SCROLLBAR_H = 12;
+/** The editor keeps at least this much (its CSS min-height) plus the splitter. */
+const EDITOR_MIN_H = 60 + 1;
+
+/** Heights of the results chrome (tabs, toolbar, filter bar, status row), measured; defaults before the first paint. */
+interface ResultsChrome {
+  header: number;
+  status: number;
+}
+const DEFAULT_CHROME: ResultsChrome = { header: 30 + 32, status: 24 };
+
+function measureChrome(host: HTMLElement | null): ResultsChrome | null {
+  if (!host) return null;
+  const h = (sel: string) => host.querySelector<HTMLElement>(sel)?.offsetHeight ?? 0;
+  const tabs = h('.results-tabs');
+  if (!tabs) return null; // hidden tab (display: none) or nothing rendered yet
+  const toolbar = h('.resultset-toolbar');
+  const bar = h('.resultset > .fb');
+  const status = h('.resultset-status');
+  return { header: tabs + (toolbar || DEFAULT_CHROME.header - 30) + bar, status: status || DEFAULT_CHROME.status };
+}
+
+/**
+ * Minimum height of the open results pane in px: its header (results tabs + toolbar [+ filter bar]), the grid header
+ * and MIN_RESULT_ROWS rows at the current density, and the status row; never more than MIN_RESULTS_SHARE of the
+ * console's height, and never so much that the editor drops below its own minimum (exported for tests).
+ */
+export function minResultsHeight(consoleHeight: number, splitHeight: number, chrome: ResultsChrome, rowHeight: number): number {
+  const want = chrome.header + GRID_HEADER_H + MIN_RESULT_ROWS * rowHeight + GRID_SCROLLBAR_H + chrome.status;
+  return Math.max(0, Math.round(Math.min(want, consoleHeight * MIN_RESULTS_SHARE, splitHeight - EDITOR_MIN_H)));
+}
 let usageTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: EffectiveTheme; visible: boolean }) {
@@ -34,12 +72,43 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
   const updateText = useTabs((s) => s.updateText);
   const resultsVisible = useUi((s) => s.resultsVisible);
   const maximized = useUi((s) => s.resultsMaximized);
-  const fraction = useUi((s) => s.resultsFraction);
-  const setLayout = useUi((s) => s.setLayout);
+  const globalFraction = useUi((s) => s.resultsFraction);
+  // The user's split is remembered per tab; short windows get 60 % results after the first run (actions.ts).
+  const tabFraction = useUi((s) => s.tabSplits[tab.id]);
+  const fraction = tabFraction ?? globalFraction;
+  const setTabSplit = useUi((s) => s.setTabSplit);
   const setCursor = useUi((s) => s.setCursor);
   const exec = useTabExecution(tab.id);
   const containerRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState(fraction);
+  const density = useSettings((s) => s.settings.grid?.density ?? 'comfortable');
+  const rowHeight = density === 'compact' ? 24 : 28;
+  const [size, setSize] = useState({ console: 0, split: 0 });
+  const splitH = size.split;
+  const [chrome, setChrome] = useState<ResultsChrome>(DEFAULT_CHROME);
+
+  // Track the split height (window, zoom, tip strip) and the measured results chrome (toolbar, open filter bar).
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const host = el.parentElement ?? el; // the console: toolbar + tip strip + split
+    const measure = () => setSize((s) => (s.console === host.clientHeight && s.split === el.clientHeight ? s : { console: host.clientHeight, split: el.clientHeight }));
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(host);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const m = measureChrome(resultsRef.current);
+    if (m && (m.header !== chrome.header || m.status !== chrome.status)) setChrome(m);
+  });
+  // Only once there is something to show: the empty "Run a statement" pane keeps the plain 12 % minimum.
+  const hasResults = !!exec;
+  const minPx = resultsVisible && hasResults && splitH > 0 ? minResultsHeight(size.console, splitH, chrome, rowHeight) : 0;
+  const minFraction = splitH > 0 ? Math.max(0.12, minPx / splitH) : 0.12;
+  const shown = Math.max(minFraction, Math.min(MAX_RESULTS_SHARE, fraction));
 
   const tabId = tab.id;
   const connectionId = tab.connectionId;
@@ -78,7 +147,7 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
     },
     [connectionId],
   );
-  const onCursorChange = useCallback((line: number, col: number) => setCursor({ line, col }), [setCursor]);
+  const onCursorChange = useCallback((line: number, col: number) => setCursor(tabId, { line, col }), [setCursor, tabId]);
 
   // Errors and Oracle compile errors of the last run become editor markers.
   const externalDiagnostics = useMemo<ServerDiagnostic[] | undefined>(() => {
@@ -92,13 +161,14 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
   }, [exec?.diagnostics, exec?.messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="console" style={{ display: visible ? undefined : 'none' }} data-tab={tab.id}>
+    <div className="console" style={{ display: visible ? undefined : 'none' }} data-tab={tab.id} data-command-scope="console">
       <Toolbar tab={tab} />
       <TipStrip />
       <div className={`console-split${maximized && resultsVisible ? ' results-maximized' : ''}`} ref={containerRef}>
         <div
           className="editor-host"
-          style={{ flexBasis: resultsVisible ? `${(1 - fraction) * 100}%` : '100%' }}
+          data-region="editor"
+          style={{ flexBasis: resultsVisible ? `${(1 - shown) * 100}%` : '100%' }}
           onDropCapture={(e) => {
             const raw = e.dataTransfer.getData('application/x-dbstudio-object');
             if (!raw) return;
@@ -146,14 +216,17 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
             <Splitter
               direction="horizontal"
               ariaLabel="Resize results"
-              onDragStart={() => setDragStart(fraction)}
+              onDragStart={() => setDragStart(shown)}
               onDrag={(d) => {
                 const h = containerRef.current?.clientHeight ?? 600;
-                setLayout({ resultsFraction: Math.max(0.12, Math.min(0.88, dragStart - d / h)) });
+                // Clamped from the results minimum (header + 5 rows), not a fixed share (styles-03).
+                const consoleH = containerRef.current?.parentElement?.clientHeight ?? h;
+                const min = h > 0 && hasResults ? Math.max(0.12, minResultsHeight(consoleH, h, chrome, rowHeight) / h) : 0.12;
+                setTabSplit(tab.id, Math.max(min, Math.min(MAX_RESULTS_SHARE, dragStart - d / h)));
               }}
-              onDoubleClick={() => setLayout({ resultsFraction: 0.45 })}
+              onDoubleClick={() => setTabSplit(tab.id, null)}
             />
-            <div className="results-host" style={{ flexBasis: `${fraction * 100}%` }}>
+            <div className="results-host" data-region="results" ref={resultsRef} style={{ flexBasis: `${shown * 100}%`, ...(minPx ? { minHeight: minPx } : {}) }}>
               <ResultsPane tabId={tab.id} dialect={dialect} theme={theme} onClose={() => useUi.getState().toggle('resultsVisible')} />
             </div>
           </>

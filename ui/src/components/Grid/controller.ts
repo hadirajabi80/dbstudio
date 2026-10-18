@@ -9,7 +9,12 @@ export interface GridController {
   quickFilterCell(): void;
   clearFilter(): void;
   applyServerFilter?(): void;
+  /** Save the pending edits (directly; the SQL preview only when settings.grid.showSqlBeforeSave is on). */
   submit?(): void;
+  /** Open the SQL preview of the pending edits. */
+  previewChanges?(): void;
+  /** Copy the SQL of the pending edits. */
+  copyChangesSql?(): void;
   undo?(): void;
   redo?(): void;
   setNull?(): void;
@@ -20,6 +25,34 @@ export interface GridController {
   loadMore?(): void;
   refresh?(): void;
   hasPending?(): boolean;
+  /** Commit an open in-place editor like Enter does (before submit / dialogs). */
+  commitEdit?(): Promise<void>;
+  /** Open the in-place editor on the focused cell (F2 / context menu). */
+  editCell?(): void;
+  /** Copy the selection (or every visible row when nothing / `all` is selected) in a format. */
+  copyAs?(format: import('../../lib/serialize').CopyFormat, all?: boolean): void;
+  /** Export the whole result (engine-side when possible). */
+  exportAs?(format: 'csv' | 'json' | 'sql-insert'): void;
+  /** Client-side export of the visible rows (filter, sort and committed edits applied; full values fetched). */
+  exportVisible?(format: 'csv' | 'json' | 'sql-insert', o: { baseName: string; note?: string | null }): Promise<void>;
+  toggleValueViewer?(): void;
+  clearSort?(): void;
+  hasSort?(): boolean;
+  copyColumnNames?(): void;
+  /**
+   * Focus the grid (its canvas / focused cell), keeping the selection. False when the grid is not rendered yet or is
+   * hidden (a host can retry).
+   */
+  focus?(): boolean;
+}
+
+/**
+ * Focus the grid registered under `key` (filter bar closed, tab opened, …). Returns false when there is no such grid
+ * or it cannot take focus yet.
+ */
+export function focusGrid(key: string): boolean {
+  const c = controllers.get(key);
+  return !!c?.focus && c.focus();
 }
 
 const controllers = new Map<string, GridController>();

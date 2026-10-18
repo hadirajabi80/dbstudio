@@ -1,9 +1,10 @@
 -- rebuildRequired: false, transactional: false
+-- warning: SHOP.TOTALS is replaced by a new view SHOP.ORDER_TOTALS: grants on the old view are not carried over.
 
--- [rename]
-RENAME TOTALS TO ORDER_TOTALS;
-
--- [alter]
-CREATE OR REPLACE FORCE VIEW SHOP.ORDER_TOTALS AS
+-- [create]
+CREATE FORCE VIEW SHOP.ORDER_TOTALS AS
 SELECT customer_id, SUM(total) total FROM orders GROUP BY customer_id
 WITH CHECK OPTION;
+
+-- [drop]
+DROP VIEW SHOP.TOTALS;

@@ -18,6 +18,7 @@ public sealed class SqlServerSession : AdoSessionBase
 {
     private const string ErrorCountKey = "sqlserver.errors";
     private const string StoppingKey = "sqlserver.stopping";
+    private const string CancelAckKey = "sqlserver.cancelAck";
 
     private readonly SqlConnection _conn;
 
@@ -118,9 +119,16 @@ public sealed class SqlServerSession : AdoSessionBase
     {
         if (context.Items.TryGetValue(ErrorCountKey, out var n) && n is int count && count > 0 && context.Status == BatchStatus.Ok)
             context.Status = BatchStatus.Error;
-        // With FireInfoMessageEventOnUserErrors the attention ("Operation cancelled by user") can arrive as a message.
-        if (CancelRequested && context.Status != BatchStatus.Cancelled && !context.Items.ContainsKey(StoppingKey))
+        // With FireInfoMessageEventOnUserErrors the attention ("Operation cancelled by user") arrives as a message, so the
+        // reader ends normally: only the acknowledgement says the server aborted the batch. Without it the batch ran to
+        // completion before the cancel reached the server (its changes stand): keep the base's Ok + warning.
+        var acknowledged = context.Items.ContainsKey(CancelAckKey);
+        if (CancelRequested && context.Status != BatchStatus.Cancelled && !context.Items.ContainsKey(StoppingKey)
+            && (acknowledged || !context.CompletedDespiteCancel))
+        {
             context.Status = BatchStatus.Cancelled;
+            context.CompletedDespiteCancel = false;
+        }
         // USE [db] inside the batch changes the database (ENVCHANGE is tracked by SqlConnection.Database).
         if (_conn.State == System.Data.ConnectionState.Open && !string.IsNullOrEmpty(_conn.Database))
             CurrentDatabase = _conn.Database;
@@ -135,6 +143,11 @@ public sealed class SqlServerSession : AdoSessionBase
         var count = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return count is int n ? n > 0 : null;
     }
+
+    /// <summary>"Operation cancelled by user" (attention acknowledged) thrown as an exception.</summary>
+    protected override bool IsCancellationException(Exception exception) =>
+        base.IsCancellationException(exception)
+        || exception is SqlException sql && sql.Errors.Cast<SqlError>().Any(e => IsCancellationError(SqlServerErrors.From(e)));
 
     protected override ErrorInfo MapException(Exception exception, SqlBatch batch) => exception switch
     {
@@ -194,7 +207,11 @@ public sealed class SqlServerSession : AdoSessionBase
             if (SqlServerErrors.IsError(err))
             {
                 // Errors caused by our own cancel (user cancel or row cap) are not batch errors.
-                if ((CancelRequested || ctx.Items.ContainsKey(StoppingKey)) && IsCancellationError(err)) continue;
+                if ((CancelRequested || ctx.Items.ContainsKey(StoppingKey)) && IsCancellationError(err))
+                {
+                    if (CancelRequested) ctx.Items[CancelAckKey] = true; // the server aborted the batch (attention acknowledged)
+                    continue;
+                }
                 ctx.Items[ErrorCountKey] = (ctx.Items.TryGetValue(ErrorCountKey, out var n) && n is int c ? c : 0) + 1;
                 EmitError(SqlServerErrors.ToErrorInfo(err, ctx.Batch));
             }

@@ -1,4 +1,4 @@
-import type { CellValue, ColumnInfo, RunLabel, ServerDiagnostic, SqlBatch, WsEvent } from '../api/types';
+import type { CellValue, ColumnInfo, QueryParam, RunLabel, ServerDiagnostic, SqlBatch, WsEvent } from '../api/types';
 import { ChunkedList } from '../lib/chunked';
 
 /**
@@ -50,6 +50,8 @@ export interface ExecutionState {
   sessionId: string | null;
   label: RunLabel;
   batches: SqlBatch[];
+  /** Bind values the batches ran with (A2); re-runs (server filter, Clear) must send them again. */
+  params: QueryParam[];
   maxRows: number;
   confirmedDestructive: boolean;
   status: ExecStatus;
@@ -68,7 +70,7 @@ export interface ExecutionState {
 
 export function createExecution(init: {
   localId: string; tabId: string; connectionId: string; sessionId: string | null; label: RunLabel; batches: SqlBatch[];
-  maxRows: number; confirmedDestructive?: boolean; now?: number;
+  maxRows: number; confirmedDestructive?: boolean; now?: number; params?: QueryParam[] | null;
 }): ExecutionState {
   return {
     localId: init.localId,
@@ -78,6 +80,7 @@ export function createExecution(init: {
     sessionId: init.sessionId,
     label: init.label,
     batches: init.batches,
+    params: init.params ?? [],
     maxRows: init.maxRows,
     confirmedDestructive: init.confirmedDestructive ?? false,
     status: 'starting',

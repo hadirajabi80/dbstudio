@@ -1,0 +1,1 @@
+merge dbo.CustomerStats as tgt using(select CustomerId, count(*) as Orders from dbo.Orders group by CustomerId) as src on tgt.CustomerId = src.CustomerId when matched then update set tgt.Orders = src.Orders when not matched then insert (CustomerId, Orders) values (src.CustomerId, src.Orders);

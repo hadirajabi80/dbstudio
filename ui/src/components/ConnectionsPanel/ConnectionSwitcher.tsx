@@ -9,6 +9,7 @@ import { useTabSession } from '../../store/sessions';
 import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
+import { useRestoreFocus } from '../common/focus';
 import { ProviderIcon } from '../common/icons';
 import { Kbd } from '../Shortcuts/Kbd';
 
@@ -44,6 +45,8 @@ function Switcher() {
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  // Esc / choosing gives the focus back to the editor (or the pill) the switcher was opened from.
+  useRestoreFocus(true, boxRef);
 
   useEffect(() => {
     inputRef.current?.focus();

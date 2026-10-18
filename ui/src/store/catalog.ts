@@ -198,11 +198,21 @@ export const useCatalog = create<CatalogState>((set, get) => {
     },
 
     applyChanged(ev) {
-      const d = get().dbs[dbKey(ev.connectionId, ev.database)];
-      if (!d) return;
-      if (d.schemasStatus === 'ready') void get().loadSchemas(ev.connectionId, ev.database, true);
-      const targets = ev.schemas.length ? ev.schemas : Object.keys(d.loaded);
-      for (const s of targets) if (d.loaded[s] || d.schemaStatus[s] === 'ready') void get().loadSchema(ev.connectionId, ev.database, s, true);
+      // The engine may name no database (SQLite, Oracle: one per connection) while the cache is keyed by the effective
+      // database ("main", "Shop"): a null database refreshes every cached database of the connection; a database that
+      // matches no key falls back to the connection's default (null / current database) entry.
+      const all = Object.values(get().dbs).filter((d) => d.connectionId === ev.connectionId);
+      const same = (a: string | null, b: string) => !!a && a.toLowerCase() === b.toLowerCase();
+      let targets = ev.database == null ? all : all.filter((d) => same(d.database, ev.database!));
+      if (!targets.length && ev.database != null) {
+        const current = get().conns[ev.connectionId]?.databases?.current ?? null;
+        targets = all.filter((d) => d.database === null || (current !== null && same(d.database, current)));
+      }
+      for (const d of targets) {
+        if (d.schemasStatus === 'ready') void get().loadSchemas(ev.connectionId, d.database, true);
+        const schemas = ev.schemas.length ? ev.schemas : Object.keys(d.loaded);
+        for (const s of schemas) if (d.loaded[s] || d.schemaStatus[s] === 'ready') void get().loadSchema(ev.connectionId, d.database, s, true);
+      }
     },
 
     forget(cid) {

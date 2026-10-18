@@ -1,5 +1,6 @@
 // Single multiplexed WebSocket to the engine (D-6). Auth via the first frame, never the URL.
 import type { WsClientFrame, WsEvent, WsEventOf, WsEventType } from './types';
+import { uiClientId } from './clientId';
 
 /** Minimal WebSocket surface so tests and the mock engine can supply a fake socket. */
 export interface SocketLike {
@@ -133,7 +134,7 @@ export class EngineSocket {
     let opened = false;
     sock.onopen = () => {
       opened = true;
-      this.sendFrame({ type: 'auth', token: this.info!.token });
+      this.sendFrame({ type: 'auth', token: this.info!.token, clientId: uiClientId() });
     };
     sock.onmessage = (m) => this.onMessage(m.data);
     sock.onerror = () => {

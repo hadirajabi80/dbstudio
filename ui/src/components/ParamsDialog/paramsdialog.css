@@ -35,7 +35,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pd-row select {
+.pd-row .select-trigger {
   width: 100%;
 }
 .pd-value {

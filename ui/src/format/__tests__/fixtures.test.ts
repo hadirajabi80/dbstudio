@@ -1,11 +1,12 @@
 // Formatter fixture tests (PLAN-M1.5 1.2 step 6): for every fixture `<dialect>/NN-name.sql`
 // - the output equals `NN-name.expected.sql` (regenerate with UPDATE_FORMAT_FIXTURES=1 and review the diff),
 // - formatting is idempotent,
-// - the token sequence is unchanged (words compared case-insensitively, everything else byte for byte),
-// - every comment survives with identical text,
+// - the token sequence is unchanged (words compared case-insensitively, everything else byte for byte; a `;` may
+//   move before the comments right in front of it),
+// - every comment survives with identical text (block comment continuation lines may be re-indented),
 // - only fixtures named `*broken*` produce warnings (and those keep the broken statement verbatim).
 import { describe, expect, it } from 'vitest';
-import { formatSql } from '../index';
+import { canonicalTokens, commentKey, formatSql } from '../index';
 import { getSpec } from '../../intel/dialect';
 import { tokenize } from '../../intel/lexer/lexer';
 import type { Dialect, Token } from '../../intel/types';
@@ -21,9 +22,13 @@ async function writeExpected(rel: string, text: string): Promise<void> {
 }
 
 function norm(tokens: Token[]): string[] {
-  return tokens
-    .filter((t) => t.kind !== 'eof')
-    .map((t) => (t.kind === 'keyword' || t.kind === 'ident' || t.kind === 'batchSep' || t.kind === 'op' ? `${t.kind}:${t.upper}` : `${t.kind}:${t.text}`));
+  return canonicalTokens(tokens).map((t) =>
+    t.kind === 'keyword' || t.kind === 'ident' || t.kind === 'batchSep' || t.kind === 'op'
+      ? `${t.kind}:${t.upper}`
+      : t.kind === 'comment'
+        ? `comment:${commentKey(t.text)}`
+        : `${t.kind}:${t.text}`,
+  );
 }
 
 export function fixtureFiles(dialect: Dialect): string[] {
@@ -49,7 +54,7 @@ for (const dialect of ['tsql', 'plsql', 'sqlite'] as Dialect[]) {
         const before = tokenize(input, spec), after = tokenize(r.text, spec);
         expect(norm(after)).toEqual(norm(before));
         // comment preservation
-        const comments = (ts: Token[]) => ts.filter((t) => t.kind === 'comment').map((t) => t.text);
+        const comments = (ts: Token[]) => ts.filter((t) => t.kind === 'comment').map((t) => commentKey(t.text));
         expect(comments(after)).toEqual(comments(before));
         if (f.includes('broken')) expect(r.warnings.length).toBeGreaterThan(0);
         else expect(r.warnings).toEqual([]);

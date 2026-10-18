@@ -35,6 +35,11 @@ export interface DbStudioBridge {
   loadWorkspace(): Promise<unknown | null>;
   saveWorkspace(data: unknown): Promise<void>;
   setTitle(title: string): void;
+  /**
+   * Additive (optional, older preloads lack it): page zoom via webFrame.setZoomFactor, 0.6–2. Renderer-side only,
+   * no IPC; Chromium then renders canvases at the zoomed devicePixelRatio.
+   */
+  setZoomFactor?(factor: number): void;
 }
 
 declare global {

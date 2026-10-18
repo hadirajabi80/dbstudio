@@ -43,12 +43,14 @@ export function TabBar() {
     setTimeout(() => scrollRef.current?.querySelector<HTMLElement>('.tab.active')?.focus(), 0);
   };
 
+  // With every tab on one connection the suffix says nothing the colour bar does not (features-r1-05).
+  const showConn = new Set(tabs.map((t) => t.connectionId).filter(Boolean)).size > 1;
   const add = commandView('file.newConsole');
   return (
     <div className="tabbar" role="tablist" aria-label="Editor tabs" onKeyDown={onKeyDown}>
       <div className="tabbar-scroll" ref={scrollRef}>
         {tabs.map((t) => (
-          <TabItem key={t.id} tab={t} active={t.id === activeId} dragId={dragId} setDragId={setDragId} />
+          <TabItem key={t.id} tab={t} active={t.id === activeId} showConn={showConn} dragId={dragId} setDragId={setDragId} />
         ))}
       </div>
       <button className="icon-btn tabbar-add" title={add.tooltip} aria-label="New console" onClick={add.run}>
@@ -64,7 +66,9 @@ function TabIcon({ tab }: { tab: Tab }) {
   return <SquareTerminal size={14} strokeWidth={1.5} />;
 }
 
-function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean; dragId: string | null; setDragId: (id: string | null) => void }) {
+function TabItem({ tab, active, showConn, dragId, setDragId }: {
+  tab: Tab; active: boolean; showConn: boolean; dragId: string | null; setDragId: (id: string | null) => void;
+}) {
   const conn = useConnections((s) => s.connections.find((c) => c.id === tab.connectionId));
   const running = useResults((s) => isRunning(s.executions[s.byTab[tab.id]]));
   const txOpen = useSessions((s) => {
@@ -117,28 +121,31 @@ function TabItem({ tab, active, dragId, setDragId }: { tab: Tab; active: boolean
       <span className="tab-icon">
         <TabIcon tab={tab} />
       </span>
-      {renaming ? (
-        <input
-          className="tab-rename"
-          autoFocus
-          aria-label="Tab name"
-          defaultValue={tab.title}
-          onMouseDown={(e) => e.stopPropagation()}
-          onFocus={(e) => e.target.select()}
-          onBlur={(e) => {
-            if (e.target.value.trim()) t.rename(tab.id, e.target.value.trim());
-            useUi.getState().setRenamingTab(null);
-          }}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            if (e.key === 'Escape') useUi.getState().setRenamingTab(null);
-          }}
-        />
-      ) : (
-        <span className="tab-title">{tab.title}</span>
-      )}
-      {conn && <span className="tab-conn">{conn.name}</span>}
+      <span className="tab-label">
+        {renaming ? (
+          <input
+            className="tab-rename"
+            autoFocus
+            aria-label="Tab name"
+            defaultValue={tab.title}
+            onMouseDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.target.select()}
+            onBlur={(e) => {
+              if (e.target.value.trim()) t.rename(tab.id, e.target.value.trim());
+              useUi.getState().setRenamingTab(null);
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              if (e.key === 'Escape') useUi.getState().setRenamingTab(null);
+            }}
+          />
+        ) : (
+          <span className="tab-title">{tab.title}</span>
+        )}
+        {/* Redundant with a single connection, or when the title already names it ("Sample: Shop", "Orders · Shop"). */}
+        {conn && showConn && !tab.title.toLowerCase().includes(conn.name.toLowerCase()) && <span className="tab-conn">{conn.name}</span>}
+      </span>
       {conn?.readOnly && <Lock size={11} className="tab-lock" aria-label="Read-only connection" />}
       {running && <span className="tab-running" role="img" aria-label="Running" />}
       {txOpen && <span className="tab-tx" title="Uncommitted transaction">tx</span>}

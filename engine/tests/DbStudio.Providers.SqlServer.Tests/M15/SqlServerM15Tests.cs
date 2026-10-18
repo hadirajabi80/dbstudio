@@ -49,16 +49,155 @@ public sealed class SqlServerScripterGoldenTests
     public void IdentityChange_IsARebuild_WithIdentityInsert()
     {
         var orders = DesignerCases.Orders(Dialect.TSql);
+        orders = orders with { Columns = orders.Columns.Select(c => c.Name == "Note" ? c with { Comment = "Free text" } : c).ToList() };
         var desired = orders with { Columns = orders.Columns.Select(c => c.Name == "Id" ? c with { Identity = new IdentityModel(1000, 1) } : c).ToList() };
-        var script = Scripter.ScriptTable(orders, desired, Context);
+        var script = Scripter.ScriptTable(orders, desired, RebuildContext);
         Assert.True(script.RebuildRequired);
         var sql = script.Statements.Select(s => s.Sql).ToList();
         Assert.Contains("SET IDENTITY_INSERT [dbo].[Orders__new] ON", sql);
         Assert.Contains("SET IDENTITY_INSERT [dbo].[Orders__new] OFF", sql);
         Assert.Contains("EXEC sys.sp_rename N'[dbo].[Orders__new]', N'Orders'", sql);
         Assert.Contains(sql, s => s.StartsWith("ALTER TABLE [dbo].[Orders] ADD CONSTRAINT [PK_Orders] PRIMARY KEY CLUSTERED", StringComparison.Ordinal));
+
+        // Inbound foreign keys are dropped before DROP TABLE and recreated after the primary key.
+        var dropFk = sql.IndexOf("ALTER TABLE [Sales].[OrderLines] DROP CONSTRAINT [FK_OrderLines_Orders]");
+        var dropTable = sql.IndexOf("DROP TABLE [dbo].[Orders]");
+        var addPk = sql.FindIndex(s => s.Contains("[PK_Orders] PRIMARY KEY", StringComparison.Ordinal));
+        var addFk = sql.IndexOf("ALTER TABLE [Sales].[OrderLines] WITH CHECK ADD CONSTRAINT [FK_OrderLines_Orders] FOREIGN KEY ([OrderId]) REFERENCES [dbo].[Orders] ([Id]) ON DELETE CASCADE");
+        Assert.True(dropFk >= 0 && dropFk < dropTable && addPk < addFk, string.Join("\n", sql));
+        Assert.Contains("ALTER TABLE [dbo].[Audit] WITH NOCHECK ADD CONSTRAINT [FK_Audit_Orders] FOREIGN KEY ([OrderId]) REFERENCES [dbo].[Orders] ([Id])", sql);
+        Assert.Contains("ALTER TABLE [dbo].[Audit] NOCHECK CONSTRAINT [FK_Audit_Orders]", sql);
+        // Triggers from their definitions (disabled ones stay disabled), MS_Description from the model, permissions.
+        Assert.True(sql.IndexOf(TriggerSql) > addFk);
+        Assert.Contains("DISABLE TRIGGER [dbo].[TR_Orders_Audit] ON [dbo].[Orders]", sql);
+        Assert.Contains(sql, s => s.StartsWith("EXEC sys.sp_addextendedproperty @name = N'MS_Description', @value = N'Free text'", StringComparison.Ordinal));
+        Assert.Contains("GRANT SELECT ON [dbo].[Orders] TO [reporting]", sql);
+        Assert.Contains("GRANT UPDATE ([Note]) ON [dbo].[Orders] TO [clerks] WITH GRANT OPTION", sql);
+        Assert.Contains("DENY DELETE ON [dbo].[Orders] TO [clerks]", sql);
+        // What cannot be scripted is listed, so the confirm dialog shows exactly what is lost.
+        Assert.Contains("Extended property Owner on table is not carried over.", script.Warnings);
+        Assert.Contains("The firing order of trigger TR_Orders_Audit (sp_settriggerorder) is not carried over.", script.Warnings);
         AssertParses(script.Statements);
         Golden.Match("tsql_identity_rebuild.sql", Golden.Render(script, "GO"));
+    }
+
+    private const string TriggerSql = "CREATE TRIGGER [dbo].[TR_Orders_Stamp] ON [dbo].[Orders] AFTER UPDATE AS\nBEGIN\n    SET NOCOUNT ON;\nEND";
+
+    /// <summary>What SqlServerDesignerDatabase reads for Orders: two inbound FKs, two triggers, permissions, an extended property.</summary>
+    private static readonly DdlScriptContext RebuildContext = Context with
+    {
+        Dependents =
+        [
+            new(DependentTypes.ForeignKey, "FK_OrderLines_Orders", "", false, "Sales", "OrderLines",
+                new ForeignKeyModel { Name = "FK_OrderLines_Orders", Columns = ["OrderId"], RefSchema = "dbo", RefTable = "Orders", RefColumns = ["Id"], OnDelete = ReferentialActions.Cascade }),
+            new(DependentTypes.ForeignKey, "FK_Audit_Orders", "", false, "dbo", "Audit",
+                new ForeignKeyModel { Name = "FK_Audit_Orders", Columns = ["OrderId"], RefSchema = "dbo", RefTable = "Orders", RefColumns = ["Id"] }, Disabled: true),
+            new(DependentTypes.Trigger, "TR_Orders_Stamp", TriggerSql, true),
+            new(DependentTypes.Trigger, "TR_Orders_Audit", "CREATE TRIGGER dbo.TR_Orders_Audit ON dbo.Orders AFTER DELETE AS RETURN", true, Disabled: true, Detail: "ordered"),
+            new(DependentTypes.Permission, "reporting", "SELECT", true, Detail: "GRANT"),
+            new(DependentTypes.Permission, "clerks", "UPDATE", true, Detail: "GRANT_WITH_GRANT_OPTION", Column: "Note"),
+            new(DependentTypes.Permission, "clerks", "DELETE", true, Detail: "DENY"),
+            new(DependentTypes.NotCarried, "Owner", "", true, Detail: "Extended property Owner on table is not carried over."),
+        ],
+    };
+
+    [Fact]
+    public void IdentityRebuild_IsRefused_WhenDependentsAreUnknownOrCannotBeRecreated()
+    {
+        var orders = DesignerCases.Orders(Dialect.TSql);
+        var desired = orders with { Columns = orders.Columns.Select(c => c.Name == "Id" ? c with { Identity = new IdentityModel(1000, 1) } : c).ToList() };
+
+        // Not read (or the read failed): nothing is dropped blindly.
+        Assert.Contains("are unknown", Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, Context)).Message);
+        var unreadable = Context with { Dependents = [new(DependentTypes.Blocker, "Orders", "", false, Detail: "The foreign keys, triggers and permissions of the table could not be read (denied).")] };
+        Assert.Contains("could not be read", Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, unreadable)).Message);
+
+        // An encrypted trigger cannot be recreated.
+        var encrypted = Context with { Dependents = [new(DependentTypes.Trigger, "TR_Secret", "", true)] };
+        Assert.Contains("TR_Secret", Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, encrypted)).Message);
+
+        // A referenced column that the rebuild drops.
+        var referenced = Context with
+        {
+            Dependents = [new(DependentTypes.ForeignKey, "FK_X", "", false, "dbo", "X", new ForeignKeyModel { Name = "FK_X", Columns = ["NoteRef"], RefTable = "Orders", RefColumns = ["Note"] })],
+        };
+        var dropsNote = desired with { Columns = desired.Columns.Where(c => c.Name != "Note").ToList() };
+        Assert.Contains("FK_X", Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, dropsNote, referenced)).Message);
+
+        // A table with triggers cannot be renamed in the same rebuild (the definitions name it).
+        var withTrigger = Context with { Dependents = [new(DependentTypes.Trigger, "TR_Orders_Stamp", TriggerSql, true)] };
+        Assert.Contains("separate step", Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired with { Name = "Orders2" }, withTrigger)).Message);
+
+        // With no dependents at all the rebuild is fine.
+        Assert.True(Scripter.ScriptTable(orders, desired, Context with { Dependents = [] }).RebuildRequired);
+    }
+
+    [Fact]
+    public void RebuildDependencyQueries_AreRegisteredForTheParseTest()
+    {
+        foreach (var name in new[] { "InboundForeignKeysQuery", "TriggersQuery", "PermissionsQuery", "ExtendedPropertiesQuery", "SchemaBoundQuery", "UnsupportedStorageQuery" })
+            Assert.True(SqlServerDesignerDatabase.AllQueries.ContainsKey(name), name);
+    }
+
+    public static TheoryData<string, string, string?, string> StorageCases => new()
+    {
+        { DependentTypes.ColumnstoreIndex, "IX_cs", "NONCLUSTERED COLUMNSTORE", "Orders has a columnstore index IX_cs; DbStudio cannot recreate it in a rebuild" },
+        { DependentTypes.XmlIndex, "XI_Doc", "XML", "Orders has an XML index XI_Doc; DbStudio cannot recreate it in a rebuild" },
+        { DependentTypes.SpatialIndex, "SI_Geo", "SPATIAL", "Orders has a spatial index SI_Geo; DbStudio cannot recreate it in a rebuild" },
+        { DependentTypes.OtherIndex, "IX_hash", "NONCLUSTERED_HASH", "Orders has a nonclustered hash index IX_hash; DbStudio cannot recreate it" },
+        { DependentTypes.FulltextIndex, "", "FT_Catalog", "Orders has a full-text index (catalog FT_Catalog); DbStudio cannot recreate it" },
+        { DependentTypes.Partitioning, "PK_Orders", "PS_OrderDate", "index PK_Orders of Orders is partitioned on PS_OrderDate; DbStudio cannot recreate it" },
+        { DependentTypes.Partitioning, "", "PS_OrderDate", "Orders is partitioned on PS_OrderDate; DbStudio cannot recreate it" },
+        { DependentTypes.Filegroup, "", "FG_Archive", "Orders is stored on filegroup FG_Archive; DbStudio cannot recreate it" },
+        { DependentTypes.Filegroup, "", "FG_Lob (TEXTIMAGE_ON)", "Orders is stored on filegroup FG_Lob (TEXTIMAGE_ON); DbStudio cannot recreate it" },
+        { DependentTypes.Compression, "PK_Orders", "PAGE", "index PK_Orders of Orders uses PAGE compression; DbStudio cannot recreate it" },
+        { DependentTypes.Compression, "", "ROW", "Orders uses ROW compression; DbStudio cannot recreate it" },
+        { DependentTypes.ChangeTracking, "", null, "Orders has change tracking enabled; DbStudio cannot recreate it" },
+        { DependentTypes.Cdc, "", null, "Orders is tracked by change data capture (CDC); DbStudio cannot recreate it" },
+    };
+
+    /// <summary>features-r1-02: storage the model does not hold refuses the identity rebuild instead of being dropped.</summary>
+    [Theory]
+    [MemberData(nameof(StorageCases))]
+    public void IdentityRebuild_IsRefused_ForStorageTheModelDoesNotHold(string type, string name, string? detail, string expected)
+    {
+        var orders = DesignerCases.Orders(Dialect.TSql);
+        var desired = orders with { Columns = orders.Columns.Select(c => c.Name == "Id" ? c with { Identity = new IdentityModel(1000, 1) } : c).ToList() };
+        // Alongside everything a rebuild can carry over (FKs, triggers, permissions): the storage dependent alone decides.
+        var context = RebuildContext with { Dependents = [.. RebuildContext.Dependents!, new DependentObject(type, name, "", true, Detail: detail)] };
+        var message = Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, context)).Message;
+        Assert.StartsWith("The table cannot be rebuilt safely: ", message);
+        Assert.Contains(expected, message);
+        Assert.EndsWith("Change the identity in a script instead.", message);
+        Assert.True(DependentTypes.UnsupportedStorage.Contains(type));
+    }
+
+    [Fact]
+    public void IdentityRebuild_Refusal_ListsEveryStorageFeature_AndOtherAltersIgnoreThem()
+    {
+        var orders = DesignerCases.Orders(Dialect.TSql);
+        var desired = orders with { Columns = orders.Columns.Select(c => c.Name == "Id" ? c with { Identity = new IdentityModel(1000, 1) } : c).ToList() };
+        var context = Context with
+        {
+            Dependents =
+            [
+                new(DependentTypes.ColumnstoreIndex, "IX_cs", "", true, Detail: "NONCLUSTERED COLUMNSTORE"),
+                new(DependentTypes.Compression, "PK_Orders", "", true, Detail: "PAGE"),
+                new(DependentTypes.Compression, "PK_Orders", "", true, Detail: "PAGE"), // one row per partition: listed once
+                new(DependentTypes.Cdc, "", "", true),
+            ],
+        };
+        var message = Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, context)).Message;
+        Assert.Equal(
+            "The table cannot be rebuilt safely: DbStudio cannot recreate these in a rebuild: Orders has a columnstore index IX_cs; " +
+            "index PK_Orders of Orders uses PAGE compression; Orders is tracked by change data capture (CDC). Change the identity in a script instead.",
+            message);
+
+        // A plain ALTER (no rebuild) keeps them: the dependents are not consulted.
+        var addColumn = orders with { Columns = [.. orders.Columns, new TableColumnModel { Name = "Extra", Type = "int", Nullable = true }] };
+        var alter = Scripter.ScriptTable(orders, addColumn, context);
+        Assert.False(alter.RebuildRequired);
+        Assert.NotEmpty(alter.Statements);
     }
 
     [Fact]
@@ -87,16 +226,32 @@ public sealed class SqlServerScripterGoldenTests
     [Fact]
     public void Views_CreateOrAlter_AndOldServers()
     {
+        // A new view is a plain CREATE VIEW: an existing view of that name fails on the server instead of being replaced.
         var view = new ViewDefinition("Sales", "OrderTotals", null, "SELECT CustomerId, SUM(Total) AS Total FROM dbo.Orders GROUP BY CustomerId;", new ViewOptions(SchemaBinding: true, CheckOption: false));
         var s = Scripter.ScriptView(view, Context);
-        Assert.Equal("CREATE OR ALTER VIEW [Sales].[OrderTotals]\nWITH SCHEMABINDING\nAS\nSELECT CustomerId, SUM(Total) AS Total FROM dbo.Orders GROUP BY CustomerId", Assert.Single(s.Statements).Sql);
+        Assert.Equal("CREATE VIEW [Sales].[OrderTotals]\nWITH SCHEMABINDING\nAS\nSELECT CustomerId, SUM(Total) AS Total FROM dbo.Orders GROUP BY CustomerId", Assert.Single(s.Statements).Sql);
         AssertParses(s.Statements);
         Golden.Match("tsql_view_create.sql", Golden.Render(s, "GO"));
 
+        // Editing the same view: CREATE OR ALTER (2016 SP1+), ALTER VIEW on older servers; a case-only rename keeps it.
+        var edited = Scripter.ScriptView(view with { OriginalName = "OrderTotals" }, Context);
+        Assert.StartsWith("CREATE OR ALTER VIEW [Sales].[OrderTotals]", Assert.Single(edited.Statements).Sql);
+        var editedOld = Scripter.ScriptView(view with { OriginalName = "OrderTotals" }, new DdlScriptContext("12.0.6024.0", "dbo"));
+        Assert.StartsWith("ALTER VIEW [Sales].[OrderTotals]", Assert.Single(editedOld.Statements).Sql);
+        var caseOnly = Scripter.ScriptView(view with { OriginalName = "ordertotals" }, Context);
+        Assert.Equal("EXEC sys.sp_rename N'[Sales].[ordertotals]', N'OrderTotals'", caseOnly.Statements[0].Sql);
+        Assert.StartsWith("CREATE OR ALTER VIEW [Sales].[OrderTotals]", caseOnly.Statements[1].Sql);
+
+        // Renamed: the new name is created (never replaced), then the old view is dropped, in one transaction.
         var renamed = Scripter.ScriptView(view with { OriginalName = "Totals", Options = new ViewOptions(CheckOption: true) }, new DdlScriptContext("12.0.6024.0", "dbo"));
-        Assert.Equal("EXEC sys.sp_rename N'[Sales].[Totals]', N'OrderTotals'", renamed.Statements[0].Sql);
-        Assert.StartsWith("ALTER VIEW [Sales].[OrderTotals]", renamed.Statements[1].Sql);
-        Assert.EndsWith("WITH CHECK OPTION", renamed.Statements[1].Sql);
+        Assert.True(renamed.Transactional);
+        Assert.Equal(2, renamed.Statements.Count);
+        Assert.StartsWith("CREATE VIEW [Sales].[OrderTotals]", renamed.Statements[0].Sql);
+        Assert.EndsWith("WITH CHECK OPTION", renamed.Statements[0].Sql);
+        Assert.Equal("DROP VIEW [Sales].[Totals]", renamed.Statements[1].Sql);
+        Assert.DoesNotContain(renamed.Statements, st => st.Sql.Contains("OR ALTER", StringComparison.Ordinal) || st.Sql.Contains("IF EXISTS", StringComparison.Ordinal));
+        Assert.Contains(renamed.Warnings, w => w.Contains("permissions", StringComparison.Ordinal));
+        AssertParses(renamed.Statements);
         Assert.False(SqlServerDdlScripter.SupportsCreateOrAlter("13.0.4000.0"));
         Assert.True(SqlServerDdlScripter.SupportsCreateOrAlter("13.0.4001.0"));
     }

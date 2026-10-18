@@ -6,7 +6,7 @@ import { callParams, isRefCursor, isRoutine, isTable, returnParam } from '../mod
 import { NameScope, pascal, snake } from '../naming';
 import type { CodegenOptions } from '../options';
 import { bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, routineSqlName, typeNameOf, type Member } from '../shape';
-import { crudSql, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
+import { crudSql, defaultsNote, PH, qi, rewriteQuery, trimStatement, type Placeholder } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, Writer } from '../writer';
 
@@ -23,7 +23,7 @@ const TYPE_IMPORT: Record<string, [string, string]> = {
   timedelta: ['datetime', 'timedelta'], UUID: ['uuid', 'UUID'], Any: ['typing', 'Any'],
 };
 
-function use(ctx: Ctx, module: string, name: string) {
+function addImport(ctx: Ctx, module: string, name: string) {
   if (!ctx.from.has(module)) ctx.from.set(module, new Set());
   ctx.from.get(module)!.add(name);
 }
@@ -31,10 +31,10 @@ function use(ctx: Ctx, module: string, name: string) {
 function pyType(t: ResolvedType, nullable: boolean, ctx: Ctx): string {
   const b = t.py;
   const imp = TYPE_IMPORT[b];
-  if (imp) use(ctx, imp[0], imp[1]);
+  if (imp) addImport(ctx, imp[0], imp[1]);
   if (!nullable || b === 'Any') return b;
   if (ctx.o.pyUnionSyntax) return `${b} | None`;
-  use(ctx, 'typing', 'Optional');
+  addImport(ctx, 'typing', 'Optional');
   return `Optional[${b}]`;
 }
 
@@ -60,16 +60,33 @@ function fromDb(expr: string, m: Member, ctx: Ctx): string {
   if (b === 'datetime') conv = 'datetime.fromisoformat';
   else if (b === 'date') conv = 'date.fromisoformat';
   else if (b === 'Decimal') conv = 'Decimal';
+  else if (b === 'time') conv = 'time.fromisoformat';
+  else if (b === 'UUID') conv = 'UUID';
   else if (b === 'bool') conv = 'bool';
   if (!conv) return expr;
-  const call = conv === 'Decimal' ? `Decimal(str(${expr}))` : `${conv}(${expr})`;
+  const call = conv === 'Decimal' || conv === 'UUID' ? `${conv}(str(${expr}))` : `${conv}(${expr})`;
   return m.nullable ? `${call} if ${expr} is not None else None` : call;
+}
+
+/**
+ * Convert a value for the driver where it cannot bind the Python type. The stdlib sqlite3 module rejects Decimal and
+ * UUID ("type 'decimal.Decimal' is not supported"), and its date/datetime adapters are deprecated since Python 3.12:
+ * bind text instead (ISO 8601; datetimes with a space, as SQLite's own datetime() writes them).
+ */
+function toDb(expr: string, py: string, nullable: boolean, ctx: Ctx): string {
+  if (ctx.d !== 'sqlite') return expr;
+  let conv: string | null = null;
+  if (py === 'Decimal' || py === 'UUID') conv = `str(${expr})`;
+  else if (py === 'datetime') conv = `${expr}.isoformat(" ")`;
+  else if (py === 'date' || py === 'time') conv = `${expr}.isoformat()`;
+  if (!conv) return expr;
+  return nullable ? `(${conv} if ${expr} is not None else None)` : conv;
 }
 
 // ---------------- models ----------------
 
 function dataclass(w: Writer, typeName: string, members: Member[], doc: string, ctx: Ctx) {
-  use(ctx, 'dataclasses', 'dataclass');
+  addImport(ctx, 'dataclasses', 'dataclass');
   w.line(ctx.o.pyUnionSyntax ? '@dataclass(slots=True)' : '@dataclass');
   w.line(`class ${typeName}:`);
   w.indent();
@@ -85,15 +102,15 @@ function dataclass(w: Writer, typeName: string, members: Member[], doc: string, 
 }
 
 function pydanticModel(w: Writer, typeName: string, members: Member[], doc: string, ctx: Ctx) {
-  use(ctx, 'pydantic', 'BaseModel');
+  addImport(ctx, 'pydantic', 'BaseModel');
   const needsField = members.some((m) => m.name !== m.col.name || (m.type.logical === 'string' && m.type.length));
-  if (needsField) use(ctx, 'pydantic', 'Field');
+  if (needsField) addImport(ctx, 'pydantic', 'Field');
   w.line(`class ${typeName}(BaseModel):`);
   w.indent();
   docstring(w, doc);
   w.blank();
   if (members.some((m) => m.name !== m.col.name)) {
-    use(ctx, 'pydantic', 'ConfigDict');
+    addImport(ctx, 'pydantic', 'ConfigDict');
     w.line('model_config = ConfigDict(populate_by_name=True)');
     w.blank();
   }
@@ -121,13 +138,13 @@ const SA_TYPE: Record<string, string> = {
 function saColumnType(t: ResolvedType, ctx: Ctx): string {
   const name = SA_TYPE[t.logical] ?? 'NullType';
   if (name === 'NullType') {
-    use(ctx, 'sqlalchemy.types', 'NullType');
+    addImport(ctx, 'sqlalchemy.types', 'NullType');
     return 'NullType()';
   }
-  use(ctx, 'sqlalchemy', name);
+  addImport(ctx, 'sqlalchemy', name);
   if (name === 'String' && t.length) return `String(${t.length})`;
   if (name === 'String' && /text|clob|ntext|max/i.test(t.dbType)) {
-    use(ctx, 'sqlalchemy', 'Text');
+    addImport(ctx, 'sqlalchemy', 'Text');
     return 'Text()';
   }
   if (name === 'Numeric' && t.precision) return `Numeric(${t.precision}, ${t.scale ?? 0})`;
@@ -136,8 +153,8 @@ function saColumnType(t: ResolvedType, ctx: Ctx): string {
 }
 
 function sqlalchemyModel(w: Writer, typeName: string, members: Member[], t: CgTable, doc: string, ctx: Ctx) {
-  use(ctx, 'sqlalchemy.orm', 'Mapped');
-  use(ctx, 'sqlalchemy.orm', 'mapped_column');
+  addImport(ctx, 'sqlalchemy.orm', 'Mapped');
+  addImport(ctx, 'sqlalchemy.orm', 'mapped_column');
   w.line(`class ${typeName}(Base):`);
   w.indent();
   docstring(w, doc);
@@ -157,12 +174,17 @@ function sqlalchemyModel(w: Writer, typeName: string, members: Member[], t: CgTa
     kw.push(saColumnType(m.type, ctx));
     const fk = t.foreignKeys.find((f) => f.columns.length === 1 && f.columns[0] === m.col.name);
     if (fk) {
-      use(ctx, 'sqlalchemy', 'ForeignKey');
+      addImport(ctx, 'sqlalchemy', 'ForeignKey');
       const target = [fk.refSchema && !(ctx.d === 'sqlite' && fk.refSchema === 'main') ? fk.refSchema : null, fk.refTable, fk.refColumns[0]].filter(Boolean).join('.');
       kw.push(`ForeignKey("${target}")`);
     }
     if (isPk) kw.push('primary_key=True');
     if (m.col.identity) kw.push('autoincrement=True');
+    else if (m.col.hasDefault && !isPk && t.kind === 'table') {
+      // The server fills it on INSERT when the attribute is left unset.
+      addImport(ctx, 'sqlalchemy', 'FetchedValue');
+      kw.push('server_default=FetchedValue()');
+    }
     if (m.col.computed) kw.push('# computed');
     const c = commentText(m.col.comment);
     if (c) kw.push(`comment="${c.replace(/"/g, '\\"')}"`);
@@ -197,10 +219,11 @@ function repository(w: Writer, t: CgTable, typeName: string, members: Member[], 
   for (const [n, s] of consts) w.line(`${n} = ${q3(s)}`);
   w.blanks(2);
 
-  const args = (cols: { m: Member; expr: string }[]) => {
+  const args = (cols: { m: Member; expr: string; key?: boolean }[]) => {
     if (d === 'plsql') return `{${cols.map((c) => `"${c.m.name}": ${c.expr}`).join(', ')}}`;
     if (d === 'tsql') return cols.map((c) => c.expr).join(', ');
-    return `(${cols.map((c) => c.expr).join(', ')}${cols.length === 1 ? ',' : ''})`;
+    const vals = cols.map((c) => toDb(c.expr, c.m.type.py, c.m.nullable && !c.key, ctx));
+    return `(${vals.join(', ')}${cols.length === 1 ? ',' : ''})`;
   };
   /** Emit `cur.execute(...)` in a cursor scope (python-oracledb cursors are context managers; sqlite3's are not). */
   const withCursor = (body: () => void, after?: () => void) => {
@@ -226,7 +249,7 @@ function repository(w: Writer, t: CgTable, typeName: string, members: Member[], 
   w.blank();
   w.line('@staticmethod');
   w.line(`def _from_row(row: Any) -> ${typeName}:`);
-  use(ctx, 'typing', 'Any');
+  addImport(ctx, 'typing', 'Any');
   w.indent();
   w.line(`return ${typeName}(`);
   w.indent();
@@ -239,13 +262,13 @@ function repository(w: Writer, t: CgTable, typeName: string, members: Member[], 
     w.blank();
     let optType = `${typeName} | None`;
     if (!o.pyUnionSyntax) {
-      use(ctx, 'typing', 'Optional');
+      addImport(ctx, 'typing', 'Optional');
       optType = `Optional[${typeName}]`;
     }
     w.line(`def get(self, ${keySig}) -> ${optType}:`);
     w.indent();
     withCursor(() => {
-      execute(`_${base}_GET`, keys.map((k) => ({ m: k.m, expr: k.local })));
+      execute(`_${base}_GET`, keys.map((k) => ({ m: k.m, expr: k.local, key: true })));
       w.line('row = cur.fetchone()');
     });
     w.line('return self._from_row(row) if row is not None else None');
@@ -267,7 +290,8 @@ function repository(w: Writer, t: CgTable, typeName: string, members: Member[], 
     const idType = identity ? pyType(identity.type, false, ctx) : 'None';
     w.line(`def insert(self, e: ${typeName}) -> ${idType}:`);
     w.indent();
-    if (identity) docstring(w, `Insert a row and return the generated ${identity.col.name}.`);
+    const note = defaultsNote(ins, !!crud.update);
+    if (identity || note) docstring(w, [identity ? `Insert a row and return the generated ${identity.col.name}.` : 'Insert a row.', note].filter(Boolean).join(' '));
     if (identity && ins.returningKind === 'row') {
       withCursor(() => {
         execute(`_${base}_INSERT`, cols);
@@ -297,7 +321,7 @@ function repository(w: Writer, t: CgTable, typeName: string, members: Member[], 
     w.dedent();
   };
   if (crud.update) affected('update', `e: ${typeName}`, `_${base}_UPDATE`, crud.update.params.map((c) => ({ m: byCol.get(c)!, expr: `e.${byCol.get(c)!.name}` })));
-  if (crud.delete) affected('delete', keySig, `_${base}_DELETE`, keys.map((k) => ({ m: k.m, expr: k.local })));
+  if (crud.delete) affected('delete', keySig, `_${base}_DELETE`, keys.map((k) => ({ m: k.m, expr: k.local, key: true })));
   w.dedent();
 }
 
@@ -350,10 +374,10 @@ function routineFn(w: Writer, r: CgRoutine, ctx: Ctx, prefix: string) {
     ...outs.map((x) => [x.name, x.cursor ? 'list[tuple[Any, ...]]' : pyType(x.rt, true, ctx)]),
     ...(d === 'tsql' ? [['return_value', 'int']] : []),
   ];
-  if (fields.some((f) => f[1].includes('Any'))) use(ctx, 'typing', 'Any');
+  if (fields.some((f) => f[1].includes('Any'))) addImport(ctx, 'typing', 'Any');
   const hasResult = fields.length > 0;
   if (hasResult) {
-    use(ctx, 'dataclasses', 'dataclass');
+    addImport(ctx, 'dataclasses', 'dataclass');
     w.line('@dataclass');
     w.line(`class ${resultName}:`);
     w.indent();
@@ -461,7 +485,11 @@ function queryFn(w: Writer, q: CgQuery, ctx: Ctx, rowType: string, members: Memb
   const style = d === 'plsql' ? 'colon' : d === 'tsql' ? 'q' : q.params.some((p) => p.positional) ? 'q' : 'colon';
   const { sql, order } = rewriteQuery(trimStatement(q.sql), d, style);
   const scope = new NameScope(['conn', 'cur', 'rows', 'r']);
-  const args = q.params.map((p) => ({ p, local: scope.take(localName(p.name, o)), type: queryParamPy(p.type, ctx) }));
+  const args = q.params.map((p) => {
+    const local = scope.take(localName(p.name, o));
+    const type = queryParamPy(p.type, ctx);
+    return { p, local, type, bind: toDb(local, type, false, ctx) };
+  });
   const constName = `_${snake(q.name).toUpperCase()}_SQL`;
   w.line(`${constName} = ${q3(sql)}`);
   w.blanks(2);
@@ -471,9 +499,9 @@ function queryFn(w: Writer, q: CgQuery, ctx: Ctx, rowType: string, members: Memb
   docstring(w, `Run the ${q.name} query.`);
   let bind = '';
   if (args.length) {
-    if (style === 'colon') bind = `, {${args.map((a) => `"${a.p.name}": ${a.local}`).join(', ')}}`;
+    if (style === 'colon') bind = `, {${args.map((a) => `"${a.p.name}": ${a.bind}`).join(', ')}}`;
     else if (d === 'tsql') bind = `, ${order.map((n) => args.find((a) => a.p.name === n)!.local).join(', ')}`;
-    else bind = `, (${order.map((n) => args.find((a) => a.p.name === n)!.local).join(', ')}${order.length === 1 ? ',' : ''})`;
+    else bind = `, (${order.map((n) => args.find((a) => a.p.name === n)!.bind).join(', ')}${order.length === 1 ? ',' : ''})`;
   }
   w.line(`rows = conn.cursor().execute(${constName}${bind}).fetchall()`);
   w.line(`return [${rowType}(${members.map((m, i) => `${m.name}=${fromDb(`r[${i}]`, m, ctx)}`).join(', ')}) for r in rows]`);
@@ -487,7 +515,7 @@ function queryParamPy(t: CgQuery['params'][number]['type'], ctx: Ctx): string {
   };
   const r = m[t] ?? 'Any';
   const imp = TYPE_IMPORT[r];
-  if (imp) use(ctx, imp[0], imp[1]);
+  if (imp) addImport(ctx, imp[0], imp[1]);
   return r;
 }
 

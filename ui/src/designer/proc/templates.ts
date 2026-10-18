@@ -23,7 +23,7 @@ export interface WizardSpec {
   /** Function return type. */
   returns: string;
   /** Trigger details. */
-  trigger?: { table: string; timing: 'BEFORE' | 'AFTER' | 'INSTEAD OF'; events: ('INSERT' | 'UPDATE' | 'DELETE')[]; forEachRow: boolean };
+  trigger?: { table: string; timing: TriggerTiming; events: ('INSERT' | 'UPDATE' | 'DELETE')[]; forEachRow: boolean };
   /** Oracle: add a procedure/function to an existing package (its current spec and body DDL). */
   packageMember?: { packageName: string; spec: string; body: string | null; member: 'procedure' | 'function' } | null;
 }
@@ -33,6 +33,21 @@ export function kindsFor(dialect: Dialect): RoutineKind[] {
   if (dialect === 'sqlite') return ['trigger'];
   if (dialect === 'plsql') return ['procedure', 'function', 'package', 'trigger'];
   return ['procedure', 'function', 'trigger'];
+}
+
+export type TriggerTiming = 'BEFORE' | 'AFTER' | 'INSTEAD OF';
+
+/**
+ * Timings a trigger can have on a table or on a view. Views only take INSTEAD OF triggers in every dialect; SQL Server
+ * tables have no BEFORE triggers, and SQLite / Oracle tables no INSTEAD OF.
+ */
+export function triggerTimings(dialect: Dialect, onView: boolean): TriggerTiming[] {
+  if (onView) return ['INSTEAD OF'];
+  return dialect === 'tsql' ? ['AFTER', 'INSTEAD OF'] : ['BEFORE', 'AFTER'];
+}
+
+export function defaultTiming(dialect: Dialect, onView: boolean): TriggerTiming {
+  return onView ? 'INSTEAD OF' : dialect === 'plsql' ? 'BEFORE' : 'AFTER';
 }
 
 export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER' };

@@ -33,10 +33,16 @@ Setup: fresh profile (browser: `http://localhost:5177/?fresh` with `npm run dev:
 | 20 | Ctrl+W, Ctrl+Shift+T, Ctrl+1…9, Ctrl+Tab | Close, reopen, jump to a tab, switch to the previously used tab. | `tab.close`, `tab.reopenClosed`, `tab.goto1`, `tab.mruNext` |
 | 21 | F1 (or Ctrl+K Ctrl+S) | Shortcut sheet; type "format" or "ctrl+shift"; no conflict banner. | `view.shortcuts` |
 | 22 | Ctrl+, | Settings; Theme "Follow system"; switch OS theme: the app recolours live (editor, grid, menus). | `view.settings` |
+| 23 | In a console: Ctrl+Enter, then Alt+3, then Ctrl+F | The statement runs; Alt+3 moves focus to the console's result grid (a short focus outline marks the region); Ctrl+F opens the grid filter bar. Alt+2 returns to the editor, Alt+1 focuses the explorer tree. | `run.statement`, `view.focusResults`, `grid.filter`, `view.focusEditor`, `view.focusExplorer` |
+| 24 | F6 / Shift+F6 (repeat) | Focus cycles side panel → editor → results → status bar and back, with a visible outline each time. | `view.nextRegion`, `view.prevRegion` |
+| 25 | Ctrl+M in the editor, then Tab | Tab moves focus out of the editor instead of indenting (Monaco tab-focus mode); Ctrl+M again restores indenting. Listed in the shortcut sheet (macOS: ⌃⇧M). | `editor.toggleTabFocus` |
+| 26 | Ctrl+Shift+P, Esc; Ctrl+P, Esc; Ctrl+Shift+K, Esc; Shift+F10 in the tree, Esc | Each overlay gives focus back to where it was opened from (editor caret or tree row), never to the page body. Ctrl+W on the last tab focuses the first Welcome action. Ctrl+L from the toolbar or the grid explains the editor's statement. | `view.commandPalette`, `view.goToObject`, `connections.change`, `explain.estimated` |
+| 27 | On a read-only connection: `update Customers set City='X' where Id=1`, Ctrl+Enter, then Enter | "Read-only connection" opens with Cancel focused, so Enter cancels. *Run with writes* stays disabled until "Allow this statement to write to …" is ticked (Space). | `run.statement` |
 
 Pass criteria
 - Every step works with the keyboard only and focus is always visible (2 px `--focus-ring`).
-- Dialogs: Esc closes, Tab is trapped inside, Enter triggers the primary action.
+- Dialogs: Esc closes, Tab is trapped inside, Enter triggers the primary action, except danger confirmations: there
+  Cancel has the focus (Enter = Cancel), and a read-only override needs its checkbox ticked first.
 - The shortcut sheet shows no conflicts; `npm --prefix ui test` (commands.test.ts) is green.
 - Steps 12–16 depend on WP-G/WP-H/WP-I; if a command is missing, the menu item is hidden (not disabled) and the
   coverage test reports it once the package's `commands.ts` exists.
@@ -45,4 +51,5 @@ Automated counterparts (vitest + jsdom): `src/commands/commands.test.ts` (covera
 `src/components/Onboarding/Onboarding.test.tsx` (steps 1–2), `src/app/multiRun.test.ts` (step 17),
 `src/components/CommandPalette/objectIndex.test.ts` (step 7, < 30 ms on 50k objects),
 `src/components/Explorer/tree.test.ts` (step 11), `src/store/history.test.ts` (step 18),
-`src/theme/tokens.test.ts` (tokens, contrast, no literal colours).
+`src/theme/tokens.test.ts` (tokens, contrast, no literal colours), `src/components/layout/shell.test.tsx` (steps 26–27:
+menus, focus restore, danger confirmations), `src/app/shortcutLiterals.test.ts` (no hand-written "(Ctrl+…)" labels).

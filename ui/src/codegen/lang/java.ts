@@ -9,7 +9,7 @@ import {
   bindNameOf, DIALECT_LABEL, friendlyParam, localName, membersOf, objectLabel, pkMembers, proceduresClassName, routineSqlName, typeNameOf,
   type Member,
 } from '../shape';
-import { crudSql, PH, qi, rewriteQuery, trimStatement } from '../sqlgen';
+import { crudSql, defaultsNote, PH, qi, rewriteQuery, trimStatement } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, dq, Writer } from '../writer';
 
@@ -45,6 +45,8 @@ function sqlType(t: ResolvedType): string {
 /** ResultSet getter for a column (by label). */
 function getter(t: ResolvedType, nullable: boolean, label: string, ctx: Ctx, rs = 'rs'): string {
   const b = t.java;
+  // The getter names the type (LocalDateTime.parse, UUID::fromString, LocalDate.class): import it like javaType does.
+  if (IMPORT_OF[b]) ctx.imports.add(IMPORT_OF[b]);
   const l = dq(label);
   if (ctx.d === 'sqlite' && (b === 'LocalDate' || b === 'LocalDateTime')) {
     // sqlite-jdbc stores dates as text; parse ISO-8601 (with a space or T separator).
@@ -177,6 +179,8 @@ function jpaEntity(w: Writer, typeName: string, members: Member[], t: CgTable, c
       if (m.type.logical === 'string' && m.type.length) attrs.push(`length = ${m.type.length}`);
       if (m.type.logical === 'decimal' && m.type.precision) attrs.push(`precision = ${m.type.precision}`, `scale = ${m.type.scale ?? 0}`);
       if (m.col.identity || m.col.computed || m.type.logical === 'rowversion') attrs.push('insertable = false', 'updatable = false');
+      // A server default fills it on INSERT (as the JDBC insert does); updates still write it.
+      else if (m.col.hasDefault && t.kind === 'table' && !pk.includes(m)) attrs.push('insertable = false');
       if (m.type.logical === 'binary' && !m.type.length) w.line('@Lob');
       if (m.type.logical === 'rowversion') w.line('@Version');
       w.line(`@Column(${attrs.join(', ')})`);
@@ -308,7 +312,8 @@ function dao(w: Writer, t: CgTable, typeName: string, members: Member[], ctx: Ct
       w.blank();
       const binds = crud.insert.params.map((c) => ({ m: byCol.get(c)!, expr: access(byCol.get(c)!, ctx) }));
       const idType = identity ? javaType(identity.type, false, ctx) : null;
-      w.line(identity ? `/** Inserts a row and returns the generated ${identity.col.name}. */` : '/** Inserts a row. */');
+      const note = defaultsNote(crud.insert, !!crud.update);
+      w.line(`/** ${identity ? `Inserts a row and returns the generated ${identity.col.name}.` : 'Inserts a row.'}${note ? ` ${note}` : ''} */`);
       w.line(`public ${idType ?? 'void'} insert(${typeName} e) throws SQLException {`);
       w.indent();
       w.line('try (Connection c = dataSource.getConnection();');

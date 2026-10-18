@@ -72,7 +72,7 @@ function Sheet() {
         <Search size={14} />
         <input
           className="input borderless"
-          placeholder="Search by command or key (e.g. “format” or “Ctrl+Shift”)"
+          placeholder={`Search by command or key (e.g. “format” or “${displayShortcut('Mod+Shift')}”)`}
           aria-label="Search shortcuts"
           value={q}
           data-autofocus

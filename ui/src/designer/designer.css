@@ -55,7 +55,7 @@
   flex-direction: column;
 }
 .dz-top {
-  flex: 1 1 55%;
+  flex: 1 1 auto;
   min-height: 120px;
   display: flex;
   flex-direction: column;
@@ -100,7 +100,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: var(--fs);
+  font-size: var(--text-md);
 }
 .dz-grid th {
   position: sticky;
@@ -147,7 +147,7 @@
 }
 .dz-grid td.dz-mono {
   font-family: var(--font-mono);
-  font-size: var(--grid-font-size, var(--fs));
+  font-size: var(--grid-font-size, var(--text-md));
 }
 .dz-grid td.dz-check {
   width: 56px;
@@ -187,8 +187,9 @@
   vertical-align: middle;
 }
 .dz-mark.on {
-  background: var(--accent-soft);
+  background: var(--accent);
   border-color: var(--accent);
+  color: var(--accent-fg);
 }
 .dz-pk-order {
   font-size: var(--text-xs);
@@ -199,6 +200,43 @@
 /* type combobox */
 .dz-combo {
   position: relative;
+}
+/* type cell: the value plus a chevron that opens the type list */
+.dz-type-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.dz-type-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dz-type-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0.55;
+}
+.dz-grid tr:hover .dz-type-chevron,
+.dz-grid td:focus .dz-type-chevron,
+.dz-grid tr.dz-row-active .dz-type-chevron {
+  opacity: 1;
+}
+.dz-type-chevron:hover {
+  background: var(--bg-hover, var(--bg-selected-inactive));
+  color: var(--fg);
 }
 .dz-combo-list {
   position: absolute;
@@ -247,6 +285,17 @@
   font-weight: var(--weight-strong);
   color: var(--fg);
 }
+/* compact controls of the properties strip and the constraint cards share one height with the chips */
+.dz-props .input,
+.dz-card .input,
+.dz-list .input {
+  height: var(--input-h-sm);
+  font-size: var(--text-sm);
+}
+.dz-props .input.mono,
+.dz-card .input.mono {
+  font-family: var(--font-mono);
+}
 
 /* constraint lists */
 .dz-list {
@@ -281,9 +330,9 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 22px;
+  height: var(--input-h-sm);
   padding: 0 var(--space-2);
-  border-radius: 11px;
+  border-radius: calc(var(--input-h-sm) / 2);
   border: 1px solid var(--border-strong);
   background: var(--bg-panel);
   color: var(--fg);
@@ -311,11 +360,58 @@
 
 /* ---------- DDL preview ---------- */
 .dz-preview {
-  flex: 1 1 45%;
-  min-height: 120px;
+  flex: 0 0 auto;
+  min-height: 96px;
   display: flex;
   flex-direction: column;
+}
+.dz-preview.collapsed {
+  min-height: 0;
   border-top: 1px solid var(--border-strong);
+}
+.dz-preview.collapsed .dz-preview-bar {
+  border-bottom: none;
+}
+.dz-splitter {
+  flex-shrink: 0;
+  height: 5px;
+  margin-bottom: -2px;
+  border-top: 1px solid var(--border-strong);
+  cursor: row-resize;
+  position: relative;
+  z-index: 2;
+  outline: none;
+  touch-action: none;
+}
+.dz-splitter:hover,
+.dz-splitter:active {
+  background: var(--accent-soft);
+}
+.dz-splitter:focus-visible {
+  background: var(--focus-ring);
+}
+.dz-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--input-h-sm);
+  padding: 0 var(--space-1) 0 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.dz-preview-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.dz-preview-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--fg-muted);
 }
 .dz-preview-bar {
   display: flex;
@@ -368,14 +464,21 @@
   margin: var(--space-1) 0 0;
   padding-left: var(--space-5);
 }
+.dz-banner ul.dz-issues {
+  margin: 0;
+}
+.dz-banner .btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .dz-banner .mono {
   font-family: var(--font-mono);
 }
 
 /* ---------- view designer ---------- */
 .dz-split {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 120px;
   display: flex;
 }
 .dz-split-main {

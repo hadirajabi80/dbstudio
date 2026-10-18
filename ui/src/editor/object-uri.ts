@@ -1,6 +1,7 @@
 // Synthetic `dbstudio-object://connectionId/db/schema/type/name` URIs for go-to-definition on catalog objects.
 // Pure: no Monaco imports.
 import type { CatalogObjectType, ObjectRef } from '../api/types';
+import { displayShortcut } from '../commands/keys';
 
 const TYPES = new Set<CatalogObjectType>(['table', 'view', 'mview', 'proc', 'func', 'tablefunc', 'synonym', 'sequence', 'package', 'type', 'trigger']);
 const enc = (s: string | null | undefined) => encodeURIComponent(s ?? '') || '-';
@@ -37,5 +38,6 @@ export function parseObjectUri(uri: string): { connectionId: string; ref: Object
 
 export function objectSummary(ref: ObjectRef, _owner?: unknown): string {
   const name = [ref.schema, ref.name].filter(Boolean).join('.');
-  return `-- ${name} (${ref.type})\n-- F12 / Ctrl+click opens the object tab`;
+  // platform labels (design-r1-08): "F12 / Ctrl+click" on Windows and Linux, "F12 / ⌘-click" on macOS
+  return `-- ${name} (${ref.type})\n-- ${displayShortcut('F12')} / ${displayShortcut('Mod+Click')} opens the object tab`;
 }

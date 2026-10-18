@@ -11,6 +11,7 @@ import { dialectOf, getConnection, useConnections } from '../store/connections';
 import { useSessions } from '../store/sessions';
 import { getActiveTab, useTabs, type Tab } from '../store/tabs';
 import { toast } from '../store/ui';
+import { rememberEdit } from './editSession';
 import { rewriteForEdit } from './rewrite';
 import { useDesignerUi } from './store';
 
@@ -96,8 +97,15 @@ export function objectOf(args?: unknown): ObjectTarget | null {
   return null;
 }
 
-const designerKey = (kind: string, c: { connectionId: string; database: string | null; schema: string | null }, name: string) =>
-  `${kind}|${c.connectionId}|${c.database ?? ''}|${c.schema ?? ''}|${name}`;
+/**
+ * Tab key of a designer tab, so F4 on the same object activates the open designer instead of opening a second one.
+ * The database is normalised to the one the catalog uses (a console's "current database" (null) and the explorer's
+ * explicit 'main' are the same database), so the key does not depend on where the designer was opened from.
+ */
+export function designerKey(kind: 'table' | 'view', c: { connectionId: string; database: string | null; schema: string | null }, name: string): string {
+  const db = catalogDatabase(c.connectionId, c.database);
+  return `${kind}|${c.connectionId}|${db ?? ''}|${c.schema ?? ''}|${name}`;
+}
 
 export function tableTitle(dialect: Dialect, schema: string | null, name: string | null): string {
   return name ? `Design: ${qualifiedName({ schema, name }, dialect, { always: dialect !== 'sqlite' })}` : 'New table';
@@ -134,7 +142,6 @@ export function openViewDesigner(ctx: DesignerContext, name: string | null): str
 export function openProcedureWizard(ctx: DesignerContext, opts: { kind?: 'procedure' | 'function' | 'package' | 'trigger'; table?: string | null; packageName?: string | null } = {}): void {
   void preloadCatalog(ctx.connectionId, ctx.database);
   useDesignerUi.getState().openWizard({ ...ctx, kind: opts.kind ?? (ctx.dialect === 'sqlite' ? 'trigger' : 'procedure'), table: opts.table ?? null, packageName: opts.packageName ?? null });
-  void import('./host').then((m) => m.ensureDesignerHost());
 }
 
 const SCRIPT_TYPES = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc', 'package', 'trigger', 'type', 'mview']);
@@ -175,7 +182,8 @@ export async function openEditScript(connectionId: string, database: string | nu
   const r = rewriteForEdit(ddl, { dialect, type: ref.type, name: ref.name, schema: ref.schema, productVersion: productVersionOf(connectionId) });
   const id = newConsole(connectionId, database, r.text);
   useTabs.getState().rename(id, `Edit: ${ref.name}`);
-  useDesignerUi.getState().registerEdit(id, { connectionId, database, ref, serverDdl: ddl, dialect });
+  // Persisted in the tab too: after a restart the tab still applies atomically and offers "Compare with server".
+  rememberEdit(id, { connectionId, database, ref, serverDdl: ddl, dialect });
   toast('info', `Editing ${qualifiedName(ref, dialect, { always: dialect !== 'sqlite' })}`, `${r.note ?? 'Definition loaded'}. Run the script (F5) to apply; “Compare with server” shows your changes.`);
   return id;
 }

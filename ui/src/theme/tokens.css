@@ -19,8 +19,8 @@
   --bg-hover: #eceef2;
   --bg-selected: #dde8fb;
   --bg-grid-alt: #fafbfc;
-  --border: #d9dde3;
-  --border-strong: #b9bfc9;
+  --border: #ccd1d9;          /* decorative separators and outlines: >= 1.5:1 on --bg-panel */
+  --border-strong: #8a919c;   /* control boundaries (buttons, inputs, segmented controls): >= 3:1 on --bg-panel */
   --fg: #1c1f24;
   --fg-muted: #5f6673;
   --fg-disabled: #a0a6b0;
@@ -38,7 +38,7 @@
   /* connection colour palette (profiles store the light hex; ui maps it to these) */
   --conn-red: #dc2626;
   --conn-orange: #ea580c;
-  --conn-yellow: #ca8a04;
+  --conn-yellow: #b47c03;     /* profiles store #ca8a04 (connColors.ts); rendered darker for 3:1 on --bg-panel */
   --conn-green: #16a34a;
   --conn-blue: #2563eb;
   --conn-purple: #7c3aed;
@@ -51,15 +51,19 @@
   --bg-overlay: rgb(17 20 26 / 32%);
   --bg-selected-inactive: #e7eaef;
   --border-subtle: #e8ebef;
-  --border-control: #8a919c;   /* form-control boundaries: >= 3:1 on --bg-panel */
   --accent-hover: #1d4ed8;
-  --accent-soft: #e8effd;
+  --accent-soft: #ecf2fe;
   --accent-soft-strong: #d3e1fb;
-  --success-soft: #e7f5ec;
+  --success-soft: #ebf7ef;
   --warning-soft: #fdf3e6;
   --danger-soft: #fcebeb;
   --info-soft: #e5f4f7;
   --mark-bg: rgb(250 204 21 / 35%);
+  --run-flash: rgb(255 196 0 / 28%);          /* editor: the statement just sent to the engine */
+  /* text on tinted backgrounds (selected/active rows, soft badges) keeps >= 4.5:1 */
+  --fg-muted-on-selected: var(--fg-muted);
+  --accent-on-selected: var(--accent-hover);
+  --danger-text: var(--danger);
   --shadow-1: 0 1px 2px rgb(16 24 40 / 6%);
   --shadow-popup: 0 8px 28px rgb(16 24 40 / 14%), 0 0 0 1px rgb(16 24 40 / 6%);
   --shadow-dialog: 0 24px 64px rgb(16 24 40 / 22%), 0 0 0 1px rgb(16 24 40 / 6%);
@@ -90,7 +94,7 @@
   --obj-view: #7c3aed;
   --obj-routine: #0f766e;
   --obj-package: #b45309;
-  --obj-trigger: #b91c1c;
+  --obj-trigger: #a16207; /* amber: a trigger is not an error (design-21 e), distinct from --danger and --warning */
   --obj-key: #a16207;
   --obj-fk: #0e7490;
   --obj-db: #2563eb;
@@ -121,8 +125,8 @@
   --bg-hover: #30343c;
   --bg-selected: #2e4466;
   --bg-grid-alt: #22252a;
-  --border: #3a3f48;
-  --border-strong: #4d535e;
+  --border: #41464f;
+  --border-strong: #6f7682;
   --fg: #e6e8eb;
   --fg-muted: #9aa1ab;
   --fg-disabled: #646a74;
@@ -152,7 +156,6 @@
   --bg-overlay: rgb(0 0 0 / 55%);
   --bg-selected-inactive: #30343c;
   --border-subtle: #30343c;
-  --border-control: #6f7682;
   --accent-hover: #7cb0ff;
   --accent-soft: #233148;
   --accent-soft-strong: #2b3f5f;
@@ -161,6 +164,10 @@
   --danger-soft: #3d2526;
   --info-soft: #1b3439;
   --mark-bg: rgb(250 204 21 / 28%);
+  --run-flash: rgb(255 196 0 / 18%);
+  --fg-muted-on-selected: #b0b7c1;
+  --accent-on-selected: #9ec5ff;
+  --danger-text: #fca5a5;
   --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
   --shadow-popup: 0 10px 32px rgb(0 0 0 / 50%), 0 0 0 1px rgb(255 255 255 / 6%);
   --shadow-dialog: 0 24px 72px rgb(0 0 0 / 60%), 0 0 0 1px rgb(255 255 255 / 7%);
@@ -190,7 +197,7 @@
   --obj-view: #b794f6;
   --obj-routine: #2dd4bf;
   --obj-package: #fbbf24;
-  --obj-trigger: #f87171;
+  --obj-trigger: #facc15;
   --obj-key: #facc15;
   --obj-fk: #67e8f9;
   --obj-db: #5b9cff;
@@ -246,6 +253,7 @@
   --dialog-pad: 20px;
   --panel-pad: 12px;
   --icon-size: 16px;
+  --icon-size-sm: 14px;   /* dense spots only: status bar, chips, tab close, dock tabs, split-button carets */
   --radius: 6px;
   --radius-sm: 4px;
   --radius-lg: 10px;
@@ -263,6 +271,7 @@
   --text-faint: var(--fg-disabled);
   --text-on-accent: var(--accent-fg);
   --border-focus: var(--focus-ring);
+  --border-control: var(--border-strong);   /* deprecated alias (M1.5 QA): --border-strong is the control boundary */
   --bg-editor: var(--bg-panel);
   --bg-tooltip: var(--bg-elevated);
   --fs: var(--text-md);

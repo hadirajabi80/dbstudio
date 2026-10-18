@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { boot } from './app/boot';
 import { handleMenuCommand } from './app/commands';
 import { installKeyDispatcher } from './commands/dispatcher';
@@ -7,23 +7,28 @@ import { CommandPalette } from './components/CommandPalette/CommandPalette';
 import { ConnectionDialogHost } from './components/ConnectionDialog/ConnectionDialog';
 import { ConnectionSwitcher } from './components/ConnectionsPanel/ConnectionSwitcher';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
+import { focusFirst, focusIsLost } from './components/common/focus';
 import { MenuHost } from './components/common/Menu';
 import { Toasts } from './components/common/Toasts';
 import { ConsoleView } from './components/layout/ConsoleView';
 import { Dock } from './components/layout/Dock';
 import { SettingsDialog } from './components/layout/SettingsDialog';
 import { TabBar } from './components/layout/TabBar';
-import { getTabView, subscribeTabViews } from './components/layout/tabViews';
 import { TopBar } from './components/layout/TopBar';
+import { useFocusFallback, useTabFocusRequests, ViewTabHost } from './components/layout/ViewTabHost';
+import './components/layout/layout.css';
 import { MultiRunDialog } from './components/MultiRun/MultiRunDialog';
 import { ObjectTabView } from './components/ObjectTab/ObjectTab';
 import { Welcome } from './components/Onboarding/Welcome';
+import { ParamsDialogHost } from './components/ParamsDialog/ParamsDialog';
 import { ShortcutSheet } from './components/Shortcuts/ShortcutSheet';
 import { StatusBar } from './components/StatusBar/StatusBar';
+import { DesignerHost } from './designer/host';
+import './designer/designer.css';
 import { getPlatform } from './platform';
 import { useConnections } from './store/connections';
 import { useSettings } from './store/settings';
-import { useActiveTab, useTabs, type ViewTab } from './store/tabs';
+import { useActiveTab, useTabs } from './store/tabs';
 import { useUi } from './store/ui';
 import { useEffectiveTheme, type EffectiveTheme } from './theme/useTheme';
 
@@ -85,6 +90,8 @@ function Shell() {
   }, []);
 
   useWindowTitle();
+  useFocusFallback();
+  useTabFocusRequests();
 
   return (
     <div className="app">
@@ -94,6 +101,12 @@ function Shell() {
       <StatusBar />
       <MenuHost />
       <ConfirmDialog />
+      <div id="dbstudio-designer-host">
+        <DesignerHost />
+      </div>
+      <div id="params-dialog-host">
+        <ParamsDialogHost />
+      </div>
       <ConnectionDialogHost />
       <CommandPalette />
       <ShortcutSheet />
@@ -146,23 +159,21 @@ function EngineBanner() {
   );
 }
 
-function ViewTabHost({ tab, theme, visible }: { tab: ViewTab; theme: EffectiveTheme; visible: boolean }) {
-  useSyncExternalStore(subscribeTabViews, () => getTabView(tab.view), () => getTabView(tab.view));
-  const def = getTabView(tab.view);
-  if (!def) {
-    return visible ? (
-      <div className="workspace-missing">
-        <p>This tab ({tab.view}) is not available in this build.</p>
-      </div>
-    ) : null;
-  }
-  const C = def.component;
-  return <C tab={tab} theme={theme} visible={visible} />;
-}
-
 function Main({ theme, ready }: { theme: EffectiveTheme; ready: boolean }) {
   const tabs = useTabs((s) => s.tabs);
   const activeId = useTabs((s) => s.activeId);
+  const hadTabs = useRef(tabs.length > 0);
+
+  // Closing the last tab: focus the first welcome action instead of leaving focus on <body>.
+  useEffect(() => {
+    const had = hadTabs.current;
+    hadTabs.current = tabs.length > 0;
+    if (!had || tabs.length > 0) return;
+    const t = setTimeout(() => {
+      if (focusIsLost()) focusFirst(document, ['.welcome button:not([disabled])']);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [tabs.length]);
 
   return (
     <div className="main">
@@ -177,7 +188,9 @@ function Main({ theme, ready }: { theme: EffectiveTheme; ready: boolean }) {
               t.kind === 'console' ? (
                 <ConsoleView key={t.id} tab={t} theme={theme} visible={t.id === activeId} />
               ) : t.kind === 'object' ? (
-                <ObjectTabView key={t.id} tab={t} theme={theme} visible={t.id === activeId} />
+                <div key={t.id} className="view-tab-host" data-tab-host={t.id} style={{ display: t.id === activeId ? 'contents' : 'none' }}>
+                  <ObjectTabView tab={t} theme={theme} visible={t.id === activeId} />
+                </div>
               ) : (
                 <ViewTabHost key={t.id} tab={t} theme={theme} visible={t.id === activeId} />
               ),

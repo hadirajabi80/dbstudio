@@ -24,4 +24,9 @@ export interface Platform {
   loadWorkspace(): Promise<unknown | null>;
   saveWorkspace(data: unknown): Promise<void>;
   setTitle(title: string): void;
+  /**
+   * Desktop only: native page zoom (Electron webFrame), which scales devicePixelRatio so canvases stay sharp.
+   * Absent in the browser, where the app falls back to CSS zoom.
+   */
+  setZoomFactor?(factor: number): void;
 }

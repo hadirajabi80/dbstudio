@@ -104,14 +104,33 @@ export class Out {
     this.pendingIndent = null;
   }
 
-  /** Append `text`; `space` = separate it from the previous piece on the same line. */
-  put(text: string, space: boolean): void {
+  /**
+   * Append `text`; `space` = separate it from the previous piece on the same line. `fromColumn`: the visual column
+   * the (multi-line) text started at in the input; its continuation lines move by as much as its first line moved,
+   * so a block comment keeps its inner alignment.
+   */
+  put(text: string, space: boolean, fromColumn?: number): void {
     if (this.cur === '' || this.pendingIndent !== null) this.started++;
     this.materialise();
-    this.started += countNl(text);
     if (this.cur !== '' && space) this.cur += ' ';
+    if (fromColumn !== undefined && text.indexOf('\n') >= 0) {
+      this.colCache = -1;
+      text = shiftContinuation(text, this.column - fromColumn, this.opts.indentSize);
+    }
+    this.started += countNl(text);
     this.cur += text;
     this.colCache = -1;
+  }
+
+  /**
+   * Insert `text` before `tail` at the end of the current line (`t -- c` → `t; -- c`). Returns false (and changes
+   * nothing) when the line does not end with `tail`.
+   */
+  insertBeforeTail(text: string, tail: string): boolean {
+    if (this.pendingIndent !== null || !tail || !this.cur.endsWith(tail)) return false;
+    this.cur = this.cur.slice(0, this.cur.length - tail.length) + text + tail;
+    this.colCache = -1;
+    return true;
   }
 
   /** Text produced so far, without a trailing newline. */
@@ -126,4 +145,22 @@ function countNl(s: string): number {
   let n = 0;
   for (let i = s.indexOf('\n'); i >= 0; i = s.indexOf('\n', i + 1)) n++;
   return n;
+}
+
+/**
+ * Move the continuation lines (all but the first) of `text` by `delta` columns: leading whitespace is re-made with
+ * spaces (tabs expanded to `tab` stops), never below column 0. Whitespace-only lines stay as they are.
+ */
+export function shiftContinuation(text: string, delta: number, tab: number): string {
+  if (!delta) return text;
+  const lines = text.split('\n');
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    const ws = /^[ \t]*/.exec(line)![0];
+    if (ws.length === line.replace(/\r$/, '').length) continue;
+    let w = 0;
+    for (const ch of ws) w = ch === '\t' ? w + tab - (w % tab) : w + 1;
+    lines[i] = ' '.repeat(Math.max(0, w + delta)) + line.slice(ws.length);
+  }
+  return lines.join('\n');
 }

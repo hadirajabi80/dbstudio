@@ -1,6 +1,6 @@
 // Operand parsing shared by the client evaluator and the server predicate builder.
-import type { ColumnKind } from '../api/types';
-import { kindClass, type FilterCondition, type FilterValue, type PeriodUnit } from './model';
+import type { ColumnInfo, ColumnKind } from '../api/types';
+import { kindClass, resolveColumn, type FilterCondition, type FilterNode, type FilterValue, type PeriodUnit } from './model';
 import { arityOf } from './operators';
 
 /** Decimal strings with more significant digits than this are compared as strings, not via Number. */
@@ -300,4 +300,17 @@ export function splitList(text: string): string[] {
     if (re.lastIndex >= text.length) break;
   }
   return out;
+}
+
+/**
+ * Conditions that actually filter: enabled, on a column of the result, and complete (no `conditionProblem`).
+ * Toolbar badges count these, so an empty "Id equals …" draft does not read as an active filter.
+ */
+export function countActiveConditions(n: FilterNode | null | undefined, columns: readonly ColumnInfo[]): number {
+  if (!n) return 0;
+  if (n.kind === 'group') return n.items.reduce((a, i) => a + countActiveConditions(i, columns), 0);
+  if (n.enabled === false) return 0;
+  const ci = resolveColumn(columns, n.column, n.ordinal);
+  if (ci < 0) return 0;
+  return conditionProblem(n, columns[ci].kind) ? 0 : 1;
 }

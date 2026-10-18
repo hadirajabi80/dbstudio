@@ -28,9 +28,82 @@ interface SessionsState {
   closeConnection(connectionId: string, force?: boolean): Promise<number>;
   /** Tab that owns a session, if any. */
   tabOf(sessionId: string): string | undefined;
+  /**
+   * Re-attach engine sessions to open tabs after a reload/reconnect: `resolveTab` maps a session (its `tabId` is the
+   * `source.tabId` of its last run) to the tab key that should own it, or null. Returns the adopted session ids.
+   * A tab that already owns a live session keeps it.
+   */
+  adopt(resolveTab: (s: SessionInfo) => string | null): string[];
+  /**
+   * Engine sessions no open tab owns and that are free to take over or release: the engine reports their window gone
+   * (`orphan`), or this window opened them before a reload. Optionally of one connection.
+   */
+  orphans(connectionId?: string): SessionInfo[];
+  /** Sessions another live window is using (the engine says `orphan: false` and this window never owned them). */
+  foreign(connectionId?: string): SessionInfo[];
+  /** Debounced refreshAll (session.changed events, reconnects). */
+  refreshSoon(delayMs?: number): void;
 }
 
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
 const creating = new Map<string, Promise<SessionInfo>>();
+
+// ---------- ownership (logic-r1-03) ----------
+// The engine marks a session `orphan` when the window that owns it has no live WebSocket. A page reload keeps this
+// window's client id (sessionStorage, api/clientId.ts), so once the socket is back its own sessions read `orphan:
+// false` like those of another live window. The ids this window's tabs held are therefore kept in sessionStorage too
+// (per browser tab, survives a reload): those are ours to adopt or release; any other non-orphan is someone else's.
+
+const OWN_KEY = 'dbstudio.ownSessions';
+
+function loadOwn(): Set<string> {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(OWN_KEY);
+    const ids = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+const own = loadOwn();
+
+function saveOwn(): void {
+  try {
+    globalThis.sessionStorage?.setItem(OWN_KEY, JSON.stringify([...own]));
+  } catch {
+    // storage blocked: ownership lasts for this page load
+  }
+}
+
+function markOwn(sessionId: string): void {
+  if (own.has(sessionId)) return;
+  own.add(sessionId);
+  saveOwn();
+}
+
+function forgetOwn(ids: Iterable<string>): void {
+  let changed = false;
+  for (const id of ids) changed = own.delete(id) || changed;
+  if (changed) saveOwn();
+}
+
+/**
+ * True when another live window uses the session: the engine reports its owner connected (`orphan === false`) and this
+ * window never owned it. Such a session is listed read-only, never adopted, closed or released from here. An engine
+ * that does not report `orphan` (field absent) keeps the old single-window behaviour.
+ */
+export function isForeignSession(s: SessionInfo): boolean {
+  return s.orphan === false && !own.has(s.sessionId);
+}
+
+/** Tests: reset the remembered ownership. */
+export function resetOwnSessionsForTests(ids: string[] = []): void {
+  own.clear();
+  for (const id of ids) own.add(id);
+  saveOwn();
+}
 
 export const useSessions = create<SessionsState>((set, get) => ({
   sessions: {},
@@ -38,6 +111,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
   upsert(info, tabId) {
     const s = get();
+    if (tabId) markOwn(info.sessionId);
     set({
       sessions: { ...s.sessions, [info.sessionId]: info },
       byTab: tabId ? { ...s.byTab, [tabId]: info.sessionId } : s.byTab,
@@ -114,6 +188,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     delete nextSessions[sid];
     const nextByTab = { ...byTab };
     delete nextByTab[tabId];
+    forgetOwn([sid]);
     set({ sessions: nextSessions, byTab: nextByTab });
   },
 
@@ -135,6 +210,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     for (const x of list) if (!nextSessions[x.sessionId]) nextSessions[x.sessionId] = x;
     const nextByTab: Record<string, string> = {};
     for (const [tab, sid] of Object.entries(byTab)) if (nextSessions[sid]) nextByTab[tab] = sid;
+    forgetOwn([...own].filter((sid) => !known.has(sid)));
     set({ sessions: nextSessions, byTab: nextByTab });
   },
 
@@ -148,17 +224,59 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const nextSessions = { ...sessions };
     delete nextSessions[sessionId];
     const nextByTab = Object.fromEntries(Object.entries(byTab).filter(([, sid]) => sid !== sessionId));
+    forgetOwn([sessionId]);
     set({ sessions: nextSessions, byTab: nextByTab });
   },
 
   async closeConnection(connectionId, force = true) {
-    const ids = Object.values(get().sessions).filter((x) => x.connectionId === connectionId).map((x) => x.sessionId);
+    // Sessions of another live window are left alone: disconnecting here must not roll back work over there.
+    const ids = Object.values(get().sessions).filter((x) => x.connectionId === connectionId && !isForeignSession(x)).map((x) => x.sessionId);
     await Promise.all(ids.map((sid) => get().closeSession(sid, force).catch((e) => console.warn('[sessions] close failed', e))));
     return ids.length;
   },
 
   tabOf(sessionId) {
     return Object.entries(get().byTab).find(([, sid]) => sid === sessionId)?.[0];
+  },
+
+  adopt(resolveTab) {
+    const { sessions, byTab } = get();
+    const owned = new Set(Object.values(byTab));
+    const next = { ...byTab };
+    const adopted: string[] = [];
+    // Most recently active first, so a tab with several leaked sessions adopts the one with an open transaction.
+    const candidates = Object.values(sessions)
+      .filter((s) => !owned.has(s.sessionId) && s.state !== 'closed' && !isForeignSession(s))
+      .sort((a, b) => Number(b.txOpen) - Number(a.txOpen));
+    for (const s of candidates) {
+      const tab = resolveTab(s);
+      if (!tab) continue;
+      const cur = next[tab];
+      if (cur && sessions[cur]) continue;
+      next[tab] = s.sessionId;
+      adopted.push(s.sessionId);
+      markOwn(s.sessionId);
+    }
+    if (adopted.length) set({ byTab: next });
+    return adopted;
+  },
+
+  orphans(connectionId) {
+    const owned = new Set(Object.values(get().byTab));
+    return Object.values(get().sessions).filter((s) => !owned.has(s.sessionId) && s.state !== 'closed' && !isForeignSession(s) && (!connectionId || s.connectionId === connectionId));
+  },
+
+  foreign(connectionId) {
+    const owned = new Set(Object.values(get().byTab));
+    return Object.values(get().sessions).filter((s) => !owned.has(s.sessionId) && s.state !== 'closed' && isForeignSession(s) && (!connectionId || s.connectionId === connectionId));
+  },
+
+  refreshSoon(delayMs = 250) {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      void get().refreshAll();
+    }, delayMs);
   },
 
   applyChanged(ev) {
@@ -178,6 +296,29 @@ export const useSessions = create<SessionsState>((set, get) => ({
     set({ sessions: { ...get().sessions, [ev.sessionId]: { ...cur, txOpen: ev.txOpen, state: cur.state === 'executing' ? 'idle' : cur.state } } });
   },
 }));
+
+/**
+ * One definition of "connected" for the status bar, the dock badge and the explorer dot: the connection has an open
+ * engine session, or its catalog is loaded (browsing the explorer opens a connection without a console session).
+ */
+export type ConnectionActivity = { kind: 'session'; sessions: number } | { kind: 'catalog' } | null;
+
+export function connectionActivity(
+  connectionId: string, sessions: Record<string, SessionInfo>, catalogStatus: (connectionId: string) => string | undefined,
+): ConnectionActivity {
+  let n = 0;
+  for (const s of Object.values(sessions)) if (s.connectionId === connectionId && s.state !== 'closed') n++;
+  if (n) return { kind: 'session', sessions: n };
+  return catalogStatus(connectionId) === 'ready' ? { kind: 'catalog' } : null;
+}
+
+/** Engine-wide counts: connections that are connected (sessions or loaded catalog) and open sessions. */
+export function activityCounts(sessions: Record<string, SessionInfo>, catalogConns: Record<string, { status: string }>): { connections: number; sessions: number } {
+  const live = Object.values(sessions).filter((s) => s.state !== 'closed');
+  const ids = new Set(live.map((s) => s.connectionId));
+  for (const [cid, c] of Object.entries(catalogConns)) if (c.status === 'ready') ids.add(cid);
+  return { connections: ids.size, sessions: live.length };
+}
 
 export function useTabSession(tabId: string | null | undefined): SessionInfo | undefined {
   return useSessions((s) => {

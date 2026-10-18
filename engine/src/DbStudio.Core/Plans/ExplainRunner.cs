@@ -16,7 +16,7 @@ public sealed record ExplainOutcome(ExecutionStatus Status, PlanResult? Plan, in
 public static class ExplainRunner
 {
     public static async Task<ExplainOutcome> RunAsync(AdoSessionBase session, IPlanReader reader, ExplainInput input, IExecutionSink sink,
-        int maxRows, bool captureServerOutput, CancellationToken ct)
+        int maxRows, bool captureServerOutput, CancellationToken ct, bool writesConfirmed = false)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(reader);
@@ -29,7 +29,7 @@ public static class ExplainRunner
             if (script.Batches.Count > 0)
             {
                 var batches = script.Batches.Select(b => new SqlBatch(b.Sql, b.Line, b.Col)).ToList();
-                var request = new ExecuteRequest(batches, maxRows, true, captureServerOutput, "explain", script.Params);
+                var request = new ExecuteRequest(batches, maxRows, true, captureServerOutput, "explain", script.Params, writesConfirmed);
                 status = (await session.ExecuteAsync(request, explainSink, ct).ConfigureAwait(false)).Status;
             }
         }

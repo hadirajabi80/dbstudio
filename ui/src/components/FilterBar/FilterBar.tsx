@@ -8,7 +8,9 @@ import {
   cloneWithNewIds, countConditions, newCondition, newGroup, normalizeModel, removeNode, toFilterModel, updateNode,
   type FilterGroup, type FilterNode,
 } from '../../filter/model';
+import { commandView } from '../../commands/useCommands';
 import { defaultOperator } from '../../filter/operators';
+import { countActiveConditions } from '../../filter/values';
 import { recentKey, savedFor, useFilters } from '../../store/filters';
 import { toast } from '../../store/ui';
 import { showMenuBelow, type MenuItem } from '../common/Menu';
@@ -31,13 +33,16 @@ export interface ServerFilterControl {
   onClear?(): void;
 }
 
+/** Why the bar closed: Esc or its ✕ (focus was inside the bar: the host gives it back to the grid), or otherwise. */
+export type FilterBarCloseReason = 'escape' | 'button' | 'other';
+
 export interface FilterBarProps {
   columns: ColumnInfo[];
   filter: FilterGroup | null;
   quick: string;
   onChange(filter: FilterGroup | null): void;
   onQuickChange?(q: string): void;
-  onClose(): void;
+  onClose(reason?: FilterBarCloseReason): void;
   dialect: Dialect;
   /** Server filtering (console: button; data tab: always on). */
   server?: ServerFilterControl | null;
@@ -47,6 +52,8 @@ export interface FilterBarProps {
   saved?: { connectionId: string; signature: string } | null;
   /** Focus a new condition on this column (header "Filter column…"). */
   focusRequest?: { column: string | null; nonce: number } | null;
+  /** Column of the focused grid cell: "Add condition" starts on it. */
+  focusedColumn?: string | null;
   /** Status text ("Filtered 312 of 10,000"). */
   status?: string | null;
 }
@@ -62,6 +69,7 @@ export function FilterBar(p: FilterBarProps) {
   const recent = useFilters((s) => (saved ? s.recent[recentKey(saved.connectionId, saved.signature)] : undefined));
   const matching = useMemo(() => (saved ? savedFor(savedState, saved.signature) : []), [savedState, saved]);
   const n = countConditions(filter);
+  const active = countActiveConditions(filter, columns);
 
   useEffect(() => {
     if (saved) void useFilters.getState().load(saved.connectionId);
@@ -87,7 +95,9 @@ export function FilterBar(p: FilterBarProps) {
   function addCondition(group: FilterGroup = root) {
     const used = new Set<string>();
     group.items.forEach((i) => i.kind === 'condition' && used.add(i.column));
-    const idx = Math.max(0, columns.findIndex((c) => !used.has(c.name)));
+    // The focused grid column first (what the user is looking at), else the first column not filtered yet.
+    const focused = p.focusedColumn ? columns.findIndex((c) => c.name === p.focusedColumn) : -1;
+    const idx = focused >= 0 ? focused : Math.max(0, columns.findIndex((c) => !used.has(c.name)));
     const c = newCondition(columns[idx]?.name ?? '', defaultOperator(columns[idx]?.kind), [], idx);
     if (group === root) commit({ ...root, items: [...root.items, c] });
     else commit(updateNode(root, group.id, (g) => ({ ...(g as FilterGroup), items: [...(g as FilterGroup).items, c] })));
@@ -95,7 +105,7 @@ export function FilterBar(p: FilterBarProps) {
   }
 
   const addGroup = () => {
-    const idx = 0;
+    const idx = Math.max(0, p.focusedColumn ? columns.findIndex((c) => c.name === p.focusedColumn) : 0);
     const c = newCondition(columns[idx]?.name ?? '', defaultOperator(columns[idx]?.kind), [], idx);
     commit({ ...root, items: [...root.items, newGroup(root.logic === 'and' ? 'or' : 'and', [c])] });
     setFocusId(c.id);
@@ -162,7 +172,7 @@ export function FilterBar(p: FilterBarProps) {
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
-          p.onClose();
+          p.onClose('escape');
         } else if (e.key === 'Enter' && e.ctrlKey && e.shiftKey && server?.available) {
           e.preventDefault();
           server.onApply();
@@ -173,7 +183,11 @@ export function FilterBar(p: FilterBarProps) {
         <button className="btn btn-xs fb-menu" onClick={(e) => filterMenu(e.currentTarget)} title="Saved and recent filters" aria-haspopup="menu">
           <ListFilter size={13} /> Filter <ChevronDown size={11} />
         </button>
-        <button className="btn btn-xs" onClick={() => addCondition()} title="Add a condition (AND)">
+        <button
+          className="btn btn-xs"
+          onClick={() => addCondition()}
+          title={p.focusedColumn ? `Add a condition on “${p.focusedColumn}” (AND)` : 'Add a condition (AND)'}
+        >
           <Plus size={12} /> Add condition
         </button>
         <button className="btn btn-xs" onClick={addGroup} title="Add a nested group with the opposite logic">
@@ -184,7 +198,7 @@ export function FilterBar(p: FilterBarProps) {
             className={`btn btn-xs${server.active ? ' on' : ''}`}
             disabled={!server.available || server.busy}
             onClick={server.onApply}
-            title={server.available ? `Run the statement again with this filter as a WHERE clause (Ctrl+Shift+Enter)${server.previewSql ? `\n\n${server.previewSql}` : ''}` : server.reason ?? 'Server filtering needs a single SELECT'}
+            title={server.available ? `${commandView('grid.applyServerFilter', undefined, 'Run the statement again with this filter as a WHERE clause').tooltip}${server.previewSql ? `\n\n${server.previewSql}` : ''}` : server.reason ?? 'Server filtering needs a single SELECT'}
           >
             {server.busy ? <LoaderCircle size={12} className="spin" /> : <CloudUpload size={12} />} Apply on server
           </button>
@@ -229,12 +243,17 @@ export function FilterBar(p: FilterBarProps) {
           Clear
         </button>
         <div className="flex-1" />
+        {n > active && (
+          <span className="fb-status muted" title="Conditions without a value (or switched off) do not filter">
+            {active} of {n} applied
+          </span>
+        )}
         {p.status && (
           <span className="fb-status">
             <Funnel size={11} /> {p.status}
           </span>
         )}
-        <button className="icon-btn sm fb-close" title="Close filter bar (Esc) — the filter stays active" aria-label="Close filter bar" onClick={p.onClose}>
+        <button className="icon-btn sm fb-close" title="Close filter bar (Esc) — the filter stays active" aria-label="Close filter bar" onClick={() => p.onClose('button')}>
           <X size={14} />
         </button>
       </div>

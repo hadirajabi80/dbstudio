@@ -44,7 +44,7 @@ public sealed partial class ExecutionService
     {
         var sw = Stopwatch.StartNew();
         var store = _results.Begin(h.Id, executionId, h.Dialect);
-        var sink = new EventExecutionSink(executionId, _events, store, 1);
+        var sink = new EventExecutionSink(executionId, _events, store, 1, e => DescribeError(h, e));
         var status = ExecutionStatus.Ok;
         var resultSets = 0;
         long rowsAffected = 0;
@@ -59,7 +59,8 @@ public sealed partial class ExecutionService
             var session = (AdoSessionBase)h.Session;
             var input = new ExplainInput(executionId, cmd.Sql, cmd.Mode, cmd.Params, cmd.Line, cmd.Col, session.Server.ProductVersion);
             await sink.BatchStarted(0).ConfigureAwait(false);
-            var outcome = await ExplainRunner.RunAsync(session, reader, input, sink, cmd.MaxRows, h.Options.CaptureServerOutput, CancellationToken.None).ConfigureAwait(false);
+            var outcome = await ExplainRunner.RunAsync(session, reader, input, sink, cmd.MaxRows, h.Options.CaptureServerOutput, CancellationToken.None,
+                writesConfirmed: cmd.ConfirmedDestructive && h.Profile.ReadOnly).ConfigureAwait(false);
             status = outcome.Status;
             rowsAffected = outcome.RowsAffected;
             resultSets = outcome.ResultSets;

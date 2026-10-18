@@ -25,7 +25,7 @@ export function ProviderIcon({ providerId, color, size = 16 }: { providerId: Pro
       style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--bg-panel), 0 0 0 3.5px ${ring}` : undefined }}
       aria-hidden="true"
     >
-      <p.Icon size={Math.round(size * 0.68)} strokeWidth={2} />
+      <p.Icon size={Math.round(size * 0.68)} strokeWidth={2} data-stroke="" />
     </span>
   );
 }
@@ -54,7 +54,7 @@ export function ColumnIcon({ pk, fk, size = 16 }: { pk?: boolean; fk?: boolean; 
   return (
     <span className="col-icon" aria-hidden="true">
       <Columns3 size={size} strokeWidth={1.5} className="obj-icon obj-column" />
-      {pk ? <Key size={9} strokeWidth={2.5} className="col-badge obj-pk" /> : fk ? <Link size={9} strokeWidth={2.5} className="col-badge obj-fk" /> : null}
+      {pk ? <Key size={9} strokeWidth={2.5} data-stroke="" className="col-badge obj-pk" /> : fk ? <Link size={9} strokeWidth={2.5} data-stroke="" className="col-badge obj-fk" /> : null}
     </span>
   );
 }

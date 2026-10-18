@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import * as monaco from '../../editor/monaco';
 import { ensureMonacoSetup, THEME_IDS } from '../../editor/monaco-setup';
+import { baseMonacoOptions, remeasureAfterFonts } from '../../editor/monacoOptions';
 import type { EffectiveTheme } from '../../theme/useTheme';
 
 const LOADERS: Record<string, () => Promise<unknown>> = {
@@ -39,7 +40,9 @@ export function CodeView({ value, language, theme, label }: { value: string; lan
   useEffect(() => {
     if (!host.current) return;
     ensureMonacoSetup();
+    // Shared options first (code font, light-DOM context views, no rainbow brackets), then the read-only view's own.
     const e = monaco.editor.create(host.current, {
+      ...baseMonacoOptions(),
       value,
       language: 'plaintext',
       readOnly: true,
@@ -48,13 +51,17 @@ export function CodeView({ value, language, theme, label }: { value: string; lan
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       fontSize: 13,
-      fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace",
       theme: THEME_IDS[theme],
       ariaLabel: label,
       renderLineHighlight: 'none',
       tabSize: language === 'go' ? 4 : undefined,
     });
+    // Bracket pair colorization is a text model option: the editor option in baseMonacoOptions() does not reach the
+    // model in standalone Monaco (only the dotted `bracketPairColorization.enabled` key is a configuration key), so
+    // the gold / orchid / blue bracket colours would stay. Turn it off on the model itself.
+    e.getModel()?.updateOptions({ bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false } });
     ed.current = e;
+    remeasureAfterFonts();
     return () => {
       e.getModel()?.dispose();
       e.dispose();
