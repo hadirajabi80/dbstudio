@@ -55,10 +55,12 @@ describe('resolveEngineLaunch', () => {
     assert.ok(l.spec.readyTimeoutMs >= 60_000);
   });
   it('packaged: resources/engine exe, 15 s timeout, falls back to the Host exe name', () => {
-    const l = ep.resolveEngineLaunch({ ...base, isPackaged: true, exists: (p) => p.endsWith('DbStudio.Host.exe') });
+    // Windows naming (the macOS/Linux names without .exe are covered in platform.test.mjs).
+    const win = { ...base, platform: 'win32' };
+    const l = ep.resolveEngineLaunch({ ...win, isPackaged: true, exists: (p) => p.endsWith('DbStudio.Host.exe') });
     assert.match(l.spec.command, /resources[\\/]engine[\\/]DbStudio\.Host\.exe$/);
     assert.equal(l.spec.readyTimeoutMs, 15_000);
-    const l2 = ep.resolveEngineLaunch({ ...base, isPackaged: true, exists: () => true });
+    const l2 = ep.resolveEngineLaunch({ ...win, isPackaged: true, exists: () => true });
     assert.match(l2.spec.command, /DbStudio\.Engine\.exe$/);
   });
   it('DBSTUDIO_ENGINE_CMD override, plus --dev when the UI comes from Vite', () => {

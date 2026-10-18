@@ -326,7 +326,7 @@ describe('large inputs', () => {
     // (`npm test`, jsdom, every package in parallel) also picks this file up; there it only guards against
     // pathological regressions. Shared CI runners are 2-4x slower than a developer machine and their timing is
     // noisy, so CI only fails on a clear (4x) regression; the 150 ms budget is checked locally.
-    const onCi = typeof process !== 'undefined' && !!process.env.CI;
+    const onCi = !!(globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.CI;
     const budget = typeof document === 'undefined' ? (onCi ? 600 : 150) : 1000;
     expect(median).toBeLessThan(budget);
   });
