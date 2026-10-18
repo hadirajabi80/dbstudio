@@ -35,9 +35,29 @@ export function tableEditability(
 ): Editability {
   if (conn?.readOnly) return NOT('Read-only connection');
   const found = findTable(snapshot, schema, name);
+  if (isView || found?.obj.t === 'view') {
+    const reason = viewReadOnlyReason(columns, conn);
+    if (reason) return NOT(reason);
+  }
   const pk = found?.obj.pk?.length ? found.obj.pk : columns.filter((c) => c.isKey).map((c) => c.name);
   if (!pk.length) return NOT(isView ? 'View without a key: read-only' : 'No primary key: read-only');
   return finish(columns, { schema: found?.schema ?? schema, name: found?.obj.n ?? name, keyColumns: pk }, found?.obj, snapshot);
+}
+
+/**
+ * Why a view opened in a Data tab cannot be edited, or null when it may be updatable. Decided up front so the user
+ * never edits rows the server will refuse: a key column alone is not enough (SQLite reports a view's `Id` as a key
+ * when it comes from a base table's primary key, even for an aggregate view).
+ * - SQLite views are never updatable without INSTEAD OF triggers.
+ * - Elsewhere a view is only updatable when every column comes straight from one base table: aggregates,
+ *   expressions (no base table) and joins (several base tables) make it read-only.
+ */
+function viewReadOnlyReason(columns: readonly ColumnInfo[], conn: ConnectionProfile | undefined): string | null {
+  if (conn?.providerId === 'sqlite') return 'View: read-only (SQLite views cannot be updated). Edit the base table instead';
+  const bases = new Set(columns.map((c) => (c.table ? `${c.schema ?? ''}.${c.table}`.toLowerCase() : '')));
+  if (bases.has('')) return 'View with computed or aggregated columns: read-only';
+  if (bases.size > 1) return 'View over several tables: read-only';
+  return null;
 }
 
 /** Editability of a console result set. */

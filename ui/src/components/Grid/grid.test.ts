@@ -54,6 +54,21 @@ describe('editability', () => {
     const withCat = resultEditability([col('id', 'int', { isKey: true }), col('alias', 'string')], { singleSelect: true, snapshot: SNAP, conn: CONN });
     expect(withCat.editableColumns.has(1)).toBe(false);
   });
+  it('views are read-only unless every column comes straight from one base table', () => {
+    // SQLite: never updatable, even when the view exposes a key column (CustomerTotals.Id from Customers.Id).
+    const sqlite = { ...CONN, providerId: 'sqlite' } as ConnectionProfile;
+    const viewCols = [col('id', 'int', { isKey: true }), col('name', 'string'), col('total', 'decimal', { table: null, schema: null })];
+    const s = tableEditability(viewCols, 'main', 'customer_totals', SNAP, sqlite, true);
+    expect(s.editable).toBe(false);
+    expect(s.reason).toMatch(/SQLite views cannot be updated/);
+    // SQL Server: aggregate/expression column -> read-only; join of two tables -> read-only; simple view -> editable.
+    const mssql = { ...CONN, providerId: 'sqlserver' } as ConnectionProfile;
+    expect(tableEditability(viewCols, 'dbo', 'customer_totals', null, mssql, true).reason).toMatch(/computed or aggregated/);
+    const joined = [col('id', 'int', { isKey: true }), col('total', 'decimal', { table: 'orders' })];
+    expect(tableEditability(joined, 'dbo', 'v', null, mssql, true).reason).toMatch(/several tables/);
+    const simple = [col('id', 'int', { isKey: true }), col('name', 'string')];
+    expect(tableEditability(simple, 'dbo', 'active_customers', null, mssql, true).editable).toBe(true);
+  });
   it('tables without a key are read-only in a data tab', () => {
     expect(tableEditability([col('a', 'int')], 'main', 'nokey', null, CONN).reason).toMatch(/No primary key/);
     expect(tableEditability(COLS, 'main', 'customers', SNAP, CONN).editable).toBe(true);
