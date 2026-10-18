@@ -4,11 +4,12 @@ import { engineSocket } from '../api/ws';
 import { pluralize } from '../components/common/text';
 import { getPlatform } from '../platform';
 import { useCatalog } from '../store/catalog';
-import { useConnections } from '../store/connections';
+import { providerKind, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
 import { useResults } from '../store/results';
 import { useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
+import { useSourceClients } from '../store/sourceClients';
 import { useTabs, type WorkspaceData } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
 import { preloadCatalog } from './actions';
@@ -97,6 +98,8 @@ export function wireSocket(): void {
     // Reconnected (engine still up): the session list may have changed meanwhile.
     if (s === 'open' && wasOpen) void reattachSessions(false);
     if (s === 'open') wasOpen = true;
+    // M2: Redis/MongoDB/Kafka clients the engine holds (Connections panel, activity dots, status bar).
+    if (s === 'open') void useSourceClients.getState().refresh();
   });
   engineSocket.onAny((ev) => {
     if (ev.type.startsWith('exec.')) useResults.getState().ingest(ev);
@@ -119,6 +122,7 @@ export function wireSocket(): void {
     if (ev.status === 'ok') toast('success', `Exported ${pluralize(ev.rows, 'row')}`, ev.path);
     else toast('error', 'Export failed', ev.error ?? undefined);
   });
+  engineSocket.on('source.client', (ev) => useSourceClients.getState().apply(ev.connectionId, ev.state));
   engineSocket.on('engine.log', (ev) => {
     if (ev.level === 'error') toast('error', ev.message);
   });
@@ -170,7 +174,11 @@ export async function boot(): Promise<void> {
     engineSocket.connect(info);
     // Sessions died with the engine; tabs recreate them lazily on the next run.
     useSessions.setState({ sessions: {}, byTab: {} });
-    toast('warning', 'The engine was restarted', 'Open transactions were lost; sessions are recreated on the next run.');
+    // M2: source clients and streams died too; live views get stream.state{ended, reason: 'engine-restarted'}.
+    useSourceClients.getState().reset();
+    const streams = engineSocket.endAllStreams('engine-restarted');
+    toast('warning', 'The engine was restarted',
+      `Open transactions were lost; sessions are recreated on the next run.${streams ? ` ${pluralize(streams, 'live view')} stopped.` : ''}`);
   });
 
   await Promise.all([useSettings.getState().load(), useConnections.getState().load()]);
@@ -192,8 +200,10 @@ export async function boot(): Promise<void> {
       else useTabs.getState().setConnection(t.id, null);
     }
   }
-  if (useTabs.getState().tabs.length === 0 && ids.size > 0) {
-    useTabs.getState().newConsole({ connectionId: useConnections.getState().connections[0].id });
+  // M2: the first console goes to a relational connection (Redis/MongoDB/Kafka have no consoles).
+  const firstSql = useConnections.getState().connections.find((c) => providerKind(c.providerId) === 'relational');
+  if (useTabs.getState().tabs.length === 0 && firstSql) {
+    useTabs.getState().newConsole({ connectionId: firstSql.id });
   }
   const seen = new Set<string>();
   for (const t of useTabs.getState().tabs) {

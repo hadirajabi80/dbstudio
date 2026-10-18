@@ -25,7 +25,8 @@ function table(json: Record<string, unknown>): Table {
   return out;
 }
 
-export const TYPE_TABLES: Record<Dialect, Table> = { tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite) };
+// pgsql: M2-0 placeholder (empty table = wire-kind fallback); PG-C adds the PostgreSQL type table.
+export const TYPE_TABLES: Record<Dialect, Table> = { tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite), pgsql: table({}) };
 
 export interface ResolvedType extends TypeRow {
   /** Normalized base type used for the lookup (`nvarchar`, `number#decimal`). */

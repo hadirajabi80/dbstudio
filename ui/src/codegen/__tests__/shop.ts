@@ -7,13 +7,16 @@ import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
 import { fromCatalogObject, queryObject } from '../fromCatalog';
 import type { CgColumn, CgInput, CgObject } from '../model';
 
-const SNAPSHOTS: Record<Dialect, CatalogSnapshot> = {
+/** M2-0: the M1 dialects; PG-C adds pgsql (shop-pgsql.json) and widens these maps to Dialect. */
+export type ShopDialect = Exclude<Dialect, 'pgsql'>;
+
+const SNAPSHOTS: Record<ShopDialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
 };
 
-const EXTRA: Record<Dialect, { schema: string; objects: CatalogObject[] }> = {
+const EXTRA: Record<ShopDialect, { schema: string; objects: CatalogObject[] }> = {
   tsql: {
     schema: 'dbo',
     objects: [
@@ -91,7 +94,7 @@ const EXTRA: Record<Dialect, { schema: string; objects: CatalogObject[] }> = {
   },
 };
 
-const QUERY: Record<Dialect, { sql: string; columns: CgColumn[] }> = {
+const QUERY: Record<ShopDialect, { sql: string; columns: CgColumn[] }> = {
   tsql: {
     sql: 'SELECT c.Id, c.Name, o.Total, o.OrderDate\nFROM dbo.Customers c\nJOIN dbo.Orders o ON o.CustomerId = c.Id\nWHERE c.Id = @customerId AND o.Total > @minTotal\nORDER BY o.OrderDate DESC;',
     columns: [
@@ -124,7 +127,7 @@ const QUERY: Record<Dialect, { sql: string; columns: CgColumn[] }> = {
 const PARAM_TYPES = { customerId: 'int', minTotal: 'decimal', customer_id: 'int', min_total: 'decimal', p1: 'int', p2: 'float' } as const;
 
 /** Every object of the shop fixture for one dialect (tables, views, routines, packages and one query). */
-export function shopInput(dialect: Dialect, opts: { query?: boolean } = {}): CgInput {
+export function shopInput(dialect: ShopDialect, opts: { query?: boolean } = {}): CgInput {
   const snap = SNAPSHOTS[dialect];
   const objects: CgObject[] = [];
   for (const s of snap.schemas) {
@@ -154,4 +157,4 @@ export function shopInput(dialect: Dialect, opts: { query?: boolean } = {}): CgI
   return { dialect, objects };
 }
 
-export const DIALECTS: Dialect[] = ['tsql', 'plsql', 'sqlite'];
+export const DIALECTS: ShopDialect[] = ['tsql', 'plsql', 'sqlite'];

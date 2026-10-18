@@ -18,6 +18,7 @@ export const LANGUAGE_IDS: Record<Dialect, string> = {
   tsql: 'dbstudio-tsql',
   plsql: 'dbstudio-plsql',
   sqlite: 'dbstudio-sqlite',
+  pgsql: 'dbstudio-sqlite', // M2-0 placeholder: PG-B registers 'dbstudio-pgsql'
 };
 
 export const THEME_IDS = { light: 'dbstudio-light', dark: 'dbstudio-dark' } as const;

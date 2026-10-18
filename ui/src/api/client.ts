@@ -12,7 +12,10 @@ import type {
   ExplainRequest, HistoryQuery, SampleDbRequest, SampleDbResponse, SavedFilter, SavedFilterInput, SavedFilterPatch,
   TableModel, TableScriptRequest, TableScriptResponse, ViewModel, ViewScriptRequest,
 } from './types';
+// M2
+import type { SourceClientInfo, StreamInfo, StreamOpenRequest, StreamOpenResponse } from './types';
 import { CLIENT_ID_HEADER, uiClientId } from './clientId';
+import { createM2Namespaces } from './client.m2';
 
 export const API_PREFIX = '/api/v1';
 
@@ -152,6 +155,17 @@ function refQuery(database: string | null | undefined, ref: Pick<ObjectRef, 'sch
   return { database: database ?? undefined, schema: ref.schema ?? undefined, name: ref.name, type: ref.type };
 }
 
+/** HTTP helpers handed to the M2 feature namespaces (./client.m2.ts). */
+export interface M2Http {
+  json: <T>(method: string, path: string, opts?: { query?: Query; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal }) => Promise<T>;
+  send: (method: string, path: string, opts?: { query?: Query; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
+  enc: (s: string) => string;
+  filenameFrom: (res: Response) => string | null;
+}
+export type M2Query = Query;
+
+const m2 = createM2Namespaces({ json, send, enc, filenameFrom });
+
 export const api = {
   // 3.1 Meta
   health: (signal?: AbortSignal) => json<Health>('GET', '/health', { signal }),
@@ -265,6 +279,31 @@ export const api = {
   /** Errors: 409 DDL_FAILED with `detail: DdlFailedDetail`. */
   applyDdl: (cid: string, req: DdlApplyRequest) =>
     json<DdlApplyResponse>('POST', `/connections/${enc(cid)}/designer/apply`, { body: req }),
+
+  // ---------- M2 (docs/PLAN-M2.md 1.1, 2.3, 2.4) ----------
+  // Streams: 202 { streamId }; data arrives as `stream.data` / `stream.state` WS events (engineSocket.onStream).
+  /** 429 STREAM_LIMIT when this UI client already has 8 open streams; 503 SOURCE_UNAVAILABLE when the source is down. */
+  openStream: (req: StreamOpenRequest) => json<StreamOpenResponse>('POST', '/streams', { body: req }),
+  closeStream: (streamId: string) => json<void>('DELETE', `/streams/${enc(streamId)}`),
+  pauseStream: (streamId: string) => json<StreamInfo>('POST', `/streams/${enc(streamId)}/pause`),
+  resumeStream: (streamId: string) => json<StreamInfo>('POST', `/streams/${enc(streamId)}/resume`),
+  listStreams: () => json<StreamInfo[]>('GET', '/streams'),
+  // Source clients (one per non-relational connection, D2)
+  /** Opens the client lazily (503 SOURCE_UNAVAILABLE on failure). */
+  sourceClient: (cid: string) => json<SourceClientInfo>('GET', `/sources/${enc(cid)}/client`),
+  /** Disconnect: closes the client and every stream on it. */
+  closeSourceClient: (cid: string) => json<void>('DELETE', `/sources/${enc(cid)}/client`),
+  sourceClients: () => json<SourceClientInfo[]>('GET', '/sources/clients'),
+  // Jobs (2.3)
+  cancelJob: (jobId: string) => json<void>('DELETE', `/jobs/${enc(jobId)}`),
+
+  // Feature namespaces (bodies in ./client.m2.ts, written from the endpoint tables of docs/PLAN-M2.md 3–8).
+  redis: m2.redis,
+  mongo: m2.mongo,
+  kafka: m2.kafka,
+  logs: m2.logs,
+  er: m2.er,
 };
+
 
 export type Api = typeof api;

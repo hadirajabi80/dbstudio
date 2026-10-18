@@ -5,19 +5,23 @@ import { isMac } from '../../commands/keys';
 import { advertisedShortcuts, getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
 import type { ObjectTarget } from '../../commands/types';
 import { useCommandsVersion } from '../../commands/useCommands';
+import type { CatalogObjectType } from '../../api/types';
 import type { FuzzyResult } from '../../lib/fuzzy';
+import { useSourceModules } from '../../lib/sources';
 import { isTabular, OBJECT_TYPE_SINGULAR, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { dialectOf, useConnections } from '../../store/connections';
+import { dialectOf, providerKind, useConnections } from '../../store/connections';
 import { getActiveConsole } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
-import { ColumnIcon, ObjectIcon } from '../common/icons';
+import { ColumnIcon, ObjectIcon, ProviderIcon } from '../common/icons';
 import { ColorDot } from '../common/ConnectionBadge';
 import { useRestoreFocus } from '../common/focus';
 import { useExplorer } from '../Explorer/explorerStore';
 import { Kbd } from '../Shortcuts/Kbd';
 import { commandIcon } from '../layout/commandMenu';
-import { collectEntries, parseObjectQuery, searchObjects, type IndexEntry } from './objectIndex';
+import { collectEntries, parseObjectQuery, searchObjects, type IndexEntry, type SourceEntryType } from './objectIndex';
+
+const SOURCE_ENTRY_LABEL: Record<SourceEntryType, string> = { 'redis.key': 'Key', 'mongo.collection': 'Collection', 'kafka.topic': 'Topic' };
 import { paletteMatch, rankPalette, type PaletteMatch } from './paletteScore';
 
 const MRU_KEY = 'dbstudio.palette.mru.v1';
@@ -86,6 +90,14 @@ function targetOf(e: IndexEntry): ObjectTarget {
 
 /** Run an object hit: Enter opens, Mod+Enter data, Shift+Enter inserts the name, Alt+Enter reveals in the explorer. */
 export function runObjectHit(e: IndexEntry, how: 'open' | 'data' | 'insert' | 'reveal'): void {
+  if (e.source) {
+    // M2: Redis keys / Mongo collections / Kafka topics open through their source module.
+    if (how === 'insert') {
+      if (getActiveConsole()) insertIntoActiveEditor(e.name);
+      else toast('info', 'Open a console to insert the name');
+    } else e.source.open();
+    return;
+  }
   const t = targetOf(e);
   if (how === 'data') {
     if (!isTabular(e.ref.type)) return openObject(e.connectionId, e.database, e.ref, e.column);
@@ -141,14 +153,20 @@ export function CommandPalette() {
   const objectMode = mode === 'objects' ? !q.startsWith('>') : q.startsWith('@');
   const text = objectMode ? (q.startsWith('@') ? q.slice(1) : q) : q.startsWith('>') ? q.slice(1) : q;
   const parsed = parseObjectQuery(text);
-  const groups = useMemo(() => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c') : []), [open, objectMode, dbs, parsed.prefix]);
+  const sourceVersion = useSourceModules((s) => s.version);
+  const groups = useMemo(
+    () => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c') : []),
+    // sourceVersion: source modules (lib/sources.ts) changed their palette entries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open, objectMode, dbs, parsed.prefix, sourceVersion],
+  );
   const connName = useMemo(() => new Map(connections.map((c) => [c.id, c])), [connections]);
   const loadedCount = useMemo(() => groups.reduce((n, g) => n + g.length, 0), [groups]);
   // Connections the go-to index cannot see yet: offered as "Load catalog of X" rows (logic-24 f).
   const unloaded = useMemo(() => {
     if (!open || !objectMode) return [];
     const loaded = new Set(Object.values(dbs).filter((d) => Object.keys(d.loaded).length > 0).map((d) => d.connectionId));
-    return connections.filter((c) => !loaded.has(c.id));
+    return connections.filter((c) => !loaded.has(c.id) && providerKind(c.providerId) === 'relational');
   }, [open, objectMode, dbs, connections]);
 
   const items = useMemo<Item[]>(() => {
@@ -225,7 +243,7 @@ export function CommandPalette() {
 
   const noCatalog = objectMode && loadedCount === 0 && unloaded.length === 0;
   const placeholder = objectMode
-    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · > commands'
+    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · k: keys · coll: collections · > commands'
     : 'Type a command…  @ to go to an object';
 
   return (
@@ -351,7 +369,7 @@ export function CommandPalette() {
 function ObjectRow({ it, i, sel, setSel, choose, connName }: {
   it: ObjItem; i: number; sel: number; setSel: (n: number) => void;
   choose: (i: number, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }) => void;
-  connName: Map<string, { name: string; color: string | null }>;
+  connName: Map<string, { name: string; color: string | null; providerId: string }>;
 }) {
   const e = it.entry;
   const conn = connName.get(e.connectionId);
@@ -367,9 +385,11 @@ function ObjectRow({ it, i, sel, setSel, choose, connName }: {
         ev.preventDefault();
         choose(i, ev);
       }}
-      title={`${e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type]} ${e.name} — ${conn?.name ?? ''}`}
+      title={`${e.source ? SOURCE_ENTRY_LABEL[e.source.type] : e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type as CatalogObjectType]} ${e.name} — ${conn?.name ?? ''}`}
     >
-      <span className="palette-icon">{e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type} />}</span>
+      <span className="palette-icon">
+        {e.source ? <ProviderIcon providerId={conn?.providerId ?? ''} color={null} size={16} /> : e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type as CatalogObjectType} />}
+      </span>
       <span className="palette-label">
         <Hl text={e.name} positions={it.match.positions} />
       </span>

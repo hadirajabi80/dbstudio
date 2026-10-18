@@ -353,7 +353,7 @@ describe('4.14 SQLite', () => {
 });
 
 describe('4.14 all dialects', () => {
-  const owner: Record<Dialect, string> = { tsql: 'dbo.Customers', plsql: 'SHOP.CUSTOMERS', sqlite: 'main.customers' };
+  const owner: Record<Dialect, string> = { tsql: 'dbo.Customers', plsql: 'SHOP.CUSTOMERS', sqlite: 'main.customers', pgsql: 'public.customers' };
   for (const dialect of ['tsql', 'plsql', 'sqlite'] as Dialect[]) {
     it(`#45 ${dialect}: unknown column through a resolved qualifier`, () => {
       const i = intelFor(dialect);

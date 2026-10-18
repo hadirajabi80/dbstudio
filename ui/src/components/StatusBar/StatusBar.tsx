@@ -7,6 +7,7 @@ import { useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { useCatalog } from '../../store/catalog';
+import { useSourceClients } from '../../store/sourceClients';
 import { activityCounts, useSessions, useTabSession } from '../../store/sessions';
 import { pluralize } from '../common/text';
 import { useActiveTab } from '../../store/tabs';
@@ -43,6 +44,8 @@ export function StatusBar() {
   // Engine-wide (GET /sessions, refreshed on session.changed) and the explorer's definition of "connected":
   // a connection with an open session or a loaded catalog.
   const counts = useMemo(() => activityCounts(sessions, catalogConns), [sessions, catalogConns]);
+  // M2: open Redis/MongoDB/Kafka clients (GET /sources/clients, source.client events).
+  const clients = useSourceClients((s) => Object.keys(s.clients).length);
   const orphans = useMemo(() => useSessions.getState().orphans().length, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tx = session ? (session.txMode === 'manual' ? (session.txOpen ? 'Manual tx · pending' : 'Manual tx') : 'Auto-commit') : tab?.kind === 'console' ? (tab.txMode === 'manual' ? 'Manual tx' : 'Auto-commit') : null;
@@ -61,6 +64,7 @@ export function StatusBar() {
       >
         <Activity size={12} />
         {pluralize(counts.connections, 'connection')} · {pluralize(counts.sessions, 'session')}
+        {clients > 0 && <> · {pluralize(clients, 'client')}</>}
         {orphans > 0 && <span className="sb-warn-dot" aria-label={pluralize(orphans, 'unused session')} />}
       </button>
       {conn ? (
@@ -109,5 +113,5 @@ function shortVersion(v: string): string {
 }
 
 function dialectName(p?: string): string {
-  return p === 'sqlserver' ? 'T-SQL' : p === 'oracle' ? 'PL/SQL' : p === 'sqlite' ? 'SQLite' : 'SQL';
+  return p === 'sqlserver' ? 'T-SQL' : p === 'oracle' ? 'PL/SQL' : p === 'sqlite' ? 'SQLite' : p === 'postgresql' ? 'PostgreSQL' : 'SQL';
 }

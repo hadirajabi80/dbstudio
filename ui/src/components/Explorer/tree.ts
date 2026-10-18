@@ -1,10 +1,13 @@
-import type { CatalogObject, CatalogObjectType, ConnectionProfile, ObjectRef } from '../../api/types';
+import type { CatalogObject, CatalogObjectType, ConnectionProfile, ObjectRef, ProviderId } from '../../api/types';
 import { fuzzyMatchLower } from '../../lib/fuzzy';
+import { getSourceModule, sourceNodeId } from '../../lib/sources';
+import { hasDatabaseLevel, providerKind } from '../../store/connections';
 import { isTabular, OBJECT_TYPE_LABELS, OBJECT_TYPE_ORDER } from '../../lib/sql';
 import { dbKey, type ConnCatalog, type DbCatalog } from '../../store/catalog';
 import type { TypeChip } from './explorerStore';
 
-export type NodeKind = 'cfolder' | 'connection' | 'database' | 'schema' | 'folder' | 'object' | 'column' | 'status';
+/** M2: `source` rows belong to a source module (Redis/MongoDB/Kafka, see lib/sources.ts). */
+export type NodeKind = 'cfolder' | 'connection' | 'database' | 'schema' | 'folder' | 'object' | 'column' | 'status' | 'source';
 
 export interface TreeRow {
   id: string;
@@ -28,6 +31,8 @@ export interface TreeRow {
   busy?: boolean;
   /** status 'load': the schema to load when activated. */
   loadSchema?: string;
+  /** M2: rows of a source module (kind 'source'): node type ('db', 'key', 'collection', 'topic'...), path from the connection. */
+  source?: { providerId: ProviderId; nodeType: string; path: string[]; meta?: unknown };
 }
 
 export const nodeId = {
@@ -37,7 +42,28 @@ export const nodeId = {
   schema: (cid: string, db: string | null, s: string) => `s:${cid}:${db ?? ''}:${s}`,
   folder: (cid: string, db: string | null, s: string, t: CatalogObjectType) => `f:${cid}:${db ?? ''}:${s}:${t}`,
   object: (cid: string, db: string | null, s: string, t: CatalogObjectType, n: string) => `o:${cid}:${db ?? ''}:${s}:${t}:${n}`,
+  /** M2: source module rows (lib/sources.ts sourceNodeId). */
+  source: sourceNodeId,
 };
+
+/** M2: whether a connection is rendered by a source module instead of the SQL catalog. */
+export function isSourceConnection(c: ConnectionProfile): boolean {
+  return providerKind(c.providerId) !== 'relational';
+}
+
+/** M2: child rows of an expanded non-relational connection, delegated to its source module. */
+function addSourceChildren(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, depth: number, parent: string, filter = '') {
+  const mod = getSourceModule(c.providerId);
+  if (!mod) return status(rows, parent, depth, 'hint', 'Support for this source is not available in this build');
+  let children: TreeRow[];
+  try {
+    children = mod.tree({ connection: c, depth, expanded: input.expanded, filter });
+  } catch (e) {
+    return status(rows, parent, depth, 'error', e instanceof Error ? e.message : String(e));
+  }
+  if (children.length === 0 && !filter) return status(rows, parent, depth, 'empty', 'Nothing to show');
+  for (const r of children) rows.push(r);
+}
 
 /** Chip → object types (1.1.2). */
 export const CHIP_TYPES: Record<TypeChip, CatalogObjectType[]> = {
@@ -70,7 +96,8 @@ export interface TreeInput {
 /** Databases shown under a connection; `[null]` when the provider has no database level (Oracle) or none were returned. */
 export function databasesOf(conn: ConnectionProfile, cat: ConnCatalog | undefined): (string | null)[] | null {
   if (!cat || cat.status !== 'ready' || !cat.databases) return null;
-  if (conn.providerId === 'oracle' || cat.databases.databases.length === 0) return [null];
+  if (!hasDatabaseLevel(conn.providerId) && conn.providerId !== 'sqlite') return [null];
+  if (cat.databases.databases.length === 0) return [null];
   return cat.databases.databases;
 }
 
@@ -144,6 +171,7 @@ function addConnection(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, 
     id, kind: 'connection', depth, label: c.name, expandable: true, expanded: open, connectionId: c.id, busy: isBusy(input, c.id),
   });
   if (!open) return;
+  if (isSourceConnection(c)) return addSourceChildren(rows, input, c, depth + 1, id);
   if (!cat || cat.status === 'loading' || cat.status === 'idle') return status(rows, id, depth + 1, 'loading', 'Connecting…');
   if (cat.status === 'error') return status(rows, id, depth + 1, 'error', cat.error ?? 'Failed to connect');
   const dbs = databasesOf(c, cat) ?? [];
@@ -263,6 +291,20 @@ function buildFiltered(input: TreeInput): TreeRow[] {
   const pattern = input.filter.trim().toLowerCase();
   for (const c of sortedConnections(input.connections)) {
     const connMatch = fuzzyMatchLower(pattern, c.name, c.name.toLowerCase());
+    if (isSourceConnection(c)) {
+      // M2: the source module filters its own (loaded) rows.
+      const sub: TreeRow[] = [];
+      const cid = nodeId.conn(c.id);
+      if (getSourceModule(c.providerId)) addSourceChildren(sub, input, c, 1, cid, input.filter.trim());
+      const hits = sub.filter((r) => r.kind === 'source');
+      if (!connMatch && hits.length === 0) continue;
+      rows.push({
+        id: cid, kind: 'connection', depth: 0, label: c.name, expandable: true, expanded: hits.length > 0, connectionId: c.id,
+        match: connMatch?.positions, busy: false, count: hits.length || undefined,
+      });
+      if (hits.length > 0) for (const r of sub) rows.push(r);
+      continue;
+    }
     const types = input.typesFor?.(c.id) ?? null;
     const hits: Hit[] = [];
     const unloaded: { db: string | null; schema: string }[] = [];

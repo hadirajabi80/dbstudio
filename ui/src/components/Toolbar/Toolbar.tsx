@@ -13,7 +13,7 @@ import { getCommand, hasCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { formatCount, formatDuration } from '../../lib/format';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { useConnection } from '../../store/connections';
+import { hasDatabaseLevel, useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { useTabSession } from '../../store/sessions';
@@ -70,7 +70,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const prod = isProductionColor(conn?.color);
 
   let current: string | null = null;
-  if (conn?.providerId === 'sqlserver') current = effectiveDatabase(conn.id, tab.database) ?? session?.database ?? connCat?.databases?.current ?? null;
+  if (hasDatabaseLevel(conn?.providerId)) current = effectiveDatabase(conn!.id, tab.database) ?? session?.database ?? connCat?.databases?.current ?? null;
   else if (conn?.providerId === 'oracle') current = tab.database ?? session?.database ?? oracleSchemas?.defaultSchema ?? null;
 
   const openSwitcher = (mode: 'connection' | 'database', el: HTMLElement) => {

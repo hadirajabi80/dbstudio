@@ -2,5 +2,10 @@
   "gzipBytes": 1426124,
   "rawBytes": 5528394,
   "files": 7,
-  "note": "Measured from the M1 UI build at commit bfaac37; PLAN-M1.5 5.5 allows +600 KB gzipped over this. Re-measure only from that commit (see .github/scripts/bundle-size.mjs), never from the current tree."
+  "note": "Measured from the M1 UI build at commit bfaac37; PLAN-M1.5 5.5 allows +600 KB gzipped over this. Re-measure only from that commit (see .github/scripts/bundle-size.mjs), never from the current tree.",
+  "initial": {
+    "gzipBytes": 1487026,
+    "files": 15,
+    "note": "Initial load (entry chunk + static imports) of the M2-0 tree; PLAN-M2 D10 allows +120 KB gzipped over this."
+  }
 }

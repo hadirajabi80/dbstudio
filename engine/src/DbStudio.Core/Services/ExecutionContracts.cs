@@ -26,6 +26,21 @@ public class EngineException(int status, string code, string message, object? de
 
     public static EngineException NotFound(string what) => new(404, ErrorCodes.NotFound, $"{what} was not found.");
     public static EngineException Validation(string message, object? detail = null) => new(400, ErrorCodes.Validation, message, detail);
+
+    // ---- M2 (docs/PLAN-M2.md 1.1)
+
+    /// <summary>503 SOURCE_UNAVAILABLE: the Redis/Mongo/Kafka client cannot connect (message = driver message).</summary>
+    public static EngineException SourceUnavailable(string message, object? detail = null) => new(503, ErrorCodes.SourceUnavailable, message, detail);
+
+    /// <summary>429 STREAM_LIMIT: more than the allowed open streams per UI client (or engine-wide).</summary>
+    public static EngineException StreamLimit(string message, object? detail = null) => new(429, ErrorCodes.StreamLimit, message, detail);
+
+    /// <summary>403 PRIVILEGE: the server denied a system view or command; <paramref name="needs"/> names the grant (detail.needs).</summary>
+    public static EngineException Privilege(string message, string? needs) => new(403, ErrorCodes.Privilege, message, new { needs });
+
+    /// <summary>403 READ_ONLY for a non-SQL action on a read-only connection; the message names the action.</summary>
+    public static EngineException ReadOnly(string connectionName, string action) =>
+        new(403, ErrorCodes.ReadOnly, $"The connection '{connectionName}' is read-only: {action} is not allowed.", new { action });
 }
 
 /// <summary>Error codes of the REST error envelope (docs/PLAN.md section 3) and engine-generated execution errors.</summary>
@@ -34,5 +49,7 @@ public static class ErrorCodes
     public const string Unauthorized = "UNAUTHORIZED", NotFound = "NOT_FOUND", Validation = "VALIDATION",
         SessionBusy = "SESSION_BUSY", SessionBroken = "SESSION_BROKEN", TxOpen = "TX_OPEN", ProviderError = "PROVIDER_ERROR",
         BindVarsUnsupported = "BIND_VARS_UNSUPPORTED", NotSupported = "NOT_SUPPORTED", ReadOnly = "READ_ONLY",
-        EngineError = "ENGINE_ERROR", Cancelled = "CANCELLED";
+        EngineError = "ENGINE_ERROR", Cancelled = "CANCELLED",
+        // M2 (docs/PLAN-M2.md 1.1, 7.5)
+        SourceUnavailable = "SOURCE_UNAVAILABLE", StreamLimit = "STREAM_LIMIT", Privilege = "PRIVILEGE", GroupActive = "GROUP_ACTIVE";
 }

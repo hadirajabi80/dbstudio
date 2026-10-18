@@ -4,7 +4,7 @@ import type { ConnectionProfile, RunLabel } from '../../api/types';
 import { getEditor } from '../../app/editors';
 import { runMulti, type MultiTarget } from '../../app/multiRun';
 import { useCatalog } from '../../store/catalog';
-import { useConnections } from '../../store/connections';
+import { hasDatabaseLevel, providerKind, useConnections } from '../../store/connections';
 import { useTabs } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
@@ -33,7 +33,9 @@ export function MultiRunDialog() {
 function Inner({ tabId }: { tabId: string }) {
   const close = () => useUi.getState().openMultiRun(null);
   const tab = useTabs((s) => s.tabs.find((t) => t.id === tabId));
-  const connections = useConnections((s) => s.connections);
+  const allConnections = useConnections((s) => s.connections);
+  // M2: multi-run executes SQL, so only relational connections are listed.
+  const connections = useMemo(() => allConnections.filter((c) => providerKind(c.providerId) === 'relational'), [allConnections]);
   const catConns = useCatalog((s) => s.conns);
   const [what, setWhat] = useState<RunLabel>('statement');
   const [picked, setPicked] = useState<Map<string, string | null>>(() => {
@@ -45,7 +47,7 @@ function Inner({ tabId }: { tabId: string }) {
   });
 
   useEffect(() => {
-    for (const c of connections) if (c.providerId === 'sqlserver' && picked.has(c.id)) void useCatalog.getState().loadDatabases(c.id);
+    for (const c of connections) if (hasDatabaseLevel(c.providerId) && picked.has(c.id)) void useCatalog.getState().loadDatabases(c.id);
   }, [connections, picked]);
 
   const folders = useMemo(() => {
@@ -154,7 +156,7 @@ function Inner({ tabId }: { tabId: string }) {
                         <span>{c.name}</span>
                         {c.id === tab?.connectionId && <span className="pill pill-muted">this console</span>}
                       </label>
-                      {c.providerId === 'sqlserver' && picked.has(c.id) && (
+                      {hasDatabaseLevel(c.providerId) && picked.has(c.id) && (
                         <Select
                           size="sm"
                           aria-label={`Database for ${c.name}`}

@@ -1,8 +1,11 @@
 // Wire contract between the UI and the .NET engine. Mirrors docs/PLAN.md section 3.
 // Frozen: change the plan (and the engine DTOs) before changing this file.
 
-export type Dialect = 'tsql' | 'plsql' | 'sqlite';
-export type ProviderId = 'sqlserver' | 'oracle' | 'sqlite';
+export type Dialect = 'tsql' | 'plsql' | 'sqlite' | 'pgsql';
+/** M2: relational providers (sqlserver, oracle, sqlite, postgresql) and non-relational sources (redis, mongodb, kafka). */
+export type ProviderId = 'sqlserver' | 'oracle' | 'sqlite' | 'postgresql' | 'redis' | 'mongodb' | 'kafka';
+/** M2 (docs/PLAN-M2.md D1): provider family. Only `relational` providers have sessions, consoles and a SQL catalog. */
+export type SourceKind = 'relational' | 'keyvalue' | 'document' | 'stream';
 
 export interface ApiErrorBody {
   error: { code: ApiErrorCode; message: string; detail?: unknown };
@@ -11,7 +14,10 @@ export type ApiErrorCode =
   | 'UNAUTHORIZED' | 'NOT_FOUND' | 'VALIDATION' | 'SESSION_BUSY' | 'SESSION_BROKEN'
   | 'TX_OPEN' | 'PROVIDER_ERROR' | 'BIND_VARS_UNSUPPORTED' | 'NOT_SUPPORTED' | 'READ_ONLY'
   // M1.5 (docs/PLAN-M1.5.md 3.7–3.9)
-  | 'SESSION_LIMIT' | 'DDL_FAILED' | 'NOT_EDITABLE';
+  | 'SESSION_LIMIT' | 'DDL_FAILED' | 'NOT_EDITABLE'
+  // M2 (docs/PLAN-M2.md 1.1): 503 a source client cannot connect, 429 more than 8 open streams per UI client,
+  // 403 the server denied a system view (`detail.needs` names the grant), 409 offset reset on an active group (7.5).
+  | 'SOURCE_UNAVAILABLE' | 'STREAM_LIMIT' | 'PRIVILEGE' | 'GROUP_ACTIVE';
 
 // ---------- 3.1 Meta ----------
 export interface Health { status: 'ok'; version: string; pid: number; dev: boolean }
@@ -33,7 +39,10 @@ export interface FormField {
 export interface ProviderInfo {
   id: ProviderId;
   displayName: string;
-  dialect: Dialect;
+  /** M2: null for non-relational sources (redis, mongodb, kafka). */
+  dialect: Dialect | null;
+  /** M2: provider family (engines before M2 omitted it; treat a missing kind as `relational`). */
+  kind: SourceKind;
   formSpec: { fields: FormField[] };
 }
 
@@ -59,6 +68,9 @@ export interface Settings {
   snippets?: Snippet[];
   grid?: GridSettings;
   connections?: ConnectionsSettings;
+  // M2 additive keys (engine defaults: streams.maxQueuedItems 50000, logs.tailIntervalMs 2000).
+  streams?: StreamsSettings;
+  logs?: LogsSettings;
 }
 
 // ---------- 3.2 Connections ----------
@@ -104,7 +116,8 @@ export interface DatabasesResponse { databases: string[]; current: string | null
 export interface SchemasResponse {
   database: string | null;
   defaultSchema: string;
-  schemas: { name: string; loaded: boolean; objectCount?: number | null }[];
+  /** M2 (PostgreSQL): `searchPathIndex` = position in `current_schemas(true)`, null/absent when not on the path. */
+  schemas: { name: string; loaded: boolean; objectCount?: number | null; searchPathIndex?: number | null }[];
 }
 
 export type CatalogObjectType =
@@ -150,6 +163,8 @@ export interface CatalogSnapshot {
   version: number;
   databases: string[];
   schemas: CatalogSchema[];
+  /** M2 (PostgreSQL): `current_schemas(true)` minus `pg_catalog`, in order; omitted for other dialects. */
+  searchPath?: string[];
 }
 
 export interface ObjectRef { database: string | null; schema: string | null; name: string; type: CatalogObjectType }
@@ -322,7 +337,13 @@ export type WsEvent =
   | (Ev<'catalog.changed'> & { connectionId: string; database: string | null; schemas: string[]; version: number })
   | (Ev<'export.progress'> & { exportId: string; rows: number })
   | (Ev<'export.done'> & { exportId: string; path: string; rows: number; status: 'ok' | 'error' | 'cancelled'; error: string | null })
-  | (Ev<'engine.log'> & { level: 'debug' | 'info' | 'warn' | 'error'; message: string });
+  | (Ev<'engine.log'> & { level: 'debug' | 'info' | 'warn' | 'error'; message: string })
+  // ---- M2 (docs/PLAN-M2.md 1.2, 2.4): streams, source clients, jobs
+  | (Ev<'stream.data'> & StreamDataPayload)
+  | (Ev<'stream.state'> & StreamStatePayload)
+  | (Ev<'source.client'> & { connectionId: string; state: SourceClientState })
+  | (Ev<'job.progress'> & JobProgressPayload)
+  | (Ev<'job.done'> & JobDonePayload);
 
 export type WsEventType = WsEvent['type'];
 export type WsEventOf<T extends WsEventType> = Extract<WsEvent, { type: T }>;
@@ -378,7 +399,13 @@ export interface ConnectionsSettings {
   maxSessionsPerProfile: number;
   /** B1 (logic-08): seconds a session survives its window's disconnect before the engine closes it (0 = never). Default 90. */
   orphanGraceSeconds?: number;
+  /** M2 (D2): seconds an unused Redis/MongoDB/Kafka client stays open (0 = never close). Default 600. */
+  sourceIdleSeconds?: number;
 }
+/** M2 (docs/PLAN-M2.md 1.1): engine stream queue size (oldest items dropped beyond it). */
+export interface StreamsSettings { maxQueuedItems: number }
+/** M2: poll interval of `logs.tail` streams over sources without push. */
+export interface LogsSettings { tailIntervalMs: number }
 
 // ----- Error details -----
 /** `detail` of a 429 SESSION_LIMIT error. */
@@ -506,7 +533,8 @@ export interface ExecPlanPayload {
   mode: ExplainMode;
   root: PlanNode;
   raw: string;
-  rawFormat: 'xml' | 'text';
+  /** M2: `json` for PostgreSQL `EXPLAIN (FORMAT JSON)`. */
+  rawFormat: 'xml' | 'text' | 'json';
   warnings: string[];
 }
 export type ExecPlanEvent = WsEventOf<'exec.plan'>;
@@ -653,3 +681,57 @@ export interface DdlApplyRequest {
   schema?: string | null;
 }
 export interface DdlApplyResponse { ok: true; executed: number; elapsedMs: number }
+
+// ---------- M2 (docs/PLAN-M2.md 1.2, 2.3, 2.4) ----------
+// Shared framework types. Feature wire types (Redis, Mongo, Kafka, Logs, ER) live in ./types.m2.ts (re-exported here).
+
+/** Stream kinds; the engine dispatches `POST /streams` to the `IStreamFactory` registered under the same key. */
+export type StreamKind =
+  | 'redis.monitor' | 'redis.subscribe' | 'kafka.tail' | 'kafka.fetch' | 'mongo.changes' | 'logs.tail' | 'activity.poll';
+export interface StreamOpenRequest { kind: StreamKind; connectionId: string; params: Record<string, unknown> }
+export interface StreamOpenResponse { streamId: string }
+/** `open` is re-sent about every second while items are dropped (with the running `dropped` total). */
+export type StreamState = 'open' | 'paused' | 'ended' | 'error';
+export interface StreamInfo {
+  streamId: string;
+  kind: StreamKind;
+  connectionId: string;
+  state: StreamState;
+  /** UI client id (`X-DbStudio-Client`) owning the stream; null for API callers without one. */
+  owner: string | null;
+  openedAt: string;
+  /** Items delivered in `stream.data` batches so far. */
+  delivered: number;
+  dropped: number;
+}
+/** `items` are kind-specific JSON objects (docs/PLAN-M2.md 2.4); `seq` is monotonic per stream (one per batch). */
+export interface StreamDataPayload { streamId: string; items: unknown[]; seq: number }
+export interface StreamStatePayload { streamId: string; state: StreamState; reason: string | null; dropped: number }
+export type StreamDataEvent = WsEventOf<'stream.data'>;
+export type StreamStateEvent = WsEventOf<'stream.state'>;
+export type StreamEvent = StreamDataEvent | StreamStateEvent;
+
+export type SourceClientState = 'open' | 'closed' | 'broken';
+/** One long-lived client per non-relational connection (D2); listed as "Clients" in the Connections panel. */
+export interface SourceClientInfo {
+  connectionId: string;
+  state: SourceClientState;
+  server: ServerInfo | null;
+  openedAt: string;
+  lastUsed: string;
+}
+
+/** Long operations (2.3): `202 { jobId }`, then `job.progress` / `job.done`; `DELETE /jobs/{id}` cancels. */
+export interface JobStarted { jobId: string }
+export interface JobProgressPayload { jobId: string; kind: string; done: number; total: number | null; message: string | null }
+export interface JobDonePayload {
+  jobId: string;
+  kind: string;
+  status: 'ok' | 'error' | 'cancelled';
+  error: string | null;
+  result: unknown;
+}
+export type JobProgressEvent = WsEventOf<'job.progress'>;
+export type JobDoneEvent = WsEventOf<'job.done'>;
+
+export * from './types.m2';

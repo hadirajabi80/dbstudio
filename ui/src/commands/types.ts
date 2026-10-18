@@ -1,6 +1,6 @@
 // Argument shapes passed by the shell's context menus to registered commands. Commands from other packages
 // should accept these (all optional) and fall back to the current selection / active tab when run without args.
-import type { CatalogObjectType, ObjectRef } from '../api/types';
+import type { CatalogObjectType, ObjectRef, ProviderId } from '../api/types';
 
 /** An explorer object node (table, view, procedure, ...): explorer context menu, palette "go to object". */
 export interface ObjectTarget {
@@ -32,7 +32,21 @@ export interface TabTarget {
   tabId: string;
 }
 
-export type CommandTarget = ObjectTarget | ContainerTarget | ConnectionTarget | TabTarget;
+/**
+ * M2 (docs/PLAN-M2.md 1.3): a node of a source module subtree (Redis db/folder/key, Mongo database/collection,
+ * Kafka topic/group...). `path` is the node path below the connection (e.g. ['0', 'user:', 'user:1001']).
+ */
+export interface SourceTarget {
+  kind: 'source';
+  connectionId: string;
+  providerId: ProviderId;
+  /** Module-defined node type: 'db' | 'folder' | 'key' | 'database' | 'collection' | 'topic' | 'group' | ... */
+  nodeType: string;
+  path: string[];
+  meta?: unknown;
+}
+
+export type CommandTarget = ObjectTarget | ContainerTarget | ConnectionTarget | TabTarget | SourceTarget;
 
 export function isObjectTarget(a: unknown): a is ObjectTarget {
   return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'object';
@@ -45,4 +59,7 @@ export function isConnectionTarget(a: unknown): a is ConnectionTarget {
 }
 export function isTabTarget(a: unknown): a is TabTarget {
   return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'tab';
+}
+export function isSourceTarget(a: unknown): a is SourceTarget {
+  return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'source';
 }

@@ -399,6 +399,18 @@ html.titlebar-inset .topbar :is(button, a, input, select, textarea, kbd, [role='
 .provider-sqlite {
   background: var(--provider-sqlite);
 }
+.provider-postgresql {
+  background: var(--provider-postgresql);
+}
+.provider-redis {
+  background: var(--provider-redis);
+}
+.provider-mongodb {
+  background: var(--provider-mongodb);
+}
+.provider-kafka {
+  background: var(--provider-kafka);
+}
 
 /* ---------- empty states ---------- */
 .empty-state {

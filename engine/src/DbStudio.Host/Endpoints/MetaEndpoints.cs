@@ -11,9 +11,10 @@ public static class MetaEndpoints
         api.MapGet("/health", (EngineOptions o) =>
             new HealthResponse("ok", typeof(MetaEndpoints).Assembly.GetName().Version?.ToString(3) ?? "0.1.0", Environment.ProcessId, o.Dev));
 
-        api.MapGet("/providers", (ProviderRegistry providers) =>
-            providers.All.OrderBy(p => p.Id switch { "sqlserver" => 0, "oracle" => 1, _ => 2 })
-                .Select(p => new ProviderInfoResponse(p.Id, p.DisplayName, p.Dialect, p.FormSpec)));
+        // M2: every provider (relational and non-relational) in SourceRegistry.DisplayOrder:
+        // sqlserver, oracle, postgresql, sqlite, redis, mongodb, kafka.
+        api.MapGet("/providers", (SourceRegistry sources) =>
+            sources.Describe().Select(p => new ProviderInfoResponse(p.Id, p.DisplayName, p.Dialect, p.FormSpec, p.Kind)));
 
         api.MapGet("/settings", (SettingsService settings) => Results.Json(settings.Get(), CoreJson.Options));
 

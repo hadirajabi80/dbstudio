@@ -17,6 +17,10 @@ using DbStudio.Providers.Oracle;
 using DbStudio.Providers.Oracle.Designer;
 using DbStudio.Providers.Oracle.Params;
 using DbStudio.Providers.Oracle.Plans;
+using DbStudio.Providers.PostgreSql;
+using DbStudio.Providers.PostgreSql.Designer;
+using DbStudio.Providers.PostgreSql.Params;
+using DbStudio.Providers.PostgreSql.Plans;
 using DbStudio.Providers.SqlServer;
 using DbStudio.Providers.SqlServer.Designer;
 using DbStudio.Providers.SqlServer.Params;
@@ -88,8 +92,11 @@ try
     services.AddSingleton<IDbProvider, SqlServerProvider>();
     services.AddSingleton<IDbProvider, OracleProvider>();
     services.AddSingleton<IDbProvider, SqliteProvider>();
+    services.AddSingleton<IDbProvider, PostgreSqlProvider>(); // M2: PG-A (docs/PLAN-PG.md)
     services.AddSingleton<ProviderRegistry>();
-    services.AddSingleton<ConnectionStore>();
+    // ---- M2 (docs/PLAN-M2.md 1.1): relational + non-relational providers, source clients, streams, jobs.
+    services.AddSingleton<SourceRegistry>();
+    services.AddSingleton(sp => new ConnectionStore(paths, sp.GetRequiredService<ISecretStore>(), sp.GetRequiredService<SourceRegistry>()));
     services.AddSingleton<SettingsService>();
     services.AddSingleton<HistoryService>();
     services.AddSingleton(new ResultStore());
@@ -97,6 +104,12 @@ try
     services.AddSingleton<WsHub>();
     services.AddSingleton<IEventPublisher>(sp => sp.GetRequiredService<WsHub>());
     services.AddSingleton<SessionManager>();
+    services.AddSingleton(sp => new SourceClientManager(sp.GetRequiredService<SourceRegistry>(), sp.GetRequiredService<ConnectionStore>(),
+        sp.GetRequiredService<IEventPublisher>(), sp.GetRequiredService<SettingsService>(), sp.GetRequiredService<ILogger<SourceClientManager>>()));
+    services.AddSingleton(sp => new StreamManager(sp.GetRequiredService<IEventPublisher>(), kind => sp.GetKeyedService<IStreamFactory>(kind),
+        sp.GetRequiredService<ConnectionStore>(), sp.GetRequiredService<ClientPresence>(), sp.GetRequiredService<SourceClientManager>(),
+        sp.GetRequiredService<SettingsService>(), sp.GetRequiredService<ILogger<StreamManager>>()));
+    services.AddSingleton(sp => new JobManager(sp.GetRequiredService<IEventPublisher>(), sp.GetRequiredService<ILogger<JobManager>>()));
     services.AddSingleton<CatalogService>();
     services.AddSingleton<ExecutionService>();
     services.AddSingleton<ExportService>();
@@ -115,13 +128,23 @@ try
     services.AddKeyedSingleton<IParamBinder>("sqlserver", SqlServerParamBinder.Instance);
     services.AddKeyedSingleton<IParamBinder>("oracle", OracleParamBinder.Instance);
     services.AddKeyedSingleton<IParamBinder>("sqlite", SqliteParamBinder.Instance);
+    // M2: PostgreSQL features (M2-0 stubs that throw NotSupportedException until PG-A implements them).
+    services.AddKeyedSingleton<IDdlScripter, PgDdlScripter>("postgresql");
+    services.AddKeyedSingleton<IDesignerDatabase, PgDesignerDatabase>("postgresql");
+    services.AddKeyedSingleton<IPlanReader, PgPlanReader>("postgresql");
+    services.AddKeyedSingleton<IParamBinder>("postgresql", PgParamBinder.Instance);
     services.AddSingleton(sp => ProviderFeatures.FromServices(sp));
     services.AddSingleton<FilterStore>();
     services.AddSingleton<DesignerService>();
     services.AddSingleton<DescribeService>();
     services.AddSingleton<SampleDatabase>();
 
+    // ---- M2 (docs/PLAN-M2.md D4): feature modules register their providers, services and stream factories.
+    var modules = EngineModules.Discover(ModuleAssemblies.All);
+    foreach (var module in modules) module.ConfigureServices(services);
+
     var app = builder.Build();
+    Log.Information("Engine modules: {Modules}", string.Join(", ", modules.Select(m => m.GetType().Name)));
 
     app.UseMiddleware<ErrorHandlingMiddleware>();
     app.UseCors();
@@ -132,8 +155,8 @@ try
     app.Map("/ws", hub.HandleAsync);
     app.Map("/api/v1/ws", hub.HandleAsync);
 
-    app.MapGroup("/api/v1")
-        .MapMeta()
+    var api = app.MapGroup("/api/v1");
+    api.MapMeta()
         .MapConnections()
         .MapCatalog()
         .MapSessions()
@@ -145,7 +168,11 @@ try
         .MapDescribe()
         .MapPlans()
         .MapDesigner()
-        .MapSampleDb();
+        .MapSampleDb()
+        // M2
+        .MapStreams()
+        .MapSources();
+    foreach (var module in modules) module.MapEndpoints(api);
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
@@ -161,6 +188,10 @@ try
     {
         // Roll back open transactions and close tab connections.
         app.Services.GetRequiredService<SessionManager>().DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(10));
+        // M2: end streams ("shutdown"), cancel jobs, close source clients.
+        app.Services.GetRequiredService<StreamManager>().DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+        app.Services.GetRequiredService<JobManager>().DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+        app.Services.GetRequiredService<SourceClientManager>().DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
     });
 
     await app.RunAsync();

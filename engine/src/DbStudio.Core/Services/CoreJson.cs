@@ -6,7 +6,8 @@ namespace DbStudio.Core.Services;
 
 /// <summary>
 /// JSON conventions shared by the REST API, the WebSocket and the engine's own files: camelCase properties,
-/// enums as camelCase strings, <see cref="Dialect"/> as "tsql" | "plsql" | "sqlite".
+/// enums as camelCase strings, <see cref="Dialect"/> as "tsql" | "plsql" | "sqlite" | "pgsql",
+/// <see cref="SourceKind"/> as "relational" | "keyvalue" | "document" | "stream".
 /// </summary>
 public static class CoreJson
 {
@@ -22,6 +23,7 @@ public static class CoreJson
         o.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
         o.NumberHandling = JsonNumberHandling.Strict;
         o.Converters.Insert(0, new DialectJsonConverter());
+        o.Converters.Insert(1, new SourceKindJsonConverter());
         o.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         return o;
     }
@@ -31,6 +33,7 @@ public static class CoreJson
         Dialect.TSql => "tsql",
         Dialect.PlSql => "plsql",
         Dialect.Sqlite => "sqlite",
+        Dialect.PgSql => "pgsql",
         _ => d.ToString().ToLowerInvariant(),
     };
 
@@ -39,6 +42,25 @@ public static class CoreJson
         "tsql" => Dialect.TSql,
         "plsql" => Dialect.PlSql,
         "sqlite" => Dialect.Sqlite,
+        "pgsql" => Dialect.PgSql,
+        _ => null,
+    };
+
+    public static string ToWire(SourceKind k) => k switch
+    {
+        SourceKind.Relational => "relational",
+        SourceKind.KeyValue => "keyvalue",
+        SourceKind.Document => "document",
+        SourceKind.Stream => "stream",
+        _ => k.ToString().ToLowerInvariant(),
+    };
+
+    public static SourceKind? ParseSourceKind(string? s) => s?.Trim().ToLowerInvariant() switch
+    {
+        "relational" => SourceKind.Relational,
+        "keyvalue" => SourceKind.KeyValue,
+        "document" => SourceKind.Document,
+        "stream" => SourceKind.Stream,
         _ => null,
     };
 }
@@ -49,8 +71,20 @@ public sealed class DialectJsonConverter : JsonConverter<Dialect>
     public override Dialect Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var s = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
-        return CoreJson.ParseDialect(s) ?? throw new JsonException($"Unknown dialect '{s}'. Expected tsql, plsql or sqlite.");
+        return CoreJson.ParseDialect(s) ?? throw new JsonException($"Unknown dialect '{s}'. Expected tsql, plsql, sqlite or pgsql.");
     }
 
     public override void Write(Utf8JsonWriter writer, Dialect value, JsonSerializerOptions options) => writer.WriteStringValue(CoreJson.ToWire(value));
+}
+
+/// <summary>M2: serializes <see cref="SourceKind"/> as relational | keyvalue | document | stream (camelCase would give "keyValue").</summary>
+public sealed class SourceKindJsonConverter : JsonConverter<SourceKind>
+{
+    public override SourceKind Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var s = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+        return CoreJson.ParseSourceKind(s) ?? throw new JsonException($"Unknown source kind '{s}'. Expected relational, keyvalue, document or stream.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, SourceKind value, JsonSerializerOptions options) => writer.WriteStringValue(CoreJson.ToWire(value));
 }

@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      integration:
+        description: 'Also run the Docker integration suites (PostgreSQL, Redis, MongoDB, Kafka) on ubuntu-latest'
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -94,11 +99,16 @@ jobs:
       - name: Build installer (engine publish + UI build + electron-builder)
         run: ./scripts/build.ps1
 
-      # PLAN-M1.5 5.5: the gzipped ui/dist may grow at most 600 KB over M1. The baseline in
-      # .github/bundle-size-baseline.json is the M1 build (commit bfaac37); never re-baseline it on the
-      # current tree to get past this step (see the header of .github/scripts/bundle-size.mjs).
+      # PLAN-M2 D10: the gzipped ui/dist may grow at most 1,400 KB over M1 (baseline: the M1 build, commit bfaac37),
+      # and the initial load (entry chunk + static imports) at most 120 KB over the M2-0 tree ("initial" in
+      # .github/bundle-size-baseline.json). Never re-baseline either on the current tree to get past this step
+      # (see the header of .github/scripts/bundle-size.mjs).
       - name: UI bundle size
-        run: node .github/scripts/bundle-size.mjs --dist ui/dist --budget-kb 600
+        run: node .github/scripts/bundle-size.mjs --dist ui/dist --budget-kb 1400 --initial-kb 120
+
+      # PLAN-M2 D8: the published engine starts and answers GET /providers (M2-K adds the librdkafka load check).
+      - name: Engine native smoke
+        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/DbStudio.Engine.exe
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
@@ -183,6 +193,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/build.sh
 
+      # PLAN-M2 D8: the published osx-arm64 engine starts and answers GET /providers (M2-K adds the librdkafka load
+      # check and the osx-x64 file/otool/codesign checks).
+      - name: Engine native smoke
+        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/osx-arm64/DbStudio.Engine
+
       - name: Upload DMG and ZIP
         uses: actions/upload-artifact@v4
         with:
@@ -198,5 +213,34 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-macos
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # PLAN-M2 10: optional, non-blocking Docker integration run (manual workflow_dispatch with integration=true).
+  integration:
+    name: Integration (Docker, optional)
+    if: github.event_name == 'workflow_dispatch' && inputs.integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      DBSTUDIO_IT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Start services
+        run: docker compose -f engine/tests/docker/compose.yml --profile kafka up -d postgres redis mongo kafka schema-registry
+      - name: Engine tests (with Docker services)
+        run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine-it" --results-directory TestResults
+      - name: Stop services
+        if: always()
+        run: docker compose -f engine/tests/docker/compose.yml --profile kafka down -v
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-integration
           path: TestResults/
           if-no-files-found: ignore

@@ -13,6 +13,7 @@ const CATALOGS: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
+  pgsql: sqliteShop as unknown as CatalogSnapshot, // M2-0 placeholder: PG-B loads shop-pgsql.json
 };
 
 const SAMPLES: Record<Dialect, string> = {
@@ -53,6 +54,10 @@ WHERE o.total > 10
 LIMIT 20;
 
 SELECT * FROM archive.orders_2020;
+`,
+  // M2-0 placeholder: PG-B adds the PostgreSQL sample.
+  pgsql: `-- PostgreSQL playground
+SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id LIMIT 20;
 `,
 };
 

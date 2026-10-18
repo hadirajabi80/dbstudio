@@ -1,6 +1,6 @@
 import {
-  Columns3, Database, Eye, File, Folder, FunctionSquare, Hash, Key, Layers, Link, Link2, Package, Server, Shapes,
-  SquareFunction, Table2, Zap,
+  Boxes, Columns3, Cylinder, Database, Eye, File, Folder, FunctionSquare, Hash, Key, Layers, Leaf, Link, Link2, Package, Server, Shapes,
+  SquareFunction, Table2, Waypoints, Zap,
 } from 'lucide-react';
 import type { CatalogObjectType, ProviderId } from '../../api/types';
 import { connColorCss } from '../../theme/connColors';
@@ -11,9 +11,16 @@ const PROVIDER_ICON: Record<ProviderId, { Icon: typeof Server; label: string }> 
   sqlserver: { Icon: Server, label: 'SQL Server' },
   oracle: { Icon: Database, label: 'Oracle' },
   sqlite: { Icon: File, label: 'SQLite' },
+  // M2 (docs/PLAN-M2.md 1.3)
+  postgresql: { Icon: Cylinder, label: 'PostgreSQL' },
+  redis: { Icon: Boxes, label: 'Redis' },
+  mongodb: { Icon: Leaf, label: 'MongoDB' },
+  kafka: { Icon: Waypoints, label: 'Kafka' },
 };
 
-export const PROVIDER_LABEL: Record<string, string> = { sqlserver: 'SQL Server', oracle: 'Oracle', sqlite: 'SQLite' };
+export const PROVIDER_LABEL: Record<string, string> = {
+  sqlserver: 'SQL Server', oracle: 'Oracle', sqlite: 'SQLite', postgresql: 'PostgreSQL', redis: 'Redis', mongodb: 'MongoDB', kafka: 'Kafka',
+};
 
 /** Provider glyph (Server / Database / File) on a provider-tinted tile; the connection colour is shown as a ring. */
 export function ProviderIcon({ providerId, color, size = 16 }: { providerId: ProviderId | string; color?: string | null; size?: number }) {

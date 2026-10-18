@@ -1,5 +1,5 @@
 // Single multiplexed WebSocket to the engine (D-6). Auth via the first frame, never the URL.
-import type { WsClientFrame, WsEvent, WsEventOf, WsEventType } from './types';
+import type { JobDoneEvent, JobProgressEvent, StreamEvent, WsClientFrame, WsEvent, WsEventOf, WsEventType } from './types';
 import { uiClientId } from './clientId';
 
 /** Minimal WebSocket surface so tests and the mock engine can supply a fake socket. */
@@ -31,6 +31,8 @@ export class EngineSocket {
   private info: { baseUrl: string; token: string } | null = null;
   private byType = new Map<string, Set<Handler>>();
   private byExec = new Map<string, Set<Handler>>();
+  private byStream = new Map<string, Set<Handler>>();
+  private byJob = new Map<string, Set<Handler>>();
   private statusHandlers = new Set<(s: WsStatus) => void>();
   private _status: WsStatus = 'idle';
   private attempt = 0;
@@ -78,6 +80,31 @@ export class EngineSocket {
     return this.add(this.byExec, executionId, fn);
   }
 
+  /**
+   * M2 (docs/PLAN-M2.md 1.2): `stream.data` / `stream.state` events of one stream (from `api.openStream`).
+   * Subscribe right after the 202: the engine starts producing asynchronously. Returns an unsubscribe function.
+   */
+  onStream(streamId: string, fn: (ev: StreamEvent) => void): () => void {
+    return this.add(this.byStream, streamId, fn as Handler);
+  }
+
+  /** M2: `job.progress` / `job.done` events of one job (from a `202 { jobId }` endpoint). */
+  onJob(jobId: string, fn: (ev: JobProgressEvent | JobDoneEvent) => void): () => void {
+    return this.add(this.byJob, jobId, fn as Handler);
+  }
+
+  /**
+   * M2: the engine restarted, so every stream it ran is gone: tell each stream subscriber with a synthetic
+   * `stream.state{ended, reason}`. Returns how many streams were notified.
+   */
+  endAllStreams(reason = 'engine-restarted'): number {
+    const ids = [...this.byStream.keys()];
+    for (const streamId of ids) {
+      this.dispatch({ type: 'stream.state', ts: new Date().toISOString(), streamId, state: 'ended', reason, dropped: 0 });
+    }
+    return ids.length;
+  }
+
   onStatus(fn: (s: WsStatus) => void): () => void {
     this.statusHandlers.add(fn);
     return () => this.statusHandlers.delete(fn);
@@ -92,6 +119,13 @@ export class EngineSocket {
     const xid = (ev as { executionId?: string }).executionId;
     if (xid) {
       const hs = this.byExec.get(xid);
+      if (hs) for (const h of [...hs]) safe(h, ev);
+    }
+    if (ev.type === 'stream.data' || ev.type === 'stream.state') {
+      const hs = this.byStream.get(ev.streamId);
+      if (hs) for (const h of [...hs]) safe(h, ev);
+    } else if (ev.type === 'job.progress' || ev.type === 'job.done') {
+      const hs = this.byJob.get(ev.jobId);
       if (hs) for (const h of [...hs]) safe(h, ev);
     }
   }

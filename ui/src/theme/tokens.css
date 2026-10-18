@@ -81,7 +81,18 @@
   --provider-sqlserver: #b91c4a;
   --provider-oracle: #c2410c;
   --provider-sqlite: #1d6fb8;
+  /* M2 (docs/PLAN-M2.md 1.3) */
+  --provider-postgresql: #336791;
+  --provider-redis: #b91c1c;
+  --provider-mongodb: #15803d;
+  --provider-kafka: #374151;
   --provider-fg: #ffffff;
+
+  /* M2: log levels (Logs & activity view) */
+  --log-debug: var(--fg-muted);
+  --log-info: var(--info);
+  --log-warn: var(--warning);
+  --log-error: var(--danger);
 
   /* foregrounds on solid status colours */
   --danger-fg: #ffffff;
@@ -183,7 +194,16 @@
   --provider-sqlserver: #e0607e;
   --provider-oracle: #f0874f;
   --provider-sqlite: #5aa5e8;
+  --provider-postgresql: #7ba7d9;
+  --provider-redis: #f07878;
+  --provider-mongodb: #4fca7d;
+  --provider-kafka: #a3abb8;
   --provider-fg: #0b1220;
+
+  --log-debug: var(--fg-muted);
+  --log-info: var(--info);
+  --log-warn: var(--warning);
+  --log-error: var(--danger);
 
   --brand: #5b9cff;
   --brand-fg: #0b1220;

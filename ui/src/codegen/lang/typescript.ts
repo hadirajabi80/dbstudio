@@ -121,6 +121,8 @@ const DRIVER: Record<Dialect, { module: string; conn: string; import: string }> 
   tsql: { module: 'mssql', conn: 'sql.ConnectionPool | sql.Transaction', import: "import sql from 'mssql';" },
   plsql: { module: 'oracledb', conn: 'oracledb.Connection', import: "import oracledb from 'oracledb';" },
   sqlite: { module: 'better-sqlite3', conn: 'Database', import: "import type { Database } from 'better-sqlite3';" },
+  // M2-0 placeholder (PG-C owns the PostgreSQL drivers, docs/PLAN-PG.md 4.1).
+  pgsql: { module: 'pg', conn: 'pg.PoolClient', import: "import pg from 'pg';" },
 };
 
 const MSSQL_TYPE: Record<string, string> = {

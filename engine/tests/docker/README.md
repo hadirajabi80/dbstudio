@@ -32,6 +32,26 @@ docker compose -f engine/tests/docker/compose.yml ps        # wait until oracle 
 | SQL Server | `localhost,14333`, db `shop` | `sa` / `DbStudio_Dev_2026!` (`MSSQL_SA_PASSWORD`) |
 | Oracle     | `localhost:15211/FREEPDB1` | `shop` / `shop` (`APP_USER_PASSWORD`); `SYSTEM` / `DbStudioDev2026` (`ORACLE_PASSWORD`) |
 
+### M2 services (docs/PLAN-M2.md)
+
+All service blocks are in `compose.yml` (written by M2-0); each feature package owns its seed file and appends a
+section with its own heading below ("PostgreSQL", "Redis", "MongoDB", "Kafka"). Kafka and the Redis cluster are behind
+profiles: `docker compose -f engine/tests/docker/compose.yml --profile kafka --profile cluster up -d`.
+
+| Service | Image | Address (host) | Credentials | Seed (owner) | Env vars for the test backends |
+|---|---|---|---|---|---|
+| `postgres` | `postgres:17` | `localhost:15432`, db `shop` | `shop` / `shop` (`PG_PASSWORD`) | `seed-postgres.sql` (PG-A) | `DBSTUDIO_PG_HOST`, `DBSTUDIO_PG_PORT`, `DBSTUDIO_PG_PASSWORD` |
+| `redis` | `redis/redis-stack:7.4.0-v1` | `localhost:16379` (RedisInsight `:18001`) | none | `seed-redis.sh` via one-shot `redis-seed` (M2-R) | `DBSTUDIO_REDIS_HOST`, `DBSTUDIO_REDIS_PORT`, `DBSTUDIO_REDIS_PASSWORD` |
+| `redis-cluster` (+ `-2`, `-3`), profile `cluster` | `bitnami/redis-cluster:7.4` | `localhost:17001-17003`, 3 masters | none | — (M2-R) | `DBSTUDIO_REDIS_CLUSTER` (`host:port,…`) |
+| `mongo` | `mongo:7` (replica set `rs0`) | `mongodb://localhost:27018/?directConnection=true` | none | `seed-mongo.js` (M2-M) | `DBSTUDIO_MONGO_URI` |
+| `kafka`, profile `kafka` | `apache/kafka:3.8.0` (KRaft) | `localhost:19092` (PLAINTEXT) | none | — (M2-K) | `DBSTUDIO_KAFKA_BOOTSTRAP` |
+| `schema-registry`, profile `kafka` | `confluentinc/cp-schema-registry:7.7.1` | `http://localhost:18081` | none | — (M2-K) | `DBSTUDIO_SCHEMA_REGISTRY_URL` |
+
+The M2 Testcontainers suites follow the `SqlServerBackend` pattern: `DBSTUDIO_IT=0` skips them, the env vars above point
+them at these long-running servers, otherwise they start their own container (`Testcontainers.PostgreSql`,
+`.Redis`, `.MongoDb`, `.Kafka` 4.16.0). The Redis cluster nodes announce container addresses, so cluster tests only
+run inside the compose network or on Linux hosts. The seed files committed by M2-0 are placeholders.
+
 `seed-mssql.sql` is applied by the one-shot `mssql-seed` service; `seed-oracle.sql` runs from
 `/container-entrypoint-initdb.d` when the Oracle database is first created. Both scripts are idempotent and can be
 re-run (`sqlcmd -i`, or SQL*Plus as SYSTEM/SYS).

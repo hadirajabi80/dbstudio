@@ -8,6 +8,7 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'sqlserver',
     displayName: 'Microsoft SQL Server',
     dialect: 'tsql',
+    kind: 'relational',
     formSpec: {
       fields: [
         { key: 'server', label: 'Server', type: 'text', required: true, placeholder: 'localhost\\SQLEXPRESS or host,1433' },
@@ -25,6 +26,7 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'oracle',
     displayName: 'Oracle Database',
     dialect: 'plsql',
+    kind: 'relational',
     formSpec: {
       fields: [
         { key: 'connectionType', label: 'Connection type', type: 'select', options: [{ value: 'basic', label: 'Basic' }, { value: 'tns', label: 'TNS alias' }, { value: 'descriptor', label: 'Connect descriptor' }], default: 'basic' },
@@ -44,11 +46,105 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'sqlite',
     displayName: 'SQLite',
     dialect: 'sqlite',
+    kind: 'relational',
     formSpec: {
       fields: [
         { key: 'path', label: 'Database file', type: 'file', required: true, fileFilter: '*.db;*.sqlite;*.sqlite3', placeholder: 'C:\\data\\shop.db' },
         { key: 'readOnly', label: 'Open read-only (Mode=ReadOnly)', type: 'bool', default: false },
         { key: 'createIfMissing', label: 'Create the file if it does not exist', type: 'bool', default: false },
+      ],
+    },
+  },
+  // ---- M2 (docs/PLAN-M2.md 1.3; specs mirror the engine: PgConnectionStrings, RedisProvider, MongoProvider, KafkaProvider)
+  {
+    id: 'postgresql',
+    displayName: 'PostgreSQL',
+    dialect: 'pgsql',
+    kind: 'relational',
+    formSpec: {
+      fields: [
+        { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'localhost' },
+        { key: 'port', label: 'Port', type: 'number', default: 5432 },
+        { key: 'database', label: 'Database', type: 'text', placeholder: 'postgres' },
+        { key: 'user', label: 'User', type: 'text', required: true },
+        { key: 'password', label: 'Password', type: 'password' },
+        { key: 'sslMode', label: 'SSL mode', type: 'select', default: 'prefer', options: [{ value: 'disable', label: 'Disable' }, { value: 'allow', label: 'Allow' }, { value: 'prefer', label: 'Prefer' }, { value: 'require', label: 'Require' }, { value: 'verify-ca', label: 'Verify CA' }, { value: 'verify-full', label: 'Verify full' }] },
+        { key: 'trustServerCertificate', label: 'Trust server certificate', type: 'bool', default: false, help: 'Accept self-signed certificates with require.' },
+        { key: 'searchPath', label: 'Search path', type: 'text', placeholder: '"$user", public', help: 'Session search_path (leave empty for the server/role default).' },
+        { key: 'applicationName', label: 'Application name', type: 'text', default: 'DbStudio' },
+        { key: 'connectTimeout', label: 'Connect timeout (s)', type: 'number', default: 15 },
+        { key: 'options', label: 'Server options', type: 'text', placeholder: '-c statement_timeout=0', help: 'Extra -c name=value server options (advanced).' },
+      ],
+    },
+  },
+  {
+    id: 'redis',
+    displayName: 'Redis',
+    dialect: null,
+    kind: 'keyvalue',
+    formSpec: {
+      fields: [
+        { key: 'mode', label: 'Mode', type: 'select', default: 'standalone', options: [{ value: 'standalone', label: 'Standalone' }, { value: 'cluster', label: 'Cluster' }, { value: 'sentinel', label: 'Sentinel' }] },
+        { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'localhost', visibleWhen: { mode: 'standalone' } },
+        { key: 'port', label: 'Port', type: 'number', default: 6379, visibleWhen: { mode: 'standalone' } },
+        { key: 'nodes', label: 'Cluster nodes', type: 'list', placeholder: 'host1:6379,host2:6379', visibleWhen: { mode: 'cluster' } },
+        { key: 'sentinels', label: 'Sentinels', type: 'list', placeholder: 'host1:26379,host2:26379', visibleWhen: { mode: 'sentinel' } },
+        { key: 'serviceName', label: 'Service name', type: 'text', default: 'mymaster', visibleWhen: { mode: 'sentinel' } },
+        { key: 'user', label: 'User', type: 'text', help: 'ACL user (empty = default user).' },
+        { key: 'password', label: 'Password', type: 'password' },
+        { key: 'db', label: 'Database', type: 'number', default: 0, help: 'Standalone and sentinel only.' },
+        { key: 'tls', label: 'Use TLS', type: 'bool', default: false },
+        { key: 'tlsSkipVerify', label: 'Skip certificate verification', type: 'bool', default: false },
+        { key: 'keyDelimiter', label: 'Key delimiter', type: 'text', default: ':' },
+        { key: 'scanCount', label: 'SCAN count', type: 'number', default: 500 },
+        { key: 'connectTimeout', label: 'Connect timeout (s)', type: 'number', default: 5 },
+      ],
+    },
+  },
+  {
+    id: 'mongodb',
+    displayName: 'MongoDB',
+    dialect: null,
+    kind: 'document',
+    formSpec: {
+      fields: [
+        { key: 'uri', label: 'Connection string', type: 'text', required: true, placeholder: 'mongodb://localhost:27017 or mongodb+srv://cluster.example.net' },
+        { key: 'user', label: 'User', type: 'text', help: 'Merged into the URI only when it has no credentials.' },
+        { key: 'password', label: 'Password', type: 'password' },
+        { key: 'authSource', label: 'Auth database', type: 'text', placeholder: 'admin' },
+        { key: 'authMechanism', label: 'Auth mechanism', type: 'select', default: 'default', options: [{ value: 'default', label: 'Default' }, { value: 'SCRAM-SHA-256', label: 'SCRAM-SHA-256' }, { value: 'SCRAM-SHA-1', label: 'SCRAM-SHA-1' }, { value: 'MONGODB-X509', label: 'X.509' }, { value: 'PLAIN', label: 'PLAIN (LDAP)' }] },
+        { key: 'database', label: 'Database', type: 'text', help: 'Default database for the explorer (empty = list all).' },
+        { key: 'tls', label: 'Use TLS', type: 'bool', default: false },
+        { key: 'tlsCaFile', label: 'CA file', type: 'file', fileFilter: '*.pem;*.crt;*.cer' },
+        { key: 'tlsAllowInvalid', label: 'Allow invalid certificates', type: 'bool', default: false },
+        { key: 'readPreference', label: 'Read preference', type: 'select', default: 'primary', options: [{ value: 'primary', label: 'Primary' }, { value: 'primaryPreferred', label: 'Primary preferred' }, { value: 'secondary', label: 'Secondary' }, { value: 'secondaryPreferred', label: 'Secondary preferred' }, { value: 'nearest', label: 'Nearest' }] },
+        { key: 'connectTimeout', label: 'Connect timeout (s)', type: 'number', default: 10 },
+        { key: 'appName', label: 'App name', type: 'text', default: 'DbStudio' },
+      ],
+    },
+  },
+  {
+    id: 'kafka',
+    displayName: 'Apache Kafka',
+    dialect: null,
+    kind: 'stream',
+    formSpec: {
+      fields: [
+        { key: 'bootstrapServers', label: 'Bootstrap servers', type: 'text', required: true, placeholder: 'host:9092,host2:9092' },
+        { key: 'securityProtocol', label: 'Security protocol', type: 'select', default: 'PLAINTEXT', options: [{ value: 'PLAINTEXT', label: 'PLAINTEXT' }, { value: 'SSL', label: 'SSL' }, { value: 'SASL_PLAINTEXT', label: 'SASL_PLAINTEXT' }, { value: 'SASL_SSL', label: 'SASL_SSL' }] },
+        { key: 'saslMechanism', label: 'SASL mechanism', type: 'select', default: 'PLAIN', options: [{ value: 'PLAIN', label: 'PLAIN' }, { value: 'SCRAM-SHA-256', label: 'SCRAM-SHA-256' }, { value: 'SCRAM-SHA-512', label: 'SCRAM-SHA-512' }, { value: 'OAUTHBEARER', label: 'OAUTHBEARER' }], help: 'SASL_PLAINTEXT and SASL_SSL only.' },
+        { key: 'user', label: 'SASL user', type: 'text' },
+        { key: 'password', label: 'SASL password', type: 'password' },
+        { key: 'sslCaLocation', label: 'CA certificate', type: 'file', fileFilter: '*.pem;*.crt;*.cer' },
+        { key: 'sslCertLocation', label: 'Client certificate', type: 'file', fileFilter: '*.pem;*.crt;*.cer' },
+        { key: 'sslKeyLocation', label: 'Client key', type: 'file', fileFilter: '*.pem;*.key' },
+        { key: 'sslKeyPassword', label: 'Client key password', type: 'password' },
+        { key: 'schemaRegistryUrl', label: 'Schema Registry URL', type: 'text', placeholder: 'http://localhost:8081' },
+        { key: 'schemaRegistryUser', label: 'Schema Registry user', type: 'text' },
+        { key: 'schemaRegistrySecret', label: 'Schema Registry secret', type: 'password' },
+        { key: 'clientId', label: 'Client id', type: 'text', default: 'DbStudio' },
+        { key: 'requestTimeoutMs', label: 'Request timeout (ms)', type: 'number', default: 15000 },
+        { key: 'extra', label: 'Extra librdkafka settings', type: 'text', placeholder: 'key=value;key2=value2', help: 'Passed to librdkafka as is (advanced).' },
       ],
     },
   },
@@ -71,6 +167,33 @@ export function initialConnections(): ConnectionProfile[] {
       id: 'c_ora', name: 'Oracle Shop', providerId: 'oracle', color: '#f76b15', folder: 'Work', readOnly: true,
       props: { connectionType: 'basic', host: 'ora-dev', port: 1521, serviceName: 'FREEPDB1', user: 'SHOP', role: 'normal' },
       hasPassword: true, savePassword: true, createdAt: now, lastUsedAt: null,
+    },
+    ...m2Connections(),
+  ];
+}
+
+/** M2 (docs/PLAN-M2.md 1.3): one connection per new provider, in the "M2" folder. */
+export function m2Connections(): ConnectionProfile[] {
+  return [
+    {
+      id: 'c_pg', name: 'Postgres Shop', providerId: 'postgresql', color: '#3e63dd', folder: 'M2', readOnly: false,
+      props: { host: 'pg-dev', port: 5432, database: 'shop', user: 'shop', sslMode: 'prefer' },
+      hasPassword: true, savePassword: true, createdAt: now, lastUsedAt: null,
+    },
+    {
+      id: 'c_redis', name: 'Redis Cache', providerId: 'redis', color: '#e5484d', folder: 'M2', readOnly: false,
+      props: { mode: 'standalone', host: 'redis-dev', port: 6379, db: 0, keyDelimiter: ':' },
+      hasPassword: false, savePassword: false, createdAt: now, lastUsedAt: null,
+    },
+    {
+      id: 'c_mongo', name: 'Mongo Shop', providerId: 'mongodb', color: '#46a758', folder: 'M2', readOnly: false,
+      props: { uri: 'mongodb://mongo-dev:27017', database: 'shop' },
+      hasPassword: false, savePassword: false, createdAt: now, lastUsedAt: null,
+    },
+    {
+      id: 'c_kafka', name: 'Kafka Dev', providerId: 'kafka', color: null, folder: 'M2', readOnly: false,
+      props: { bootstrapServers: 'kafka-dev:9092', securityProtocol: 'PLAINTEXT' },
+      hasPassword: false, savePassword: false, createdAt: now, lastUsedAt: null,
     },
   ];
 }

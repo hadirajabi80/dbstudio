@@ -86,6 +86,10 @@ export const MENUS: MenuDef[] = [
       cmd('view.explorer', 'Show database explorer', 'Mod+Shift+E'),
       cmd('view.history', 'Show query history', 'Mod+Shift+H'),
       cmd('connections.showActive', 'Show active connections'),
+      // M2 (docs/PLAN-M2.md 1.3): Ctrl+Shift+L is explain actual and Ctrl+Alt+L the second Format SQL binding (user-01),
+      // so logs use Mod+Alt+Shift+L (deviation from the plan's Mod+Alt+L).
+      cmd('view.logs', 'Logs & activity', 'Mod+Alt+Shift+L', { optional: true }),
+      cmd('er.open', 'ER diagram', 'Mod+Alt+E', { optional: true }),
       cmd('view.toggleResults', 'Toggle results pane', 'Mod+R'),
       cmd('view.maximizeResults', 'Maximize / restore results pane', 'Mod+Shift+R'),
       sep,
@@ -180,6 +184,8 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('designer.newTable', true), n('designer.newView'), n('designer.newTrigger'), 'separator',
     c('connections.edit'), c('connections.duplicate'), 'separator',
     c('connections.refreshCatalog'), c('connections.disconnect'), c('explorer.copyName'), 'separator',
+    // M2 (optional until M2-ER / M2-L land)
+    c('er.open', true), c('view.logs', true), 'separator',
     c('connections.delete'),
   ],
   'explorer.container': [
@@ -215,6 +221,35 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     h('explorer.drop'),
   ],
   'explorer.folder': [c('connections.connectFolder'), c('connections.newInFolder')],
+
+  // ---- M2 (docs/PLAN-M2.md 2.5): source connections and source module nodes. Command ids are reserved here; each
+  // feature package registers them in its commands.ts (optional until then). Args: a SourceTarget (commands/types.ts),
+  // or a ConnectionTarget on the connection row.
+  /** Redis/MongoDB/Kafka connection row (no consoles, no designer). */
+  'explorer.sourceConnection': [
+    c('connections.openWorkspace'), c('view.logs', true), 'separator',
+    c('connections.edit'), c('connections.duplicate'), 'separator',
+    c('connections.disconnect'), c('explorer.copyName'), 'separator',
+    c('connections.delete'),
+  ],
+  'explorer.redis.db': [c('redis.openBrowser', true), c('redis.newKey', true), 'separator', c('redis.flushDb', true)],
+  'explorer.redis.folder': [c('redis.openPattern', true), 'separator', c('redis.deletePattern', true)],
+  'explorer.redis.key': [
+    c('redis.openKey', true), c('redis.renameKey', true), c('redis.setTtl', true), 'separator',
+    c('redis.copyKey', true), c('redis.copyValueJson', true), 'separator', c('redis.deleteKey', true),
+  ],
+  'explorer.mongo.db': [c('mongo.newCollection', true), c('mongo.importInto', true), 'separator', c('mongo.dropDatabase', true)],
+  'explorer.mongo.collection': [
+    c('mongo.openDocuments', true), c('mongo.aggregate', true), c('mongo.schema', true), c('mongo.indexes', true), c('mongo.explain', true),
+    c('mongo.validation', true), 'separator', c('mongo.import', true), c('mongo.export', true), 'separator',
+    c('mongo.renameCollection', true), c('mongo.dropCollection', true),
+  ],
+  'explorer.kafka.cluster': [c('kafka.overview', true), c('kafka.createTopic', true)],
+  'explorer.kafka.topic': [
+    c('kafka.browseMessages', true), c('kafka.produce', true), c('kafka.topicConfigs', true), c('kafka.topicGroups', true), 'separator',
+    c('kafka.addPartitions', true), c('kafka.deleteTopic', true),
+  ],
+  'explorer.kafka.group': [c('kafka.openGroup', true), c('kafka.resetOffsets', true), 'separator', c('kafka.deleteGroup', true)],
   tab: [
     c('tab.close'), c('tab.closeOthers'), 'separator', c('tab.rename'), c('tab.duplicate'),
     { command: 'designer.compareWithServer', optional: true, hideDisabled: true }, 'separator', c('tab.reopenClosed'),

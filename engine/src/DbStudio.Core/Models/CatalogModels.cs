@@ -11,7 +11,8 @@ public static class ObjectTypes
         Type = "type", Trigger = "trigger";
 }
 
-public sealed record SchemaInfo(string Name, int? ObjectCount = null);
+/// <param name="SearchPathIndex">M2 (PostgreSQL): position in <c>current_schemas(true)</c>; null when not on the search path.</param>
+public sealed record SchemaInfo(string Name, int? ObjectCount = null, int? SearchPathIndex = null);
 
 public sealed record SchemaCatalog(string? Database, string Name, IReadOnlyList<CatalogObject> Objects);
 

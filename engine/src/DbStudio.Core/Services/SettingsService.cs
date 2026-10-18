@@ -69,6 +69,19 @@ public sealed class SettingsService
             ["maxSessionsPerProfile"] = 8,
             // B1 (logic-08): seconds a session survives its UI client's disconnect before it is closed (0 = never).
             ["orphanGraceSeconds"] = SessionManager.DefaultOrphanGraceSeconds,
+            // M2 (docs/PLAN-M2.md D2): seconds an unused Redis/Mongo/Kafka client stays open (0 = never close).
+            ["sourceIdleSeconds"] = SourceClientManager.DefaultIdleSeconds,
+        },
+        // ---- M2 (docs/PLAN-M2.md 1.1, 2.4)
+        ["streams"] = new JsonObject
+        {
+            // Bounded queue per stream; when full the oldest items are dropped and counted.
+            ["maxQueuedItems"] = StreamManager.DefaultMaxQueuedItems,
+        },
+        ["logs"] = new JsonObject
+        {
+            // Poll interval of logs.tail streams over sources without push.
+            ["tailIntervalMs"] = 2000,
         },
     };
 
@@ -179,7 +192,7 @@ public sealed class SettingsService
         }
     }
 
-    private static readonly string[] Dialects = ["tsql", "plsql", "sqlite"];
+    private static readonly string[] Dialects = ["tsql", "plsql", "sqlite", "pgsql"];
 
     /// <summary>M1.5 keys: format, snippets, grid, connections, editor.blankLineSplitsStatementsByDialect.</summary>
     private static void ValidateM15(JsonObject s, JsonObject editor)
@@ -215,7 +228,7 @@ public sealed class SettingsService
             if (dialects is not null)
             {
                 if (dialects is not JsonArray list || list.Any(d => d?.GetValueKind() != JsonValueKind.String || !Dialects.Contains(d.GetValue<string>())))
-                    throw EngineException.Validation($"{field}.dialects must be null or a list of tsql, plsql, sqlite.", new { field = $"{field}.dialects" });
+                    throw EngineException.Validation($"{field}.dialects must be null or a list of tsql, plsql, sqlite, pgsql.", new { field = $"{field}.dialects" });
             }
         }
 
@@ -226,6 +239,13 @@ public sealed class SettingsService
         if (s["connections"] is not JsonObject connections) throw Invalid("connections", "object");
         CheckRange(connections, "connections.maxSessionsPerProfile", 0, 1000);
         CheckRange(connections, "connections.orphanGraceSeconds", 0, 86_400);
+        CheckRange(connections, "connections.sourceIdleSeconds", 0, 86_400);
+
+        // M2
+        if (s["streams"] is not JsonObject streams) throw Invalid("streams", "object");
+        CheckRange(streams, "streams.maxQueuedItems", 100, 10_000_000);
+        if (s["logs"] is not JsonObject logs) throw Invalid("logs", "object");
+        CheckRange(logs, "logs.tailIntervalMs", 250, 600_000);
     }
 
     private static void CheckRange(JsonObject o, string path, double min, double max)

@@ -4,8 +4,9 @@ import type {
   CheckModel, Dialect, ForeignKeyModel, IndexModel, ReferentialAction, TableColumnModel, TableModel, UniqueModel,
 } from '../../api/types';
 
-export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = { tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT' };
-export const DEFAULT_KEY_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER' };
+// pgsql: M2-0 placeholder values (PG-C owns the PostgreSQL designer, docs/PLAN-PG.md 4.2).
+export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = { tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'varchar(100)' };
+export const DEFAULT_KEY_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER', pgsql: 'integer' };
 
 export function caseFor(dialect: Dialect, name: string): string {
   return dialect === 'plsql' ? name.toUpperCase() : dialect === 'sqlite' ? name.toLowerCase() : name;

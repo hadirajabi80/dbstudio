@@ -64,6 +64,22 @@ public sealed record ExportDoneEvent(string ExportId, string Path, long Rows, Ex
 /// <param name="Level">debug | info | warn | error.</param>
 public sealed record EngineLogEvent(string Level, string Message) : EngineEvent("engine.log");
 
+// ---- M2 (docs/PLAN-M2.md 1.1, 2.3, 2.4)
+
+/// <summary>A batch of stream items (kind-specific JSON objects); <paramref name="Seq"/> is monotonic per stream, one per batch.</summary>
+public sealed record StreamDataEvent(string StreamId, IReadOnlyList<System.Text.Json.JsonElement> Items, long Seq) : EngineEvent("stream.data");
+
+/// <param name="State">open | paused | ended | error. "open" is re-sent about every second while items are dropped.</param>
+/// <param name="Dropped">Items dropped so far (queue full or paused).</param>
+public sealed record StreamStateEvent(string StreamId, string State, string? Reason, long Dropped) : EngineEvent("stream.state");
+
+/// <param name="State">open | closed | broken.</param>
+public sealed record SourceClientChangedEvent(string ConnectionId, string State) : EngineEvent("source.client");
+
+public sealed record JobProgressEvent(string JobId, string Kind, long Done, long? Total, string? Message) : EngineEvent("job.progress");
+
+public sealed record JobDoneEvent(string JobId, string Kind, ExecutionStatus Status, string? Error, System.Text.Json.JsonElement? Result) : EngineEvent("job.done");
+
 /// <summary>Publisher that drops everything (tests, tools).</summary>
 public sealed class NullEventPublisher : IEventPublisher
 {

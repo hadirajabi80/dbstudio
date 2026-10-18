@@ -3,7 +3,7 @@
 import { api } from '../api/client';
 import type { HistoryEntry, SessionInfo } from '../api/types';
 import {
-  cancelTab, catalogDatabase, closeTab, commitTab, connectAllInFolder, copyText, disconnectAll, disconnectConnection,
+  cancelTab, catalogDatabase, closeTab, commitTab, connectAllInFolder, connectAndOpen, copyText, disconnectAll, disconnectConnection,
   insertIntoActiveEditor, newConsole, openObject, openSampleDatabase, openSqlFile, openSqliteFile, reopenSql, rerun, rollbackTab,
   ownSessions, runActive, saveActiveFile, selectTop, setTxMode,
 } from '../app/actions';
@@ -15,7 +15,8 @@ import { cycleRegion, focusEditorRegion, focusExplorer, focusResults } from '../
 import { isTabular, qualifiedName } from '../lib/sql';
 import { getPlatform } from '../platform';
 import { dbKey, useCatalog } from '../store/catalog';
-import { dialectOf, getConnection, useConnections } from '../store/connections';
+import { dialectOf, getConnection, kindOf, providerKind, useConnections } from '../store/connections';
+import { sourceClientOpen, useSourceClients } from '../store/sourceClients';
 import { useHistory } from '../store/history';
 import { useResults } from '../store/results';
 import { isRunning } from '../store/resultsReducer';
@@ -211,11 +212,24 @@ export const CORE_COMMANDS: Command<never>[] = [
   },
   {
     id: 'connections.changeDatabase', title: 'Change database…', category: 'Connections', shortcut: 'Mod+Shift+D', icon: 'Database',
-    when: () => { const t = consoleWithConnection(); return !!t && getConnection(t.connectionId)?.providerId !== 'sqlite'; },
+    when: () => {
+      const t = consoleWithConnection();
+      const p = t ? getConnection(t.connectionId)?.providerId : undefined;
+      // Databases (SQL Server, PostgreSQL) or Oracle schemas; never SQLite or a non-relational source.
+      return !!p && p !== 'sqlite' && providerKind(p) === 'relational';
+    },
     run: () => useUi.getState().openSwitcher({ tabId: getActiveConsole()!.id, mode: 'database', anchor: anchorOf('.console:not([style*="none"]) .db-pill') }),
   },
   {
-    id: 'connections.openConsole', title: 'Open console', category: 'Connections', icon: 'SquareTerminal', when: (a?: unknown) => !!connectionIdOf(a),
+    // M2: Redis/MongoDB/Kafka connections open their module's default workspace (browser, documents, overview).
+    id: 'connections.openWorkspace', title: 'Open', category: 'Connections', icon: 'PanelsTopLeft', palette: false,
+    when: (a?: unknown) => { const cid = connectionIdOf(a); return !!cid && kindOf(cid) !== 'relational'; },
+    run: (a?: unknown) => void connectAndOpen(connectionIdOf(a)!),
+  },
+  {
+    id: 'connections.openConsole', title: 'Open console', category: 'Connections', icon: 'SquareTerminal',
+    // M2: consoles only on relational connections.
+    when: (a?: unknown) => { const cid = connectionIdOf(a); return !!cid && kindOf(cid) === 'relational'; },
     run: (a?: unknown) => {
       const t = targetOf(a);
       if (!t || !('connectionId' in t)) return;
@@ -235,13 +249,13 @@ export const CORE_COMMANDS: Command<never>[] = [
     when: (a?: unknown) => {
       const cid = connectionIdOf(a);
       // Only what Disconnect closes: the cached catalog and this window's sessions (not another window's).
-      return !!cid && (!!useCatalog.getState().conns[cid] || ownSessions(cid).length > 0);
+      return !!cid && (!!useCatalog.getState().conns[cid] || ownSessions(cid).length > 0 || sourceClientOpen(cid));
     },
     run: (a?: unknown) => void disconnectConnection(connectionIdOf(a)!),
   },
   {
     id: 'connections.disconnectAll', title: 'Disconnect all', category: 'Connections', icon: 'Unplug',
-    when: () => ownSessions().length > 0 || Object.keys(useCatalog.getState().conns).length > 0,
+    when: () => ownSessions().length > 0 || Object.keys(useCatalog.getState().conns).length > 0 || Object.keys(useSourceClients.getState().clients).length > 0,
     run: () => void disconnectAll(),
   },
   {

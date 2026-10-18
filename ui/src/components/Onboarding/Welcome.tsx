@@ -10,7 +10,12 @@ import { Kbd } from '../Shortcuts/Kbd';
 const PROVIDERS: { id: ProviderId; blurb: string }[] = [
   { id: 'sqlserver', blurb: 'SQL Server 2012+ and Azure SQL' },
   { id: 'oracle', blurb: 'Oracle 11g+ via service name, SID or TNS' },
+  // M2 (docs/PLAN-M2.md 1.3)
+  { id: 'postgresql', blurb: 'PostgreSQL 12+, Supabase, Neon, RDS' },
   { id: 'sqlite', blurb: 'A local database file' },
+  { id: 'redis', blurb: 'Standalone, Cluster, Sentinel; Redis Stack' },
+  { id: 'mongodb', blurb: 'mongodb:// and mongodb+srv://, Atlas' },
+  { id: 'kafka', blurb: 'Brokers, topics, consumer groups; Schema Registry' },
 ];
 
 /** First launch / no tabs: welcome screen in the centre area (no modal). */

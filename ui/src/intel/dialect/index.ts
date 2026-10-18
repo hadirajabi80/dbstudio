@@ -11,6 +11,7 @@ export function getSpec(dialect: Dialect): DialectSpec {
     case 'tsql': return tsqlSpec;
     case 'plsql': return plsqlSpec;
     case 'sqlite': return sqliteSpec;
+    case 'pgsql': return sqliteSpec; // M2-0 placeholder: PG-B adds pgsqlSpec
   }
 }
 

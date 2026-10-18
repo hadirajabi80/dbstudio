@@ -2,6 +2,13 @@
 #   docker compose -f engine/tests/docker/compose.yml up -d
 # SQL Server: localhost,14333  (sa / $MSSQL_SA_PASSWORD, database "shop")
 # Oracle:     localhost:15211/FREEPDB1  (shop / $APP_USER_PASSWORD; SYSTEM / $ORACLE_PASSWORD)
+# M2 (docs/PLAN-M2.md 9: M2-0 owns every service block; feature packages only fill their seed files):
+# PostgreSQL: localhost:15432, db "shop" (shop / $PG_PASSWORD)
+# Redis:      localhost:16379 (redis-stack: ReJSON, RediSearch, TimeSeries; RedisInsight UI on 18001)
+# Redis cluster (profile "cluster"): localhost:17001-17003, 3 masters
+# MongoDB:    mongodb://localhost:27018/?directConnection=true (single-node replica set rs0, for change streams)
+# Kafka (profile "kafka"): localhost:19092 (KRaft, PLAINTEXT); Schema Registry http://localhost:18081
+#   docker compose -f engine/tests/docker/compose.yml --profile kafka --profile cluster up -d
 name: dbstudio-it
 
 services:
@@ -50,3 +57,136 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  # ---- M2 ------------------------------------------------------------------------------------------------------
+  # PostgreSQL (PG-A, docs/PLAN-PG.md 2.9): seed-postgres.sql runs once, when the data directory is first created.
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: "${PG_PASSWORD:-shop}"
+      POSTGRES_DB: shop
+    ports:
+      - "${PG_PORT:-15432}:5432"
+    volumes:
+      - ./seed-postgres.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # Redis Stack (M2-R, docs/PLAN-M2.md 5.6): Redis 7.4 with ReJSON, RediSearch and TimeSeries.
+  redis:
+    image: redis/redis-stack:7.4.0-v1
+    environment:
+      REDIS_ARGS: "${REDIS_ARGS:-}"
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+      - "${REDISINSIGHT_PORT:-18001}:8001"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: seed-redis.sh (owned by M2-R) runs redis-cli against the redis service.
+  redis-seed:
+    image: redis/redis-stack:7.4.0-v1
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+    volumes:
+      - ./seed-redis.sh:/seed/seed-redis.sh:ro
+    entrypoint: ["/bin/sh", "/seed/seed-redis.sh"]
+    restart: "no"
+
+  # Redis Cluster (profile "cluster"): 3 masters, no replicas. Nodes announce their container addresses, so cluster
+  # tests reach them from the compose network (or Linux hosts); see README.md.
+  redis-cluster-2:
+    image: bitnami/redis-cluster:7.4
+    profiles: ["cluster"]
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+      REDIS_NODES: "redis-cluster redis-cluster-2 redis-cluster-3"
+    ports:
+      - "17002:6379"
+  redis-cluster-3:
+    image: bitnami/redis-cluster:7.4
+    profiles: ["cluster"]
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+      REDIS_NODES: "redis-cluster redis-cluster-2 redis-cluster-3"
+    ports:
+      - "17003:6379"
+  redis-cluster:
+    image: bitnami/redis-cluster:7.4
+    profiles: ["cluster"]
+    depends_on: [redis-cluster-2, redis-cluster-3]
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+      REDIS_NODES: "redis-cluster redis-cluster-2 redis-cluster-3"
+      REDIS_CLUSTER_REPLICAS: "0"
+      REDIS_CLUSTER_CREATOR: "yes"
+    ports:
+      - "17001:6379"
+
+  # MongoDB 7 (M2-M, docs/PLAN-M2.md 6.5) as a single-node replica set so change streams work; the healthcheck
+  # initiates rs0 on first start. seed-mongo.js (owned by M2-M) runs from /docker-entrypoint-initdb.d.
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "${MONGO_PORT:-27018}:27017"
+    volumes:
+      - ./seed-mongo.js:/docker-entrypoint-initdb.d/10-seed.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  # Apache Kafka 3.8 in KRaft mode (profile "kafka", M2-K, docs/PLAN-M2.md 7.6). Host clients use localhost:19092.
+  kafka:
+    image: apache/kafka:3.8.0
+    profiles: ["kafka"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${KAFKA_PORT:-19092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "${KAFKA_PORT:-19092}:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  # Confluent Schema Registry (profile "kafka") for the Avro/Protobuf/JSON Schema decoders.
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    profiles: ["kafka"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "${SCHEMA_REGISTRY_PORT:-18081}:8081"

@@ -109,7 +109,8 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
   return chunks;
 }
 
-const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules };
+// pgsql: M2-0 placeholder (PG-B adds rules/pgsql.ts).
+const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: sqliteRules };
 
 /**
  * Tokens in the order the safety check compares them: `eof` dropped and every `;` moved before the comments right in

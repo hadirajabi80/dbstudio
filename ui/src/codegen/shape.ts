@@ -108,7 +108,7 @@ export function objectLabel(obj: CgObject): string {
   return [obj.schema, obj.name].filter(Boolean).join('.');
 }
 
-export const DIALECT_LABEL: Record<Dialect, string> = { tsql: 'SQL Server', plsql: 'Oracle', sqlite: 'SQLite' };
+export const DIALECT_LABEL: Record<Dialect, string> = { tsql: 'SQL Server', plsql: 'Oracle', sqlite: 'SQLite', pgsql: 'PostgreSQL' };
 
 /** Primary key members in key order. */
 export function pkMembers(members: Member[], pk: string[]): Member[] {

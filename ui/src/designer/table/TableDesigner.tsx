@@ -52,6 +52,8 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
   tsql: ['int', 'bigint', 'smallint', 'tinyint', 'bit', 'decimal(18,2)', 'money', 'float', 'real', 'nvarchar(100)', 'varchar(100)', 'nchar(10)', 'nvarchar(max)', 'date', 'datetime2(3)', 'datetimeoffset(7)', 'time(7)', 'uniqueidentifier', 'varbinary(max)', 'xml'],
   plsql: ['NUMBER(10)', 'NUMBER(19)', 'NUMBER(12,2)', 'NUMBER', 'BINARY_DOUBLE', 'VARCHAR2(100)', 'NVARCHAR2(100)', 'CHAR(1)', 'CLOB', 'DATE', 'TIMESTAMP(6)', 'TIMESTAMP(6) WITH TIME ZONE', 'RAW(16)', 'BLOB', 'BOOLEAN'],
   sqlite: ['INTEGER', 'TEXT', 'REAL', 'NUMERIC', 'BLOB', 'BOOLEAN', 'DATETIME', 'DATE', 'JSON'],
+  // M2-0 placeholder (PG-C owns it).
+  pgsql: ['integer', 'bigint', 'smallint', 'numeric(12,2)', 'double precision', 'boolean', 'text', 'varchar(100)', 'date', 'timestamptz', 'uuid', 'jsonb', 'bytea'],
 };
 
 function fallbackTypes(dialect: Dialect): DesignerType[] {

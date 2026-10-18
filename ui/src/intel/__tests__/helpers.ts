@@ -9,6 +9,7 @@ export const fixtures: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
+  pgsql: sqliteShop as unknown as CatalogSnapshot, // M2-0 placeholder: PG-B adds fixtures/shop-pgsql.json
 };
 
 const cache = new Map<string, Intel>();

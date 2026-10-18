@@ -1,4 +1,4 @@
-import { Activity, AppWindow, CircleStop, Lock, LoaderCircle, RefreshCw, SquareTerminal, TriangleAlert, Unplug, X } from 'lucide-react';
+import { Activity, AppWindow, Cable, CircleStop, Lock, LoaderCircle, RefreshCw, SquareTerminal, TriangleAlert, Unplug, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { SessionInfo } from '../../api/types';
 import { runCommand } from '../../commands/registry';
@@ -9,6 +9,7 @@ import { useConnections } from '../../store/connections';
 import { useResults } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { isForeignSession, useSessions } from '../../store/sessions';
+import { useSourceClients } from '../../store/sourceClients';
 import { useTabs } from '../../store/tabs';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
@@ -28,12 +29,24 @@ export function ConnectionsPanel() {
   const executions = useResults((s) => s.executions);
   const resultsByTab = useResults((s) => s.byTab);
   const [now, setNow] = useState(() => Date.now());
+  // M2: long-lived Redis/MongoDB/Kafka clients (one per connection, no sessions).
+  const sourceClients = useSourceClients((s) => s.clients);
 
   useEffect(() => {
     void useSessions.getState().refreshAll();
-    const t = setInterval(() => void useSessions.getState().refreshAll(), 5000);
+    void useSourceClients.getState().refresh();
+    const t = setInterval(() => {
+      void useSessions.getState().refreshAll();
+      void useSourceClients.getState().refresh();
+    }, 5000);
     return () => clearInterval(t);
   }, []);
+  const clients = useMemo(
+    () => Object.values(sourceClients)
+      .map((c) => ({ info: c, conn: connections.find((x) => x.id === c.connectionId) }))
+      .sort((a, b) => (a.conn?.name ?? a.info.connectionId).localeCompare(b.conn?.name ?? b.info.connectionId)),
+    [sourceClients, connections],
+  );
   const anyRunning = Object.values(sessions).some((s) => s.state === 'executing');
   useEffect(() => {
     if (!anyRunning) return;
@@ -75,7 +88,7 @@ export function ConnectionsPanel() {
     <div className="dock-panel connections-panel" aria-label="Active connections">
       <div className="panel-header">
         <span className="panel-title">Active connections</span>
-        <span className="panel-count">{groups.length} · {pluralize(total, 'session')}</span>
+        <span className="panel-count">{groups.length} · {pluralize(total, 'session')}{clients.length ? ` · ${pluralize(clients.length, 'client')}` : ''}</span>
         <div className="panel-actions">
           <button className="icon-btn" title="Refresh" aria-label="Refresh sessions" onClick={() => void useSessions.getState().refreshAll()}>
             <RefreshCw size={14} />
@@ -113,7 +126,33 @@ export function ConnectionsPanel() {
           ))}
         </section>
       )}
-      {groups.length === 0 && orphans.length === 0 && foreign.length === 0 ? (
+      {clients.length > 0 && (
+        <section className="session-group clients-group" aria-label="Clients">
+          <div className="session-group-header" title="Redis, MongoDB and Kafka connections keep one shared client each; it closes after the idle timeout.">
+            <Cable size={14} className="muted" aria-hidden="true" />
+            <span className="session-conn-name">Clients</span>
+            <span className="muted">{pluralize(clients.length, 'client')}</span>
+          </div>
+          {clients.map(({ info, conn }) => (
+            <div key={info.connectionId} className="session-row client-row" style={{ ['--conn-color' as string]: connColorCss(conn?.color ?? null) }}>
+              {conn ? <ProviderIcon providerId={conn.providerId} color={conn.color} size={14} /> : <Cable size={14} className="muted" />}
+              <span className="session-tab">{conn?.name ?? info.connectionId}</span>
+              <span className="muted session-db" title={info.server?.version ?? undefined}>{info.server?.version ?? ''}</span>
+              <div className="flex-1" />
+              <span className={`state-badge state-${info.state}`}>{info.state}</span>
+              <button
+                className="icon-btn xs"
+                title="Disconnect"
+                aria-label={`Disconnect ${conn?.name ?? info.connectionId}`}
+                onClick={() => runCommand('connections.disconnect', { kind: 'connection', connectionId: info.connectionId })}
+              >
+                <Unplug size={13} />
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+      {groups.length === 0 && orphans.length === 0 && foreign.length === 0 && clients.length === 0 ? (
         <EmptyState
           icon={<Activity size={28} strokeWidth={1.5} />}
           title="No active connections"

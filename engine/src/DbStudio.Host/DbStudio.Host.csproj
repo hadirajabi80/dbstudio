@@ -15,6 +15,12 @@
     <ProjectReference Include="..\DbStudio.Providers.Sqlite\DbStudio.Providers.Sqlite.csproj" />
     <ProjectReference Include="..\DbStudio.Providers.SqlServer\DbStudio.Providers.SqlServer.csproj" />
     <ProjectReference Include="..\DbStudio.Providers.Oracle\DbStudio.Providers.Oracle.csproj" />
+    <!-- M2 (docs/PLAN-M2.md D4): feature projects; their IEngineModules are discovered at startup (ModuleAssemblies.cs). -->
+    <ProjectReference Include="..\DbStudio.Providers.PostgreSql\DbStudio.Providers.PostgreSql.csproj" />
+    <ProjectReference Include="..\DbStudio.Sources.Redis\DbStudio.Sources.Redis.csproj" />
+    <ProjectReference Include="..\DbStudio.Sources.Mongo\DbStudio.Sources.Mongo.csproj" />
+    <ProjectReference Include="..\DbStudio.Sources.Kafka\DbStudio.Sources.Kafka.csproj" />
+    <ProjectReference Include="..\DbStudio.Logs\DbStudio.Logs.csproj" />
   </ItemGroup>
 
   <ItemGroup>

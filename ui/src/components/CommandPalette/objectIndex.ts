@@ -3,13 +3,19 @@
 // Search is a lower-cased subsequence pre-check plus fuzzy scoring: < 30 ms for 50k objects (objectIndex.test.ts).
 import type { CatalogObjectType, CatalogSchema, ObjectRef } from '../../api/types';
 import { fuzzyMatchLower, type FuzzyResult } from '../../lib/fuzzy';
+import { listSourceModules, type PaletteSourceEntry } from '../../lib/sources';
 import type { DbCatalog } from '../../store/catalog';
+
+/** M2: source module entries (Redis keys, Mongo collections, Kafka topics) next to the SQL catalog types. */
+export type SourceEntryType = PaletteSourceEntry['type'];
 
 export interface IndexEntry {
   /** Object name (or "Table.Column" for column entries). */
   name: string;
   lower: string;
-  type: CatalogObjectType | 'column';
+  type: CatalogObjectType | 'column' | SourceEntryType;
+  /** M2: set for source module entries; `open` goes through the module (`ref` is then only a placeholder). */
+  source?: PaletteSourceEntry;
   connectionId: string;
   database: string | null;
   schema: string;
@@ -23,13 +29,18 @@ export interface SearchHit {
   match: FuzzyResult;
 }
 
-/** Type prefixes: `t:` tables, `v:` views, `p:` procedures, `f:` functions, `c:` columns. */
+/**
+ * Type prefixes: `t:` tables (and Kafka topics), `v:` views, `p:` procedures, `f:` functions, `c:` columns,
+ * M2: `k:` Redis keys, `coll:` Mongo collections.
+ */
 export const TYPE_PREFIXES: Record<string, (t: IndexEntry['type']) => boolean> = {
-  t: (t) => t === 'table',
+  t: (t) => t === 'table' || t === 'kafka.topic',
   v: (t) => t === 'view' || t === 'mview',
   p: (t) => t === 'proc' || t === 'package',
   f: (t) => t === 'func' || t === 'tablefunc',
   c: (t) => t === 'column',
+  k: (t) => t === 'redis.key',
+  coll: (t) => t === 'mongo.collection',
 };
 
 const objectCache = new WeakMap<CatalogSchema, IndexEntry[]>();
@@ -65,14 +76,38 @@ function columnEntries(d: DbCatalog, s: CatalogSchema): IndexEntry[] {
   return list;
 }
 
-/** Flattened entry arrays (one per loaded schema). Cheap: only cached arrays are collected. */
-export function collectEntries(dbs: Record<string, DbCatalog>, withColumns: boolean): IndexEntry[][] {
+/** M2: Ctrl+P entries of the registered source modules (from data they already loaded). */
+export function sourceEntries(): IndexEntry[] {
+  const out: IndexEntry[] = [];
+  for (const m of listSourceModules()) {
+    let list: PaletteSourceEntry[];
+    try {
+      list = m.paletteEntries();
+    } catch {
+      continue;
+    }
+    for (const s of list) {
+      out.push({
+        name: s.name, lower: s.name.toLowerCase(), type: s.type, connectionId: s.connectionId, database: null, schema: s.detail ?? '',
+        ref: { database: null, schema: null, name: s.name, type: 'table' }, source: s,
+      });
+    }
+  }
+  return out;
+}
+
+/** Flattened entry arrays (one per loaded schema, plus one for the source modules). Cheap: only cached arrays are collected. */
+export function collectEntries(dbs: Record<string, DbCatalog>, withColumns: boolean, withSources = true): IndexEntry[][] {
   const out: IndexEntry[][] = [];
   for (const d of Object.values(dbs)) {
     for (const s of Object.values(d.loaded)) {
       out.push(schemaEntries(d, s));
       if (withColumns) out.push(columnEntries(d, s));
     }
+  }
+  if (withSources) {
+    const src = sourceEntries();
+    if (src.length) out.push(src);
   }
   return out;
 }
@@ -83,7 +118,7 @@ export interface ParsedQuery {
 }
 
 export function parseObjectQuery(q: string): ParsedQuery {
-  const m = /^\s*([tvpfc]):\s*(.*)$/i.exec(q);
+  const m = /^\s*(coll|[tvpfck]):\s*(.*)$/i.exec(q);
   if (m) return { prefix: m[1].toLowerCase(), pattern: m[2].trim() };
   return { prefix: null, pattern: q.trim() };
 }

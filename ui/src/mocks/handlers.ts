@@ -6,6 +6,12 @@ import type {
 import { serializeRows } from '../lib/serialize';
 import { MockEngine } from './engine';
 import { createM15Handlers } from './m15/m15Handlers';
+import { createM2Context, createM2FrameworkHandlers } from './m2';
+import { createErHandlers } from './m2/er';
+import { createKafkaHandlers } from './m2/kafka';
+import { createLogsHandlers } from './m2/logs';
+import { createMongoHandlers } from './m2/mongo';
+import { createRedisHandlers } from './m2/redis';
 
 const P = '*/api/v1';
 
@@ -215,5 +221,20 @@ export function createHandlers(engine: MockEngine) {
 
     // M1.5: explain, describe, designer, query export
     ...createM15Handlers(engine),
+
+    // M2 (docs/PLAN-M2.md): streams/sources/jobs framework, then the feature mocks (mocks/m2/*.ts, owned per package)
+    ...m2Handlers(engine, ok),
+  ];
+}
+
+function m2Handlers(engine: MockEngine, ok: Parameters<typeof createM2Context>[1]) {
+  const ctx = createM2Context(engine, ok);
+  return [
+    ...createM2FrameworkHandlers(ctx),
+    ...createRedisHandlers(ctx),
+    ...createMongoHandlers(ctx),
+    ...createKafkaHandlers(ctx),
+    ...createLogsHandlers(ctx),
+    ...createErHandlers(ctx),
   ];
 }

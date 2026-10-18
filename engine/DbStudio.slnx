@@ -2,16 +2,26 @@
   <Folder Name="/src/">
     <Project Path="src/DbStudio.Core/DbStudio.Core.csproj" />
     <Project Path="src/DbStudio.Host/DbStudio.Host.csproj" />
+    <Project Path="src/DbStudio.Logs/DbStudio.Logs.csproj" />
     <Project Path="src/DbStudio.Providers.Oracle/DbStudio.Providers.Oracle.csproj" />
+    <Project Path="src/DbStudio.Providers.PostgreSql/DbStudio.Providers.PostgreSql.csproj" />
     <Project Path="src/DbStudio.Providers.Sqlite/DbStudio.Providers.Sqlite.csproj" />
     <Project Path="src/DbStudio.Providers.SqlServer/DbStudio.Providers.SqlServer.csproj" />
+    <Project Path="src/DbStudio.Sources.Kafka/DbStudio.Sources.Kafka.csproj" />
+    <Project Path="src/DbStudio.Sources.Mongo/DbStudio.Sources.Mongo.csproj" />
+    <Project Path="src/DbStudio.Sources.Redis/DbStudio.Sources.Redis.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Codegen.Smoke/Codegen.Smoke.csproj" />
     <Project Path="tests/DbStudio.Core.Tests/DbStudio.Core.Tests.csproj" />
+    <Project Path="tests/DbStudio.Logs.Tests/DbStudio.Logs.Tests.csproj" />
     <Project Path="tests/DbStudio.Providers.Oracle.Tests/DbStudio.Providers.Oracle.Tests.csproj" />
+    <Project Path="tests/DbStudio.Providers.PostgreSql.Tests/DbStudio.Providers.PostgreSql.Tests.csproj" />
     <Project Path="tests/DbStudio.Providers.Sqlite.Tests/DbStudio.Providers.Sqlite.Tests.csproj" />
     <Project Path="tests/DbStudio.Providers.SqlServer.Tests/DbStudio.Providers.SqlServer.Tests.csproj" />
+    <Project Path="tests/DbStudio.Sources.Kafka.Tests/DbStudio.Sources.Kafka.Tests.csproj" />
+    <Project Path="tests/DbStudio.Sources.Mongo.Tests/DbStudio.Sources.Mongo.Tests.csproj" />
+    <Project Path="tests/DbStudio.Sources.Redis.Tests/DbStudio.Sources.Redis.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/DbStudio.Providers.Conformance/">
     <Project Path="tests/DbStudio.Providers.Conformance/DbStudio.Providers.Conformance.Tests.csproj" />

@@ -9,7 +9,9 @@ import { selectTopSql } from '../lib/sql';
 import { getPlatform } from '../platform';
 import { effectiveViewportHeight } from './zoom';
 import { dbKey, useCatalog } from '../store/catalog';
-import { dialectOf, getConnection, useConnections } from '../store/connections';
+import { getSourceModule } from '../lib/sources';
+import { dialectOf, getConnection, providerKind, useConnections } from '../store/connections';
+import { useSourceClients } from '../store/sourceClients';
 import { useHistory } from '../store/history';
 import { useResults, viewKey } from '../store/results';
 import { createExecution, isRunning, type ExecutionState, type ResultSetState } from '../store/resultsReducer';
@@ -35,8 +37,10 @@ function consoleTab(tabId: string): ConsoleTab | undefined {
 /** Database the tab effectively uses: its own choice, else the connection's current database. */
 export function effectiveDatabase(connectionId: string | null, database: string | null): string | null {
   if (!connectionId) return null;
-  if (database) return database;
   const c = getConnection(connectionId);
+  // M2: Redis/MongoDB/Kafka have no SQL database.
+  if (c && providerKind(c.providerId) !== 'relational') return null;
+  if (database) return database;
   if (c?.providerId === 'oracle') return null;
   return useCatalog.getState().conns[connectionId]?.databases?.current ?? null;
 }
@@ -47,7 +51,8 @@ export function effectiveDatabase(connectionId: string | null, database: string 
  */
 export function catalogDatabase(connectionId: string | null, database: string | null): string | null {
   if (!connectionId) return null;
-  if (getConnection(connectionId)?.providerId === 'oracle') return null;
+  const c = getConnection(connectionId);
+  if (c?.providerId === 'oracle' || (c && providerKind(c.providerId) !== 'relational')) return null;
   return effectiveDatabase(connectionId, database);
 }
 
@@ -299,6 +304,9 @@ export async function switchDatabase(tabId: string, database: string | null): Pr
 }
 
 export async function preloadCatalog(connectionId: string, database: string | null): Promise<void> {
+  // M2: non-relational sources have no SQL catalog (their module loads its own data).
+  const c = getConnection(connectionId);
+  if (c && providerKind(c.providerId) !== 'relational') return;
   const cat = useCatalog.getState();
   await cat.loadDatabases(connectionId);
   await cat.ensureDefault(connectionId, catalogDatabase(connectionId, database));
@@ -560,6 +568,18 @@ function uncommittedText(withTx: SessionInfo[]): string {
 /** Explorer "Disconnect": closes this window's sessions of the connection and drops its cached catalog. */
 export async function disconnectConnection(connectionId: string): Promise<void> {
   const conn = getConnection(connectionId);
+  if (conn && providerKind(conn.providerId) !== 'relational') {
+    // M2: close the engine's source client (its streams end) and let the module drop cached data.
+    try {
+      await useSourceClients.getState().close(connectionId);
+    } catch (e) {
+      toast('error', `Could not disconnect ${conn.name}`, errorMessage(e));
+      return;
+    }
+    getSourceModule(conn.providerId)?.onDisconnect?.(connectionId);
+    toast('info', `Disconnected ${conn.name}`);
+    return;
+  }
   const withTx = ownSessions(connectionId).filter((s) => s.txOpen);
   if (withTx.length) {
     const ok = await useUi.getState().askConfirm({
@@ -580,7 +600,7 @@ export async function disconnectAll(): Promise<void> {
   const mine = ownSessions();
   const ids = [...new Set(mine.map((s) => s.connectionId))];
   const cached = Object.keys(useCatalog.getState().conns);
-  const all = [...new Set([...ids, ...cached])];
+  const all = [...new Set([...ids, ...cached, ...Object.keys(useSourceClients.getState().clients)])];
   if (!all.length) return;
   const withTx = mine.filter((s) => s.txOpen);
   if (withTx.length) {
@@ -594,6 +614,8 @@ export async function disconnectAll(): Promise<void> {
   }
   const closed = await Promise.all(ids.map((cid) => useSessions.getState().closeConnection(cid, true)));
   for (const cid of all) useCatalog.getState().forget(cid);
+  // M2: source clients too.
+  await Promise.all(Object.keys(useSourceClients.getState().clients).map((cid) => useSourceClients.getState().close(cid).catch(() => undefined)));
   const nSessions = closed.reduce((a, b) => a + b, 0);
   toast('info', `Disconnected ${pluralize(all.length, 'connection')}`, nSessions ? `${pluralize(nSessions, 'session')} closed` : undefined);
 }
@@ -658,8 +680,19 @@ export async function openSqliteFile(): Promise<void> {
   }
 }
 
-/** Open a console on a connection (welcome screen, explorer, connection dialog "Connect"). */
+/**
+ * Open a console on a connection (welcome screen, explorer, connection dialog "Connect"). M2: Redis/MongoDB/Kafka
+ * open their module's default workspace instead (Redis browser, Mongo documents, Kafka overview) and return ''.
+ */
 export function connectAndOpen(connectionId: string): string {
+  const conn = getConnection(connectionId);
+  if (conn && providerKind(conn.providerId) !== 'relational') {
+    const mod = getSourceModule(conn.providerId);
+    if (mod) mod.defaultWorkspace(connectionId);
+    else toast('info', `${conn.name}: support for this source is not available in this build`);
+    useUi.getState().showDock('explorer');
+    return '';
+  }
   const id = newConsole(connectionId, null);
   useUi.getState().showDock('explorer');
   return id;

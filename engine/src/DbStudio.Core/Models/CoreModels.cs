@@ -4,7 +4,13 @@ namespace DbStudio.Core.Models;
 
 // Enums serialize as camelCase strings (the Host registers JsonStringEnumConverter with camelCase naming).
 
-public enum Dialect { TSql, PlSql, Sqlite }
+public enum Dialect { TSql, PlSql, Sqlite, PgSql }
+
+/// <summary>
+/// M2 (docs/PLAN-M2.md D1): provider family. Wire tokens relational | keyvalue | document | stream
+/// (<see cref="Services.SourceKindJsonConverter"/>). Only relational providers have sessions and a SQL catalog.
+/// </summary>
+public enum SourceKind { Relational, KeyValue, Document, Stream }
 public enum SessionState { Idle, Executing, Broken, Closed }
 public enum TransactionMode { Auto, Manual }
 public enum MessageSeverity { Info, Warning, Error }
@@ -17,7 +23,7 @@ public sealed class ConnectionProfile
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
-    /// <summary>"sqlserver" | "oracle" | "sqlite".</summary>
+    /// <summary>"sqlserver" | "oracle" | "sqlite" | "postgresql" | "redis" | "mongodb" | "kafka".</summary>
     public string ProviderId { get; set; } = "";
     public string? Color { get; set; }
     public string? Folder { get; set; }
@@ -80,7 +86,7 @@ public sealed record SessionOptions(string SessionId, string? Database, Transact
 public sealed record IdentifierRules(
     char QuoteOpen,
     char QuoteClose,
-    /// <summary>"upper" (Oracle), "preserve" (SQL Server, SQLite).</summary>
+    /// <summary>"upper" (Oracle), "lower" (PostgreSQL), "preserve" (SQL Server, SQLite).</summary>
     string CaseFolding,
     IReadOnlySet<string> ReservedWords);
 

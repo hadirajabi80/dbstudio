@@ -52,6 +52,27 @@ function suggestName(p: ProviderInfo | undefined, v: Values): string {
     const path = str('path');
     return path ? path.split(/[\\/]/).pop()!.replace(/\.(db|sqlite3?|db3)$/i, '') : '';
   }
+  // M2 (docs/PLAN-M2.md 1.3)
+  if (p.id === 'redis') {
+    const mode = str('mode') || 'standalone';
+    const list = (k: string) => (Array.isArray(v[k]) ? (v[k] as unknown[]).map(String) : str(k).split(',')).map((s) => s.trim()).filter(Boolean);
+    if (mode === 'cluster') return list('nodes')[0] ?? '';
+    if (mode === 'sentinel') return str('serviceName') ? `${str('serviceName')}@${list('sentinels')[0] ?? ''}` : list('sentinels')[0] ?? '';
+    const host = str('host');
+    if (!host) return '';
+    const port = v.port === undefined || v.port === null || v.port === '' ? '6379' : String(v.port);
+    const db = v.db === undefined || v.db === null || v.db === '' ? '0' : String(v.db);
+    return `${host}:${port}/${db}`;
+  }
+  if (p.id === 'mongodb') {
+    const uri = str('uri');
+    const m = /^mongodb(?:\+srv)?:\/\/(?:[^@/]*@)?([^/?,]+)/i.exec(uri);
+    const host = m ? m[1] : '';
+    if (!host) return '';
+    const user = str('user');
+    return user ? `${user}@${host}` : host;
+  }
+  if (p.id === 'kafka') return str('bootstrapServers').split(',').map((s) => s.trim()).filter(Boolean)[0] ?? '';
   const host = str('server') || str('host') || str('tnsAlias');
   const db = str('database') || str('serviceName') || str('sid');
   const user = str('user');

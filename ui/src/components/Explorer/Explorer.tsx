@@ -1,17 +1,19 @@
 import {
-  ChevronDown, ChevronRight, ChevronsDownUp, Columns3, Database, Folder, LoaderCircle, Lock, Plus, RefreshCw, Search,
-  SquareTerminal, Unplug, X,
+  ChevronDown, ChevronRight, ChevronsDownUp, Circle, Columns3, Database, Folder, LoaderCircle, Lock, PanelsTopLeft, Plus, RefreshCw,
+  Search, SquareTerminal, Unplug, X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CatalogObjectType, ConnectionProfile } from '../../api/types';
-import { newConsole, openObject } from '../../app/actions';
+import { connectAndOpen, newConsole, openObject } from '../../app/actions';
 import { displayShortcut } from '../../commands/keys';
 import { hasCommand, runCommand } from '../../commands/registry';
 import type { CommandTarget } from '../../commands/types';
 import { useCommandContext } from '../../commands/useCommands';
 import { isTabular, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { dialectOf, useConnections } from '../../store/connections';
+import { getSourceModule, useSourceModules } from '../../lib/sources';
+import { dialectOf, kindOf, providerKind, useConnections } from '../../store/connections';
+import { useSourceClients } from '../../store/sourceClients';
 import { connectionActivity, useSessions, type ConnectionActivity } from '../../store/sessions';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
@@ -20,7 +22,7 @@ import { activityTitle } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
 import { activeChips, ALL_CONNECTIONS, chipsFor, TYPE_CHIPS, useExplorer } from './explorerStore';
-import { buildTree, databasesOf, nodeId, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
+import { buildTree, databasesOf, isSourceConnection, nodeId, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
 
 export { useExplorer } from './explorerStore';
 
@@ -34,6 +36,7 @@ function useLazyLoads(connections: ConnectionProfile[]) {
   const expanded = useExplorer((s) => s.expanded);
   const conns = useCatalog((s) => s.conns);
   const dbs = useCatalog((s) => s.dbs);
+  const modules = useSourceModules((s) => s.modules);
   useEffect(() => {
     const cat = useCatalog.getState();
     const ensureDb = (cid: string, db: string | null) => {
@@ -47,6 +50,11 @@ function useLazyLoads(connections: ConnectionProfile[]) {
     };
     for (const c of connections) {
       if (!expanded.has(nodeId.conn(c.id))) continue;
+      if (isSourceConnection(c)) {
+        // M2: Redis/MongoDB/Kafka never load the SQL catalog; their module loads what its expanded nodes need.
+        modules[c.providerId]?.ensureLoaded?.(c, expanded);
+        continue;
+      }
       const cc = conns[c.id];
       if (!cc || cc.status === 'idle') {
         void cat.loadDatabases(c.id);
@@ -66,7 +74,7 @@ function useLazyLoads(connections: ConnectionProfile[]) {
         }
       }
     }
-  }, [expanded, conns, dbs, connections]);
+  }, [expanded, conns, dbs, connections, modules]);
 }
 
 function Highlight({ text, positions }: { text: string; positions?: number[] }) {
@@ -86,6 +94,12 @@ function Highlight({ text, positions }: { text: string; positions?: number[] }) 
 export function targetOfRow(r: TreeRow): CommandTarget | null {
   if (!r.connectionId) return null;
   if (r.kind === 'connection') return { kind: 'connection', connectionId: r.connectionId };
+  if (r.kind === 'source' && r.source) {
+    return {
+      kind: 'source', connectionId: r.connectionId, providerId: r.source.providerId, nodeType: r.source.nodeType, path: r.source.path,
+      meta: r.source.meta,
+    };
+  }
   if (r.kind === 'object' || r.kind === 'column') {
     const ref = refOf(r);
     return ref ? { kind: 'object', connectionId: r.connectionId, database: r.database ?? null, ref } : null;
@@ -100,7 +114,8 @@ const ROUTINES = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc', 'packa
 
 export function contextMenuIdOf(r: TreeRow): string | null {
   if (r.kind === 'cfolder') return 'explorer.folder';
-  if (r.kind === 'connection') return 'explorer.connection';
+  if (r.kind === 'connection') return r.connectionId && kindOf(r.connectionId) !== 'relational' ? 'explorer.sourceConnection' : 'explorer.connection';
+  if (r.kind === 'source') return r.source ? getSourceModule(r.source.providerId)?.contextMenuId(r) ?? null : null;
   if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') return 'explorer.container';
   if (r.kind === 'object' || r.kind === 'column') {
     const t = r.objectType;
@@ -116,6 +131,13 @@ export function contextMenuIdOf(r: TreeRow): string | null {
 function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
   if (r.kind === 'status' && r.status === 'load' && r.connectionId && r.loadSchema) {
     void useCatalog.getState().loadSchema(r.connectionId, r.database ?? null, r.loadSchema);
+    return;
+  }
+  if (r.kind === 'source') {
+    // M2: leaves open their view (module.activate); containers toggle.
+    const mod = r.source ? getSourceModule(r.source.providerId) : undefined;
+    if (mod && !r.expandable) mod.activate(r);
+    else toggle(r);
     return;
   }
   if (r.kind === 'object' || r.kind === 'column') {
@@ -143,6 +165,8 @@ export function Explorer() {
   const revealSeq = useExplorer((s) => s.revealSeq);
   const ex = useExplorer.getState;
   const sessions = useSessions((s) => s.sessions);
+  const sourceVersion = useSourceModules((s) => s.version);
+  const sourceClients = useSourceClients((s) => s.clients);
   useLazyLoads(connections);
 
   const chips = activeChips({ chips: chipsMap, chipScope });
@@ -156,16 +180,19 @@ export function Explorer() {
 
   const rows = useMemo(
     () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns }),
-    [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns],
+    // sourceVersion: source modules re-render their subtrees through notifySourceTreeChanged().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns, sourceVersion],
   );
   // One definition of "connected" (shared with the status bar): an open session or a loaded catalog.
   const activityOf = useMemo(() => {
     const m = new Map<string, ConnectionActivity>();
     return (cid: string) => {
-      if (!m.has(cid)) m.set(cid, connectionActivity(cid, sessions, (id) => conns[id]?.status));
+      // M2: an open source client (Redis/MongoDB/Kafka) counts like a loaded catalog.
+      if (!m.has(cid)) m.set(cid, connectionActivity(cid, sessions, (id) => conns[id]?.status ?? (sourceClients[id] ? 'ready' : undefined)));
       return m.get(cid)!;
     };
-  }, [sessions, conns]);
+  }, [sessions, conns, sourceClients]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -463,6 +490,12 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
   else if (r.kind === 'folder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
   else if (r.kind === 'object' && r.objectType) icon = <ObjectIcon type={r.objectType} />;
   else if (r.kind === 'column') icon = <ColumnIcon pk={r.column?.pk} fk={r.column?.fk} />;
+  else if (r.kind === 'source') {
+    const custom = r.source ? getSourceModule(r.source.providerId)?.icon?.(r) : undefined;
+    icon = custom ?? (r.expandable
+      ? <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />
+      : <Circle size={10} strokeWidth={2} className="obj-icon obj-source" />);
+  }
   else if (r.status === 'loading') icon = <LoaderCircle size={14} className="spin" />;
   else if (r.status === 'load') icon = <Database size={14} strokeWidth={1.5} />;
 
@@ -499,12 +532,12 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
       onMouseDown={() => onSelect()}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('.tree-twisty, .tree-row-actions')) return;
-        if (r.kind === 'cfolder' || r.kind === 'folder' || r.kind === 'database' || r.kind === 'schema') onToggle();
+        if (r.kind === 'cfolder' || r.kind === 'folder' || r.kind === 'database' || r.kind === 'schema' || (r.kind === 'source' && r.expandable)) onToggle();
         if (r.kind === 'status' && r.status === 'load') onActivate();
       }}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('.tree-row-actions')) return;
-        if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column') onActivate();
+        if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column' || (r.kind === 'source' && !r.expandable)) onActivate();
       }}
       onContextMenu={onMenu}
       title={title}
@@ -537,9 +570,15 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
       {r.count !== undefined && r.kind !== 'object' && <span className="tree-count">{r.count.toLocaleString()}</span>}
       {r.kind === 'connection' && r.connectionId && (
         <span className="tree-row-actions">
-          <button className="icon-btn xs" title="Open console" aria-label={`Open console on ${r.label}`} tabIndex={-1} onClick={() => newConsole(r.connectionId!, null)}>
-            <SquareTerminal size={13} />
-          </button>
+          {conn && providerKind(conn.providerId) !== 'relational' ? (
+            <button className="icon-btn xs" title="Open" aria-label={`Open ${r.label}`} tabIndex={-1} onClick={() => connectAndOpen(r.connectionId!)}>
+              <PanelsTopLeft size={13} />
+            </button>
+          ) : (
+            <button className="icon-btn xs" title="Open console" aria-label={`Open console on ${r.label}`} tabIndex={-1} onClick={() => newConsole(r.connectionId!, null)}>
+              <SquareTerminal size={13} />
+            </button>
+          )}
           {active && (
             <button className="icon-btn xs" title="Disconnect" aria-label={`Disconnect ${r.label}`} tabIndex={-1} onClick={() => runCommand('connections.disconnect', { kind: 'connection', connectionId: r.connectionId })}>
               <Unplug size={13} />

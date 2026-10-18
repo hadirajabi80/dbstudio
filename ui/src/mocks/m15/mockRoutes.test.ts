@@ -3,6 +3,7 @@
 import { getResponse, type RequestHandler } from 'msw';
 import { describe, expect, it } from 'vitest';
 import clientSrc from '../../api/client.ts?raw';
+import clientM2Src from '../../api/client.m2.ts?raw';
 import { MockEngine } from '../engine';
 import { createHandlers } from '../handlers';
 import { createGridHandlers, FilterStoreMock } from './grid';
@@ -18,6 +19,13 @@ export function clientEndpoints(src: string): [string, string][] {
   return out;
 }
 
+/**
+ * M2: feature namespaces of api/client.m2.ts whose mock module (mocks/m2/*.ts) is not written yet. Each feature package
+ * removes its prefix when its mock routes land, so from then on every api.<ns>.* call needs a route.
+ */
+const PENDING_M2_PREFIXES = ['/redis/', '/mongo/', '/kafka/', '/logs/', '/connections/x1/er/'];
+const pending = (path: string) => PENDING_M2_PREFIXES.some((p) => path.startsWith(p));
+
 describe('mock engine routes', () => {
   const engine = new MockEngine({ frameDelay: 0 });
   const handlers = [...createGridHandlers(new FilterStoreMock()), ...createHandlers(engine)] as RequestHandler[];
@@ -27,11 +35,15 @@ describe('mock engine routes', () => {
     expect(eps.length).toBeGreaterThan(40);
     expect(eps).toContainEqual(['POST', '/sessions/x1/explain']);
     expect(eps).toContainEqual(['POST', '/connections/x1/designer/apply']);
+    // M2 framework (client.ts) and feature namespaces (client.m2.ts)
+    expect(eps).toContainEqual(['POST', '/streams']);
+    expect(eps).toContainEqual(['GET', '/sources/x1/client']);
+    expect(clientEndpoints(clientM2Src).length).toBeGreaterThan(60);
   });
 
   it('every client endpoint has a mock route', async () => {
     const missing: string[] = [];
-    for (const [method, path] of clientEndpoints(clientSrc)) {
+    for (const [method, path] of [...clientEndpoints(clientSrc), ...clientEndpoints(clientM2Src).filter(([, p]) => !pending(p))]) {
       const req = new Request(`http://engine.test/api/v1${path}`, {
         method,
         headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },

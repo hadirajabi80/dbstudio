@@ -9,7 +9,8 @@ namespace DbStudio.Host.Contracts;
 
 public sealed record HealthResponse(string Status, string Version, int Pid, bool Dev);
 
-public sealed record ProviderInfoResponse(string Id, string DisplayName, Dialect Dialect, ConnectionFormSpec FormSpec);
+/// <summary>M2: <paramref name="Dialect"/> is null for non-relational sources; <paramref name="Kind"/> = relational | keyvalue | document | stream.</summary>
+public sealed record ProviderInfoResponse(string Id, string DisplayName, Dialect? Dialect, ConnectionFormSpec FormSpec, SourceKind Kind);
 
 /// <summary>POST/PUT /connections body: a profile without id/hasPassword plus the password (null = keep, "" = clear).</summary>
 public sealed class ConnectionInput

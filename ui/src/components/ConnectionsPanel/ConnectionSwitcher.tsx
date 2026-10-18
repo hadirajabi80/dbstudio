@@ -4,7 +4,7 @@ import type { ConnectionProfile } from '../../api/types';
 import { effectiveDatabase, switchConnection, switchDatabase } from '../../app/actions';
 import { fuzzyMatch } from '../../lib/fuzzy';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { useConnections } from '../../store/connections';
+import { providerKind, useConnections } from '../../store/connections';
 import { useTabSession } from '../../store/sessions';
 import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
@@ -93,6 +93,8 @@ function Switcher() {
     const byRecent = [...connections].sort((a, b) => (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? ''));
     const recentIds = new Set(byRecent.filter((c) => c.lastUsedAt).slice(0, 4).map((c) => c.id));
     for (const c of connections) {
+      // M2: consoles run SQL; Redis/MongoDB/Kafka connections are not offered.
+      if (providerKind(c.providerId) !== 'relational') continue;
       const m = fuzzyMatch(p, `${c.name} ${c.folder ?? ''}`);
       if (!m) continue;
       const group = !p && recentIds.has(c.id) ? 'Recent' : c.folder || 'Connections';

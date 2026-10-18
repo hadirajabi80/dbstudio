@@ -22,6 +22,8 @@ function ownerLoaded(id: string): boolean {
   const owner: Record<string, RegExp> = {
     'data.': /DataTab|filter/, 'grid.': /DataTab|Grid|filter/, 'designer.': /designer/, 'codegen.': /codegen|Codegen/,
     'format.': /format|editor/, 'snippet': /snippets|editor/, 'explain.': /PlanView|format|editor/, 'params.': /ParamsDialog|src\/params\//,
+    // M2 feature packages (docs/PLAN-M2.md 9)
+    'er.': /ErDiagram/, 'view.logs': /Logs/, 'logs.': /Logs/, 'redis.': /Redis|src\/redis\//, 'mongo.': /Mongo|src\/mongo\//, 'kafka.': /Kafka/,
   };
   const re = Object.entries(owner).find(([p]) => id.startsWith(p))?.[1];
   return !!re && re.test(mods);

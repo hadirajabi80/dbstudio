@@ -50,8 +50,9 @@ export function defaultTiming(dialect: Dialect, onView: boolean): TriggerTiming 
   return onView ? 'INSTEAD OF' : dialect === 'plsql' ? 'BEFORE' : 'AFTER';
 }
 
-export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER' };
-export const DEFAULT_RETURN_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER' };
+// pgsql: M2-0 placeholder values (PG-C owns the PostgreSQL templates, docs/PLAN-PG.md 4.2).
+export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
+export const DEFAULT_RETURN_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
 
 /** Escape literal text for a snippet. */
 function lit(s: string): string {

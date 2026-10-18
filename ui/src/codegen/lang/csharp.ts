@@ -33,6 +33,8 @@ const PROVIDER: Record<Dialect, { ns: string; conn: string; param: string; prefi
   tsql: { ns: 'Microsoft.Data.SqlClient', conn: 'SqlConnection', param: 'SqlParameter', prefix: '@' },
   plsql: { ns: 'Oracle.ManagedDataAccess.Client', conn: 'OracleConnection', param: 'OracleParameter', prefix: '' },
   sqlite: { ns: 'Microsoft.Data.Sqlite', conn: 'SqliteConnection', param: 'SqliteParameter', prefix: '@' },
+  // M2-0 placeholder (PG-C owns the PostgreSQL flavour, docs/PLAN-PG.md 4.1).
+  pgsql: { ns: 'Npgsql', conn: 'NpgsqlConnection', param: 'NpgsqlParameter', prefix: '@' },
 };
 
 // ---------------- types ----------------

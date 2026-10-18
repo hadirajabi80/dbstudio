@@ -21,7 +21,8 @@ import { sqliteRules, SQLITE_TRIGGER_LINES } from './rules/sqlite';
 type Stop = (k: number) => boolean;
 const NEVER: Stop = () => false;
 
-const RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules };
+// pgsql: M2-0 placeholder (PG-B adds rules/pgsql.ts).
+const RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: sqliteRules };
 
 const LIST_CLAUSES = set('select set groupBy orderBy values');
 const SELECT_MODIFIERS = set('DISTINCT ALL UNIQUE');
