@@ -57,6 +57,10 @@ jobs:
       # ---- engine -----------------------------------------------------------------------------
       - name: Engine tests
         run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine" --results-directory TestResults
+      # Failed tests as annotations (name, message, top of the stack), readable without downloading the artifact.
+      - name: Annotate failed engine tests
+        if: failure()
+        run: node .github/scripts/trx-annotate.mjs TestResults
 
       # NU1902/NU1903 already fail the restore (engine/Directory.Build.props); this also lists low-severity and
       # transitive advisories and fails on any of them.
@@ -160,6 +164,9 @@ jobs:
       # ---- tests ------------------------------------------------------------------------------
       - name: Engine tests (includes the real Keychain round trip)
         run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine-macos" --results-directory TestResults
+      - name: Annotate failed engine tests
+        if: failure()
+        run: node .github/scripts/trx-annotate.mjs TestResults
 
       - name: UI install
         working-directory: ui
