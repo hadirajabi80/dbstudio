@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from 'lucide-react';
 import { useUi } from '../../store/ui';
+import { UpdateNotice } from '../layout/UpdateNotice';
 
 const ICONS = { info: Info, success: CircleCheck, warning: TriangleAlert, error: CircleAlert };
 
@@ -8,6 +9,7 @@ export function Toasts() {
   const dismiss = useUi((s) => s.dismissToast);
   return (
     <div className="toasts" role="status" aria-live="polite">
+      <UpdateNotice />
       {toasts.map((t) => {
         const Icon = ICONS[t.kind];
         return (

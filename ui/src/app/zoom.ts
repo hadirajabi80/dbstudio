@@ -3,6 +3,7 @@
 // settings.ui.zoom and restored on boot.
 import { getPlatform } from '../platform';
 import { uiSetting, useSettings } from '../store/settings';
+import { syncTitleBar } from '../theme/titlebar';
 
 export const ZOOM_MIN = 0.6;
 export const ZOOM_MAX = 2;
@@ -31,6 +32,8 @@ export function setZoom(z: number, persist = true): void {
     style.zoom = zoom === 1 ? '' : String(zoom);
   }
   document.documentElement.dataset.zoom = String(zoom);
+  // The Windows caption-button overlay is sized in device pixels: keep it as tall as the zoomed top bar.
+  syncTitleBar();
   if (persist) useSettings.getState().update({ ui: { zoom } });
 }
 

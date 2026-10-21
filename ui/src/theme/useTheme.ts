@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../store/settings';
 import { applyMonacoTheme } from './monacoTheme';
+import { syncTitleBar } from './titlebar';
 
 export type EffectiveTheme = 'light' | 'dark';
 
@@ -43,6 +44,8 @@ export function useEffectiveTheme(): EffectiveTheme {
     applyThemeAttribute(eff);
     void applyMonacoTheme(eff);
   }, [eff]);
+  // Desktop: the window chrome (native light/dark mode, Windows caption buttons) follows the theme setting.
+  useEffect(() => syncTitleBar(eff), [eff, pref]);
   useEffect(() => {
     document.documentElement.dataset.density = density === 'compact' ? 'compact' : 'comfortable';
   }, [density]);

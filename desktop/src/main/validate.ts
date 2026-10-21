@@ -126,6 +126,52 @@ export function validateExternalUrl(v: unknown): string {
   return u.toString();
 }
 
+/** updates.check({ manual }) */
+export function validateUpdateCheckArgs(v: unknown): { manual: boolean } {
+  const o = v === undefined || v === null ? {} : v;
+  if (!isPlainObject(o)) throw new ValidationError('options must be an object');
+  if (o.manual !== undefined && typeof o.manual !== 'boolean') throw new ValidationError('manual must be a boolean');
+  return { manual: o.manual === true };
+}
+
+/** updates.configure({ autoCheck }) */
+export function validateUpdateConfig(v: unknown): { autoCheck: boolean } {
+  if (!isPlainObject(v)) throw new ValidationError('options must be an object');
+  if (typeof v.autoCheck !== 'boolean') throw new ValidationError('autoCheck must be a boolean');
+  return { autoCheck: v.autoCheck };
+}
+
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export interface TitleBarThemeArgs { theme: 'system' | 'light' | 'dark'; color: string; symbolColor: string; height?: number }
+
+/**
+ * setTitleBarTheme: the theme setting plus the caption-button colours as #rrggbb / #rrggbbaa (nothing else reaches
+ * Electron's colour parser) and an optional overlay height, clamped to a sane range.
+ */
+export function validateTitleBarTheme(v: unknown): TitleBarThemeArgs {
+  if (!isPlainObject(v)) throw new ValidationError('title bar theme must be an object');
+  if (v.theme !== 'system' && v.theme !== 'light' && v.theme !== 'dark') throw new ValidationError('theme must be system, light or dark');
+  if (typeof v.color !== 'string' || !HEX_COLOR.test(v.color)) throw new ValidationError('color must be #rrggbb or #rrggbbaa');
+  if (typeof v.symbolColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v.symbolColor)) throw new ValidationError('symbolColor must be #rrggbb');
+  let height: number | undefined;
+  if (v.height !== undefined) {
+    if (typeof v.height !== 'number' || !Number.isFinite(v.height)) throw new ValidationError('height must be a number');
+    height = Math.round(Math.max(24, Math.min(96, v.height)));
+  }
+  return { theme: v.theme, color: v.color, symbolColor: v.symbolColor, ...(height !== undefined ? { height } : {}) };
+}
+
+/** showAppMenu({ x, y }): a point in window coordinates (rounded, kept within a generous window size). */
+export function validateMenuPosition(v: unknown): { x: number; y: number } {
+  if (!isPlainObject(v)) throw new ValidationError('position must be an object');
+  const coord = (n: unknown, name: string) => {
+    if (typeof n !== 'number' || !Number.isFinite(n)) throw new ValidationError(`${name} must be a number`);
+    return Math.round(Math.max(0, Math.min(100_000, n)));
+  };
+  return { x: coord(v.x, 'x'), y: coord(v.y, 'y') };
+}
+
 /** Serializes the workspace payload (already structured-cloned by IPC) and enforces a size cap. */
 export function serializeWorkspace(v: unknown): string {
   if (v === undefined) throw new ValidationError('workspace data is required');

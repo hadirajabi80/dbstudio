@@ -1,19 +1,25 @@
 // IPC handlers behind window.dbstudio. Every handler checks the sender's origin and validates its arguments.
-import { BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import * as fs from 'node:fs';
 import type { EngineInfo } from '../../../ui/src/platform/bridge';
 import { IPC } from '../shared/channels';
 import { atomicWriteFile, readTextFileDecoded, SerialQueue } from './fs-utils';
 import { workspaceFile } from './paths';
+import type { UpdateController } from './updater-core';
 import {
   LIMITS,
   serializeWorkspace,
   validateExternalUrl,
   validateFileContent,
   validateFilePath,
+  validateMenuPosition,
   validateOpenDialogArgs,
   validateSaveDialogArgs,
   validateTitle,
+  validateTitleBarTheme,
+  validateUpdateCheckArgs,
+  validateUpdateConfig,
+  type TitleBarThemeArgs,
 } from './validate';
 import { isAllowedUrl } from './window';
 
@@ -22,6 +28,10 @@ export interface IpcDeps {
   devUrl?: string;
   /** Called when the renderer sets a title (main also stops page <title> from overriding it). */
   onTitle?(win: BrowserWindow, title: string): void;
+  /** The auto-updater (created asynchronously at startup). */
+  updates?(): Promise<UpdateController>;
+  /** Applies the renderer's theme to the window chrome (caption-button overlay, native light/dark mode). */
+  onTitleBarTheme?(win: BrowserWindow, theme: TitleBarThemeArgs): void;
 }
 
 function assertTrustedSender(e: IpcMainInvokeEvent | IpcMainEvent, devUrl?: string): void {
@@ -100,6 +110,40 @@ export function registerIpc(deps: IpcDeps): void {
 
   handle(IPC.loadWorkspace, () => loadWorkspace());
   handle(IPC.saveWorkspace, (_e, data) => saveWorkspace(data));
+
+  const updates = async () => {
+    if (!deps.updates) throw new Error('Updates are not available.');
+    return deps.updates();
+  };
+  handle(IPC.updatesGetStatus, async () => (await updates()).status);
+  handle(IPC.updatesCheck, async (_e, opts) => {
+    const o = validateUpdateCheckArgs(opts);
+    return (await updates()).check(o);
+  });
+  handle(IPC.updatesConfigure, async (_e, opts) => {
+    const o = validateUpdateConfig(opts);
+    (await updates()).configure(o);
+  });
+  handle(IPC.updatesQuitAndInstall, async () => (await updates()).quitAndInstall());
+
+  // Fire-and-forget channels: bad input is ignored.
+  const on = (channel: string, fn: (e: IpcMainEvent, win: BrowserWindow, ...args: unknown[]) => void) => {
+    ipcMain.removeAllListeners(channel);
+    ipcMain.on(channel, (e, ...args) => {
+      try {
+        assertTrustedSender(e, deps.devUrl);
+        const win = BrowserWindow.fromWebContents(e.sender);
+        if (win && !win.isDestroyed()) fn(e, win, ...args);
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+  on(IPC.setTitleBarTheme, (_e, win, theme) => deps.onTitleBarTheme?.(win, validateTitleBarTheme(theme)));
+  on(IPC.showAppMenu, (_e, win, pos) => {
+    const p = validateMenuPosition(pos);
+    Menu.getApplicationMenu()?.popup({ window: win, x: p.x, y: p.y });
+  });
 
   ipcMain.removeAllListeners(IPC.setTitle);
   ipcMain.on(IPC.setTitle, (e, title) => {

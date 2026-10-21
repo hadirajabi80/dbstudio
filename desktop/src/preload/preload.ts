@@ -1,8 +1,8 @@
 // Sandboxed preload: exposes window.dbstudio (the DbStudioBridge contract from ui/src/platform/bridge.ts).
 // Only `electron` may be required at runtime; esbuild inlines ../shared/channels.
 import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron';
-import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand } from '../../../ui/src/platform/bridge';
-import { desktopOs, htmlPlatformClasses, htmlPlatformVars, type DesktopPlatformInfo } from '../main/platform';
+import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus } from '../../../ui/src/platform/bridge';
+import { desktopOs, htmlPlatformClasses, htmlPlatformVars, parseChromeArg, type DesktopPlatformInfo } from '../main/platform';
 import { APP_VERSION_ARG, IPC } from '../shared/channels';
 
 function readAppVersion(): string {
@@ -39,23 +39,38 @@ const bridge: DbStudioBridge = {
     if (typeof factor !== 'number' || !Number.isFinite(factor)) return;
     webFrame.setZoomFactor(Math.max(0.6, Math.min(2, factor)));
   },
+  // Auto-update (desktop/src/main/updater.ts) and the window chrome (main validates every argument).
+  onUpdateStatus: (cb: (status: UpdateStatus) => void) => subscribe<UpdateStatus>(IPC.updateStatus, cb),
+  getUpdateStatus: () => ipcRenderer.invoke(IPC.updatesGetStatus) as Promise<UpdateStatus>,
+  checkForUpdates: (opts?: { manual?: boolean }) => ipcRenderer.invoke(IPC.updatesCheck, opts ?? {}) as Promise<UpdateStatus>,
+  configureUpdates: (opts: { autoCheck: boolean }) => ipcRenderer.invoke(IPC.updatesConfigure, opts) as Promise<void>,
+  quitAndInstall: () => ipcRenderer.invoke(IPC.updatesQuitAndInstall) as Promise<boolean>,
+  setTitleBarTheme: (theme: TitleBarTheme) => { ipcRenderer.send(IPC.setTitleBarTheme, theme); },
+  showAppMenu: (pos: { x: number; y: number }) => { ipcRenderer.send(IPC.showAppMenu, pos); },
 };
 
 contextBridge.exposeInMainWorld('dbstudio', bridge);
 
 // OS information outside the frozen DbStudioBridge contract (ui/src/platform/bridge.ts):
-//  - window.dbstudioPlatform = { platform: 'win32' | 'darwin' | 'linux', arch }
-//  - <html class="platform-darwin titlebar-inset"> (or platform-win32 / platform-linux) and the CSS variables
-//    --titlebar-inset-left (78px on macOS: room for the traffic lights) and --titlebar-drag, set before the UI runs.
+//  - window.dbstudioPlatform = { platform: 'win32' | 'darwin' | 'linux', arch, titleBar, nativeMaterial }
+//  - <html class="platform-<os> [titlebar-inset | titlebar-overlay] [native-material]"> and the CSS variables
+//    --titlebar-inset-left (78px on macOS: room for the traffic lights), --titlebar-overlay-fallback (Windows caption
+//    buttons, until env(titlebar-area-*) is known) and --titlebar-drag, set before the UI runs.
 const os = desktopOs(process.platform);
-const platformInfo: DesktopPlatformInfo = Object.freeze({ platform: os, arch: process.arch });
+const chrome = parseChromeArg(process.argv);
+const platformInfo: DesktopPlatformInfo = Object.freeze({
+  platform: os,
+  arch: process.arch,
+  titleBar: chrome.titleBar,
+  nativeMaterial: chrome.material !== 'none',
+});
 contextBridge.exposeInMainWorld('dbstudioPlatform', platformInfo);
 
 function applyPlatformToDocument(): boolean {
   const html = document.documentElement;
   if (!html) return false;
-  html.classList.add(...htmlPlatformClasses(os));
-  for (const [name, value] of Object.entries(htmlPlatformVars(os))) html.style.setProperty(name, value);
+  html.classList.add(...htmlPlatformClasses(os, chrome));
+  for (const [name, value] of Object.entries(htmlPlatformVars(os, chrome))) html.style.setProperty(name, value);
   return true;
 }
 if (!applyPlatformToDocument()) document.addEventListener('DOMContentLoaded', () => { applyPlatformToDocument(); }, { once: true });

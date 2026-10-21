@@ -16,6 +16,16 @@ export const IPC = {
   menuCommand: 'dbstudio:menu-command',
   /** main -> renderer */
   engineRestarted: 'dbstudio:engine-restarted',
+  updatesCheck: 'dbstudio:updates-check',
+  updatesGetStatus: 'dbstudio:updates-get-status',
+  updatesConfigure: 'dbstudio:updates-configure',
+  updatesQuitAndInstall: 'dbstudio:updates-quit-and-install',
+  /** main -> renderer */
+  updateStatus: 'dbstudio:update-status',
+  /** renderer -> main (send) */
+  setTitleBarTheme: 'dbstudio:set-titlebar-theme',
+  /** renderer -> main (send) */
+  showAppMenu: 'dbstudio:show-app-menu',
 } as const;
 
 /** Passed to the renderer through webPreferences.additionalArguments, read by the preload. */

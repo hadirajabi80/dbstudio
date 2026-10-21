@@ -41,14 +41,23 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
 
   assert.equal(r.hasBridge, true);
   assert.deepEqual(r.keys, [
-    'appVersion', 'getEngineInfo', 'loadWorkspace', 'onEngineRestarted', 'onMenuCommand', 'openExternal', 'platform',
-    'readTextFile', 'saveWorkspace', 'setTitle', 'setZoomFactor', 'showOpenDialog', 'showSaveDialog', 'writeTextFile',
+    'appVersion', 'checkForUpdates', 'configureUpdates', 'getEngineInfo', 'getUpdateStatus', 'loadWorkspace',
+    'onEngineRestarted', 'onMenuCommand', 'onUpdateStatus', 'openExternal', 'platform', 'quitAndInstall',
+    'readTextFile', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu', 'showOpenDialog',
+    'showSaveDialog', 'writeTextFile',
   ]);
   assert.equal(r.platform, 'electron');
   // OS info outside the bridge contract (WP-K): window.dbstudioPlatform and <html class="platform-<os>">.
   const os = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';
   assert.equal(r.osPlatform, os);
   assert.ok(r.htmlClass.split(' ').includes(`platform-${os}`), r.htmlClass);
+  assert.equal(r.titleBar, { win32: 'overlay', darwin: 'inset', linux: 'native' }[os]);
+  if (os === 'win32') assert.ok(r.htmlClass.split(' ').includes('titlebar-overlay'), r.htmlClass);
+  // Auto-update is off in unpackaged/smoke runs; the IPC still validates its arguments.
+  assert.equal(r.updateStatus.state, 'disabled');
+  assert.equal(r.updateStatus.mode, 'disabled');
+  assert.equal(r.manualCheck.state, 'disabled');
+  assert.equal(r.badUpdateConfigRejected, true);
   assert.match(r.appVersion, /^\d+\.\d+\.\d+/);
   assert.equal(r.origin, 'dbstudio://app');
   assert.equal(r.tokenInUrl, false);

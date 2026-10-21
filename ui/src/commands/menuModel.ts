@@ -39,7 +39,8 @@ export const MENUS: MenuDef[] = [
   {
     id: 'app', label: 'DbStudio', platform: 'darwin',
     items: [
-      cmd('help.about', 'About DbStudio'), sep,
+      cmd('help.about', 'About DbStudio'),
+      cmd('help.checkForUpdates', 'Check for Updates…'), sep,
       cmd('view.settings', 'Settings…', 'Mod+,'), sep,
       role('services'), sep, role('hide'), role('hideOthers'), role('unhide'), sep, role('quit'),
     ],
@@ -154,6 +155,7 @@ export const MENUS: MenuDef[] = [
       { type: 'native', id: 'openLogs', label: 'Open logs folder' },
       { type: 'native', id: 'restartEngine', label: 'Restart engine' },
       sep,
+      cmd('help.checkForUpdates', 'Check for Updates…', undefined, { platform: 'win32' }),
       cmd('help.about', 'About DbStudio', undefined, { platform: 'win32' }),
     ],
   },

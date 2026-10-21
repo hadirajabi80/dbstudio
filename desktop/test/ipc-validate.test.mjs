@@ -68,6 +68,49 @@ describe('misc validation', () => {
   });
 });
 
+describe('update and window-chrome IPC', () => {
+  it('updates.check takes an optional { manual: boolean }', () => {
+    assert.deepEqual(v.validateUpdateCheckArgs(undefined), { manual: false });
+    assert.deepEqual(v.validateUpdateCheckArgs({}), { manual: false });
+    assert.deepEqual(v.validateUpdateCheckArgs({ manual: true }), { manual: true });
+    for (const bad of [{ manual: 'yes' }, { manual: 1 }, 'x', [], 5]) assert.throws(() => v.validateUpdateCheckArgs(bad), v.ValidationError, JSON.stringify(bad));
+  });
+
+  it('updates.configure needs { autoCheck: boolean }', () => {
+    assert.deepEqual(v.validateUpdateConfig({ autoCheck: false }), { autoCheck: false });
+    assert.deepEqual(v.validateUpdateConfig({ autoCheck: true, extra: 1 }), { autoCheck: true }, 'unknown keys are dropped');
+    for (const bad of [undefined, null, {}, { autoCheck: 'true' }, { autoCheck: 1 }, [true]]) {
+      assert.throws(() => v.validateUpdateConfig(bad), v.ValidationError, JSON.stringify(bad));
+    }
+  });
+
+  it('setTitleBarTheme: theme setting, hex colours only, height clamped', () => {
+    assert.deepEqual(
+      v.validateTitleBarTheme({ theme: 'dark', color: '#00000000', symbolColor: '#e6e8eb', height: 40 }),
+      { theme: 'dark', color: '#00000000', symbolColor: '#e6e8eb', height: 40 },
+    );
+    assert.deepEqual(v.validateTitleBarTheme({ theme: 'system', color: '#F5F6F8', symbolColor: '#1c1f24' }), { theme: 'system', color: '#F5F6F8', symbolColor: '#1c1f24' });
+    assert.equal(v.validateTitleBarTheme({ theme: 'light', color: '#ffffff', symbolColor: '#000000', height: 3 }).height, 24);
+    assert.equal(v.validateTitleBarTheme({ theme: 'light', color: '#ffffff', symbolColor: '#000000', height: 79.6 }).height, 80);
+    assert.equal(v.validateTitleBarTheme({ theme: 'light', color: '#ffffff', symbolColor: '#000000', height: 1e9 }).height, 96);
+    const ok = { theme: 'light', color: '#ffffff', symbolColor: '#000000' };
+    for (const bad of [
+      null, 'dark', { ...ok, theme: 'blue' }, { ...ok, theme: undefined },
+      { ...ok, color: 'red' }, { ...ok, color: 'rgb(0,0,0)' }, { ...ok, color: '#fff' }, { ...ok, color: '#ffffff; x' }, { ...ok, color: 7 },
+      { ...ok, symbolColor: '#00000000' }, { ...ok, symbolColor: 'white' },
+      { ...ok, height: '40' }, { ...ok, height: Number.NaN }, { ...ok, height: Infinity },
+    ]) assert.throws(() => v.validateTitleBarTheme(bad), v.ValidationError, JSON.stringify(bad));
+  });
+
+  it('showAppMenu: a finite point, rounded and clamped', () => {
+    assert.deepEqual(v.validateMenuPosition({ x: 10.4, y: 40.6 }), { x: 10, y: 41 });
+    assert.deepEqual(v.validateMenuPosition({ x: -5, y: 1e12 }), { x: 0, y: 100_000 });
+    for (const bad of [undefined, null, {}, { x: 1 }, { x: '1', y: 2 }, { x: Number.NaN, y: 0 }, [1, 2]]) {
+      assert.throws(() => v.validateMenuPosition(bad), v.ValidationError, JSON.stringify(bad));
+    }
+  });
+});
+
 describe('fs-utils', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dbstudio-test-'));
   it('atomicWriteFile replaces content and leaves no temp files', async () => {

@@ -146,6 +146,14 @@ export const useSettings = create<SettingsState>((set, get) => ({
   },
 }));
 
+/** settings.ui key of "Automatically check for updates" (desktop; kept in the free-form ui object, no engine change). */
+export const AUTO_CHECK_UPDATES_KEY = 'autoCheckUpdates';
+
+/** "Automatically check for updates": on unless the user turned it off. */
+export function autoCheckUpdates(s: Pick<FullSettings, 'ui'> = useSettings.getState().settings): boolean {
+  return s.ui[AUTO_CHECK_UPDATES_KEY] !== false;
+}
+
 /** Typed read of a free-form `settings.ui` key. */
 export function uiSetting<T>(key: string, fallback: T): T {
   const v = useSettings.getState().settings.ui[key];

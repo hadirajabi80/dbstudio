@@ -8,6 +8,7 @@ import {
   ownSessions, runActive, saveActiveFile, selectTop, setTxMode,
 } from '../app/actions';
 import { canDrop, copyDdl, dropObject, generateSqlInto, truncateTable, type SqlTemplate } from '../app/objectActions';
+import { checkForUpdatesNow } from '../app/updates';
 import { currentZoom, setZoom } from '../app/zoom';
 import { pluralize } from '../components/common/text';
 import { useExplorer } from '../components/Explorer/explorerStore';
@@ -457,6 +458,10 @@ export const CORE_COMMANDS: Command<never>[] = [
 
   // Help
   { id: 'help.about', title: 'About DbStudio', category: 'Help', icon: 'Info', run: () => toast('info', `DbStudio ${getPlatform().appVersion}`, 'A fast desktop client for SQL Server, Oracle and SQLite.') },
+  {
+    id: 'help.checkForUpdates', title: 'Check for Updates…', category: 'Help', icon: 'RefreshCw', keywords: 'update upgrade new version release',
+    run: () => checkForUpdatesNow(),
+  },
   {
     id: 'help.welcome', title: 'Show welcome screen', category: 'Help', icon: 'House',
     run: () => useTabs.getState().openView({ view: 'welcome', title: 'Welcome', key: 'welcome' }),

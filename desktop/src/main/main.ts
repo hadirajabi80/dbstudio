@@ -17,8 +17,9 @@ import { electronProfileDir, engineLogFile, iconPath, repoRoot, uiDir } from './
 import { desktopOs, quitWhenAllWindowsClosed } from './platform';
 import { registerSchemePrivileges, registerUiProtocol } from './protocol';
 import { runSmoke } from './smoke';
-import { checkForUpdates } from './updater-stub';
-import { createMainWindow, installCsp, uiEntryUrl } from './window';
+import { createUpdater } from './updater';
+import type { UpdateController } from './updater-core';
+import { applyTitleBarTheme, createMainWindow, installCsp, uiEntryUrl } from './window';
 
 const APP_ID = 'com.dbstudio.desktop';
 const smokeTest = process.env.DBSTUDIO_SMOKE === '1';
@@ -56,6 +57,7 @@ function main(): void {
   let titleLocked = false;
   let quitting = false;
   let engineStartedOnce = false;
+  let updates: Promise<UpdateController> | null = null;
 
   let launch: EngineLaunch;
   try {
@@ -171,10 +173,14 @@ function main(): void {
   app.whenReady().then(() => {
     registerUiProtocol(uiDir());
     installCsp(devUrl);
+    // The renderer reports the "Automatically check for updates" setting; checks start 10 s after launch at the earliest.
+    updates = createUpdater({ os, smokeTest, log: (m) => log.write('updater', m) });
     registerIpc({
       getEngineInfo: () => supervisor.whenReady(),
       devUrl,
       onTitle: () => { titleLocked = true; },
+      updates: () => updates!,
+      onTitleBarTheme: applyTitleBarTheme,
     });
     Menu.setApplicationMenu(buildMenu({ isDev: !app.isPackaged, onRestartEngine: supervisor.isExternal ? undefined : restartEngine }));
 
@@ -189,7 +195,6 @@ function main(): void {
     supervisor.start().catch(() => undefined);
     engineStartedOnce = true;
     loadUi();
-    void checkForUpdates();
   });
 
   // macOS: closing the last window keeps the app (and the engine) alive; clicking the Dock icon re-creates it.
@@ -200,6 +205,7 @@ function main(): void {
 
   const cleanup = () => {
     quitting = true;
+    void updates?.then((u) => u.dispose());
     supervisor.shutdown(); // synchronous tree kill: taskkill /T /F, or SIGKILL to the process group
   };
   // POSIX: give the engine a chance to roll back open transactions (SIGTERM to its process group, bounded wait,

@@ -23,6 +23,16 @@ files:
 npmRebuild: false
 asar: true
 
+# Auto-update (src/main/updater.ts, electron-updater). The build scripts keep `--publish never`; this config makes
+# electron-builder write resources/app-update.yml into the app and latest.yml (Windows) / latest-mac.yml (macOS) plus
+# the .blockmap files next to the installers, which .github/workflows/release.yml uploads to the v<version> release.
+# The file names inside latest*.yml are the artifactName values below, i.e. exactly the uploaded asset names.
+publish:
+  provider: github
+  owner: hadirajabi80
+  repo: dbstudio
+  releaseType: release
+
 # Shared by every platform; the engine (different per OS/arch) is mapped in win/mac below.
 extraResources:
   - from: ../ui/dist

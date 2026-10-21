@@ -2,6 +2,7 @@ import { RefreshCw } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { boot } from './app/boot';
 import { handleMenuCommand } from './app/commands';
+import { useUpdateWiring } from './app/updates';
 import { windowTitle } from './app/windowTitle';
 import { installKeyDispatcher } from './commands/dispatcher';
 import { CommandPalette } from './components/CommandPalette/CommandPalette';
@@ -91,6 +92,7 @@ function Shell() {
   }, []);
 
   useWindowTitle();
+  useUpdateWiring();
   useFocusFallback();
   useTabFocusRequests();
 

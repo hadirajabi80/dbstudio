@@ -1,7 +1,8 @@
 import { Settings as SettingsIcon } from 'lucide-react';
 import { lazy, Suspense, useState, type ComponentType, type ReactNode } from 'react';
 import { displayShortcut } from '../../commands/keys';
-import { useSettings, type FullSettings } from '../../store/settings';
+import { getPlatform } from '../../platform';
+import { AUTO_CHECK_UPDATES_KEY, autoCheckUpdates, useSettings, type FullSettings } from '../../store/settings';
 import { useUi } from '../../store/ui';
 import { Dialog } from '../common/Dialog';
 import { Select as StyledSelect } from '../common/Select';
@@ -81,6 +82,8 @@ function Inner() {
   const up = useSettings.getState().update;
   const [section, setSection] = useState<Section>('general');
   const close = () => useUi.getState().setSettingsOpen(false);
+  // Desktop builds only: the browser build has no updater.
+  const updatesAvailable = typeof getPlatform().checkForUpdates === 'function';
 
   return (
     <Dialog title={<span className="dialog-title-icon"><SettingsIcon size={16} /> Settings</span>} ariaLabel="Settings" onClose={close} width={760} className="settings-dialog">
@@ -106,6 +109,13 @@ function Inner() {
                   Confirm statements that modify data (UPDATE/DELETE without WHERE, DROP, TRUNCATE…)
                 </Check>
               </Row>
+              {updatesAvailable && (
+                <Row label="Updates" hint={`DbStudio ${getPlatform().appVersion}`}>
+                  <Check id="set-updates" checked={autoCheckUpdates(s)} onChange={(v) => up({ ui: { [AUTO_CHECK_UPDATES_KEY]: v } })}>
+                    Automatically check for updates
+                  </Check>
+                </Row>
+              )}
             </>
           )}
           {section === 'editor' && (

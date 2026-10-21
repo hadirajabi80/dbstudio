@@ -18,6 +18,13 @@ const PHASE1 = `(async () => {
   try { eval('1'); r.evalBlocked = false; } catch { r.evalBlocked = true; }
   r.openExternalFileRejected = await b.openExternal('file:///C:/Windows/notepad.exe').then(() => false, () => true);
   r.readRelativeRejected = await b.readTextFile('relative.sql').then(() => false, () => true);
+  r.updateStatus = await b.getUpdateStatus();
+  r.manualCheck = await b.checkForUpdates({ manual: true });
+  r.badUpdateConfigRejected = await b.configureUpdates({ autoCheck: 'yes' }).then(() => false, () => true);
+  await b.configureUpdates({ autoCheck: true });
+  b.setTitleBarTheme({ theme: 'system', color: 'url(javascript:alert(1))', symbolColor: '#000000' });
+  b.setTitleBarTheme({ theme: 'system', color: '#00000000', symbolColor: '#1c1f24', height: 40 });
+  r.titleBar = window.dbstudioPlatform && window.dbstudioPlatform.titleBar;
   await b.saveWorkspace({ tabs: [{ id: 1, text: 'select 1' }] });
   r.workspace = await b.loadWorkspace();
   const tryWorker = (make) => new Promise((res) => {

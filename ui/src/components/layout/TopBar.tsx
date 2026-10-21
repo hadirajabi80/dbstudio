@@ -33,7 +33,11 @@ export function TopBar({ theme }: { theme: EffectiveTheme }) {
   useCommandContext();
   const pref = useSettings((s) => s.settings.theme);
   const explorerVisible = useUi((s) => s.explorerVisible);
-  const browser = getPlatform().kind === 'browser';
+  const platform = getPlatform();
+  const browser = platform.kind === 'browser';
+  // Windows draws its caption buttons over the top bar (titleBarOverlay) and has no native menu bar: the same button
+  // pops up the native application menu instead.
+  const nativeMenuPopup = !browser && window.dbstudioPlatform?.titleBar === 'overlay' && typeof platform.showAppMenu === 'function';
   const nextTheme = pref === 'system' ? (theme === 'dark' ? 'light' : 'dark') : pref === 'dark' ? 'light' : 'system';
   const ThemeIcon = pref === 'system' ? SunMoon : theme === 'dark' ? Moon : Sun;
   const gotoShortcut = getCommand('view.goToObject')?.shortcut;
@@ -50,8 +54,23 @@ export function TopBar({ theme }: { theme: EffectiveTheme }) {
         </span>
         <span className="brand-name">DbStudio</span>
       </div>
-      {browser && (
-        <button className="icon-btn" title="Menu" aria-label="Application menu" aria-haspopup="menu" onClick={(e) => showMenuBelow(e.currentTarget, appMenuItems())}>
+      {(browser || nativeMenuPopup) && (
+        <button
+          className="icon-btn"
+          title="Menu"
+          aria-label="Application menu"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            if (!nativeMenuPopup) {
+              showMenuBelow(e.currentTarget, appMenuItems());
+              return;
+            }
+            // Window coordinates in device-independent pixels: CSS pixels times the page zoom.
+            const r = e.currentTarget.getBoundingClientRect();
+            const zoom = Number(document.documentElement.dataset.zoom) || 1;
+            platform.showAppMenu!({ x: r.left * zoom, y: r.bottom * zoom });
+          }}
+        >
           <MenuIcon size={16} strokeWidth={1.5} />
         </button>
       )}

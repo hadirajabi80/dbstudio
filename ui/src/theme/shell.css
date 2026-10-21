@@ -95,11 +95,21 @@
   background: var(--border);
   margin: 0 var(--space-1);
 }
+/* Top-bar buttons share one hover/pressed treatment, translucent so it reads on the glass (tokens --glass-hover/-active). */
 .topbar .btn-ghost {
   color: var(--fg-muted);
   padding: 0 var(--space-2);
 }
-.topbar .btn-ghost:hover:not(:disabled) {
+.topbar :is(.btn-ghost, .icon-btn) {
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.topbar :is(.btn-ghost, .icon-btn):hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--glass-hover);
+  color: var(--fg);
+}
+.topbar :is(.btn-ghost, .icon-btn):active:not(:disabled, [aria-disabled='true']),
+.topbar .icon-btn.on {
+  background: var(--glass-active);
   color: var(--fg);
 }
 .palette-trigger-text {
@@ -155,16 +165,40 @@
     display: none;
   }
 }
-/* macOS hiddenInset title bar (Electron sets html.platform-darwin.titlebar-inset and --titlebar-inset-left):
-   the header is the window's drag region and clears the traffic lights; its controls stay clickable. */
+/* The top bar is the window's drag region (app.css .topbar); everything interactive in it stays clickable, the search
+   box included. */
+.topbar :is(button, a, input, select, textarea, kbd, [role='button'], [tabindex]) {
+  -webkit-app-region: no-drag;
+}
+/* macOS hiddenInset title bar (Electron sets html.platform-darwin.titlebar-inset and --titlebar-inset-left): the bar
+   clears the traffic lights. */
 html.titlebar-inset .topbar {
-  -webkit-app-region: drag;
-  -webkit-user-select: none;
-  user-select: none;
   padding-left: calc(var(--titlebar-inset-left, 78px) + 4px);
 }
-html.titlebar-inset .topbar :is(button, a, input, select, textarea, kbd, [role='button'], [tabindex]) {
-  -webkit-app-region: no-drag;
+/* Windows titleBarOverlay (html.titlebar-overlay): the minimize/maximize/close buttons are drawn over the right end of
+   the bar. env(titlebar-area-*) is the part of the bar left to the page; until Chromium knows it, the preload's
+   --titlebar-overlay-fallback (3 x 46 px) reserves the room. Nothing of ours sits under the buttons. */
+html.titlebar-overlay {
+  --titlebar-overlay-right: max(
+    0px,
+    calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - var(--titlebar-overlay-fallback, 138px))))
+  );
+}
+html.titlebar-overlay .topbar {
+  padding-right: calc(var(--titlebar-overlay-right) + var(--space-1));
+}
+/* A system material (Mica on Windows 11, vibrancy on macOS) shows through the transparent window: only the top bar is
+   see-through, everything below it stays opaque (readability, and no compositing cost for the rest of the app). */
+html.native-material body {
+  background: transparent;
+}
+html.native-material .app {
+  background: linear-gradient(to bottom, transparent var(--topbar-h), var(--bg-app) var(--topbar-h));
+}
+html.native-material .topbar {
+  background: var(--glass-bg-native);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- dock ---------- */
@@ -1345,4 +1379,14 @@ html.titlebar-inset .topbar :is(button, a, input, select, textarea, kbd, [role='
 .form-control.checks .check input {
   vertical-align: -2px;
   margin-right: 6px;
+}
+
+/* ---------- update notice (components/layout/UpdateNotice.tsx): a persistent card at the top of the toast stack ---------- */
+.update-notice {
+  border-left-color: var(--accent);
+}
+.update-notice-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }

@@ -3,7 +3,8 @@
 // theme (selected rows, widgets, context menu), and the CSS lints: no literal colours outside src/theme/,
 // --fg-disabled only on disabled controls, theme typography on the scale, one rule per selector in app/shell.css.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { contrast, parseColor, parseTokenBlocks, resolveTokens, type TokenMap } from './index';
+import { blend, contrast, parseColor, parseTokenBlocks, resolveTokens, toHex, type TokenMap } from './index';
+import { titleBarOverlayColors } from './titlebar';
 import { buildMonacoTheme, WIDGET_SURFACE } from './monacoTheme';
 
 // Node APIs, typed locally (the app tsconfig has no Node types; vitest runs on Node).
@@ -25,7 +26,17 @@ function walk(dir: string, out: string[] = []): string[] {
 const SOURCES: Record<string, string> = Object.fromEntries(walk(SRC).map((p) => [p.slice(SRC.length + 1), nodeFs.readFileSync(p, 'utf8')]));
 
 const RAW = parseTokenBlocks(css);
-const TOKENS: Record<'light' | 'dark', TokenMap> = { light: resolveTokens(RAW.light), dark: resolveTokens(RAW.dark) };
+/**
+ * The glass top bar is translucent: what text sits on is the tint composited over what is behind it. Two synthetic
+ * surfaces for the matrix: `@topbar` (--glass-bg over --bg-app: browser and Windows 10) and `@topbar-native`
+ * (--glass-bg-native over the assumed OS material --glass-material: Mica / vibrancy).
+ */
+function withGlass(t: TokenMap): TokenMap {
+  const over = (fg: string, bg: string) => toHex(blend(parseColor(t[fg])!, parseColor(t[bg])!));
+  return { ...t, '@topbar': over('--glass-bg', '--bg-app'), '@topbar-native': over('--glass-bg-native', '--glass-material') };
+}
+const TOKENS: Record<'light' | 'dark', TokenMap> = { light: withGlass(resolveTokens(RAW.light)), dark: withGlass(resolveTokens(RAW.dark)) };
+const GLASS = ['@topbar', '@topbar-native'];
 const THEMES = ['light', 'dark'] as const;
 
 // docs/PLAN-M1.5.md section 3 token table.
@@ -88,6 +99,21 @@ const CONTRAST_MATRIX: Pair[] = [
   ...['debug', 'info', 'warn', 'error'].flatMap((l) => ['--bg-panel', '--bg-grid-alt'].map((bg) => pair(`--log-${l}`, bg, TEXT, 'log level text'))),
   ...['debug', 'info', 'warn', 'error'].map((l) => pair(`--log-${l}`, '--bg-selected', UI, 'log level glyph on a selected row')),
   pair('--brand-fg', '--brand', UI, 'brand mark'),
+  // Glass top bar: text and icons on the bar, on its hover/pressed states and in the search box, in both the
+  // fallback (blurred tint over --bg-app) and over the OS material.
+  ...GLASS.flatMap((g) => [
+    pair('--fg', g, TEXT, 'top bar text (brand, hovered buttons)'),
+    pair('--fg-muted', g, TEXT, 'top bar button labels and icons'),
+    pair('--fg', '--glass-hover', TEXT, 'hovered top bar button', g),
+    pair('--fg', '--glass-active', TEXT, 'pressed / toggled-on top bar button', g),
+    pair('--fg-muted', '--glass-input', TEXT, 'search box placeholder and icon', g),
+    pair('--border-strong', '--glass-input', UI, 'search box boundary', g),
+    pair('--focus-ring', g, UI, 'focus ring on the top bar'),
+    pair('--titlebar-symbol', g, UI, 'Windows caption-button glyphs'),
+    pair('--brand-fg', '--brand', UI, 'brand mark on the bar'),
+  ]),
+  pair('--fg-muted', '--glass-hover', TEXT, 'hovered (inactive) editor tab', '--bg-app'),
+  pair('--fg', '--glass-hover', TEXT, 'hovered editor tab title', '--bg-app'),
 ];
 
 function ratio(t: TokenMap, p: Pair): number {
@@ -142,6 +168,37 @@ describe('design tokens', () => {
       expect(contrast(t['--obj-trigger'], t['--bg-panel']), `${theme}: trigger icon on --bg-panel`).toBeGreaterThanOrEqual(UI);
     }
     expect(CONTRAST_MATRIX.some((p) => p.fg === '--obj-trigger' && p.bg === '--bg-panel' && p.min >= UI)).toBe(true);
+  });
+
+  it('defines the glass tokens in both themes: translucent tints, a hairline and a shadow', () => {
+    for (const theme of THEMES) {
+      const t = TOKENS[theme];
+      for (const k of ['--glass-bg', '--glass-bg-native', '--glass-border', '--glass-hover', '--glass-active', '--glass-input']) {
+        const c = parseColor(t[k] ?? '');
+        expect(c, `${theme} ${k}`).not.toBeNull();
+        expect(c!.a, `${theme} ${k} is translucent`).toBeLessThan(1);
+        expect(c!.a, `${theme} ${k}`).toBeGreaterThan(0);
+      }
+      expect(parseColor(t['--glass-material'])!.a, `${theme} --glass-material is an opaque sample`).toBe(1);
+      expect(t['--glass-shadow'], theme).toMatch(/rgb\(/);
+    }
+    expect(RAW.light['--glass-filter']).toMatch(/^blur\(\d+px\) saturate\(\d+%\)$/);
+  });
+
+  it('gives the Windows caption buttons the top bar colours (theme/titlebar.ts)', () => {
+    for (const theme of THEMES) {
+      const t = TOKENS[theme];
+      const solid = titleBarOverlayColors(t, false);
+      expect(solid.color, `${theme}: Windows 10, opaque bar colour`).toBe(t['@topbar']);
+      expect(solid.color).toMatch(/^#[0-9a-f]{6}$/);
+      expect(solid.symbolColor).toMatch(/^#[0-9a-f]{6}$/);
+      expect(contrast(solid.symbolColor, solid.color)).toBeGreaterThanOrEqual(UI);
+      const glass = titleBarOverlayColors(t, true);
+      expect(glass.color, `${theme}: over Mica, transparent with the tint's RGB`).toMatch(/^#[0-9a-f]{6}00$/);
+      expect(glass.color.slice(0, 7)).toBe(toHex({ ...parseColor(t['--glass-bg-native'])!, a: 1 }));
+      expect(glass.symbolColor).toBe(solid.symbolColor);
+    }
+    expect(() => titleBarOverlayColors({}, false)).toThrow();
   });
 
   it('resolves var() aliases and translucent colours', () => {

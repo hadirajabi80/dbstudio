@@ -115,6 +115,23 @@
   --brand: #2563eb;
   --brand-fg: #ffffff;
 
+  /* glass top bar (shell.css). --glass-bg sits on --bg-app (browser, Windows 10: solid window) with a backdrop blur;
+     --glass-bg-native sits on the OS material shown through the transparent window (Mica on Windows 11, vibrancy on
+     macOS; main keeps the window's light/dark mode in step with the theme). --glass-material is the darkest material
+     DbStudio assumes behind the light bar (Mica light measured ~#f0f1f8): only the contrast tests read it. */
+  --glass-bg: rgb(255 255 255 / 62%);
+  --glass-bg-native: rgb(255 255 255 / 45%);
+  --glass-material: #e8eaf0;
+  --glass-border: rgb(16 24 40 / 10%);
+  --glass-shadow: 0 1px 2px rgb(16 24 40 / 5%), 0 6px 16px -10px rgb(16 24 40 / 22%);
+  --glass-hover: rgb(16 24 40 / 6%);
+  --glass-active: rgb(16 24 40 / 10%);
+  --glass-input: rgb(255 255 255 / 72%);
+  /* Windows caption buttons (minimize/maximize/close) drawn by Electron's titleBarOverlay (theme/titlebar.ts) */
+  --titlebar-symbol: var(--fg);
+  /* tab strip: the active tab lifts slightly off the strip */
+  --tab-active-shadow: 0 1px 3px rgb(16 24 40 / 9%);
+
   /* Monaco (editor themes read these) */
   --syn-keyword: #2563eb;
   --syn-string: #047857;
@@ -208,6 +225,18 @@
   --brand: #5b9cff;
   --brand-fg: #0b1220;
 
+  /* glass top bar (see the light block); Mica dark measured ~#1d2124, --glass-material is a lighter worst case */
+  --glass-bg: rgb(36 39 45 / 66%);
+  --glass-bg-native: rgb(36 39 45 / 45%);
+  --glass-material: #2e3138;
+  --glass-border: rgb(255 255 255 / 8%);
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 6px 16px -10px rgb(0 0 0 / 60%);
+  --glass-hover: rgb(255 255 255 / 7%);
+  --glass-active: rgb(255 255 255 / 11%);
+  --glass-input: rgb(0 0 0 / 18%);      /* a slightly sunken field on the dark glass */
+  --titlebar-symbol: var(--fg);
+  --tab-active-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+
   --danger-fg: #1b1d21;
   --success-fg: #0b1220;
   --warning-fg: #1b1d21;
@@ -279,6 +308,8 @@
   --radius-lg: 10px;
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
+  /* glass top bar fallback (browser, Windows 10): blur and lift what is behind the translucent bar */
+  --glass-filter: blur(18px) saturate(170%);
 
   /* motion */
   --ease: cubic-bezier(0.2, 0, 0, 1);

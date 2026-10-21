@@ -164,20 +164,75 @@ describe('window chrome and lifecycle', () => {
     assert.equal(pf.quitWhenAllWindowsClosed('linux'), true);
   });
 
-  it('macOS: hiddenInset title bar with the traffic lights centred in the 40 px top bar', () => {
+  it('macOS: hiddenInset title bar with the traffic lights centred in the 40 px top bar, vibrancy behind it', () => {
     const c = pf.windowChrome('darwin');
     assert.equal(c.titleBarStyle, 'hiddenInset');
     assert.equal(c.trafficLightPosition.x, 14);
     assert.equal(c.trafficLightPosition.y, 13);
-    assert.deepEqual(pf.windowChrome('win32'), {}, 'Windows keeps the native frame');
+    assert.equal(c.vibrancy, 'titlebar');
+    assert.equal(c.visualEffectState, 'active', 'the glass stays live when the window loses focus');
+    assert.equal(c.backgroundColor, '#00000000', 'transparent window: the page keeps everything but the top bar opaque');
+    assert.equal(c.titleBarOverlay, undefined);
+    assert.equal(c.backgroundMaterial, undefined);
+  });
+
+  it('Windows 11 (22H2+): hidden title bar, caption-button overlay in the 40 px top bar, Mica, transparent background', () => {
+    for (const release of ['10.0.22621', '10.0.22631', '10.0.26200']) {
+      const c = pf.windowChrome('win32', { dark: false, osRelease: release });
+      assert.equal(c.titleBarStyle, 'hidden', release);
+      assert.equal(c.backgroundMaterial, 'mica', release);
+      assert.equal(c.backgroundColor, '#00000000', release);
+      assert.deepEqual(c.titleBarOverlay, { color: '#00000000', symbolColor: '#1c1f24', height: 40 }, release);
+      assert.equal(c.vibrancy, undefined);
+      assert.equal(c.trafficLightPosition, undefined);
+    }
+    assert.equal(pf.windowChrome('win32', { dark: true, osRelease: '10.0.22631' }).titleBarOverlay.symbolColor, '#e6e8eb');
+  });
+
+  it('Windows 10: the same overlay title bar, but solid (no material, opaque window and caption buttons)', () => {
+    for (const release of ['10.0.19045', '10.0.22000', '', undefined, 'garbage']) {
+      const c = pf.windowChrome('win32', { dark: true, osRelease: release });
+      assert.equal(c.titleBarStyle, 'hidden', String(release));
+      assert.equal(c.backgroundMaterial, undefined, String(release));
+      assert.equal(c.backgroundColor, undefined, 'window.ts keeps the solid theme colour');
+      assert.deepEqual(c.titleBarOverlay, { color: '#1b1d21', symbolColor: '#e6e8eb', height: 40 });
+    }
+    assert.equal(pf.windowChrome('win32', { dark: false, osRelease: '10.0.19045' }).titleBarOverlay.color, '#f5f6f8');
+  });
+
+  it('Linux keeps the native frame', () => {
     assert.deepEqual(pf.windowChrome('linux'), {});
+    assert.deepEqual(pf.chromeInfo('linux'), { titleBar: 'native', material: 'none' });
+  });
+
+  it('windowsBuild reads the build number of os.release()', () => {
+    assert.equal(pf.windowsBuild('10.0.22631'), 22631);
+    assert.equal(pf.windowsBuild('10.0.19045.1234'), 19045);
+    assert.equal(pf.windowsBuild(''), 0);
+    assert.equal(pf.windowsBuild(undefined), 0);
+    assert.equal(pf.WINDOWS_MATERIAL_MIN_BUILD, 22621);
+  });
+
+  it('chrome info round-trips through the renderer argument; bad input means the native frame', () => {
+    for (const info of [pf.chromeInfo('darwin'), pf.chromeInfo('win32', '10.0.22631'), pf.chromeInfo('win32', '10.0.19045'), pf.chromeInfo('linux')]) {
+      assert.deepEqual(pf.parseChromeArg(['x', pf.chromeArg(info)]), info);
+    }
+    assert.equal(pf.chromeArg(pf.chromeInfo('win32', '10.0.22631')), '--dbstudio-chrome=overlay:mica');
+    assert.deepEqual(pf.parseChromeArg([]), { titleBar: 'native', material: 'none' });
+    assert.deepEqual(pf.parseChromeArg(['--dbstudio-chrome=evil:acid']), { titleBar: 'native', material: 'none' });
   });
 
   it('html classes and CSS variables for the renderer', () => {
-    assert.deepEqual(pf.htmlPlatformClasses('darwin'), ['platform-darwin', 'titlebar-inset']);
-    assert.deepEqual(pf.htmlPlatformClasses('win32'), ['platform-win32']);
+    assert.deepEqual(pf.htmlPlatformClasses('darwin'), ['platform-darwin', 'titlebar-inset', 'native-material']);
+    assert.deepEqual(pf.htmlPlatformClasses('win32', pf.chromeInfo('win32', '10.0.22631')), ['platform-win32', 'titlebar-overlay', 'native-material']);
+    assert.deepEqual(pf.htmlPlatformClasses('win32', pf.chromeInfo('win32', '10.0.19045')), ['platform-win32', 'titlebar-overlay']);
+    assert.deepEqual(pf.htmlPlatformClasses('linux'), ['platform-linux']);
     assert.equal(pf.htmlPlatformVars('darwin')['--titlebar-inset-left'], '78px');
+    assert.equal(pf.htmlPlatformVars('darwin')['--titlebar-overlay-fallback'], '0px');
     assert.equal(pf.htmlPlatformVars('win32')['--titlebar-inset-left'], '0px');
+    assert.equal(pf.htmlPlatformVars('win32')['--titlebar-overlay-fallback'], '138px');
+    assert.equal(pf.htmlPlatformVars('win32')['--titlebar-drag'], 'drag');
+    assert.equal(pf.htmlPlatformVars('linux')['--titlebar-drag'], 'no-drag');
   });
 
 });

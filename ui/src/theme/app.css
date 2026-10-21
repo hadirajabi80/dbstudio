@@ -419,14 +419,25 @@ svg.lucide:not([data-stroke]) {
   height: 100%;
 }
 .topbar {
+  position: relative;
+  z-index: 1; /* its soft shadow falls on the content below */
   display: flex;
   align-items: center;
   flex-shrink: 0;
   height: var(--topbar-h);
   gap: var(--space-1);
   padding: 0 var(--space-2);
-  background: var(--bg-app);
-  border-bottom: 1px solid var(--border);
+  /* Glass: a translucent tint with a hairline and a soft shadow. Over a native material (shell.css
+     html.native-material) the OS blurs; elsewhere (browser, Windows 10) backdrop-filter is the fallback. */
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  /* The whole bar moves the window (Electron title bar; no effect in a browser); its controls opt out (shell.css). */
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+  user-select: none;
   /* a size container: the top bar compacts itself on a narrow window or at high zoom (shell.css, styles-r2-01) */
   container: topbar / inline-size;
 }
@@ -451,11 +462,11 @@ svg.lucide:not([data-stroke]) {
   padding: 0 var(--space-1) 0 var(--space-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: var(--glass-input);
   color: var(--fg-muted);
   cursor: pointer;
   font-size: var(--text-sm);
-  transition: border-color var(--dur-fast) var(--ease);
+  transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
 }
 .palette-trigger span {
   flex: 1;
@@ -772,6 +783,7 @@ body.resizing-row .splitter-horizontal {
   color: var(--text-muted);
   font-size: var(--text-md);
   white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease);
 }
 .tab::before {
   content: '';
@@ -783,11 +795,12 @@ body.resizing-row .splitter-horizontal {
   background: var(--tab-color);
 }
 .tab:hover {
-  background: var(--bg-hover);
+  background: var(--glass-hover);
 }
 .tab.active {
   color: var(--text);
   background: var(--bg-panel);
+  box-shadow: var(--tab-active-shadow);
 }
 .tab.active::after {
   content: '';

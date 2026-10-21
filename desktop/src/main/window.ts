@@ -2,13 +2,15 @@
 // background colour that matches the OS theme so there is no white flash before the UI paints.
 import { BrowserWindow, nativeTheme, screen, session, shell, type Rectangle } from 'electron';
 import * as fs from 'node:fs';
+import { release } from 'node:os';
 import * as path from 'node:path';
 import { APP_VERSION_ARG } from '../shared/channels';
 import { buildCsp } from './csp';
 import { atomicWriteFile } from './fs-utils';
 import { iconPath, windowStateFile } from './paths';
-import { desktopOs, windowChrome } from './platform';
+import { chromeArg, chromeInfo, desktopOs, windowChrome } from './platform';
 import { UI_URL } from './protocol';
+import type { TitleBarThemeArgs } from './validate';
 
 interface WindowState { x?: number; y?: number; width: number; height: number; maximized: boolean }
 
@@ -116,6 +118,12 @@ export interface CreateWindowOptions {
 export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
   const state = loadState();
   const icon = iconPath();
+  const os = desktopOs();
+  const osRelease = release();
+  const chrome = windowChrome(os, { dark: nativeTheme.shouldUseDarkColors, osRelease });
+  // A material (Mica, vibrancy) shows through the transparent window background; the page keeps all but the top bar opaque.
+  const transparent = chrome.backgroundColor !== undefined;
+  const solidBg = () => (nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG);
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -125,11 +133,13 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
     minHeight: 500,
     show: false,
     title: 'DbStudio',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG,
+    backgroundColor: solidBg(),
     icon: fs.existsSync(icon) ? icon : undefined,
     autoHideMenuBar: false,
-    // macOS: hidden inset title bar, traffic lights inside the renderer's top bar. Windows/Linux: native frame.
-    ...windowChrome(desktopOs()),
+    // macOS: hidden inset title bar, traffic lights inside the renderer's top bar, vibrancy behind it.
+    // Windows: hidden title bar, caption buttons as an overlay inside the top bar, Mica behind it (Windows 11).
+    // Linux: native frame.
+    ...chrome,
     webPreferences: {
       preload: o.preloadPath,
       contextIsolation: true,
@@ -140,15 +150,15 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
       allowRunningInsecureContent: false,
       webviewTag: false,
       spellcheck: false,
-      additionalArguments: [`${APP_VERSION_ARG}${o.appVersion}`],
+      additionalArguments: [`${APP_VERSION_ARG}${o.appVersion}`, chromeArg(chromeInfo(os, osRelease))],
     },
   });
   if (state.maximized) win.maximize();
   trackState(win);
 
   if (o.show !== false) win.once('ready-to-show', () => win.show());
-  // Keep the native background in sync with OS theme changes (visible during reloads).
-  const onTheme = () => { if (!win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? DARK_BG : LIGHT_BG); };
+  // Keep the native background in sync with OS theme changes (visible during reloads); a transparent one stays so.
+  const onTheme = () => { if (!win.isDestroyed() && !transparent) win.setBackgroundColor(solidBg()); };
   nativeTheme.on('updated', onTheme);
   win.on('closed', () => nativeTheme.removeListener('updated', onTheme));
 
@@ -167,6 +177,18 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
   win.webContents.on('will-attach-webview', (e) => e.preventDefault());
 
   return win;
+}
+
+/**
+ * The renderer's theme (ui/src/theme/titlebar.ts): the window's native light/dark mode follows the theme setting, so
+ * the material behind the top bar (Mica, vibrancy), native menus and dialogs match the app, and on Windows the caption
+ * buttons take the top bar's colours. Colours arrive validated as #rrggbb, or #00000000 (transparent) over a material.
+ */
+export function applyTitleBarTheme(win: BrowserWindow, t: TitleBarThemeArgs): void {
+  if (nativeTheme.themeSource !== t.theme) nativeTheme.themeSource = t.theme;
+  if (desktopOs() === 'win32' && !win.isDestroyed()) {
+    win.setTitleBarOverlay({ color: t.color, symbolColor: t.symbolColor, ...(t.height !== undefined ? { height: t.height } : {}) });
+  }
 }
 
 export function uiEntryUrl(devUrl?: string): string {

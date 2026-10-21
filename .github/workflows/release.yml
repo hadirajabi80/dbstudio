@@ -52,10 +52,16 @@ jobs:
           npm ci --prefix desktop
       - name: Build installer
         run: ./scripts/build.ps1
+      # latest.yml + the .blockmap: electron-updater (src/main/updater.ts) reads them from the release.
+      - name: Check update metadata
+        run: node .github/scripts/check-update-info.mjs desktop/dist --tag $env:TAG --require latest.yml
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: desktop/dist/DbStudio-Setup-*.exe
+          path: |
+            desktop/dist/DbStudio-Setup-*.exe
+            desktop/dist/DbStudio-Setup-*.exe.blockmap
+            desktop/dist/latest.yml
           if-no-files-found: error
 
   macos:
@@ -92,12 +98,17 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/build.sh
+      # latest-mac.yml (both architectures; electron-updater picks the arm64/x64 ZIP by name) + the ZIP .blockmaps.
+      - name: Check update metadata
+        run: node .github/scripts/check-update-info.mjs desktop/dist --tag "$TAG" --require latest-mac.yml
       - uses: actions/upload-artifact@v4
         with:
           name: release-macos
           path: |
             desktop/dist/DbStudio-*-mac-*.dmg
             desktop/dist/DbStudio-*-mac-*.zip
+            desktop/dist/DbStudio-*-mac-*.zip.blockmap
+            desktop/dist/latest-mac.yml
           if-no-files-found: error
 
   publish:
@@ -113,6 +124,9 @@ jobs:
           path: artifacts
           merge-multiple: true
       - run: ls -la artifacts
+      # Every file latest.yml / latest-mac.yml names is uploaded under that exact name (no spaces, so GitHub keeps it).
+      - name: Check update metadata against the release assets
+        run: node .github/scripts/check-update-info.mjs artifacts --tag "$TAG" --require latest.yml,latest-mac.yml
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}

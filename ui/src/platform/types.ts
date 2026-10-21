@@ -1,6 +1,6 @@
-import type { EngineInfo, FileFilter, MenuCommand } from './bridge';
+import type { EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus } from './bridge';
 
-export type { EngineInfo, FileFilter, MenuCommand };
+export type { EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus };
 
 /** What the app needs from its host. Electron delegates to window.dbstudio; the browser uses fallbacks. */
 export interface Platform {
@@ -29,4 +29,14 @@ export interface Platform {
    * Absent in the browser, where the app falls back to CSS zoom.
    */
   setZoomFactor?(factor: number): void;
+  /** Desktop only (absent in the browser and with older preloads): auto-update through GitHub Releases. */
+  onUpdateStatus?(cb: (status: UpdateStatus) => void): () => void;
+  getUpdateStatus?(): Promise<UpdateStatus>;
+  checkForUpdates?(opts?: { manual?: boolean }): Promise<UpdateStatus>;
+  configureUpdates?(opts: { autoCheck: boolean }): Promise<void>;
+  quitAndInstall?(): Promise<boolean>;
+  /** Desktop only: window chrome (caption buttons, native light/dark mode) follows the app theme. */
+  setTitleBarTheme?(theme: TitleBarTheme): void;
+  /** Desktop only (Windows overlay title bar, which hides the native menu bar): the application menu as a popup. */
+  showAppMenu?(pos: { x: number; y: number }): void;
 }

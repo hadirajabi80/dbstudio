@@ -1,4 +1,4 @@
-import type { DbStudioBridge } from './bridge';
+import type { DbStudioBridge, TitleBarTheme } from './bridge';
 import type { Platform } from './types';
 
 function baseName(p: string): string {
@@ -33,5 +33,13 @@ export function createElectronPlatform(b: DbStudioBridge): Platform {
     saveWorkspace: (d) => b.saveWorkspace(d),
     setTitle: (t) => b.setTitle(t),
     ...(typeof b.setZoomFactor === 'function' ? { setZoomFactor: (f: number) => b.setZoomFactor!(f) } : {}),
+    // Additive bridge members: only present when this preload has them.
+    ...(typeof b.onUpdateStatus === 'function' ? { onUpdateStatus: (cb: Parameters<NonNullable<DbStudioBridge['onUpdateStatus']>>[0]) => b.onUpdateStatus!(cb) } : {}),
+    ...(typeof b.getUpdateStatus === 'function' ? { getUpdateStatus: () => b.getUpdateStatus!() } : {}),
+    ...(typeof b.checkForUpdates === 'function' ? { checkForUpdates: (o?: { manual?: boolean }) => b.checkForUpdates!(o) } : {}),
+    ...(typeof b.configureUpdates === 'function' ? { configureUpdates: (o: { autoCheck: boolean }) => b.configureUpdates!(o) } : {}),
+    ...(typeof b.quitAndInstall === 'function' ? { quitAndInstall: () => b.quitAndInstall!() } : {}),
+    ...(typeof b.setTitleBarTheme === 'function' ? { setTitleBarTheme: (t: TitleBarTheme) => b.setTitleBarTheme!(t) } : {}),
+    ...(typeof b.showAppMenu === 'function' ? { showAppMenu: (pos: { x: number; y: number }) => b.showAppMenu!(pos) } : {}),
   };
 }
