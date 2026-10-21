@@ -454,7 +454,8 @@ describe('icon sizing (styles-10, styles-r1-02)', () => {
     const other = rules.filter((r) => /stroke-width/.test(r.body) && !r.selectors.includes('svg.lucide:not([data-stroke])'));
     expect(other.map((r) => `${r.file}:${r.line}`)).toEqual([]);
     // the deliberate exceptions carry the opt-out
-    expect(SOURCES['components/common/icons.tsx']).toMatch(/strokeWidth=\{2\} data-stroke=""/);
+    // (the provider glyph used to be one at 2; it is now a filled product logo in a plain <svg>, outside svg.lucide)
+    expect(SOURCES['theme/brand/ProviderLogo.tsx']).toMatch(/<svg viewBox=\{logo\.viewBox\}/);
     expect(SOURCES['components/common/icons.tsx'].match(/strokeWidth=\{2\.5\} data-stroke=""/g)).toHaveLength(2);
     expect(SOURCES['components/common/Select.tsx']).toMatch(/<Check size=\{14\} strokeWidth=\{2\} data-stroke="" \/>/);
   });

@@ -270,7 +270,7 @@ export function MessageBrowser({ tab, cid, topic, partitions, theme, visible }: 
           onChange={(e) => setBrowse({ limit: Math.min(5000, Number(e.target.value.replace(/\D/g, '')) || 1) })} />
         <div className="kafka-search-box">
           <Search size={13} aria-hidden />
-          <input className="input" type="search" placeholder="Search in value" aria-label="Search in value" value={browse.search} data-primary-focus
+          <input className="input" type="search" dir="auto" placeholder="Search in value" aria-label="Search in value" value={browse.search} data-primary-focus
             onChange={(e) => setBrowse({ search: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && mode !== 'tail' && fetch()} />
           <button type="button" className={`btn btn-xs btn-ghost${browse.caseSensitive ? ' on' : ''}`} aria-pressed={browse.caseSensitive} title="Match case"
             onClick={() => setBrowse({ caseSensitive: !browse.caseSensitive })}>Aa</button>
@@ -317,8 +317,8 @@ export function MessageBrowser({ tab, cid, topic, partitions, theme, visible }: 
                 <span className="c-offset num">{m.offset}</span>
                 <span className="c-part num">{m.partition}</span>
                 <span className="c-ts">{formatTimestamp(m.timestamp)}</span>
-                <span className={`c-key mono${m.key.text === null ? ' muted' : ''}`}>{preview(m.key, 40)}</span>
-                <span className={`c-value mono${m.value.error ? ' kafka-decode-error' : ''}${m.value.text === null ? ' muted' : ''}`} title={m.value.error}>{preview(m.value)}</span>
+                <span className={`c-key mono${m.key.text === null ? ' muted' : ''}`} dir="auto">{preview(m.key, 40)}</span>
+                <span className={`c-value mono${m.value.error ? ' kafka-decode-error' : ''}${m.value.text === null ? ' muted' : ''}`} title={m.value.error} dir="auto">{preview(m.value)}</span>
                 <span className="c-hdr num">{m.headers.length || ''}</span>
               </div>
             );
@@ -371,16 +371,16 @@ function MessageDetail({ cid, topic, message: m, pretty, setPretty, readOnly, br
           <button type="button" className="btn btn-xs" disabled={readOnly} onClick={produceSimilar}>Produce similar</button>
         </div>
         {m.value.error && <div className="kafka-decode-error-line" role="note">{m.value.error}</div>}
-        <pre className="kafka-pre" tabIndex={0}>{text}</pre>
+        <pre className="kafka-pre" dir="auto" tabIndex={0}>{text}</pre>
       </div>
       <div className="kafka-detail-side">
-        <div><span className="muted">Key</span> <span className="mono">{decodedText(m.key)}</span>{m.key.error && <span className="kafka-decode-error"> ({m.key.error})</span>}</div>
+        <div><span className="muted">Key</span> <span className="mono" dir="auto">{decodedText(m.key)}</span>{m.key.error && <span className="kafka-decode-error"> ({m.key.error})</span>}</div>
         <div><span className="muted">Partition / offset</span> {m.partition} / {m.offset}</div>
         <div><span className="muted">Timestamp</span> {formatTimestamp(m.timestamp)} <span className="muted">({m.timestampType})</span></div>
         <div className="kafka-headers">
           <span className="muted">Headers</span>
           {m.headers.length === 0 ? <span className="muted"> none</span> : (
-            <ul>{m.headers.map((h, i) => <li key={i}><span className="mono">{h.key}</span>=<span className="mono">{decodedText(h.value)}</span></li>)}</ul>
+            <ul>{m.headers.map((h, i) => <li key={i}><span className="mono" dir="auto">{h.key}</span>=<span className="mono" dir="auto">{decodedText(h.value)}</span></li>)}</ul>
           )}
         </div>
       </div>

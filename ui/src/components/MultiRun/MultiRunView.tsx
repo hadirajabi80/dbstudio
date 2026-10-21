@@ -7,7 +7,7 @@ import { useResults } from '../../store/results';
 import { isRunning, type ExecutionState } from '../../store/resultsReducer';
 import { useTabs } from '../../store/tabs';
 import { connColorCss, connColorName } from '../../theme/connColors';
-import { ProviderIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { pluralWord } from '../common/text';
 import { ResultsPane } from '../ResultsPane/ResultsPane';
 import type { TabViewProps } from '../layout/tabViews';
@@ -78,7 +78,7 @@ export function MultiRunView({ tab, theme, visible }: TabViewProps) {
               title={`${c?.name ?? ''}${t.database ? ` · ${t.database}` : ''}${c?.color ? ` (${connColorName(c.color)})` : ''}`}
               onClick={() => setActive(t.connectionId)}
             >
-              {c && <ProviderIcon providerId={c.providerId} color={null} size={14} />}
+              {c && <ProviderLogo providerId={c.providerId} size={14} />}
               <span>{c?.name ?? t.connectionId}</span>
               {t.database && <span className="muted">· {t.database}</span>}
               <I size={13} className={`status-${s.status}${s.status === 'running' ? ' spin' : ''}`} aria-label={s.status} />

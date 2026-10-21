@@ -7,6 +7,7 @@ import { Dialog } from '../components/common/Dialog';
 import * as monaco from '../editor/monaco';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from '../editor/monaco-setup';
 import { remeasureAfterFonts } from '../editor/monacoOptions';
+import { bindEditorFontSize } from '../editor/fontZoom';
 import { useTabs } from '../store/tabs';
 import { currentTheme } from '../theme/useTheme';
 import { rewriteForEdit } from './rewrite';
@@ -52,8 +53,11 @@ export function CompareDialog({ tabId }: { tabId: string }) {
     diff.setModel({ original, modified });
     // after setModel: attaching a model to an editor re-applies the configured model options
     plainBrackets(original, modified);
+    // both sides on Settings.editor.fontSize, live; Ctrl + wheel over the diff changes it
+    const unbindFont = bindEditorFontSize(diff, { suggest: false });
     remeasureAfterFonts();
     return () => {
+      unbindFont();
       diff.dispose();
       original.dispose();
       modified.dispose();

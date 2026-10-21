@@ -1,0 +1,25 @@
+/* Console toolbar: Save (F4 "Edit:" consoles) and the Execute split button (routine edit consoles). */
+.btn.tb-save {
+  gap: 6px;
+}
+/* "unsaved changes": a small dot after the label */
+.tb-dirty-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.tb-exec .btn.split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tb-exec .btn.split-caret-run {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--success-fg) 35%, transparent);
+}

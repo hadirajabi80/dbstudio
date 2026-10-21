@@ -6,6 +6,9 @@ import type { ModelBinding } from './registry';
 import { resolveRunTarget } from './run-target';
 import { getEditorConfig, type ExplainTarget } from './config';
 
+/** Ctrl+Space / Ctrl+I (editor/suggestKey.ts), re-exported for the lazily loaded command path. */
+export { triggerSuggest } from './suggestKey';
+
 export const FORMAT_MARKER_OWNER = 'dbstudio.format';
 
 function warningMarkers(model: monaco.editor.ITextModel, warnings: FormatWarning[]): monaco.editor.IMarkerData[] {

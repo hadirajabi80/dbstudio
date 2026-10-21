@@ -28,6 +28,37 @@ export const WIDGET_SURFACE: Record<string, string> = {
   menu: 'menu.background',
 };
 
+/**
+ * IntelliSense kind icon colours: Monaco colour key `symbolIcon.<key>Foreground` (the codicon the suggest list draws
+ * for a CompletionItemKind) → design token. The SQL kinds map onto codicons in editor/monaco-setup.ts (KIND): table
+ * Struct, view Interface, column Field, function Function, procedure Method, schema / package Module, database Folder,
+ * keyword Keyword, snippet Snippet, alias Reference, CTE Class, variable Variable, parameter / type TypeParameter,
+ * sequence Constant, synonym EnumMember, operator Operator. The Mongo and Redis consoles reuse the same codicons.
+ */
+export const SUGGEST_KIND_COLORS: Record<string, string> = {
+  struct: '--kind-table',
+  interface: '--kind-view',
+  field: '--kind-column',
+  function: '--kind-function',
+  method: '--kind-function',
+  constructor: '--kind-function',
+  module: '--kind-schema',
+  namespace: '--kind-schema',
+  folder: '--kind-database',
+  keyword: '--kind-keyword',
+  snippet: '--kind-snippet',
+  reference: '--kind-alias',
+  class: '--kind-alias',
+  variable: '--kind-variable',
+  typeParameter: '--kind-variable',
+  constant: '--kind-other',
+  enumerator: '--kind-other',
+  enumeratorMember: '--kind-other',
+  operator: '--kind-other',
+  property: '--kind-other',
+  text: '--kind-other',
+};
+
 export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = themeTokens(theme)): MonacoThemeData {
   const dark = theme === 'dark';
   const colorOf = (name: string): Rgba | null => parseColor(tokens[name] ?? '');
@@ -89,7 +120,23 @@ export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = theme
     'editorOverviewRuler.border': a('--bg-panel', 0),
     'scrollbarSlider.background': c('--scrollbar'),
     'scrollbarSlider.hoverBackground': c('--scrollbar-hover'),
-    'scrollbarSlider.activeBackground': c('--scrollbar-hover'),
+    'scrollbarSlider.activeBackground': c('--scrollbar-active'),
+    // slim sliders without the drop shadow along the top edge (baseMonacoOptions: useShadows false)
+    'scrollbar.shadow': a('--bg-panel', 0),
+
+    // diff editor (Compare with server): soft tints, a faint hatch, solid gutter / overview marks
+    'diffEditor.insertedLineBackground': c('--diff-inserted-line'),
+    'diffEditor.insertedTextBackground': c('--diff-inserted-text'),
+    'diffEditor.removedLineBackground': c('--diff-removed-line'),
+    'diffEditor.removedTextBackground': c('--diff-removed-text'),
+    'diffEditor.diagonalFill': c('--diff-diagonal'),
+    'diffEditor.border': c('--border-subtle'),
+    'diffEditorGutter.insertedLineBackground': c('--diff-inserted-line'),
+    'diffEditorGutter.removedLineBackground': c('--diff-removed-line'),
+    'diffEditorOverview.insertedForeground': c('--diff-inserted-mark'),
+    'diffEditorOverview.removedForeground': c('--diff-removed-mark'),
+    'editorOverviewRuler.addedForeground': c('--diff-inserted-mark'),
+    'editorOverviewRuler.deletedForeground': c('--diff-removed-mark'),
     // keyboard focus inside widgets (find inputs, toggles); the editor's own ring is .editor-host:focus-within
     'focusBorder': c('--focus-ring'),
 
@@ -101,6 +148,13 @@ export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = theme
     'editorHoverWidget.background': c('--bg-elevated'),
     'editorHoverWidget.foreground': fg,
     'editorHoverWidget.border': c('--border'),
+    // active parameter in the parameter hints, matched words in hovers
+    'editorHoverWidget.highlightForeground': c('--accent'),
+    'editorHoverWidget.statusBarBackground': c('--bg-sunken'),
+    // markdown in hovers, parameter hints and the suggest details panel
+    'textLink.foreground': c('--accent'),
+    'textLink.activeForeground': c('--accent-hover'),
+    'textCodeBlock.background': c('--bg-sunken'),
     'input.background': c('--bg-input'),
     'input.foreground': fg,
     'input.border': c('--border-strong'),
@@ -118,9 +172,13 @@ export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = theme
     'editorSuggestWidget.selectedIconForeground': fg,
     'editorSuggestWidget.highlightForeground': c('--accent'),
     'editorSuggestWidget.focusHighlightForeground': c('--accent-on-selected'),
+    'editorSuggestWidgetStatus.foreground': c('--fg-muted'),
+    // kind icons keep their hue on the selected row too (editor/editor-widgets.css)
+    ...Object.fromEntries(Object.entries(SUGGEST_KIND_COLORS).map(([k, token]) => [`symbolIcon.${k}Foreground`, c(token)])),
 
     // lists (suggest details, reference/peek lists) and the quick input (F1 command palette)
-    'list.hoverBackground': c('--bg-hover'),
+    // every Monaco list sits on a popup (--bg-elevated): the hover step is measured from that surface
+    'list.hoverBackground': c('--bg-hover-elevated'),
     'list.hoverForeground': fg,
     'list.activeSelectionBackground': c('--bg-selected'),
     'list.activeSelectionForeground': fg,

@@ -240,6 +240,41 @@ public sealed class OracleM15ConformanceTests(OracleFixture fixture) : M15Confor
     protected override IPlanReader PlanReader { get; } = new OraclePlanReader();
     protected override TableModel Normalize(TableModel t, DdlScriptContext context) => OracleDdlScripter.Normalize(t, context);
 
+    /// <summary>
+    /// The UI's Execute routine call (ui/src/components/ExecuteRoutine/routineSql.ts): an anonymous block in named
+    /// notation, a parameter left on its default, OUT and SYS_REFCURSOR as out binds, a function result as an out bind.
+    /// </summary>
+    [SkippableFact]
+    public async Task ExecuteRoutine_GeneratedBlock_ReturnsOutParamsAndCursor()
+    {
+        RequireAvailable();
+        var proc = "M15_ER_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        await Fixture.RunBatchesAsync([
+            $"CREATE OR REPLACE PROCEDURE {proc}(P_A IN NUMBER, P_B IN NUMBER DEFAULT 1, P_SUM OUT NUMBER, P_CUR OUT SYS_REFCURSOR) AS " +
+            "BEGIN P_SUM := P_A + P_B; OPEN P_CUR FOR SELECT LEVEL AS n FROM dual CONNECT BY LEVEL <= P_A; END;",
+            $"CREATE OR REPLACE FUNCTION {proc}_F(P_ID IN NUMBER) RETURN VARCHAR2 AS BEGIN RETURN 'id ' || P_ID; END;",
+        ]);
+        try
+        {
+            await using var session = await Fixture.OpenSessionAsync();
+            var (summary, sink) = await RunAsync(session,
+                [P("p_a", "decimal", "3"), new QueryParam("p_sum", "decimal", null, "out"), new QueryParam("p_cur", "refcursor", null, "out")],
+                $"BEGIN\n  {proc}(P_A => :p_a, P_SUM => :p_sum, P_CUR => :p_cur);\nEND;");
+            Assert.True(summary.Status == ExecutionStatus.Ok, string.Join("; ", sink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal([("p_sum", (object?)"4")], summary.OutParams!.Select(o => (o.Name, o.Value)));
+            Assert.Equal(3, sink.ResultSets.Single().Rows.Count);
+
+            var (fn, fnSink) = await RunAsync(session, [P("p_id", "decimal", "7"), new QueryParam("result", "string", null, "out")],
+                $"BEGIN\n  :result := {proc}_F(P_ID => :p_id);\nEND;");
+            Assert.True(fn.Status == ExecutionStatus.Ok, string.Join("; ", fnSink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal([("result", (object?)"id 7")], fn.OutParams!.Select(o => (o.Name, o.Value)));
+        }
+        finally
+        {
+            await Fixture.RunBatchesAsync([$"DROP PROCEDURE {proc}", $"DROP FUNCTION {proc}_F"]);
+        }
+    }
+
     [SkippableFact]
     public async Task M15_RefCursorOutParam_ReturnsRowsAsResultSet()
     {

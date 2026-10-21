@@ -4,7 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Dialog } from './Dialog';
-import { ColumnIcon, ProviderIcon } from './icons';
+import { ColumnIcon } from './icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Select } from './Select';
 
 function SettingsLike() {
@@ -96,17 +97,19 @@ describe('Dialog initial focus (styles-r1-04)', () => {
 });
 
 describe('icon stroke opt-outs (styles-r1-02)', () => {
-  it('draws the PK/FK badge at 2.5 and the provider glyph at 2, marked data-stroke so the 1.5 default skips them', () => {
-    const { container } = render(<><ColumnIcon pk /><ColumnIcon fk /><ProviderIcon providerId="sqlite" /></>);
+  it('draws the PK/FK badge at 2.5, marked data-stroke so the 1.5 default skips it; the provider logo is filled artwork, never a lucide stroke', () => {
+    const { container } = render(<><ColumnIcon pk /><ColumnIcon fk /><ProviderLogo providerId="sqlite" /></>);
     const badges = container.querySelectorAll('svg.col-badge');
     expect(badges).toHaveLength(2);
     for (const b of badges) {
       expect(b).toHaveAttribute('data-stroke');
       expect(b).toHaveAttribute('stroke-width', '2.5');
     }
-    const glyph = container.querySelector('.provider-icon svg')!;
-    expect(glyph).toHaveAttribute('data-stroke');
-    expect(glyph).toHaveAttribute('stroke-width', '2');
+    // the svg.lucide stroke rules (app.css) must not reach the logo
+    const logo = container.querySelector('.provider-logo svg')!;
+    expect(logo).not.toHaveClass('lucide');
+    expect(logo).not.toHaveAttribute('stroke-width');
+    expect(logo.querySelector('path')).toHaveAttribute('fill');
     // ordinary icons keep the default (no opt-out)
     expect(container.querySelector('svg.obj-column')).not.toHaveAttribute('data-stroke');
   });

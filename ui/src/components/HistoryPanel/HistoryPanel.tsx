@@ -201,15 +201,15 @@ function HistoryItem({ x, connName, connColor }: { x: HistoryEntry; connName?: s
         <StatusIcon size={14} strokeWidth={1.75} className={`status-${x.status}`} aria-label={STATUS_LABEL[x.status]} />
         <ColorDot color={connColor} size={7} />
         <span className="history-conn" title={[connName, x.database].filter(Boolean).join(' · ')}>
-          {connName ?? 'deleted connection'}
-          {x.database && <span className="muted"> · {x.database}</span>}
+          {connName ? <span dir="auto">{connName}</span> : 'deleted connection'}
+          {x.database && <span className="muted"> · <span dir="auto">{x.database}</span></span>}
         </span>
         {x.label !== 'statement' && x.label !== 'script' && x.label !== 'selection' && <span className="pill pill-muted">{x.label}</span>}
         <div className="flex-1" />
         <span className="muted">{when(x.startedAt)}</span>
       </div>
       <pre className="history-sql">{x.sql.length > 600 ? `${x.sql.slice(0, 600)}…` : x.sql}</pre>
-      {x.error && <div className="history-err">{x.error}</div>}
+      {x.error && <div className="history-err" dir="auto">{x.error}</div>}
       <div className="history-actions">
         <span className="muted tabular">{formatDuration(x.durationMs)}</span>
         {x.resultRows !== null && <span className="muted">{pluralize(x.resultRows, 'row')}</span>}

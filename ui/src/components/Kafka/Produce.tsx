@@ -112,7 +112,7 @@ export function ProduceView({ tab, theme }: { tab: ViewTab; theme: EffectiveThem
             {isSchema(d.keyFormat) && <Select aria-label="Key subject" value={d.keySubject} options={subjectOptions} onChange={(v) => set({ keySubject: v })} />}
           </div>
           <label className="form-label" htmlFor={`kp-key-${tab.id}`}>Key</label>
-          <input id={`kp-key-${tab.id}`} className="input mono" value={d.key} placeholder="empty = null key" onChange={(e) => set({ key: e.target.value })} data-primary-focus />
+          <input id={`kp-key-${tab.id}`} className="input mono" dir="auto" value={d.key} placeholder="empty = null key" onChange={(e) => set({ key: e.target.value })} data-primary-focus />
           <span className="form-label">Value format</span>
           <div className="kafka-row">
             <Select aria-label="Value format" value={d.valueFormat} options={PRODUCE_FORMATS.map((f) => ({ ...f, disabled: isSchema(f.value) && !registry }))} onChange={(v) => set({ valueFormat: v })} />
@@ -130,9 +130,9 @@ export function ProduceView({ tab, theme }: { tab: ViewTab; theme: EffectiveThem
           <div className="kafka-headers-edit">
             {d.headers.map((h, i) => (
               <div key={i} className="kafka-row">
-                <input className="input mono" aria-label={`Header ${i + 1} key`} placeholder="key" value={h.key}
+                <input className="input mono" dir="auto" aria-label={`Header ${i + 1} key`} placeholder="key" value={h.key}
                   onChange={(e) => set({ headers: d.headers.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)) })} />
-                <input className="input mono flex-1" aria-label={`Header ${i + 1} value`} placeholder="value" value={h.value}
+                <input className="input mono flex-1" dir="auto" aria-label={`Header ${i + 1} value`} placeholder="value" value={h.value}
                   onChange={(e) => set({ headers: d.headers.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })} />
                 <button type="button" className="icon-btn" aria-label={`Remove header ${i + 1}`} onClick={() => set({ headers: d.headers.filter((_, j) => j !== i) })}>
                   <Trash2 size={14} />

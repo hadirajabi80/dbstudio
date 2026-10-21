@@ -85,6 +85,8 @@ function prng(seed: number) {
 const FIRST = ['Alice', 'Bob', 'Carla', 'Dmitri', 'Erin', 'Farah', 'Goran', 'Hana', 'Ivo', 'Jules', 'Kemal', 'Lena', 'Milo', 'Nora'];
 const CITIES = ['Berlin', 'Paris', 'Lisbon', 'Oslo', 'Austin', 'Osaka', 'Lyon'];
 const TIERS = ['bronze', 'silver', 'gold', 'platinum'];
+/** Right-to-left sample names (Persian, Arabic) for a few user profiles. */
+const RTL_NAMES: Record<number, string> = { 2: 'علی رضایی', 3: 'مریم احمدی', 4: 'محمد' };
 
 export const MOCK_REDIS_KEY_COUNT = 5000;
 
@@ -124,7 +126,7 @@ export function createRedisFixture(): Map<number, MockDb> {
   }
   for (let i = 1; i <= 1100; i++) {
     const f = FIRST[i % FIRST.length];
-    add(`user:${1000 + i}:profile`, { type: 'hash', v: new Map([['name', `${f} ${String.fromCharCode(65 + (i % 26))}.`], ['email', `${f.toLowerCase()}${i}@example.com`], ['city', CITIES[i % CITIES.length]], ['tier', TIERS[i % TIERS.length]], ['visits', String(i * 7 % 300)]]) });
+    add(`user:${1000 + i}:profile`, { type: 'hash', v: new Map([['name', RTL_NAMES[i] ?? `${f} ${String.fromCharCode(65 + (i % 26))}.`], ['email', `${f.toLowerCase()}${i}@example.com`], ['city', CITIES[i % CITIES.length]], ['tier', TIERS[i % TIERS.length]], ['visits', String(i * 7 % 300)]]) });
     if (i <= 500) add(`user:${1000 + i}:cart`, { type: 'list', v: Array.from({ length: 1 + (i % 4) }, (_, j) => `sku:${(i * 13 + j) % 400}`) });
   }
   for (let i = 0; i < 900; i++) add(`session:${(0x10000 + i * 7919).toString(16)}`, { type: 'string', v: JSON.stringify({ user: 1000 + (i % 1100), ua: 'Mozilla/5.0' }) }, 300 + ((i * 97) % 7000));

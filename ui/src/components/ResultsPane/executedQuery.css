@@ -1,0 +1,28 @@
+/* Executed query line in the status row under a result grid (console result set, Data tab). */
+.rs-query {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 60%;
+  overflow: hidden;
+}
+/* `.resultset-status .muted` is inline-flex, which would defeat the ellipsis. */
+.resultset-status .rs-query-text,
+.rs-query-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+.icon-btn.rs-query-btn {
+  width: 20px;
+  height: 20px;
+}
+.icon-btn.rs-query-copy.copied {
+  color: var(--success);
+}

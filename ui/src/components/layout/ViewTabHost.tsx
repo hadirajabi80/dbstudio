@@ -1,8 +1,9 @@
 // Hosts of the workspace tabs and the "focus the opened tab" logic (design-03 / design-15).
-import { Suspense, useEffect, useSyncExternalStore } from 'react';
+import { Suspense, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { getEditor } from '../../app/editors';
 import { useTabs, type Tab, type ViewTab } from '../../store/tabs';
 import type { EffectiveTheme } from '../../theme/useTheme';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { focusFirst, focusIsLost, restoredRecently, setFocusFallback } from '../common/focus';
 import { getTabView, PRIMARY_FOCUS_SELECTORS, subscribeTabViews } from './tabViews';
 
@@ -23,6 +24,18 @@ export function TabViewSkeleton({ view, visible }: { view: string; visible: bool
 }
 
 /**
+ * Error boundary of one workspace tab (console, object or view), keyed by the tab id: a crash shows the error panel in
+ * that tab only, the other tabs and the shell keep working. A hidden crashed tab renders nothing until it is shown.
+ */
+export function TabErrorBoundary({ tab, visible, children }: { tab: Pick<Tab, 'id' | 'title'>; visible: boolean; children: ReactNode }) {
+  return (
+    <ErrorBoundary key={tab.id} area={`“${tab.title}”`} variant="tab" hidden={!visible}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+/**
  * A registered view tab. Every view is wrapped in a container that is `display: none` while the tab is hidden, so a
  * view that ignores its `visible` prop can never paint over the active tab. Visible, the wrapper is
  * `display: contents` and does not change the view's layout. The view renders inside a Suspense boundary, so a
@@ -34,9 +47,11 @@ export function ViewTabHost({ tab, theme, visible }: { tab: ViewTab; theme: Effe
   return (
     <div className="view-tab-host" data-tab-host={tab.id} data-view={tab.view} style={{ display: visible ? 'contents' : 'none' }} aria-hidden={visible ? undefined : true}>
       {def ? (
-        <Suspense fallback={<TabViewSkeleton view={tab.view} visible={visible} />}>
-          <def.component tab={tab} theme={theme} visible={visible} />
-        </Suspense>
+        <TabErrorBoundary tab={tab} visible={visible}>
+          <Suspense fallback={<TabViewSkeleton view={tab.view} visible={visible} />}>
+            <def.component tab={tab} theme={theme} visible={visible} />
+          </Suspense>
+        </TabErrorBoundary>
       ) : visible ? (
         <div className="workspace-missing">
           <p>This tab ({tab.view}) is not available in this build.</p>

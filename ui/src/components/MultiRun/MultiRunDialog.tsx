@@ -9,7 +9,7 @@ import { useTabs } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
 import { Dialog } from '../common/Dialog';
-import { ProviderIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Select } from '../common/Select';
 import { Kbd } from '../Shortcuts/Kbd';
 
@@ -151,7 +151,7 @@ function Inner({ tabId }: { tabId: string }) {
                     <div key={c.id} className={`multirun-row${folder ? ' nested' : ''}`}>
                       <label className="check">
                         <input type="checkbox" checked={picked.has(c.id)} onChange={(e) => toggle(c.id, e.target.checked)} />
-                        <ProviderIcon providerId={c.providerId} color={null} size={16} />
+                        <ProviderLogo providerId={c.providerId} size={16} />
                         <ColorDot color={c.color} size={8} />
                         <span>{c.name}</span>
                         {c.id === tab?.connectionId && <span className="pill pill-muted">this console</span>}

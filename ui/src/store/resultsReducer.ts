@@ -52,6 +52,8 @@ export interface ExecutionState {
   batches: SqlBatch[];
   /** Bind values the batches ran with (A2); re-runs (server filter, Clear) must send them again. */
   params: QueryParam[];
+  /** The batches are not the console's editor text (Execute routine): error lines are not marked in the editor. */
+  detached?: boolean;
   maxRows: number;
   confirmedDestructive: boolean;
   status: ExecStatus;
@@ -70,7 +72,7 @@ export interface ExecutionState {
 
 export function createExecution(init: {
   localId: string; tabId: string; connectionId: string; sessionId: string | null; label: RunLabel; batches: SqlBatch[];
-  maxRows: number; confirmedDestructive?: boolean; now?: number; params?: QueryParam[] | null;
+  maxRows: number; confirmedDestructive?: boolean; now?: number; params?: QueryParam[] | null; detached?: boolean;
 }): ExecutionState {
   return {
     localId: init.localId,
@@ -81,6 +83,7 @@ export function createExecution(init: {
     label: init.label,
     batches: init.batches,
     params: init.params ?? [],
+    ...(init.detached ? { detached: true } : {}),
     maxRows: init.maxRows,
     confirmedDestructive: init.confirmedDestructive ?? false,
     status: 'starting',
@@ -214,6 +217,25 @@ export function applyEvents(prev: ExecutionState, events: readonly WsEvent[], no
             e.rev++;
           }
         }
+        // Values of out / in-out binds (Oracle OUT parameters, Execute routine): one more result set with one row,
+        // a column per parameter, after the ones the statements returned.
+        const outs = Array.isArray(ev.outParams) ? ev.outParams : [];
+        if (outs.length) {
+          const list = rsList();
+          const id = list.reduce((m, r) => Math.max(m, r.id), -1) + 1;
+          const columns: ColumnInfo[] = outs.map((o, i) => ({
+            name: o.name, ordinal: i, dbType: 'out parameter', kind: outKind(o.value), nullable: true, size: null, precision: null, scale: null,
+            table: null, schema: null, isKey: false,
+          }));
+          list.push({
+            id, batchIndex: Math.max(0, s.batchCount - 1), columns, rows: ChunkedList.from([outs.map((o) => o.value)]), rowCount: 1,
+            truncated: false, elapsedMs: null, done: true, rev: 1,
+          });
+          addMsg({
+            severity: 'info', text: `Output parameters: ${outs.map((o) => `${o.name} = ${o.value === null ? 'NULL' : String(o.value)}`).join(', ')}`,
+            line: null, col: null, code: null, source: 'client', batchIndex: null,
+          });
+        }
         const verb = ev.status === 'ok' ? 'Completed' : ev.status === 'cancelled' ? 'Cancelled' : 'Finished with errors';
         const parts = [`${verb} in ${ev.elapsedMs} ms`];
         if (ev.resultSets) parts.push(`${ev.resultSets} result set${ev.resultSets === 1 ? '' : 's'}`);
@@ -254,4 +276,11 @@ export function failExecution(prev: ExecutionState, text: string, code: string |
 
 export function isRunning(e: ExecutionState | undefined | null): boolean {
   return !!e && (e.status === 'starting' || e.status === 'running');
+}
+
+/** Grid kind of an out-parameter value (the wire carries no type for them). */
+function outKind(v: CellValue): ColumnInfo['kind'] {
+  if (typeof v === 'number') return Number.isInteger(v) ? 'int' : 'float';
+  if (typeof v === 'boolean') return 'bool';
+  return 'string';
 }

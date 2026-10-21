@@ -19,6 +19,8 @@ export interface ModelBinding {
   snippets?: () => readonly Snippet[];
   /** Ctrl+J: the next completion request lists snippets only. */
   snippetPicker?: boolean;
+  /** The last completion list showed a "Loading <schema>…" row: refresh it when the catalog changes. */
+  suggestLoading?: boolean;
   /** Tab id of the editor (commands acting on the focused editor). */
   tabId?: string;
 }

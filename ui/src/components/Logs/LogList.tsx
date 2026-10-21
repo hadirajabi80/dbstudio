@@ -224,21 +224,21 @@ export function LogList(p: LogListProps) {
           <span className="log-time tabular" title={fullTime(e.ts)}>{formatTime(e.ts)}</span>
           <span className={`log-level lvl-${e.level}`}>{LEVEL_LABEL[e.level]}</span>
           <span className="log-source" title={e.source}>{e.source}</span>
-          <span className="log-msg">
+          <span className="log-msg" dir="auto">
             <Highlighted text={wrap ? e.message : firstLine(e.message)} pattern={p.pattern} />
           </span>
         </div>
         {open && (
           <div className="log-detail">
-            <pre className="log-detail-text"><Highlighted text={e.message} pattern={p.pattern} /></pre>
-            {e.detail && <pre className="log-detail-text muted"><Highlighted text={e.detail} pattern={p.pattern} /></pre>}
+            <pre className="log-detail-text" dir="auto"><Highlighted text={e.message} pattern={p.pattern} /></pre>
+            {e.detail && <pre className="log-detail-text muted" dir="auto"><Highlighted text={e.detail} pattern={p.pattern} /></pre>}
             {e.fields && Object.keys(e.fields).length > 0 && (
               <table className="details-table log-fields">
                 <tbody>
                   {Object.entries(e.fields).map(([k, v]) => (
                     <tr key={k}>
                       <th scope="row">{k}</th>
-                      <td className="mono">{v}</td>
+                      <td className="mono" dir="auto">{v}</td>
                     </tr>
                   ))}
                 </tbody>

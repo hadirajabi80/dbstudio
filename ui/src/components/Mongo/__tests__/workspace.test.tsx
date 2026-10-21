@@ -90,7 +90,7 @@ describe('schema, indexes, validation, explain', () => {
   it('analyzes the schema and flags mixed types', async () => {
     renderCollection('customers', 'schema');
     fireEvent.click((await screen.findAllByRole('button', { name: /Analyze schema/ }))[0]);
-    const table = await screen.findByRole('table', { name: 'Fields' }, { timeout: 4000 });
+    const table = await screen.findByRole('table', { name: 'Fields' });
     expect(within(table).getByText('phone')).toBeInTheDocument();
     expect(within(table).getAllByText('mixed types').length).toBeGreaterThan(0);
     expect(screen.getByText(/60 documents sampled/)).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe('schema, indexes, validation, explain', () => {
   it('uses a schema example as a filter', async () => {
     const { id } = renderCollection('customers', 'schema');
     fireEvent.click((await screen.findAllByRole('button', { name: /Analyze schema/ }))[0]);
-    await screen.findByRole('table', { name: 'Fields' }, { timeout: 4000 });
+    await screen.findByRole('table', { name: 'Fields' });
     const tierChip = screen.getAllByTitle('Use as filter').find((b) => /^"(gold|silver|bronze)"$/.test(b.textContent!))!;
     fireEvent.click(tierChip);
     expect(tabStateOf(id).sub).toBe('documents');

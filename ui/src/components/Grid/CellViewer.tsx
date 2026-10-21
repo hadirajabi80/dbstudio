@@ -116,7 +116,7 @@ export function CellViewer({ executionId, resultSetId, sourceRow, col, column, v
       {value === null ? (
         <div className="cell-viewer-null">NULL</div>
       ) : (
-        <pre className={`cell-viewer-text${wrap ? ' wrap' : ''} lang-${language}`}>{text}</pre>
+        <pre className={`cell-viewer-text${wrap ? ' wrap' : ''} lang-${language}`} dir={language === 'hex' ? undefined : 'auto'}>{text}</pre>
       )}
     </div>
   );

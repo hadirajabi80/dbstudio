@@ -5,11 +5,12 @@ import type { HistoryEntry, SessionInfo } from '../api/types';
 import {
   cancelTab, catalogDatabase, closeTab, commitTab, connectAllInFolder, connectAndOpen, copyText, disconnectAll, disconnectConnection,
   insertIntoActiveEditor, newConsole, openObject, openSampleDatabase, openSqlFile, openSqliteFile, reopenSql, rerun, rollbackTab,
-  ownSessions, runActive, saveActiveFile, selectTop, setTxMode,
+  ownSessions, runActive, saveActiveFile, saveEditToDatabase, selectTop, setTxMode,
 } from '../app/actions';
 import { canDrop, copyDdl, dropObject, generateSqlInto, truncateTable, type SqlTemplate } from '../app/objectActions';
 import { checkForUpdatesNow } from '../app/updates';
 import { currentZoom, setZoom } from '../app/zoom';
+import { peekEditSession } from '../designer/editSession';
 import { pluralize } from '../components/common/text';
 import { useExplorer } from '../components/Explorer/explorerStore';
 import { cycleRegion, focusEditorRegion, focusExplorer, focusResults } from '../components/layout/regions';
@@ -93,7 +94,16 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'file.open', title: 'Open SQL file…', category: 'File', shortcut: 'Mod+O', icon: 'FolderOpen', run: () => void openSqlFile() },
   { id: 'file.openSqlite', title: 'Open a SQLite database file…', category: 'File', icon: 'File', run: () => void openSqliteFile() },
   { id: 'file.sampleDb', title: 'Open the sample database', category: 'File', keywords: 'try demo shop', icon: 'Sparkles', run: () => void openSampleDatabase() },
-  { id: 'file.save', title: 'Save', category: 'File', icon: 'Save', shortcut: 'Mod+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(false) },
+  {
+    // In an F4 "Edit:" console (procedure, function, view, trigger…) Save writes the object to the database, like
+    // SSMS / Navicat / DataGrip; elsewhere it saves the .sql file. Save as… always writes a file.
+    id: 'file.save', title: 'Save', category: 'File', icon: 'Save', shortcut: 'Mod+S', when: () => !!getActiveConsole(),
+    run: () => {
+      const t = getActiveConsole();
+      if (t && peekEditSession(t.id)) void saveEditToDatabase(t.id);
+      else void saveActiveFile(false);
+    },
+  },
   { id: 'file.saveAs', title: 'Save as…', category: 'File', icon: 'Save', shortcut: 'Mod+Shift+S', when: () => !!getActiveConsole(), run: () => void saveActiveFile(true) },
 
   // Tabs

@@ -319,6 +319,7 @@
 .log-row.wrap .log-msg {
   white-space: pre-wrap;
   word-break: break-word;
+  unicode-bidi: plaintext;
 }
 .log-hit {
   background: var(--mark-bg);
@@ -338,6 +339,7 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  unicode-bidi: plaintext;
   user-select: text;
 }
 .log-fields {

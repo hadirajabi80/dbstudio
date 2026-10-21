@@ -1,7 +1,7 @@
 // The results/data grid (glide-data-grid): client filter + sort view, in-place editing with a pending buffer,
 // quick filters from cells, FK navigation markers. Used by console result sets and Data tabs.
 import {
-  CompactSelection, DataEditor, GridCellKind, GridColumnIcon, drawTextCell, type DataEditorRef, type DrawCellCallback, type EditableGridCell,
+  CompactSelection, DataEditor, GridCellKind, GridColumnIcon, type DataEditorRef, type DrawCellCallback, type EditableGridCell,
   type GridCell, type GridColumn, type GridMouseEventArgs, type GridSelection, type Item, type Theme,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
@@ -27,7 +27,8 @@ import { GRID_CELL_EDIT_MENU, GRID_CELL_PENDING_MENU, GRID_COPY_AS_MENU, GRID_EX
 import { aggregateCells, type SelectionAggregates } from './aggregate';
 import { cellColors } from './cellColors';
 import { exportRowsToFile, type FileFormat } from './clientExport';
-import { canvasMeasure, distributeSpare, ellipsize, naturalWidths, type ColumnWidth } from './columnWidth';
+import { distributeSpare, naturalWidths, type ColumnWidth } from './columnWidth';
+import { drawCellText, textAlignFor } from './drawText';
 import { registerGridController, setActiveGridKey, type GridController } from './controller';
 import type { Editability, FkLink } from './editability';
 import { editText, isEditableKind, parseEdit } from './editValue';
@@ -353,7 +354,9 @@ export function DataGrid(p: DataGridProps) {
       const text = formatCell(v, c, fmt);
       const muted = isBinary(v) || isTruncated(v) || typeof v === 'object';
       return {
-        kind: GridCellKind.Text, data: canEdit ? editText(v) : text, displayData: text, allowOverlay: canEdit, readonly: !canEdit, contentAlign: align,
+        kind: GridCellKind.Text, data: canEdit ? editText(v) : text, displayData: text, allowOverlay: canEdit, readonly: !canEdit,
+        // RTL values (Persian, Arabic, ...) sit on the right of text columns and are drawn right-to-left (drawCellText)
+        contentAlign: textAlignFor(align, text),
         copyData: rawText(v) ?? '',
         // FK cells keep room on the right for the navigation chevron
         themeOverride: { ...(muted ? { textDark: mutedColor } : {}), ...editedTheme, ...(fkByCol.has(col) ? { cellHorizontalPadding: 16 } : {}) },
@@ -382,27 +385,9 @@ export function DataGrid(p: DataGridProps) {
 
   const drawCell = useCallback<DrawCellCallback>(
     (args, drawContent) => {
-      const { ctx, rect, col, row, cell } = args;
-      // Overflowing text gets an ellipsis instead of being clipped mid-glyph (styles-15).
-      if (cell.kind === GridCellKind.Text && cell.displayData.length > 3) {
-        const th = args.theme;
-        const font = `${th.baseFontStyle} ${th.fontFamily}`;
-        const avail = rect.width - th.cellHorizontalPadding * 2 - 1;
-        if (canvasMeasure(cell.displayData, font) > avail || cell.displayData.includes('\n')) {
-          const key = `${font}\u0001${Math.round(avail)}\u0001${cell.displayData}`;
-          const cache = ellipsisCache.current;
-          let shown = cache.get(key);
-          if (shown === undefined) {
-            shown = ellipsize(cell.displayData, avail, font);
-            if (cache.size > 5000) cache.clear();
-            cache.set(key, shown);
-          }
-          ctx.save();
-          ctx.font = font;
-          drawTextCell({ ctx, rect, theme: th } as Parameters<typeof drawTextCell>[0], shown, cell.contentAlign);
-          ctx.restore();
-        } else drawContent();
-      } else drawContent();
+      const { ctx, rect, col, row } = args;
+      // Ellipsis for overflowing text (styles-15); RTL values drawn right-to-left (Persian/Arabic/Hebrew data).
+      drawCellText(args, drawContent, ellipsisCache.current);
       const r = rowRef(row);
       if (!r) return;
       // glide caches canvas state between cells: never leak our styles into the next cell

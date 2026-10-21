@@ -1,45 +1,86 @@
 /* Settings → Snippets (WP-H). Theme tokens only. */
-.snip { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg-panel); color: var(--fg); }
+.snip { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg-panel); color: var(--fg); container: snip / inline-size; }
 .snip-toolbar {
   display: flex; align-items: center; gap: var(--space-2);
   min-height: 36px; padding: 0 var(--space-2);
-  border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .snip-icon { color: var(--accent); flex-shrink: 0; }
 .snip-title { font-weight: 600; }
-.snip-hint { color: var(--fg-muted); font-size: var(--text-sm); white-space: nowrap; }
-.snip-search { width: 180px; }
-.snip-dialect { width: 130px; }
+.snip-hint { color: var(--fg-muted); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.snip-search { width: 180px; flex-shrink: 1; min-width: 100px; }
+.snip-dialect { width: 140px; flex-shrink: 0; }
+.snip-toolbar .btn { flex-shrink: 0; }
 .snip-body { flex: 1; display: flex; min-height: 0; }
-.snip-list { width: 320px; flex-shrink: 0; overflow: auto; border-right: 1px solid var(--border); padding: var(--space-1) 0; }
+.snip-list { width: 340px; flex-shrink: 0; overflow: auto; border-right: 1px solid var(--border); padding: var(--space-1) 0; }
 .snip-group { padding: var(--space-2) var(--space-3) var(--space-1); color: var(--fg-muted); font-size: var(--text-sm); font-weight: 600; }
 .snip-empty { padding: var(--space-1) var(--space-3); color: var(--fg-muted); font-size: var(--text-sm); }
 .snip-item {
-  display: grid; grid-template-columns: 72px 1fr; grid-template-rows: auto auto; column-gap: var(--space-2);
-  padding: 4px var(--space-3); cursor: default; min-height: 24px;
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; grid-template-areas: "prefix name tag" "prefix code code";
+  column-gap: var(--space-2); row-gap: 2px; align-items: baseline;
+  padding: var(--space-2) var(--space-3); cursor: default; min-height: 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .snip-item:hover { background: var(--bg-hover); }
 .snip-item.selected { background: var(--bg-selected); }
 .snip-item:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: -2px; }
 .snip-item.overridden .snip-prefix { text-decoration: line-through; color: var(--fg-muted); }
-.snip-prefix { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent); grid-row: span 2; align-self: center; overflow: hidden; text-overflow: ellipsis; }
-.snip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.snip-tag { color: var(--fg-muted); font-size: var(--text-xs); }
+.snip-prefix { grid-area: prefix; align-self: start; font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snip-name { grid-area: name; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snip-tag { grid-area: tag; color: var(--fg-muted); font-size: var(--text-xs); white-space: nowrap; }
+.snip-item-code { grid-area: code; margin: 2px 0 0; }
+
 .snip-editor { flex: 1; overflow: auto; padding: var(--space-4); min-width: 0; }
 .snip-form { display: flex; flex-direction: column; gap: var(--space-3); max-width: 760px; }
 .snip-row { display: flex; gap: var(--space-3); }
-.snip-field { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.snip-field { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 0; }
 .snip-field-prefix { flex: 0 0 180px; }
-.snip-dialects { display: flex; gap: var(--space-4); border: 0; padding: 0; margin: 0; align-items: center; }
+.snip-dialects { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); border: 0; padding: 0; margin: 0; align-items: center; }
 .snip-dialects legend { float: left; margin-right: var(--space-3); padding: 0; }
 .snip-textarea { min-height: 140px; resize: vertical; font-family: var(--font-mono); padding: var(--space-2); }
-.snip-code {
-  margin: 0; padding: var(--space-2); white-space: pre-wrap; word-break: break-word;
-  font-family: var(--font-mono); font-size: var(--text-sm);
-  background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
-}
-.snip-preview { color: var(--fg-muted); }
+.snip-desc { margin: 0 0 var(--space-3); color: var(--fg-muted); }
 .snip-actions { display: flex; gap: var(--space-2); align-items: center; }
 .snip-ro-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-3); }
+/* .form-label is right-aligned for label/control grids; here labels sit above their field */
+.snip .form-label { text-align: left; }
+.snip-editor > .form-label { margin: var(--space-2) 0 var(--space-1); }
 .snip-ro-name { font-weight: 600; font-size: var(--text-lg); }
-.snip-empty-editor { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-8); color: var(--fg-muted); }
+.snip-empty-editor { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-8) var(--space-4); color: var(--fg-muted); text-align: center; }
+.snip-empty-hint { font-size: var(--text-sm); max-width: 280px; }
+
+/* ---- code (SnippetCode): Monaco's token classes colour the runs; the block follows the editor surface ---- */
+/* no ligatures, like Monaco (Cascadia Code would draw <> and != as single glyphs) */
+.snip-code-view { margin: 0; font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.55; color: var(--fg); tab-size: 4; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+.snip-code-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.55em; }
+.snip-code {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-editor); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+}
+.snip-preview:not(.snip-code-colored) { color: var(--fg-muted); }
+/* list previews: a few lines, each clipped with an ellipsis */
+.snip-code-clamp { font-size: var(--text-xs); line-height: 1.5; }
+.snip-code-clamp .snip-code-line { white-space: pre; overflow: hidden; text-overflow: ellipsis; min-height: 1.5em; }
+.snip-code-more { color: var(--fg-muted); }
+/* tab stops: a soft accent pill; $0 (final cursor) is outlined only */
+.snip-ph { background: var(--accent-soft); border-radius: var(--radius-sm); box-shadow: 0 0 0 1px var(--accent-soft-strong); }
+.snip-ph-final { background: transparent; box-shadow: 0 0 0 1px var(--accent-soft-strong); }
+code.snip-ph { padding: 0 2px; }
+
+/* ---- body editor (monacoBodyEditor): a form field around a small Monaco editor ---- */
+.snip-body-editor {
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden;
+  background: var(--bg-editor);
+}
+.snip-body-editor:focus-within { border-color: var(--border-focus); outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.snip-body-editor.invalid { border-color: var(--danger); }
+
+/* ---- inside Settings: the section fills a fixed-height dialog body ---- */
+.settings-dialog .snip {
+  height: min(620px, calc(100vh - 210px)); min-height: 360px;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+@container snip (max-width: 960px) {
+  .snip-hint { display: none; }
+  .snip-list { width: 300px; }
+  .snip-field-prefix { flex-basis: 140px; }
+}

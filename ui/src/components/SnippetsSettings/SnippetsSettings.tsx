@@ -7,6 +7,12 @@ import type { Dialect, Snippet } from '../../api/types';
 import { BUILTIN_SNIPPETS, newSnippetId, snippetPreview, validateSnippet, type SnippetDef } from '../../snippets';
 import { useSettings } from '../../store/settings';
 import { displayShortcut } from '../../commands/keys';
+import type { EffectiveTheme } from '../../theme/useTheme';
+import type { TabViewProps } from '../layout/tabViews';
+import { previewDialect } from './code';
+import { SnippetBodyEditor } from './SnippetBodyEditor';
+import { SnippetCode } from './SnippetCode';
+import { useDocumentTheme } from './useDocumentTheme';
 import './SnippetsSettings.css';
 
 const DIALECTS: { id: Dialect; label: string }[] = [
@@ -21,14 +27,21 @@ type Selection = { kind: 'user'; id: string } | { kind: 'builtin'; id: string } 
 export interface SnippetsSettingsProps {
   snippets: readonly Snippet[];
   onChange: (next: Snippet[]) => void;
+  /** Colours of the code (defaults to the theme the app shows). */
+  theme?: EffectiveTheme;
 }
+
+/** Lines of the body shown in a list item's preview. */
+const PREVIEW_LINES = 3;
 
 function dialectText(d: Dialect[] | null): string {
   if (!d || d.length === 0 || d.length >= DIALECTS.length) return 'All dialects';
   return d.map((x) => DIALECTS.find((y) => y.id === x)?.label ?? x).join(', ');
 }
 
-export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) {
+export function SnippetsSettings({ snippets, onChange, theme: themeProp }: SnippetsSettingsProps) {
+  const docTheme = useDocumentTheme();
+  const theme = themeProp ?? docTheme;
   const [query, setQuery] = useState('');
   const [dialect, setDialect] = useState<Dialect | 'all'>('all');
   const [sel, setSel] = useState<Selection>(snippets[0] ? { kind: 'user', id: snippets[0].id } : null);
@@ -69,6 +82,12 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
     onChange(next);
     if (next[0]) pickUser(next[0]); else { setSel(null); setDraft(null); }
   };
+  // Code is coloured as the dialect picked in the toolbar when the snippet applies to it, else its first dialect.
+  const colorDialect = (ds: Dialect[] | null): Dialect =>
+    dialect !== 'all' && (!ds || ds.length === 0 || ds.includes(dialect)) ? dialect : previewDialect(ds);
+  /** A list item's coloured preview: the first lines of the body (decorative: the body is shown when selected). */
+  const preview = (s: Pick<Snippet, 'body' | 'dialects'>) =>
+    s.body.trim() ? <SnippetCode className="snip-item-code" code={s.body} dialect={colorDialect(s.dialects)} theme={theme} maxLines={PREVIEW_LINES} aria-hidden /> : null;
   const toggleDialect = (d: Dialect) => {
     if (!draft) return;
     const cur = draft.dialects && draft.dialects.length ? draft.dialects : DIALECTS.map((x) => x.id);
@@ -104,6 +123,8 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
               <span className="snip-prefix">{s.prefix || '(no prefix)'}</span>
               <span className="snip-name">{s.name}</span>
               <span className="snip-tag">{dialectText(s.dialects)}</span>
+              {/* the selected snippet previews the draft, so the list follows the editor while typing */}
+              {preview(draft?.id === s.id ? draft : s)}
             </div>
           ))}
           <div className="snip-group">Built-in</div>
@@ -115,6 +136,7 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
               <span className="snip-prefix">{b.prefix}</span>
               <span className="snip-name">{b.name}</span>
               <span className="snip-tag">{dialectText(b.dialects)}</span>
+              {preview(b)}
             </div>
           ))}
         </div>
@@ -131,10 +153,11 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
                   <Copy size={14} strokeWidth={1.5} aria-hidden /> Customize
                 </button>
               </div>
+              {selectedBuiltin.description && <p className="snip-desc">{selectedBuiltin.description}</p>}
               <div className="form-label">Body</div>
-              <pre className="snip-code">{selectedBuiltin.body}</pre>
+              <SnippetCode className="snip-code" code={selectedBuiltin.body} dialect={colorDialect(selectedBuiltin.dialects)} theme={theme} aria-label="Body" />
               <div className="form-label">Inserts</div>
-              <pre className="snip-code snip-preview">{snippetPreview(selectedBuiltin.body)}</pre>
+              <SnippetCode className="snip-code snip-preview" code={snippetPreview(selectedBuiltin.body)} dialect={colorDialect(selectedBuiltin.dialects)} theme={theme} markPlaceholders={false} aria-label="Inserts" />
             </>
           )}
           {draft && (
@@ -163,17 +186,20 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
                 <span className="form-label">Description (optional)</span>
                 <input className="input" value={draft.description ?? ''} onChange={(e) => setDraft({ ...draft, description: e.target.value || null })} />
               </label>
-              <label className="snip-field">
+              {/* a div, not a <label>: clicks inside the Monaco editor must not be re-targeted to its input */}
+              <div className="snip-field">
                 <span className="form-label">Body</span>
-                <textarea aria-label="Body" className="input mono snip-textarea" rows={8} spellCheck={false} value={draft.body}
-                  onChange={(e) => setDraft({ ...draft, body: e.target.value })} aria-invalid={!!problem('body')} aria-describedby="snip-syntax" />
-                {problem('body') && <span className="form-error">{problem('body')}</span>}
-                <span id="snip-syntax" className="form-help">Tab stops: <code>$1</code>, <code>{'${1:default}'}</code>; final cursor <code>$0</code>; same number = same text. <code>\$</code> for a literal dollar.</span>
-              </label>
+                <SnippetBodyEditor value={draft.body} onChange={(body) => setDraft((d) => (d ? { ...d, body } : d))} dialect={colorDialect(draft.dialects)} theme={theme}
+                  ariaLabel="Body" invalid={!!problem('body')} describedBy={problem('body') ? 'snip-body-error snip-syntax' : 'snip-syntax'} />
+                {problem('body') && <span id="snip-body-error" className="form-error">{problem('body')}</span>}
+                <span id="snip-syntax" className="form-help">
+                  Tab stops: <code className="snip-ph">$1</code>, <code className="snip-ph">{'${1:default}'}</code>; final cursor <code className="snip-ph snip-ph-final">$0</code>; same number = same text. <code>\$</code> for a literal dollar.
+                </span>
+              </div>
               {draft.body && (
                 <>
                   <div className="form-label">Inserts</div>
-                  <pre className="snip-code snip-preview">{snippetPreview(draft.body)}</pre>
+                  <SnippetCode className="snip-code snip-preview" code={snippetPreview(draft.body)} dialect={colorDialect(draft.dialects)} theme={theme} markPlaceholders={false} aria-label="Inserts" />
                 </>
               )}
               <div className="snip-actions">
@@ -189,6 +215,7 @@ export function SnippetsSettings({ snippets, onChange }: SnippetsSettingsProps) 
             <div className="snip-empty-editor">
               <Braces size={24} strokeWidth={1.5} aria-hidden />
               <div>Select a snippet or create your own</div>
+              <div className="snip-empty-hint">In the editor, type a prefix at the start of a statement, or press {displayShortcut('Ctrl+J')}.</div>
               <button className="btn btn-primary" onClick={() => create()}><Plus size={14} strokeWidth={1.5} aria-hidden /> New snippet</button>
             </div>
           )}
@@ -203,10 +230,16 @@ function overlaps(a: Dialect[] | null, b: Dialect[] | null): boolean {
   return a.some((x) => b.includes(x));
 }
 
-/** Connected to Settings.snippets (persisted engine-side through PUT /settings). */
-export function SnippetsSettingsConnected() {
-  const snippets = useSettings((s) => (s.settings as { snippets?: Snippet[] }).snippets ?? []);
-  return <SnippetsSettings snippets={snippets} onChange={(next) => useSettings.getState().update({ snippets: next })} />;
+/** Stable empty list: a selector returning a fresh `[]` would make the store snapshot change on every read. */
+const NO_SNIPPETS: Snippet[] = [];
+
+/**
+ * Connected to Settings.snippets (persisted engine-side through PUT /settings). Rendered without props in Settings ›
+ * Snippets and with the tab-view props in the Snippets tab (openSnippetsSettings).
+ */
+export function SnippetsSettingsConnected(props: Partial<TabViewProps>) {
+  const snippets = useSettings((s) => (s.settings as { snippets?: Snippet[] }).snippets ?? NO_SNIPPETS);
+  return <SnippetsSettings snippets={snippets} theme={props.theme} onChange={(next) => useSettings.getState().update({ snippets: next })} />;
 }
 
 export default SnippetsSettingsConnected;

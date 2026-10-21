@@ -12,6 +12,8 @@ export interface ConsoleEdit {
   dialect: Dialect;
   /** Definition on the server when the tab was opened; fetched again when missing. */
   serverDdl?: string;
+  /** Editor text as opened or last saved to the database (the toolbar Save button's "unsaved changes" baseline). */
+  savedText?: string;
 }
 
 /** Each console tab is bound to its own connection and database (several connections can be open at once). */

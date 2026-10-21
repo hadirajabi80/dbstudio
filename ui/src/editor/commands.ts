@@ -8,7 +8,8 @@
 // phase), so it never runs twice. Format selection (a Ctrl+K chord) and the tab-focus toggle stay with Monaco
 // (`keyHandler: 'host'`).
 //
-// Commands: format.document, format.selection, snippet.insert, snippets.manage, editor.toggleTabFocus.
+// Commands: format.document, format.selection, snippet.insert, editor.triggerSuggest, snippets.manage,
+// editor.toggleTabFocus.
 // Explain commands live in components/PlanView/commands.ts.
 import { registerCommands, type Command } from '../commands/registry';
 import { FORMAT_ALT_SHORTCUT, isMac } from '../commands/keys';
@@ -32,6 +33,18 @@ function consoleInFocus(): string | null {
   // Focus is in another editor (designer preview, codegen): act on that one.
   if (b && b.editor.hasTextFocus() && !b.tabId) return null;
   return getActiveConsole()?.id ?? null;
+}
+
+/** Focus is inside a Monaco editor (which then handles its own keys). */
+function focusInEditor(): boolean {
+  const a = typeof document !== 'undefined' ? document.activeElement : null;
+  return a instanceof Element && !!a.closest('.monaco-editor');
+}
+
+/** Focus is on a results grid, whose own Ctrl+Space selects the column (glide-data-grid). */
+function focusInGrid(): boolean {
+  const a = typeof document !== 'undefined' ? document.activeElement : null;
+  return a instanceof Element && (a.tagName === 'CANVAS' || !!a.closest('.dvn-scroller, [data-testid="data-grid-canvas"]'));
 }
 
 const writable = () => {
@@ -76,6 +89,19 @@ export const EDITOR_COMMANDS: Command[] = [
     run: withEditor(
       (h) => (h.openSnippetPicker ? (h.focus(), h.openSnippetPicker(), true) : false),
       (a, b) => a.openSnippetPicker(b.editor, b),
+    ),
+  },
+  {
+    // Inside an editor its own action (SqlEditor `dbstudio.triggerSuggest`) takes Ctrl+Space / Ctrl+I; this command
+    // covers focus elsewhere in the console (toolbar, results grid, a dialog that just closed): it focuses the
+    // console's editor and opens IntelliSense there. Ctrl+I is the alternative for keyboard setups where the OS takes
+    // Ctrl+Space (IME / input-language switching).
+    id: 'editor.triggerSuggest', title: 'Trigger suggest', category: 'Edit', shortcut: 'MacCtrl+Space', altShortcuts: ['Mod+I'],
+    showAltShortcuts: true, scope: 'console', icon: 'Sparkles', keywords: 'intellisense autocomplete completion suggestions code completion',
+    when: () => !focusInEditor() && !focusInGrid() && writable(),
+    run: withEditor(
+      (h) => (h.triggerSuggest ? (h.focus(), h.triggerSuggest(), true) : false),
+      (a, b) => { b.editor.focus(); a.triggerSuggest(b.editor); },
     ),
   },
   {

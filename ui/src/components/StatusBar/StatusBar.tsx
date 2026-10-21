@@ -14,6 +14,7 @@ import { useActiveTab } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { connColorName } from '../../theme/connColors';
 import { ColorDot } from '../common/ConnectionBadge';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 
 const WS_LABEL: Record<string, string> = {
   idle: 'Engine: idle', connecting: 'Engine: connecting…', open: 'Engine connected', reconnecting: 'Engine: reconnecting…',
@@ -69,6 +70,7 @@ export function StatusBar() {
       </button>
       {conn ? (
         <button className="sb-item sb-button" title={`${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''} — change connection (${displayShortcut('Mod+Shift+K')})`} onClick={() => runCommand('connections.change')}>
+          <ProviderLogo providerId={conn.providerId} size={14} />
           <ColorDot color={conn.color} size={8} />
           {conn.name}
           {conn.readOnly && <Lock size={11} aria-label="Read-only" />}

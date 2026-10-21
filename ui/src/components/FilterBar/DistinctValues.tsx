@@ -111,7 +111,7 @@ export function DistinctValuesPopover({ column, ordinal, at, load, nullText, onA
       </div>
       <div className="fb-distinct-search">
         <Search size={13} />
-        <input className="input xs borderless" autoFocus placeholder="Search values" aria-label="Search values" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input xs borderless" autoFocus placeholder="Search values" aria-label="Search values" dir="auto" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="fb-distinct-list" role="listbox" aria-multiselectable="true">
         {!data && !error && (
@@ -132,7 +132,7 @@ export function DistinctValuesPopover({ column, ordinal, at, load, nullText, onA
                 setChecked(next);
               }}
             />
-            <span className={`v${it.value === null ? ' null' : ''}`}>{formatCell(it.value, column, fmt) || '(empty)'}</span>
+            <span className={`v${it.value === null ? ' null' : ''}`} dir="auto">{formatCell(it.value, column, fmt) || '(empty)'}</span>
             <span className="c">{it.count.toLocaleString()}</span>
           </label>
         ))}

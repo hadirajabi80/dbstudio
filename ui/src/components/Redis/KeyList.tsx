@@ -162,7 +162,7 @@ export const KeyList = forwardRef<KeyListHandle, KeyListProps>(function KeyList(
                 onClick={() => { setCursor(i); onToggle(r.prefix); }}>
                 {r.expanded ? <ChevronDown size={14} className="redis-twisty" /> : <ChevronRight size={14} className="redis-twisty" />}
                 {r.expanded ? <FolderOpen size={14} className="redis-folder-icon" /> : <Folder size={14} className="redis-folder-icon" />}
-                <span className="redis-keyname">{r.label}</span>
+                <span className="redis-keyname" dir="auto">{r.label}</span>
                 <span className="redis-count tabular">{formatCount(r.count)}</span>
               </div>
             );
@@ -178,7 +178,7 @@ export const KeyList = forwardRef<KeyListHandle, KeyListProps>(function KeyList(
               onContextMenu={(e) => { if (onContextMenu) { e.preventDefault(); setCursor(i); onSelect(k.key); onContextMenu(k.key, e.clientX, e.clientY); } }}>
               {tree && <span className="redis-twisty-spacer" />}
               <span className="redis-type-badge" style={{ color: TYPE_COLOR[k.type], borderColor: TYPE_COLOR[k.type] }}>{typeIcon(k.type, 12)}{TYPE_LABEL[k.type]}</span>
-              <span className="redis-keyname mono">{tree ? r.label : k.key}</span>
+              <span className="redis-keyname mono" dir="auto">{tree ? r.label : k.key}</span>
               <span className={`redis-ttl tabular ${ttl >= 0 && ttl < 60 ? 'soon' : ''}`} aria-label={ttl >= 0 ? `TTL ${formatTtl(ttl)}` : 'No TTL'}>{ttl >= 0 ? formatTtl(ttl) : '–'}</span>
               <span className="redis-size tabular">{size !== null ? formatBytes(size) : ''}</span>
             </div>

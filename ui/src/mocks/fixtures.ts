@@ -252,6 +252,21 @@ function isoDate(rnd: () => number, year = 2025): string {
   return `${year}-${pad(m)}-${pad(d)}T${pad(Math.floor(rnd() * 24))}:${pad(Math.floor(rnd() * 60))}:${pad(Math.floor(rnd() * 60))}.${pad(Math.floor(rnd() * 1000), 3)}0000`;
 }
 
+/**
+ * Persian, Arabic and Hebrew customers (right-to-left data in the grid, editors and record view): replace the names
+ * of a few early rows; the random sequence is consumed as for every other row, so the remaining rows are unchanged.
+ */
+const RTL_CUSTOMERS: Record<number, { name: string; email: string | null; notes: string | null }> = {
+  1: { name: 'علی رضایی', email: 'ali.rezaei@example.com', notes: 'مشتری ویژه؛ تماس بعد از ساعت ۵ عصر' },
+  2: { name: 'مریم احمدی', email: 'maryam.ahmadi@example.com', notes: 'Order #12 سفارش' },
+  3: { name: 'محمد عبدالله', email: 'mohammed@example.com', notes: '12 سفارش در انتظار ارسال به تهران (Tehran)' },
+  4: { name: 'Sara سارا کریمی', email: 'sara.karimi@example.com', notes: 'خرید از فروشگاه آنلاین با کد تخفیف SUMMER-2026 و ارسال رایگان به شیراز، اصفهان و مشهد' },
+  5: { name: 'דוד כהן', email: null, notes: 'שלום עולם' },
+};
+
+const EVENT_KINDS = ['view', 'click', 'add_to_cart', 'checkout', 'search'];
+const EVENT_KINDS_FA = ['بازدید', 'کلیک', 'افزودن به سبد خرید', 'پرداخت سفارش', 'جستجو'];
+
 const LONG_NOTE = `Customer asked for a detailed delivery log.\n${'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(700)}`;
 
 function b64(bytes: number[]): string {
@@ -284,11 +299,14 @@ export const SHOP_TABLES: FixtureTable[] = [
     gen: (i, rnd) => {
       const f = FIRST[Math.floor(rnd() * FIRST.length)];
       const l = LAST[Math.floor(rnd() * LAST.length)];
-      const name = `${f} ${l}`;
-      const email = rnd() < 0.08 ? null : `${f}.${l}`.toLowerCase().replace(/[^a-z.]/g, '') + `${i}@example.com`;
+      const rtl = RTL_CUSTOMERS[i];
+      const name = rtl?.name ?? `${f} ${l}`;
+      let email = rnd() < 0.08 ? null : `${f}.${l}`.toLowerCase().replace(/[^a-z.]/g, '') + `${i}@example.com`;
+      if (rtl) email = rtl.email;
       const profile = rnd() < 0.3 ? null : JSON.stringify({ tier: ['bronze', 'silver', 'gold'][i % 3], newsletter: rnd() < 0.5, tags: ['vip', 'b2b', 'early'].slice(0, i % 4) });
       let notes: CellValue = rnd() < 0.6 ? null : rnd() < 0.5 ? 'Prefers e-mail\nCall after 5pm' : 'Regular';
       if (i === 6) notes = { $trunc: LONG_NOTE.slice(0, 32768), len: LONG_NOTE.length };
+      if (rtl) notes = rtl.notes;
       return [i + 1, name, email, rnd() < 0.05 ? null : 1 + Math.floor(rnd() * COUNTRIES.length), rnd() < 0.85, isoDate(rnd, 2024), profile, notes];
     },
     ddl: 'CREATE TABLE customers (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  name TEXT NOT NULL,\n  email TEXT,\n  country_id INTEGER REFERENCES countries(id),\n  is_active BOOLEAN NOT NULL DEFAULT 1,\n  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  profile JSON,\n  notes TEXT\n);',
@@ -350,7 +368,8 @@ export const SHOP_TABLES: FixtureTable[] = [
       { name: 'session', type: 'TEXT', kind: 'guid', nullable: false },
     ],
     gen: (i, rnd) => [
-      i + 1, isoDate(rnd, 2026), rnd() < 0.2 ? null : 1 + Math.floor(rnd() * 500), ['view', 'click', 'add_to_cart', 'checkout', 'search'][Math.floor(rnd() * 5)],
+      // every third event has a Persian kind label: RTL text across 150k rows for grid scrolling performance
+      i + 1, isoDate(rnd, 2026), rnd() < 0.2 ? null : 1 + Math.floor(rnd() * 500), (i % 3 === 1 ? EVENT_KINDS_FA : EVENT_KINDS)[Math.floor(rnd() * 5)],
       rnd() < 0.1 ? null : Math.round(rnd() * 500000) / 100, `${Math.floor(rnd() * 0xffffffff).toString(16).padStart(8, '0')}-4a1b-9c2d-${pad(i % 10000, 4)}-${Math.floor(rnd() * 0xffffff).toString(16).padStart(12, '0')}`,
     ],
     ddl: 'CREATE TABLE events (\n  id INTEGER PRIMARY KEY,\n  ts DATETIME NOT NULL,\n  customer_id INTEGER REFERENCES customers(id),\n  kind TEXT NOT NULL,\n  duration_ms REAL,\n  session TEXT NOT NULL\n);',

@@ -102,6 +102,7 @@
   font-family: var(--font-mono);
 }
 textarea.rv-input {
+  unicode-bidi: plaintext;
   resize: vertical;
   height: auto;
   padding: 4px 6px;

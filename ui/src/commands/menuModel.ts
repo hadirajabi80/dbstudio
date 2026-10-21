@@ -213,6 +213,8 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     h('explorer.drop'),
   ],
   'explorer.routine': [
+    // Procedures, functions and Oracle packages (hidden for triggers and on SQLite): the parameter form.
+    { command: 'routine.execute', optional: true, hideDisabled: true, label: 'Execute…' }, 'separator',
     c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newProcedure', true), c('connections.refreshCatalog'), 'separator',

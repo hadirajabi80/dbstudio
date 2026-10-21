@@ -159,6 +159,7 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
             ref={valueRef}
             className="input xs"
             aria-label="Value"
+            dir="auto"
             value={texts[0] ?? ''}
             placeholder={placeholder(0)}
             spellCheck={false}
@@ -170,11 +171,11 @@ export function ConditionRow({ cond, columns, onChange, onRemove, onSubmit, auto
         </span>
       ) : arity === 'two' ? (
         <span className="fb-value two">
-          <input ref={valueRef} className="input xs" aria-label="From" value={texts[0] ?? ''} placeholder={placeholder(0)} spellCheck={false}
+          <input ref={valueRef} className="input xs" aria-label="From" dir="auto" value={texts[0] ?? ''} placeholder={placeholder(0)} spellCheck={false}
             onChange={(e) => setText(0, e.target.value)} onBlur={() => commit(texts, true)} onKeyDown={keyDown} />
           {dateInput(0)}
           <span className="fb-and">and</span>
-          <input className="input xs" aria-label="To" value={texts[1] ?? ''} placeholder={placeholder(1)} spellCheck={false}
+          <input className="input xs" aria-label="To" dir="auto" value={texts[1] ?? ''} placeholder={placeholder(1)} spellCheck={false}
             onChange={(e) => setText(1, e.target.value)} onBlur={() => commit(texts, true)} onKeyDown={keyDown} />
           {dateInput(1)}
         </span>

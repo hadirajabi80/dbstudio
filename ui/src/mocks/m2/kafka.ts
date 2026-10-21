@@ -81,7 +81,7 @@ export function createKafkaFixture(now = Date.now()) {
     const cust = `cust-${i % 17}`;
     append(orders, i % 3, {
       ts: now - (300 - i) * 60_000, key: cust,
-      value: JSON.stringify({ id: 10_000 + i, customer: cust, total: Math.round(((i * 37) % 500) * 100) / 100 + 0.5, note: i % 10 === 0 ? 'rush' : 'normal', items: [{ sku: `SKU-${i % 9}`, qty: 1 + (i % 4) }] }),
+      value: JSON.stringify({ id: 10_000 + i, customer: cust, total: Math.round(((i * 37) % 500) * 100) / 100 + 0.5, note: i % 10 === 0 ? 'rush' : i === 7 ? 'Order #12 سفارش، تحویل به تهران' : 'normal', items: [{ sku: `SKU-${i % 9}`, qty: 1 + (i % 4) }] }),
       headers: [{ key: 'traceparent', value: `00-${(i + 1).toString(16).padStart(32, '0')}-01` }, { key: 'source', value: 'web' }],
     });
   }

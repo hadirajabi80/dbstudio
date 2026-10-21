@@ -444,29 +444,6 @@ html.native-material .topbar {
   border-top: 1px solid var(--border);
 }
 
-/* provider icons (lucide glyph on a tinted tile) */
-.provider-sqlserver {
-  background: var(--provider-sqlserver);
-}
-.provider-oracle {
-  background: var(--provider-oracle);
-}
-.provider-sqlite {
-  background: var(--provider-sqlite);
-}
-.provider-postgresql {
-  background: var(--provider-postgresql);
-}
-.provider-redis {
-  background: var(--provider-redis);
-}
-.provider-mongodb {
-  background: var(--provider-mongodb);
-}
-.provider-kafka {
-  background: var(--provider-kafka);
-}
-
 /* ---------- empty states ---------- */
 .empty-state {
   display: flex;
@@ -1037,7 +1014,7 @@ html.native-material .topbar {
   opacity: 0.6;
   cursor: default;
 }
-.provider-card .provider-icon {
+.provider-card .provider-logo {
   border-radius: var(--radius);
   margin-bottom: var(--space-1);
 }
@@ -1119,11 +1096,12 @@ html.native-material .topbar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-5);
-  padding-top: var(--space-5);
+  /* the same space below as above, so the row does not sit on the edge/line underneath it */
+  padding: var(--space-5) 0;
   border-top: 1px solid var(--border);
   color: var(--fg-muted);
   font-size: var(--text-sm);
-  margin: 0;
+  margin: 0 0 var(--space-3);
 }
 .welcome .welcome-keys > span {
   display: inline-flex;
@@ -1368,6 +1346,10 @@ html.native-material .topbar {
   column-gap: var(--space-6);
   align-items: start;
   overflow-x: hidden;
+  /* keycaps keep a gap before the scrollbar: the gutter is always reserved (no reflow when it appears) and the
+     padding sits between the last keycap and it, in px tokens so it scales with the zoom like the keycaps */
+  scrollbar-gutter: stable;
+  padding-right: var(--space-2);
 }
 
 /* ---------- density fixes for the 220–480 px dock ---------- */

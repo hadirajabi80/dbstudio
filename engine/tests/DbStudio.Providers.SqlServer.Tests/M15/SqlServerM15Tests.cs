@@ -432,4 +432,42 @@ public sealed class SqlServerM15ConformanceTests(SqlServerFixture fixture) : M15
     protected override IDdlScripter Scripter { get; } = new SqlServerDdlScripter();
     protected override IDesignerDatabase Database { get; } = new SqlServerDesignerDatabase();
     protected override IPlanReader PlanReader { get; } = new SqlServerPlanReader();
+
+    /// <summary>
+    /// The UI's Execute routine call (ui/src/components/ExecuteRoutine/routineSql.ts): named binds, a parameter left on
+    /// its default, OUTPUT into a declared variable, and the return value plus outputs SELECTed as the last result set.
+    /// </summary>
+    [SkippableFact]
+    public async Task ExecuteRoutine_GeneratedCall_ReturnsOutputsAsTheLastResultSet()
+    {
+        RequireAvailable();
+        var proc = "m15_er_" + Guid.NewGuid().ToString("N")[..8];
+        await Fixture.RunBatchesAsync([
+            $"CREATE PROCEDURE dbo.{proc} @Year int, @Month int = 3, @Total decimal(12,2) OUTPUT, @Note nvarchar(50) = NULL AS " +
+            "BEGIN SET NOCOUNT ON; SELECT @Year AS y, @Month AS m, @Note AS note; SET @Total = @Year + @Month + 0.5; RETURN 7; END",
+        ]);
+        try
+        {
+            await using var session = await Fixture.OpenSessionAsync();
+            var (summary, sink) = await RunAsync(session, [P("Year", "int", 2024), P("Note", "string", "it's")],
+                "DECLARE @return_value int, @Total decimal(12,2);\n" +
+                $"EXEC @return_value = [dbo].[{proc}]\n    @Year = @Year,\n    @Total = @Total OUTPUT,\n    @Note = @Note;\n" +
+                "SELECT @return_value AS [Return value], @Total AS [Total];");
+            Assert.True(summary.Status == ExecutionStatus.Ok, string.Join("; ", sink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal(2, sink.ResultSets.Count);
+            Assert.Equal(["2024", "3", "it's"], sink.ResultSets[0].Rows.Single().Select(v => Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)));
+            Assert.Equal(["Return value", "Total"], sink.ResultSets[1].Columns.Select(c => c.Name));
+            Assert.Equal(["7", "2027.50"], sink.ResultSets[1].Rows.Single().Select(v => Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)));
+
+            // Scalar function with DEFAULT for an omitted argument.
+            await Fixture.RunBatchesAsync([$"CREATE FUNCTION dbo.{proc}_fn(@a decimal(12,2), @rate decimal(5,2) = 0.10) RETURNS decimal(12,2) AS BEGIN RETURN @a * @rate; END"]);
+            var (fn, fnSink) = await RunAsync(session, [P("a", "decimal", "200")], $"SELECT [dbo].[{proc}_fn](@a, DEFAULT) AS [Result];");
+            Assert.True(fn.Status == ExecutionStatus.Ok, string.Join("; ", fnSink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal("20.00", Convert.ToString(fnSink.ResultSets.Single().Rows.Single()[0], System.Globalization.CultureInfo.InvariantCulture));
+        }
+        finally
+        {
+            await Fixture.RunBatchesAsync([$"DROP PROCEDURE IF EXISTS dbo.{proc}", $"DROP FUNCTION IF EXISTS dbo.{proc}_fn"]);
+        }
+    }
 }

@@ -10,7 +10,8 @@ import { isMac } from '../../commands/keys';
 import { CONNECTION_PALETTE, connColorCss } from '../../theme/connColors';
 import { Dialog } from '../common/Dialog';
 import { Select } from '../common/Select';
-import { PROVIDER_LABEL, ProviderIcon } from '../common/icons';
+import { PROVIDER_LABEL } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 
 type Values = Record<string, unknown>;
 
@@ -263,7 +264,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
               onClick={() => pickProvider(p.id)}
               disabled={isEdit && p.id !== providerId}
             >
-              <ProviderIcon providerId={p.id} size={22} />
+              <ProviderLogo providerId={p.id} size={22} />
               <span>{PROVIDER_LABEL[p.id] ?? p.displayName}</span>
             </button>
           ))}

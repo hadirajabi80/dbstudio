@@ -69,6 +69,7 @@
   --shadow-dialog: 0 24px 64px rgb(16 24 40 / 22%), 0 0 0 1px rgb(16 24 40 / 6%);
   --scrollbar: rgb(0 0 0 / 18%);
   --scrollbar-hover: rgb(0 0 0 / 32%);
+  --scrollbar-active: rgb(0 0 0 / 42%);
 
   /* data kinds in the grid / cell viewer */
   --null: var(--fg-muted);
@@ -87,6 +88,13 @@
   --provider-mongodb: #15803d;
   --provider-kafka: #374151;
   --provider-fg: #ffffff;
+  /* parts of the provider logos (theme/brand) that are black or very dark in the artwork */
+  --logo-ink: #231f20;
+  --logo-sqlite-feather: #003956;
+  /* the red marks, brightened a little on dark so they keep 3:1 on --bg-elevated (dialogs) */
+  --logo-oracle: #ea1b22;
+  --logo-redis: #d82c20;
+  --logo-redis-side: #a41e11;
 
   /* M2: log levels (Logs & activity view) */
   --log-debug: var(--fg-muted);
@@ -141,6 +149,31 @@
   --syn-variable: #b45309;
   --syn-operator: #374151;
   --syn-type: #0e7490;
+
+  /* IntelliSense kind icons (theme/monacoTheme.ts symbolIcon.*, editor/editor-widgets.css): one hue per kind,
+     >= 3:1 on the suggest list (--bg-elevated) and on its selected row (--bg-selected) */
+  --kind-table: var(--obj-table);
+  --kind-view: var(--obj-view);
+  --kind-column: #0e7490;
+  --kind-function: #15803d;
+  --kind-keyword: var(--fg-muted);
+  --kind-snippet: #c2410c;
+  --kind-schema: #a16207;
+  --kind-database: #4338ca;
+  --kind-alias: #be185d;
+  --kind-variable: var(--syn-variable);
+  --kind-other: var(--fg-muted);
+  /* hovered row inside a popup (suggest list, Monaco lists): one step off --bg-elevated */
+  --bg-hover-elevated: var(--bg-hover);
+  /* diff editor (Compare with server): soft line tints, a stronger tint on the changed characters, a faint hatch where
+     the other side has no lines, and solid marks for the gutter / overview; body and syntax text keep 4.5:1 on top */
+  --diff-inserted-line: rgb(22 163 74 / 5%);
+  --diff-inserted-text: rgb(22 163 74 / 4%);
+  --diff-removed-line: rgb(220 38 38 / 3%);
+  --diff-removed-text: rgb(220 38 38 / 3%);
+  --diff-inserted-mark: rgb(22 163 74 / 55%);
+  --diff-removed-mark: rgb(220 38 38 / 50%);
+  --diff-diagonal: rgb(16 24 40 / 5%);
 }
 
 /* ------------------------------------------------------------------- dark */
@@ -201,6 +234,7 @@
   --shadow-dialog: 0 24px 72px rgb(0 0 0 / 60%), 0 0 0 1px rgb(255 255 255 / 7%);
   --scrollbar: rgb(255 255 255 / 16%);
   --scrollbar-hover: rgb(255 255 255 / 30%);
+  --scrollbar-active: rgb(255 255 255 / 40%);
 
   --null: var(--fg-muted);
   --num: #7cc4ff;
@@ -216,6 +250,11 @@
   --provider-mongodb: #4fca7d;
   --provider-kafka: #a3abb8;
   --provider-fg: #0b1220;
+  --logo-ink: #e6e8eb;
+  --logo-sqlite-feather: #d4ecfb;
+  --logo-oracle: #f23b3f;
+  --logo-redis: #e8453a;
+  --logo-redis-side: #b8301f;
 
   --log-debug: var(--fg-muted);
   --log-info: var(--info);
@@ -260,6 +299,26 @@
   --syn-variable: #fbbf24;
   --syn-operator: #cbd5e1;
   --syn-type: #67e8f9;
+
+  --kind-table: var(--obj-table);
+  --kind-view: var(--obj-view);
+  --kind-column: #67e8f9;
+  --kind-function: #4ade80;
+  --kind-keyword: var(--fg-muted);
+  --kind-snippet: #fb923c;
+  --kind-schema: #facc15;
+  --kind-database: #a5b4fc;
+  --kind-alias: #f472b6;
+  --kind-variable: var(--syn-variable);
+  --kind-other: var(--fg-muted);
+  --bg-hover-elevated: #383d46;
+  --diff-inserted-line: rgb(74 222 128 / 5%);
+  --diff-inserted-text: rgb(74 222 128 / 4%);
+  --diff-removed-line: rgb(248 113 113 / 6%);
+  --diff-removed-text: rgb(248 113 113 / 6%);
+  --diff-inserted-mark: rgb(74 222 128 / 55%);
+  --diff-removed-mark: rgb(248 113 113 / 55%);
+  --diff-diagonal: rgb(255 255 255 / 4%);
 }
 
 /* ------------------------------------------------- theme-independent scale */
@@ -267,6 +326,9 @@
   /* typography */
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
   --font-mono: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  /* Result grids and data values: the mono stack, then fonts that shape Persian/Arabic/Hebrew (Segoe UI and Tahoma
+     on Windows, SF Arabic and Geeza Pro on macOS, Noto on Linux) before the Courier New / generic monospace fallbacks. */
+  --font-grid: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Segoe UI', Tahoma, 'SF Arabic', 'Geeza Pro', 'Noto Sans Arabic', 'Noto Sans Hebrew', 'Courier New', monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-md: 13px;

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import * as monaco from '../../editor/monaco';
 import { ensureMonacoSetup, THEME_IDS } from '../../editor/monaco-setup';
 import { baseMonacoOptions, remeasureAfterFonts } from '../../editor/monacoOptions';
+import { bindEditorFontSize, editorFontSize } from '../../editor/fontZoom';
 import type { EffectiveTheme } from '../../theme/useTheme';
 
 const LOADERS: Record<string, () => Promise<unknown>> = {
@@ -50,7 +51,7 @@ export function CodeView({ value, language, theme, label }: { value: string; lan
       automaticLayout: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      fontSize: 13,
+      fontSize: editorFontSize(), // Settings.editor.fontSize, live (bindEditorFontSize)
       theme: THEME_IDS[theme],
       ariaLabel: label,
       renderLineHighlight: 'none',
@@ -61,8 +62,10 @@ export function CodeView({ value, language, theme, label }: { value: string; lan
     // the gold / orchid / blue bracket colours would stay. Turn it off on the model itself.
     e.getModel()?.updateOptions({ bracketColorizationOptions: { enabled: false, independentColorPoolPerBracketType: false } });
     ed.current = e;
+    const unbindFont = bindEditorFontSize(e, { suggest: false });
     remeasureAfterFonts();
     return () => {
+      unbindFont();
       e.getModel()?.dispose();
       e.dispose();
       ed.current = null;

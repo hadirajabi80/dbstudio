@@ -121,6 +121,11 @@
 #portal {
   z-index: calc(var(--z-dialog, 900) - 10) !important;
 }
+/* in-place editor (glide's textarea has dir="auto"): every line takes the direction of its own text, so a Persian or
+   Arabic value is typed right-to-left and right-aligned, and mixed lines keep their bidi order */
+#portal .gdg-input {
+  unicode-bidi: plaintext;
+}
 .grid-host {
   /* the canvas stops after the last row; the rest of the pane is plain panel */
   background: var(--bg-panel);

@@ -1,13 +1,13 @@
 {
   "name": "dbstudio-ui",
   "private": true,
-  "version": "0.2.2",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:mock": "vite --mode mock",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b",
+    "build": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -b && vite build",
+    "typecheck": "node --max-old-space-size=8192 node_modules/typescript/bin/tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:intel": "vitest run --config vitest.intel.config.ts",

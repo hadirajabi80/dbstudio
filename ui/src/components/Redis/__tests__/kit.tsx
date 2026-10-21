@@ -1,6 +1,5 @@
 // Test helpers for the Redis views: MSW over a MockEngine (with the Redis mock), the fake WebSocket, and a host that
 // renders a Redis tab from the tabs store plus the dialog host and the shared confirmation dialog.
-import { configure } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { configureClient } from '../../../api/client';
@@ -24,8 +23,7 @@ import { WorkbenchView } from '../WorkbenchView';
 
 export const ENGINE_URL = 'http://engine.test';
 
-// The Redis views chain several requests (server → scan → memory): give async queries room on a loaded CI runner.
-configure({ asyncUtilTimeout: 3000 });
+// Async queries wait asyncUtilTimeout (5 s, src/test/setup.ts): the Redis views chain several requests (server → scan → memory).
 
 export interface RecordedRequest { method: string; path: string; body: unknown }
 

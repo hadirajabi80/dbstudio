@@ -1,6 +1,6 @@
 import type { ConnectionProfile } from '../../api/types';
 import { CONNECTION_PALETTE, connColorCss, connColorName } from '../../theme/connColors';
-import { ProviderIcon } from './icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 
 export function ColorDot({ color, size = 8 }: { color: string | null | undefined; size?: number }) {
   const css = connColorCss(color);
@@ -19,7 +19,7 @@ export function ConnectionBadge({ conn }: { conn: ConnectionProfile | undefined 
   if (!conn) return <span className="conn-badge muted">No connection</span>;
   return (
     <span className="conn-badge">
-      <ProviderIcon providerId={conn.providerId} color={conn.color} size={14} />
+      <ProviderLogo providerId={conn.providerId} color={conn.color} size={14} />
       <span className="conn-badge-name">{conn.name}</span>
       {conn.readOnly && <span className="pill pill-muted">read-only</span>}
     </span>

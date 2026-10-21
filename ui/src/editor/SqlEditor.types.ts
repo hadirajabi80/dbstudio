@@ -55,7 +55,7 @@ export interface SqlEditorProps {
 export interface SqlEditorHandle {
   focus(): void;
   /** Same resolution the editor uses for Ctrl+Enter. Null when the document is empty. */
-  getRunTarget(label: RunLabel): { batches: SqlBatch[]; text: string } | null;
+  getRunTarget(label: RunLabel): { batches: SqlBatch[]; text: string; /** "selection" when the selection is what runs. */ label?: RunLabel } | null;
   insertText(text: string): void;
   revealLine(line: number, col?: number): void;
   getValue(): string;
@@ -66,6 +66,8 @@ export interface SqlEditorHandle {
   formatSelection?(): number;
   /** Ctrl+J: snippet picker. */
   openSnippetPicker?(): void;
+  /** Ctrl+Space / Ctrl+I: open (or refresh) IntelliSense at the cursor. */
+  triggerSuggest?(): void;
   /** Ctrl+L / Ctrl+Shift+L. False when there is no statement at the cursor or no handler. */
   explain?(mode: ExplainMode): boolean;
 }

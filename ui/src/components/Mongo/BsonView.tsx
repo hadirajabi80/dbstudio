@@ -15,7 +15,7 @@ function quote(s: string, max: number): string {
 /** Inline value (no expansion). `max` cuts long strings. */
 export function ValueText({ v, max = 300 }: { v: BsonValue; max?: number }): ReactNode {
   switch (v.t) {
-    case 'string': return <span className="mg-v mg-v-string" title={v.v.length > max ? `${v.v.length.toLocaleString()} characters` : undefined}>{quote(v.v, max)}</span>;
+    case 'string': return <span className="mg-v mg-v-string" dir="auto" title={v.v.length > max ? `${v.v.length.toLocaleString()} characters` : undefined}>{quote(v.v, max)}</span>;
     case 'int': return <span className="mg-v mg-v-num">{v.v}</span>;
     case 'double': return <span className="mg-v mg-v-num">{formatDouble(v.v)}</span>;
     case 'long': return <span className="mg-v mg-v-num"><span className="mg-v-fn">NumberLong(</span>{v.v}<span className="mg-v-fn">)</span></span>;
@@ -45,7 +45,7 @@ export function ValueText({ v, max = 300 }: { v: BsonValue; max?: number }): Rea
     case 'dbPointer': return <span className="mg-v mg-v-oid">DBPointer('{v.ref}', '{v.id}')</span>;
     case 'trunc': return (
       <span className="mg-v mg-v-string mg-v-trunc" title={`Truncated: ${v.len.toLocaleString()} ${v.binary ? 'bytes' : 'characters'}`}>
-        {v.binary ? `Binary(${v.len.toLocaleString()} bytes)` : quote(v.preview, Math.min(max, 200))}
+        {v.binary ? `Binary(${v.len.toLocaleString()} bytes)` : <span dir="auto">{quote(v.preview, Math.min(max, 200))}</span>}
         <span className="mg-trunc-badge">{v.len.toLocaleString()} {v.binary ? 'bytes' : 'chars'}</span>
       </span>
     );
@@ -79,7 +79,7 @@ function FieldNode({ name, value, depth, openDepth, isIndex }: NodeProps) {
             {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
           </button>
         ) : <span className="mg-twisty-pad" />}
-        <span className={isIndex ? 'mg-key mg-key-index' : 'mg-key'}>{name}</span>
+        <span className={isIndex ? 'mg-key mg-key-index' : 'mg-key'} dir="auto">{name}</span>
         <span className="mg-colon">:</span>
         <span className="mg-val" onDoubleClick={container ? () => setOpen(!open) : undefined}><ValueText v={value} /></span>
       </div>

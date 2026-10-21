@@ -1,0 +1,295 @@
+/*
+ * IntelliSense widgets: the suggest list, its details panel, parameter hints and hovers (every Monaco editor).
+ * Colours come from the Monaco theme (theme/monacoTheme.ts, read here as --vscode-* variables) or straight from the
+ * design tokens; sizes from the token scale. Loaded by editor/monaco.ts right after Monaco's own CSS, so a rule here
+ * wins over a Monaco rule of equal specificity. No colour literals (token lint, theme/tokens.test.ts).
+ */
+
+/* ------------------------------------------------------------ suggest list */
+
+/* Monaco sizes the widget as rows + 1 px borders on a content-box element (and defaults to 12 rows without the
+   borders); under the app-wide `box-sizing: border-box` the content box came out 2 px short, clipping the last row. */
+/* The list gets the laid-out height plus those 2 px, so the bottom padding is 2 px shorter than the top. */
+.monaco-editor .suggest-widget {
+  box-sizing: content-box;
+  padding: var(--space-1) 0 calc(var(--space-1) - 2px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+}
+/* Monaco's list container is a `.tree`, like the Explorer's (app.css `.tree`: padding-bottom 8px, overflow auto):
+   without this reset the list was 8 px shorter than Monaco laid it out and the last visible row was cut off. */
+.monaco-editor .suggest-widget > .tree {
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+}
+.monaco-editor .suggest-widget .monaco-list {
+  border-radius: 0;
+}
+/* "Loading…" / "No suggestions.": also a global class name (app.css `.message`, the Messages tab) */
+.monaco-editor .suggest-widget > .message {
+  align-items: center;
+  padding: 0 var(--space-3);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+
+/* Rows: the highlight is an inset rounded pill (transparent side borders, background clipped to the padding box),
+   so the row height Monaco lays out is untouched. */
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row {
+  border-inline: var(--space-1) solid transparent;
+  background-clip: padding-box;
+  border-radius: calc(var(--radius) + var(--space-1)) / var(--radius);
+  padding-right: var(--space-3); /* clear of the overlay scrollbar */
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused {
+  outline: none;
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents {
+  padding-left: var(--space-1);
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row .suggest-icon {
+  margin-right: var(--space-2);
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main .monaco-highlighted-label .highlight {
+  font-weight: var(--weight-strong);
+}
+
+/* Type / detail: on every row (not only the focused one), right-aligned, muted, in the UI font. */
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .right > .details-label {
+  display: inline;
+  margin-left: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: max(var(--text-sm), 0.9em);
+  color: var(--fg-muted);
+}
+/* hovered and focused rows are tinted: their muted text and matched characters use the "on selected" tokens
+   (plain --fg-muted / --accent drop under 4.5:1 on the hover tint) */
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row:hover > .contents > .main > .right > .details-label,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused > .contents > .main > .right > .details-label {
+  color: var(--fg-muted-on-selected);
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row:hover:not(.focused) > .contents > .main .monaco-highlighted-label .highlight {
+  color: var(--accent-on-selected);
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .left > .signature-label,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .left > .qualifier-label {
+  color: var(--fg-muted);
+  opacity: 1;
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row:hover > .contents > .main > .left > .signature-label,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row:hover > .contents > .main > .left > .qualifier-label,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused > .contents > .main > .left > .signature-label,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused > .contents > .main > .left > .qualifier-label {
+  color: var(--fg-muted-on-selected);
+}
+
+/* Kind icons: database glyphs for the SQL kinds that Monaco draws with generic code symbols, and one hue per kind
+   (symbolIcon.* in the Monaco theme) that the focused row keeps instead of turning every icon --fg. */
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-struct::before {
+  content: '\ebb7'; /* table */
+}
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-interface::before {
+  content: '\ea70'; /* eye: view */
+}
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-folder::before {
+  content: '\eace'; /* database */
+}
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-struct { --suggest-kind-fg: var(--vscode-symbolIcon-structForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-interface { --suggest-kind-fg: var(--vscode-symbolIcon-interfaceForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-field { --suggest-kind-fg: var(--vscode-symbolIcon-fieldForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-function { --suggest-kind-fg: var(--vscode-symbolIcon-functionForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-method { --suggest-kind-fg: var(--vscode-symbolIcon-methodForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-constructor { --suggest-kind-fg: var(--vscode-symbolIcon-constructorForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-module { --suggest-kind-fg: var(--vscode-symbolIcon-moduleForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-namespace { --suggest-kind-fg: var(--vscode-symbolIcon-namespaceForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-folder { --suggest-kind-fg: var(--vscode-symbolIcon-folderForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-keyword { --suggest-kind-fg: var(--vscode-symbolIcon-keywordForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-snippet { --suggest-kind-fg: var(--vscode-symbolIcon-snippetForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-reference { --suggest-kind-fg: var(--vscode-symbolIcon-referenceForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-class { --suggest-kind-fg: var(--vscode-symbolIcon-classForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-variable { --suggest-kind-fg: var(--vscode-symbolIcon-variableForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-type-parameter { --suggest-kind-fg: var(--vscode-symbolIcon-typeParameterForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-constant { --suggest-kind-fg: var(--vscode-symbolIcon-constantForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-enum { --suggest-kind-fg: var(--vscode-symbolIcon-enumeratorForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-value { --suggest-kind-fg: var(--vscode-symbolIcon-enumeratorForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-enum-member { --suggest-kind-fg: var(--vscode-symbolIcon-enumeratorMemberForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-operator { --suggest-kind-fg: var(--vscode-symbolIcon-operatorForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-property { --suggest-kind-fg: var(--vscode-symbolIcon-propertyForeground); }
+.monaco-editor .suggest-widget .suggest-icon.codicon-symbol-text { --suggest-kind-fg: var(--vscode-symbolIcon-textForeground); }
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row .suggest-icon.codicon,
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused .suggest-icon.codicon {
+  color: var(--suggest-kind-fg, var(--kind-other));
+}
+
+/* ------------------------------------------------------- suggest details */
+
+/* Same content-box fix as the list: Monaco sizes the panel as type + docs height without its borders. */
+.monaco-editor .suggest-details {
+  box-sizing: content-box;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+  font-family: var(--font-ui);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .header > .type {
+  margin-right: var(--space-7);
+  padding: var(--space-2) 0 var(--space-2) var(--space-3);
+  color: var(--fg-muted);
+  opacity: 1;
+}
+.monaco-editor .suggest-details.detail-and-doc > .monaco-scrollable-element > .body > .header > .type {
+  padding-bottom: var(--space-1);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close {
+  top: var(--space-1);
+  right: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close:hover {
+  background: var(--bg-hover-elevated);
+  color: var(--fg);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .docs {
+  padding: var(--space-1) var(--space-3) var(--space-2);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .docs.markdown-docs {
+  padding: 0 0 var(--space-1);
+}
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .docs.markdown-docs > div,
+.monaco-editor .suggest-details > .monaco-scrollable-element > .body > .docs.markdown-docs > span:not(:empty) {
+  padding: var(--space-1) var(--space-3);
+}
+.monaco-editor .suggest-details code,
+.monaco-editor .monaco-hover code,
+.monaco-editor .parameter-hints-widget .docs code {
+  border-radius: var(--radius-sm);
+}
+
+/* --------------------------------------------------------- parameter hints */
+
+.monaco-editor .parameter-hints-widget {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+  font-family: var(--font-ui);
+}
+.monaco-editor .parameter-hints-widget > .phwrapper {
+  max-width: 520px;
+}
+.monaco-editor .parameter-hints-widget .signature {
+  padding: var(--space-1) var(--space-3);
+}
+.monaco-editor .parameter-hints-widget .signature.has-docs::after {
+  padding-top: var(--space-1);
+  opacity: 1;
+  border-bottom-color: var(--border-subtle);
+}
+.monaco-editor .parameter-hints-widget .docs {
+  padding: 0 var(--space-3);
+}
+/* the active parameter: accent text on a soft accent chip (padding offset by margin, so the line never reflows) */
+.monaco-editor .parameter-hints-widget .signature .parameter.active {
+  font-weight: var(--weight-strong);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 0 2px;
+  margin: 0 -2px;
+}
+.monaco-editor .parameter-hints-widget .overloads {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* ------------------------------------------------------------------ hovers */
+
+.monaco-editor .monaco-resizable-hover {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+}
+.monaco-editor .monaco-resizable-hover > .monaco-hover {
+  box-shadow: none;
+}
+.monaco-editor .monaco-hover {
+  border-radius: var(--radius-lg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+.monaco-editor .monaco-hover .hover-contents:not(.html-hover-contents) {
+  padding: var(--space-2) var(--space-3);
+}
+.monaco-editor .monaco-hover hr {
+  margin: var(--space-2) calc(-1 * var(--space-3));
+  border-color: var(--border-subtle);
+}
+.monaco-editor .monaco-hover .markdown-hover table {
+  border-collapse: collapse;
+  margin-top: var(--space-1);
+}
+.monaco-editor .monaco-hover .markdown-hover th {
+  padding: 0 var(--space-4) var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  text-align: left;
+}
+.monaco-editor .monaco-hover .markdown-hover td {
+  padding: 1px var(--space-4) 1px 0;
+}
+.monaco-editor .monaco-hover .markdown-hover td:nth-child(2) {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+/* ------------------------------------------------------ font zoom indicator */
+
+/* "Editor font 15 px" while Ctrl + wheel changes the size (editor/fontZoom.ts); fades out after a moment */
+.editor-zoom-badge {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-5);
+  z-index: 30;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-popup);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.editor-zoom-badge.visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* --------------------------------------------------------------- scrollbars */
+
+/* Monaco scrollbars (editors, the Compare diff, lists in popups): the 6 px slider of MONACO_SCROLLBAR as a pill on a
+   clear track, coloured by the theme (scrollbarSlider.* from --scrollbar / --scrollbar-hover / --scrollbar-active),
+   matching the app's ::-webkit-scrollbar thumbs (app.css). */
+.monaco-scrollable-element > .scrollbar {
+  background: transparent;
+}
+.monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: var(--radius-lg);
+}
+
+/* ------------------------------------------------------------ diff editor */
+
+/* Compare with server: the line tints are kept soft for text contrast, so a solid 2 px bar at the start of every
+   changed line (the gutter side of the line number) carries the change at a glance. */
+.monaco-diff-editor .gutter-insert,
+.monaco-editor .gutter-insert {
+  box-shadow: inset 2px 0 0 var(--diff-inserted-mark);
+}
+.monaco-diff-editor .gutter-delete,
+.monaco-editor .gutter-delete {
+  box-shadow: inset 2px 0 0 var(--diff-removed-mark);
+}

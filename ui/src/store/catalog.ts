@@ -54,6 +54,8 @@ function buildSnapshot(d: DbCatalog): CatalogSnapshot | null {
     version: schemas.reduce((m, s) => Math.max(m, s.version), 0),
     databases: d.databasesList,
     schemas,
+    // every schema of the database, loaded or not, so IntelliSense offers them and lazy-loads one on `schema.`
+    ...(d.schemasResp?.schemas.length ? { schemaNames: d.schemasResp.schemas.map((s) => s.name) } : {}),
     ...(d.searchPath?.length ? { searchPath: d.searchPath } : {}),
   };
 }
@@ -115,7 +117,9 @@ export const useCatalog = create<CatalogState>((set, get) => {
       for (const r of requested ?? []) if (!loaded[r]) schemaStatus[r] = 'ready';
       const next: DbCatalog = {
         ...d, loaded, schemaStatus, etags, schemaError,
-        dialect: snap.dialect, defaultSchema: snap.defaultSchema ?? d.defaultSchema, databasesList: snap.databases ?? d.databasesList,
+        dialect: snap.dialect, defaultSchema: snap.defaultSchema ?? d.defaultSchema,
+        // the databases for IntelliSense (T-SQL `db.`): the snapshot's list, else the connection's GET /databases
+        databasesList: snap.databases?.length ? snap.databases : d.databasesList.length ? d.databasesList : get().conns[cid]?.databases?.databases ?? [],
         searchPath: snap.searchPath?.length ? snap.searchPath : d.searchPath ?? searchPathOf(d.schemasResp),
       };
       return { ...next, snapshot: buildSnapshot(next) };
@@ -151,8 +155,8 @@ export const useCatalog = create<CatalogState>((set, get) => {
           const r = await api.schemas(cid, db);
           patchDb(cid, db, (d) => {
             const next: DbCatalog = { ...d, schemasResp: r, schemasStatus: 'ready', defaultSchema: r.defaultSchema ?? d.defaultSchema, searchPath: d.searchPath ?? searchPathOf(r) };
-            // A search_path learned from the schema list reaches an already built snapshot too.
-            return (next.searchPath ?? null) !== (d.searchPath ?? null) && d.snapshot ? { ...next, snapshot: buildSnapshot(next) } : next;
+            // The schema list (and a search_path learned from it) reaches an already built snapshot too.
+            return d.snapshot ? { ...next, snapshot: buildSnapshot(next) } : next;
           });
           return r;
         } catch (e) {
@@ -169,6 +173,8 @@ export const useCatalog = create<CatalogState>((set, get) => {
         try {
           const r = await api.catalog(cid, db, null);
           if (!r.notModified) mergeSnapshot(cid, db, r.snapshot, null, null);
+          // the schema list too, so IntelliSense can offer (and lazy-load) the other schemas
+          void get().loadSchemas(cid, db);
         } catch (e) {
           console.warn('[catalog] default load failed', e);
         }

@@ -1,0 +1,85 @@
+/* Shortcut sheet key search: the "keys held" bar, hinted (held modifiers) and selected (pressed combination) rows.
+   Dimming is colour only, so text keeps a declared contrast pair; transitions use --dur-fast, which is 0 ms under
+   prefers-reduced-motion (tokens.css). */
+.sheet-keys {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--input-h-sm);
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  min-width: 0;
+}
+.sheet-keys-caps {
+  gap: var(--space-1);
+}
+.sheet-keys .sheet-keys-caps kbd {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sheet-keys-plus,
+.sheet-keys-more {
+  color: var(--fg-muted);
+}
+.sheet-keys-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-keys-text.is-result {
+  color: var(--fg);
+  font-weight: var(--weight-strong);
+}
+
+.shortcut-sheet .sheet-body:focus-visible {
+  outline: none;
+}
+.shortcut-sheet .sheet-row {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.shortcut-sheet .sheet-row dt,
+.shortcut-sheet .sheet-binding kbd {
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+/* held modifiers: rows without a matching shortcut recede */
+.sheet-body.is-hinting .sheet-row:not(.is-hint, .is-selected) dt {
+  color: var(--fg-muted);
+}
+.sheet-body.is-hinting .sheet-row:not(.is-hint, .is-selected) kbd {
+  border-color: var(--border-subtle);
+  background: transparent;
+}
+.sheet-body.is-hinting .sheet-row.is-hint {
+  background: var(--accent-soft);
+}
+.sheet-binding.is-hint kbd {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* pressed combination: its commands are selected */
+.shortcut-sheet .sheet-row.is-selected {
+  background: var(--bg-selected);
+  box-shadow: inset var(--focus-ring-width) 0 0 var(--accent);
+}
+.shortcut-sheet .sheet-row.is-selected .sheet-scope {
+  color: var(--fg-muted-on-selected);
+}
+.sheet-binding.is-selected kbd {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}

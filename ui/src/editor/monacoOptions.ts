@@ -2,10 +2,13 @@
 // previews and the DiffEditor. Spread them first and add the editor-specific options after.
 import * as monaco from './monaco';
 import { cssVar } from '../theme/gridTheme';
+import { EDITOR_FONT_SIZE, suggestMetrics } from './suggestMetrics';
 
-/** IntelliSense row metrics: explicit, so the list never clips its last row while fonts are still resolving. */
-export const SUGGEST_LINE_HEIGHT = 22;
-export const SUGGEST_FONT_SIZE = 13;
+export { EDITOR_FONT_SIZE, suggestMetrics };
+
+/** IntelliSense row metrics at the default editor font size (SqlEditor re-derives them from Settings). */
+export const SUGGEST_FONT_SIZE = suggestMetrics().suggestFontSize;
+export const SUGGEST_LINE_HEIGHT = suggestMetrics().suggestLineHeight;
 
 export function baseMonacoOptions(): monaco.editor.IEditorOptions {
   return {
@@ -17,8 +20,21 @@ export function baseMonacoOptions(): monaco.editor.IEditorOptions {
     suggestLineHeight: SUGGEST_LINE_HEIGHT,
     suggestFontSize: SUGGEST_FONT_SIZE,
     bracketPairColorization: { enabled: false },
+    scrollbar: MONACO_SCROLLBAR,
   };
 }
+
+/**
+ * Slim scrollbars for every Monaco editor, diff included: a 10 px track with a centred 6 px pill (rounded in
+ * editor-widgets.css), the same look as the app's ::-webkit-scrollbar (app.css), and no drop shadow when scrolled.
+ */
+export const MONACO_SCROLLBAR = {
+  verticalScrollbarSize: 10,
+  horizontalScrollbarSize: 10,
+  verticalSliderSize: 6,
+  horizontalSliderSize: 6,
+  useShadows: false,
+} as const satisfies monaco.editor.IEditorScrollbarOptions;
 
 let loadingHooked = false;
 

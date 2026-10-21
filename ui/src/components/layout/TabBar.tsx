@@ -12,6 +12,7 @@ import { useUi } from '../../store/ui';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
 import { ObjectIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { commandIcon, contextMenu } from './commandMenu';
 import { getTabView } from './tabViews';
 
@@ -60,9 +61,11 @@ export function TabBar() {
   );
 }
 
-function TabIcon({ tab }: { tab: Tab }) {
+/** Object tabs show the object type, view tabs their view's icon, a console its connection's product logo. */
+function TabIcon({ tab, providerId }: { tab: Tab; providerId?: string }) {
   if (tab.kind === 'object') return <ObjectIcon type={tab.ref.type} size={14} />;
   if (tab.kind === 'view') return commandIcon(getTabView(tab.view)?.icon ?? 'File', 14) ?? <SquareTerminal size={14} strokeWidth={1.5} />;
+  if (providerId) return <ProviderLogo providerId={providerId} size={14} />;
   return <SquareTerminal size={14} strokeWidth={1.5} />;
 }
 
@@ -119,7 +122,7 @@ function TabItem({ tab, active, showConn, dragId, setDragId }: {
       onContextMenu={(e) => showContextMenu(e, contextMenu('tab', { kind: 'tab', tabId: tab.id }))}
     >
       <span className="tab-icon">
-        <TabIcon tab={tab} />
+        <TabIcon tab={tab} providerId={conn?.providerId} />
       </span>
       <span className="tab-label">
         {renaming ? (

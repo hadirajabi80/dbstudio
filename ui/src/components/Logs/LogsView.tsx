@@ -708,6 +708,7 @@ export function LogsView({ tab, visible }: TabViewProps) {
               <input
                 ref={searchRef}
                 className="input"
+                dir="auto"
                 placeholder="Search (text or regex)…"
                 aria-label="Search log entries"
                 title={withShortcut('Search log entries: text or regular expression, case-insensitive', getCommand('logs.search')?.shortcut)}

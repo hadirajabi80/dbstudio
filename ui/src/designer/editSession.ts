@@ -3,6 +3,7 @@
 // and the atomic SQLite apply). After a restart only the tab field survives; these helpers re-register it, so a
 // restored "Edit:" tab still applies atomically and still offers "Compare with server".
 import { getActiveTab, useTabs, type ConsoleEdit, type Tab } from '../store/tabs';
+import { rewriteForEdit } from './rewrite';
 import { useDesignerUi, type EditSession } from './store';
 
 /** Register an edit session for a console: in memory and in the tab (persisted). */
@@ -47,4 +48,22 @@ export function peekEditSession(tabId: string): EditSession | undefined {
 export function activeEditSession(): EditSession | undefined {
   const t = getActiveTab();
   return t?.kind === 'console' ? peekEditSession(t.id) : undefined;
+}
+
+const normalized = (s: string) => s.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').trimEnd();
+
+/**
+ * The text an "Edit:" console was opened with or last saved to the database: `savedText`, else the server
+ * definition rewritten for editing (sessions persisted before `savedText` existed). Null when neither is known.
+ */
+export function editBaseline(edit: EditSession): string | null {
+  if (edit.savedText !== undefined) return edit.savedText;
+  if (edit.serverDdl === undefined) return null;
+  return rewriteForEdit(edit.serverDdl, { dialect: edit.dialect, type: edit.ref.type, name: edit.ref.name, schema: edit.ref.schema }).text;
+}
+
+/** The editor text differs from what is saved on the server (trailing whitespace aside). */
+export function isEditDirty(edit: EditSession, text: string): boolean {
+  const base = editBaseline(edit);
+  return base !== null && normalized(base) !== normalized(text);
 }

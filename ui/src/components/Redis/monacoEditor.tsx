@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import * as monaco from '../../editor/monaco';
 import { ensureMonacoSetup, THEME_IDS } from '../../editor/monaco-setup';
-import { baseMonacoOptions, remeasureAfterFonts } from '../../editor/monacoOptions';
+import { baseMonacoOptions, MONACO_SCROLLBAR, remeasureAfterFonts } from '../../editor/monacoOptions';
 import { bindRedisModel, ensureRedisLanguages, REDIS_JSON_LANGUAGE, REDIS_LANGUAGE } from '../../redis/language';
 import type { CodeEditorProps } from './CodeEditor';
 
@@ -44,7 +44,7 @@ export default function MonacoCodeEditor(props: CodeEditorProps) {
       wordWrap: p.wordWrap ? 'on' : 'off',
       overviewRulerLanes: 0,
       overviewRulerBorder: false,
-      scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, alwaysConsumeMouseWheel: false },
+      scrollbar: { ...MONACO_SCROLLBAR, alwaysConsumeMouseWheel: false },
       suggest: { showWords: false, preview: true },
       quickSuggestions: p.language === 'redis' ? { other: true, strings: false, comments: false } : false,
       wordBasedSuggestions: 'off',

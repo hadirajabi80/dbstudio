@@ -1,7 +1,7 @@
 {
   "name": "dbstudio-desktop",
   "productName": "DbStudio",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "DbStudio desktop shell: a fast SQL client for SQL Server, Oracle and SQLite",
   "author": "DbStudio contributors",
   "license": "UNLICENSED",

@@ -108,11 +108,11 @@
 .redis-table .redis-col-actions { width: 34px; text-align: right; }
 .redis-cell-key { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .redis-cell-clip { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.redis-cell { white-space: pre-wrap; word-break: break-word; border-radius: var(--radius-sm); padding: 1px 3px; margin: -1px -3px; }
+.redis-cell { white-space: pre-wrap; word-break: break-word; unicode-bidi: plaintext; border-radius: var(--radius-sm); padding: 1px 3px; margin: -1px -3px; }
 .redis-cell.editable { cursor: text; }
 .redis-cell.editable:hover { box-shadow: inset 0 0 0 1px var(--border); }
 .redis-cell:focus-visible { outline: 2px solid var(--focus-ring); }
-.redis-cell-input { width: 100%; resize: vertical; }
+.redis-cell-input { width: 100%; resize: vertical; unicode-bidi: plaintext; }
 .redis-row-edited td { background: var(--cell-edited); }
 .redis-row-added td { background: var(--cell-inserted); }
 .redis-row-deleted td { background: var(--cell-deleted); text-decoration: line-through; color: var(--fg-muted); }

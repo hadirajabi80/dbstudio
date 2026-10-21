@@ -13,7 +13,7 @@ import { useSourceClients } from '../../store/sourceClients';
 import { useTabs } from '../../store/tabs';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
-import { ProviderIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { pluralize } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
@@ -150,7 +150,7 @@ export function ConnectionsPanel() {
           </div>
           {clients.map(({ info, conn }) => (
             <div key={info.connectionId} className="session-row client-row" style={{ ['--conn-color' as string]: connColorCss(conn?.color ?? null) }}>
-              {conn ? <ProviderIcon providerId={conn.providerId} color={conn.color} size={14} /> : <Cable size={14} className="muted" />}
+              {conn ? <ProviderLogo providerId={conn.providerId} color={conn.color} size={14} /> : <Cable size={14} className="muted" />}
               <span className="session-tab">{conn?.name ?? info.connectionId}</span>
               <span className="muted session-db" title={info.server?.version ?? undefined}>{info.server?.version ?? ''}</span>
               <div className="flex-1" />
@@ -181,7 +181,7 @@ export function ConnectionsPanel() {
           {groups.map(({ conn, cid, list }) => (
             <section key={cid} className="session-group" role="listitem" style={{ ['--conn-color' as string]: connColorCss(conn!.color) }}>
               <div className="session-group-header" title={connColorName(conn!.color) ?? undefined}>
-                <ProviderIcon providerId={conn!.providerId} color={conn!.color} size={16} />
+                <ProviderLogo providerId={conn!.providerId} color={conn!.color} size={16} />
                 <span className="session-conn-name">{conn!.name}</span>
                 {conn!.readOnly && <Lock size={12} aria-label="Read-only" />}
                 <span className="muted">{list.length ? pluralize(list.length, 'session') : 'catalog loaded'}</span>

@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { boot } from './app/boot';
 import { handleMenuCommand } from './app/commands';
 import { useUpdateWiring } from './app/updates';
@@ -9,26 +9,31 @@ import { CommandPalette } from './components/CommandPalette/CommandPalette';
 import { ConnectionDialogHost } from './components/ConnectionDialog/ConnectionDialog';
 import { ConnectionSwitcher } from './components/ConnectionsPanel/ConnectionSwitcher';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { focusFirst, focusIsLost } from './components/common/focus';
-import { MenuHost } from './components/common/Menu';
+import { MenuHost, useMenu } from './components/common/Menu';
 import { Toasts } from './components/common/Toasts';
 import { ConsoleView } from './components/layout/ConsoleView';
 import { Dock } from './components/layout/Dock';
 import { SettingsDialog } from './components/layout/SettingsDialog';
 import { TabBar } from './components/layout/TabBar';
 import { TopBar } from './components/layout/TopBar';
-import { useFocusFallback, useTabFocusRequests, ViewTabHost } from './components/layout/ViewTabHost';
+import { TabErrorBoundary, useFocusFallback, useTabFocusRequests, ViewTabHost } from './components/layout/ViewTabHost';
 import './components/layout/layout.css';
 import { MultiRunDialog } from './components/MultiRun/MultiRunDialog';
 import { ObjectTabView } from './components/ObjectTab/ObjectTab';
 import { Welcome } from './components/Onboarding/Welcome';
 import { ParamsDialogHost } from './components/ParamsDialog/ParamsDialog';
+import { ExecuteRoutineHost } from './components/ExecuteRoutine/ExecuteRoutineDialog';
+import { useExecuteRoutine } from './components/ExecuteRoutine/store';
 import { ShortcutSheet } from './components/Shortcuts/ShortcutSheet';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { DesignerHost } from './designer/host';
+import { useDesignerUi } from './designer/store';
 import './designer/designer.css';
 import { getPlatform } from './platform';
 import { useConnections } from './store/connections';
+import { useParams } from './store/params';
 import { useSettings } from './store/settings';
 import { useActiveTab, useTabs } from './store/tabs';
 import { useUi } from './store/ui';
@@ -98,27 +103,82 @@ function Shell() {
 
   return (
     <div className="app">
-      <TopBar theme={theme} />
+      <ErrorBoundary area="the top bar" variant="strip">
+        <TopBar theme={theme} />
+      </ErrorBoundary>
       <EngineBanner />
       <Main theme={theme} ready={ready} />
-      <StatusBar />
-      <MenuHost />
-      <ConfirmDialog />
+      <ErrorBoundary area="the status bar" variant="strip">
+        <StatusBar />
+      </ErrorBoundary>
+      {/* Overlays: each crashes on its own and can be closed from its error panel. */}
+      <ErrorBoundary area="the menu" variant="dialog" onClose={() => useMenu.getState().hide()}>
+        <MenuHost />
+      </ErrorBoundary>
+      <ModalBoundary area="the confirmation" open={(s) => !!s.confirm} close={() => useUi.getState().resolveConfirm(false)}>
+        <ConfirmDialog />
+      </ModalBoundary>
       <div id="dbstudio-designer-host">
-        <DesignerHost />
+        <ErrorBoundary area="the designer dialog" variant="dialog" onClose={() => useDesignerUi.setState({ wizard: null, compareTabId: null })}>
+          <DesignerHost />
+        </ErrorBoundary>
       </div>
       <div id="params-dialog-host">
-        <ParamsDialogHost />
+        <ErrorBoundary area="the parameters dialog" variant="dialog" onClose={() => useParams.getState().close(null)}>
+          <ParamsDialogHost />
+        </ErrorBoundary>
       </div>
-      <ConnectionDialogHost />
-      <CommandPalette />
-      <ShortcutSheet />
-      <SettingsDialog />
-      <ConnectionSwitcher />
-      <MultiRunDialog />
-      <Toasts />
+      <ErrorBoundary area="the execute dialog" variant="dialog" onClose={() => useExecuteRoutine.getState().close()}>
+        <ExecuteRoutineHost />
+      </ErrorBoundary>
+      <ModalBoundary area="the connection dialog" open={(s) => s.connectionDialog} close={() => useUi.getState().closeConnectionDialog()}>
+        <ConnectionDialogHost />
+      </ModalBoundary>
+      <ModalBoundary area="the command palette" open={(s) => s.paletteOpen} close={() => useUi.getState().closePalette()}>
+        <CommandPalette />
+      </ModalBoundary>
+      <ModalBoundary area="the shortcut sheet" open={(s) => s.shortcutsOpen} close={() => useUi.getState().setShortcutsOpen(false)}>
+        <ShortcutSheet />
+      </ModalBoundary>
+      <ModalBoundary area="Settings" open={(s) => s.settingsOpen} close={() => useUi.getState().setSettingsOpen(false)}>
+        <SettingsDialog />
+      </ModalBoundary>
+      <ModalBoundary area="the connection switcher" open={(s) => s.switcher} close={() => useUi.getState().openSwitcher(null)}>
+        <ConnectionSwitcher />
+      </ModalBoundary>
+      <ModalBoundary area="the multi-run dialog" open={(s) => s.multiRunFor} close={() => useUi.getState().openMultiRun(null)}>
+        <MultiRunDialog />
+      </ModalBoundary>
+      <ToastsBoundary>
+        <Toasts />
+      </ToastsBoundary>
       <LiveRegion />
     </div>
+  );
+}
+
+type UiState = ReturnType<typeof useUi.getState>;
+
+/**
+ * Error boundary of a store-driven modal: its panel is a small dialog whose Close resets the store flag, and reopening
+ * the modal (a new flag value) renders it afresh.
+ */
+function ModalBoundary({ area, open, close, children }: { area: string; open: (s: UiState) => unknown; close: () => void; children: ReactNode }) {
+  const key = useUi(open);
+  return (
+    <ErrorBoundary area={area} variant="dialog" resetKey={key} onClose={close}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+/** Toasts crash quietly (nothing shown) and come back with the next notification. */
+function ToastsBoundary({ children }: { children: ReactNode }) {
+  const toasts = useUi((s) => s.toasts);
+  return (
+    <ErrorBoundary area="notifications" hidden resetKey={toasts}>
+      {children}
+    </ErrorBoundary>
   );
 }
 
@@ -181,17 +241,27 @@ function Main({ theme, ready }: { theme: EffectiveTheme; ready: boolean }) {
     <div className="main">
       <Dock />
       <section className="workspace" aria-label="Workspace">
-        {tabs.length > 0 && <TabBar />}
+        {tabs.length > 0 && (
+          <ErrorBoundary area="the tab strip" variant="strip">
+            <TabBar />
+          </ErrorBoundary>
+        )}
         <div className="workspace-body">
           {tabs.length === 0 ? (
-            <Welcome ready={ready} />
+            <ErrorBoundary area="the welcome page" variant="tab">
+              <Welcome ready={ready} />
+            </ErrorBoundary>
           ) : (
             tabs.map((t) =>
               t.kind === 'console' ? (
-                <ConsoleView key={t.id} tab={t} theme={theme} visible={t.id === activeId} />
+                <TabErrorBoundary key={t.id} tab={t} visible={t.id === activeId}>
+                  <ConsoleView tab={t} theme={theme} visible={t.id === activeId} />
+                </TabErrorBoundary>
               ) : t.kind === 'object' ? (
                 <div key={t.id} className="view-tab-host" data-tab-host={t.id} style={{ display: t.id === activeId ? 'contents' : 'none' }}>
-                  <ObjectTabView tab={t} theme={theme} visible={t.id === activeId} />
+                  <TabErrorBoundary tab={t} visible={t.id === activeId}>
+                    <ObjectTabView tab={t} theme={theme} visible={t.id === activeId} />
+                  </TabErrorBoundary>
                 </div>
               ) : (
                 <ViewTabHost key={t.id} tab={t} theme={theme} visible={t.id === activeId} />

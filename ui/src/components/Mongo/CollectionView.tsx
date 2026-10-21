@@ -1,7 +1,8 @@
 // Collection workspace (docs/PLAN-M2.md 6.3–6.5), Compass-style: a namespace header with the collection's
 // statistics and sub-tabs Documents · Aggregations · Schema · Indexes · Explain · Validation. Visited sub-views stay
 // mounted (their results survive switching); their persistent state (query, pipeline, view) lives in the tab state.
-import { Eye, Leaf, Lock, RefreshCw } from 'lucide-react';
+import { Eye, Lock, RefreshCw } from 'lucide-react';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { lazy, Suspense, useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { api } from '../../api/client';
 import type { MongoCollectionStats } from '../../api/types';
@@ -105,7 +106,7 @@ export default function CollectionView({ tab, theme, visible }: TabViewProps) {
   return (
     <div className="mg" data-command-scope="mongo">
       <header className="mg-head">
-        <span className="mg-head-icon" aria-hidden>{isView ? <Eye size={16} strokeWidth={1.5} /> : <Leaf size={16} strokeWidth={1.5} />}</span>
+        <span className="mg-head-icon" aria-hidden>{isView ? <Eye size={16} strokeWidth={1.5} /> : <ProviderLogo providerId="mongodb" size={16} />}</span>
         <h2 className="mg-ns" title={`${db}.${coll}`}><span className="mg-ns-db">{db}.</span>{coll}</h2>
         {isView && <span className="pill pill-muted" title={info?.viewOn ? `View on ${info.viewOn}` : undefined}>view{info?.viewOn ? ` on ${info.viewOn}` : ''}</span>}
         {info?.type === 'timeseries' && <span className="pill pill-muted">time series</span>}

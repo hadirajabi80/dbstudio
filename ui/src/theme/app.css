@@ -78,6 +78,11 @@ mark {
   background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
+/* dragging: the same step as Monaco's scrollbarSlider.activeBackground */
+::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-active);
+  background-clip: padding-box;
+}
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
@@ -396,15 +401,18 @@ svg.lucide:not([data-stroke]) {
 .color-dot.empty {
   border: 1px solid var(--border-strong);
 }
-.provider-icon {
+/* provider logo (theme/brand/ProviderLogo.tsx): brand artwork in a fixed square, never stretched or shrunk */
+.provider-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  color: var(--provider-fg);
-  font-weight: var(--weight-regular);
   flex-shrink: 0;
-  line-height: 1;
+  line-height: 0;
+}
+.provider-logo > svg {
+  display: block;
+  flex: none;
 }
 .conn-badge {
   display: inline-flex;
@@ -1310,6 +1318,10 @@ body.resizing-row .splitter-horizontal {
   background: var(--bg-editor);
   border-top: 1px solid var(--border);
   white-space: pre;
+}
+/* user data: every line takes its own direction (Persian/Arabic lines read right to left) */
+.cell-viewer-text[dir='auto'] {
+  unicode-bidi: plaintext;
 }
 .cell-viewer-text.wrap {
   white-space: pre-wrap;

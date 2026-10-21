@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import * as monaco from '../../editor/monaco';
 import { ensureMonacoSetup, THEME_IDS } from '../../editor/monaco-setup';
-import { baseMonacoOptions, remeasureAfterFonts } from '../../editor/monacoOptions';
+import { baseMonacoOptions, MONACO_SCROLLBAR, remeasureAfterFonts } from '../../editor/monacoOptions';
 import { checkShell } from '../../mongo/shellJson';
 import { bindMongoModel, ensureMongoLanguage, MONGO_LANGUAGE } from './language';
 import type { MongoEditorProps } from './MongoEditor';
@@ -49,7 +49,7 @@ export default function MonacoMongoEditor(props: MongoEditorProps) {
       overviewRulerBorder: false,
       hideCursorInOverviewRuler: true,
       wordWrap: single ? 'on' : 'off',
-      scrollbar: single ? { vertical: 'hidden', horizontal: 'hidden', alwaysConsumeMouseWheel: false } : { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, alwaysConsumeMouseWheel: false },
+      scrollbar: single ? { vertical: 'hidden', horizontal: 'hidden', alwaysConsumeMouseWheel: false } : { ...MONACO_SCROLLBAR, alwaysConsumeMouseWheel: false },
       suggest: { showWords: false, preview: true },
       quickSuggestions: { other: true, strings: true, comments: false },
       wordBasedSuggestions: 'off',

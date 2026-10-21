@@ -36,7 +36,7 @@ describe('PG completion: sources and columns', () => {
     const r = complete('pgsql', 'SELECT * FROM |');
     const top = labels(r.items, 11);
     expect(top).toEqual(expect.arrayContaining(['customers', 'orders', 'products', 'countries', 'order_lines', 'customer_orders', 'customer_totals', 'orders_of']));
-    expect(find(r.items, 'customer_totals')!.detail).toBe('materialized view · public');
+    expect(find(r.items, 'customer_totals')!.detail).toBe('public · materialized view');
     const sales = indexOf(r.items, 'sales', (x) => x.kind === 'schema');
     expect(sales).toBeGreaterThan(indexOf(r.items, 'customer_totals'));
     const sys = indexOf(r.items, 'pg_stat_activity');

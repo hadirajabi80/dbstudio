@@ -36,13 +36,6 @@
   flex: 1;
   min-height: 0;
 }
-.dt-sql {
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-}
 
 /* The toolbar degrades instead of scrolling: the table name keeps a minimum, the connection name and button
    labels give way first (Export / Code / Design keep their icons and tooltips). */

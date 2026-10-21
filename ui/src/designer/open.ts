@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api/client';
 import type { CatalogObjectType, Dialect, ObjectRef } from '../api/types';
 import { catalogDatabase, newConsole, preloadCatalog } from '../app/actions';
 import { targetOf } from '../commands/core';
+import { displayShortcut } from '../commands/keys';
 import { isConnectionTarget, isContainerTarget, isObjectTarget, isTabTarget, type ObjectTarget } from '../commands/types';
 import { qualifiedName } from '../lib/sql';
 import { dbKey, useCatalog } from '../store/catalog';
@@ -150,6 +151,9 @@ export function openProcedureWizard(ctx: DesignerContext, opts: { kind?: 'proced
   useDesignerUi.getState().openWizard({ ...ctx, kind: opts.kind ?? (ctx.dialect === 'sqlite' ? 'trigger' : 'procedure'), table: opts.table ?? null, packageName: opts.packageName ?? null });
 }
 
+/** Routines whose Run executes them (Execute routine) rather than re-running the script. */
+const EXECUTABLE = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc']);
+
 const SCRIPT_TYPES = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc', 'package', 'trigger', 'type', 'mview']);
 
 /** F4: tables → table designer, views → view designer, routines/packages/triggers → editable script. */
@@ -189,7 +193,7 @@ export async function openEditScript(connectionId: string, database: string | nu
   const id = newConsole(connectionId, database, r.text);
   useTabs.getState().rename(id, `Edit: ${ref.name}`);
   // Persisted in the tab too: after a restart the tab still applies atomically and offers "Compare with server".
-  rememberEdit(id, { connectionId, database, ref, serverDdl: ddl, dialect });
-  toast('info', `Editing ${qualifiedName(ref, dialect, { always: dialect !== 'sqlite' })}`, `${r.note ?? 'Definition loaded'}. Run the script (F5) to apply; “Compare with server” shows your changes.`);
+  rememberEdit(id, { connectionId, database, ref, serverDdl: ddl, dialect, savedText: r.text });
+  toast('info', `Editing ${qualifiedName(ref, dialect, { always: dialect !== 'sqlite' })}`, `${r.note ?? 'Definition loaded'}. Save (${displayShortcut('Mod+S')}) applies it to the database${EXECUTABLE.has(ref.type) ? '; Run executes it with parameters' : ''}; “Compare with server” shows your changes.`);
   return id;
 }

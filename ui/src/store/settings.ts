@@ -159,3 +159,14 @@ export function uiSetting<T>(key: string, fallback: T): T {
   const v = useSettings.getState().settings.ui[key];
   return v === undefined ? fallback : (v as T);
 }
+
+/** settings.ui key of "Open procedures and functions in edit mode" (Settings ▸ Editor; free-form ui, no engine change). */
+export const OPEN_ROUTINES_IN_EDIT_KEY = 'openRoutinesInEditMode';
+
+/**
+ * "Open procedures and functions in edit mode": explorer double-click / Enter and Ctrl+P open routines in their F4
+ * "Edit:" console instead of the read-only definition. Off unless the user turned it on.
+ */
+export function openRoutinesInEditMode(s: Pick<FullSettings, 'ui'> = useSettings.getState().settings): boolean {
+  return s.ui[OPEN_ROUTINES_IN_EDIT_KEY] === true;
+}

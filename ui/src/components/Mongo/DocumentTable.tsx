@@ -50,7 +50,7 @@ export function DocumentTable({ docs, selected, onSelect, canWrite, onEdit, onCl
           <thead>
             <tr>
               <th className="mg-th-n">#</th>
-              {scalarRows ? <th>{path[path.length - 1]}</th> : cols.map((c) => <th key={c} title={c}>{c}</th>)}
+              {scalarRows ? <th dir="auto">{path[path.length - 1]}</th> : cols.map((c) => <th key={c} title={c} dir="auto">{c}</th>)}
               <th className="mg-th-actions"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>

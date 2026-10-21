@@ -33,6 +33,8 @@ function oidFrom(ts: number, n: number): string {
 }
 
 const FIRST = ['Alice', 'Bob', 'Carla', 'Dmitri', 'Erin', 'Farah', 'Goran', 'Hana', 'Ivo', 'Jules', 'Kemal', 'Lena', 'Milo', 'Nora', 'Oskar', 'Priya'];
+/** Right-to-left sample names (Persian, Arabic, mixed) for a few customers; the PRNG sequence is unchanged. */
+const RTL_NAMES: Record<number, string> = { 1: 'علی رضایی', 2: 'مریم احمدی', 3: 'محمد عبدالله', 4: 'Order #12 سفارش' };
 const LAST = ['Martin', 'Okafor', 'Silva', 'Novak', 'Kim', 'Haddad', 'Berg', 'Rossi', 'Ivanova', 'Dubois', 'Tanaka', 'Moreau'];
 const CITIES: [string, string][] = [['Berlin', 'DE'], ['Paris', 'FR'], ['Lisbon', 'PT'], ['Oslo', 'NO'], ['Austin', 'US'], ['Osaka', 'JP'], ['Lyon', 'FR']];
 const PRODUCTS = ['Espresso beans', 'Pour-over kettle', 'Ceramic mug', 'Grinder', 'Milk frother', 'Cold brew jar', 'Tea sampler', 'Scale', 'Filter papers', 'Travel tumbler', 'Moka pot', 'Chai spice'];
@@ -71,7 +73,7 @@ export function createMongoFixture(): MockDeployment {
     const created = base + Math.floor(r() * 300) * 86400000;
     const entries: BsonEntry[] = [
       ['_id', B.oid(oidFrom(created, 0x1000 + i))],
-      ['name', B.str(`${first} ${last}`)],
+      ['name', B.str(RTL_NAMES[i] ?? `${first} ${last}`)],
       ['email', B.str(`${first}.${last}${i}@example.com`.toLowerCase())],
       ['tier', B.str(pick(['gold', 'silver', 'silver', 'bronze', 'bronze', 'bronze']))],
     ];

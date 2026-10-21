@@ -47,7 +47,8 @@ function inMonaco(target: EventTarget | null): boolean {
   return target instanceof Element && !!target.closest('.monaco-editor');
 }
 
-function inTextField(target: EventTarget | null): boolean {
+/** True for an element that takes typed text (input, textarea, select, contenteditable). */
+export function inTextField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName;
@@ -92,7 +93,28 @@ export function routeMenuCommand(id: string, focused: Element | null = typeof do
   return id;
 }
 
+/** Returns true when it consumed the keydown (no command, chord or default handling follows). */
+export type KeyCapture = (e: KeyboardEvent) => boolean;
+const captures: KeyCapture[] = [];
+
+/**
+ * A surface that reads keys itself (the shortcut sheet's key search) sees every keydown before any command or chord,
+ * whatever has focus. The latest capture wins; returns its remover.
+ */
+export function pushKeyCapture(fn: KeyCapture): () => void {
+  captures.push(fn);
+  return () => {
+    const i = captures.lastIndexOf(fn);
+    if (i >= 0) captures.splice(i, 1);
+  };
+}
+
 export function onGlobalKeyDown(e: KeyboardEvent): void {
+  const capture = captures[captures.length - 1];
+  if (capture?.(e)) {
+    pendingChord = null;
+    return;
+  }
   if (e.defaultPrevented || e.isComposing) return;
   // AltGr+L types "ł" on a Polish keyboard: text input, not Ctrl+Alt+L (Format SQL).
   if (isAltGraphCharacter(e)) return;

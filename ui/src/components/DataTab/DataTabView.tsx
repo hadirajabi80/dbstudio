@@ -15,7 +15,7 @@ import { catalogDatabase, idleSessionTabs, offerCloseIdle } from '../../app/acti
 import { runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { countSql, describeSql, distinctSql, keylessOrder, selectPageSql, uniqueOrderKey, type SortSpec, type TableTarget } from '../../data/sqlgen';
-import { buildPredicate, inlineParams, type PredicateResult } from '../../filter/sql';
+import { buildPredicate, type PredicateResult } from '../../filter/sql';
 import { appendAnd, columnSignature, normalizeNode, type FilterGroup, type GridViewModel, type SortKey } from '../../filter/model';
 import { countActiveConditions } from '../../filter/values';
 import type { ExecParam } from '../../filter/wire';
@@ -47,6 +47,8 @@ import { PendingBar } from '../PendingChanges/PendingBar';
 import { usePendingChanges } from '../PendingChanges/usePendingChanges';
 import type { EditContext } from '../PendingChanges/submit';
 import { RecordView } from '../RecordView/RecordView';
+import { ExecutedQueryLine } from '../ResultsPane/ExecutedQueryLine';
+import type { ExecutedQuery } from '../ResultsPane/executedQuery';
 import { GRID_EXPORT_MENU } from '../ResultsPane/toolbarModel';
 import { consumeGridFocus, dataGridKey, hasPendingGridFocus, openDataTab, type DataTabState, type SortByName } from './open';
 import { getSqlRunner } from './runner';
@@ -70,7 +72,9 @@ interface Loaded {
   elapsedMs: number | null;
   /** Server-side predicate in effect (for count and paging). */
   where: string | null;
+  /** The page statement as sent (placeholders intact) and its bind values: the query line under the grid. */
   sql: string | null;
+  params: ExecParam[];
   /** Keyless object paged without ORDER BY (large or not counted): later pages may repeat or skip rows. */
   unordered: boolean;
   /** Predicate the loaded rows were read with (what the grid applies while a newer filter is deferred). */
@@ -78,7 +82,7 @@ interface Loaded {
 }
 
 const EMPTY: Loaded = {
-  columns: null, rows: new ChunkedList(), rev: 0, hasMore: false, pageable: true, loading: true, error: null, errorCode: null, elapsedMs: null, where: null, sql: null, unordered: false, applied: null,
+  columns: null, rows: new ChunkedList(), rev: 0, hasMore: false, pageable: true, loading: true, error: null, errorCode: null, elapsedMs: null, where: null, sql: null, params: [], unordered: false, applied: null,
 };
 
 /**
@@ -401,7 +405,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
       const unordered = !keys.length && !fallback && (hasMoreRef.current || offset > 0);
       const next: Omit<Loaded, 'rev'> = {
         columns: colsRef.current, rows: rowsRef.current, hasMore: hasMoreRef.current, pageable: page.pageable, loading: false, error: null, errorCode: null,
-        elapsedMs: res.elapsedMs, where: pred.where, sql: inlineParams(page.sql, pred.params, dialect), unordered, applied: pred,
+        elapsedMs: res.elapsedMs, where: pred.where, sql: page.sql, params: pred.params, unordered, applied: pred,
       };
       setData((d) => ({ ...next, rev: d.rev + 1 }));
       if (req === 0) {
@@ -558,6 +562,11 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   const loaded = overlay.length - Object.keys(buffer.committed.hidden).length;
   const title = `${target.schema && target.schema !== (snapshot?.defaultSchema ?? 'main') ? `${target.schema}.` : ''}${target.name}`;
   const noMatch = !data.loading && loaded === 0 && (n > 0 || !!quick);
+  const queryDb = session?.database ?? database ?? null;
+  const executed = useMemo<ExecutedQuery | null>(
+    () => (data.sql ? { sql: data.sql, params: data.params, dialect, connectionId, database: queryDb } : null),
+    [data.sql, data.params, dialect, connectionId, queryDb],
+  );
 
   // Opened from a command before the first page arrived: focus the grid once it is rendered (design-15).
   const gridShown = !!data.columns && visible;
@@ -605,6 +614,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
             className="input xs borderless"
             placeholder="Search text columns"
             aria-label="Search text columns"
+            dir="auto"
             value={quick}
             spellCheck={false}
             onChange={(e) => changeQuick(e.target.value)}
@@ -834,7 +844,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
         {pending > 0 && <span className="muted">{pending} pending change{pending === 1 ? '' : 's'}</span>}
         <AggregateStrip agg={agg} partial={data.hasMore} />
         <div className="flex-1" />
-        {data.sql && <span className="muted mono dt-sql" title={data.sql}>{data.sql.replace(/\s+/g, ' ')}</span>}
+        <ExecutedQueryLine gridKey={gridKey} query={executed} />
       </div>
       {pendingActions.dialog}
       {distinct && columns[distinct.col] && (

@@ -273,6 +273,7 @@ function ParamsDialog() {
                 <input
                   className={`input sm mono${errors[i] ? ' invalid' : ''}`}
                   aria-label={`Value of ${r.display}`}
+                  dir={r.kind === 'string' ? 'auto' : undefined}
                   value={noValue ? '' : r.value}
                   disabled={noValue}
                   placeholder={noValue ? (r.kind === 'null' ? 'NULL' : 'returned as a result set') : errors[i] ?? ''}

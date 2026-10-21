@@ -274,6 +274,42 @@ public sealed partial class PgM15ConformanceTests(PgFixture fixture) : M15Confor
     protected override IDesignerDatabase Database { get; } = new PgDesignerDatabase();
     protected override IPlanReader PlanReader { get; } = new PgPlanReader();
 
+    /// <summary>
+    /// The UI's Execute routine calls (ui/src/components/ExecuteRoutine/routineSql.ts): CALL with positional casts and
+    /// named notation after a defaulted argument (INOUT comes back as a row), SELECT for functions, SELECT * FROM for
+    /// set-returning ones.
+    /// </summary>
+    [SkippableFact]
+    public async Task ExecuteRoutine_GeneratedCalls_RunWithPositionalBinds()
+    {
+        RequireAvailable();
+        var name = "m15_er_" + Guid.NewGuid().ToString("N")[..8];
+        await Fixture.RunBatchesAsync([
+            $"CREATE PROCEDURE public.{name}(IN p_a bigint, IN p_b integer DEFAULT 1, INOUT p_c integer DEFAULT NULL) LANGUAGE plpgsql AS $$ BEGIN p_c := p_a + p_b + coalesce(p_c, 0); END $$",
+            $"CREATE FUNCTION public.{name}_f(amount numeric, rate numeric DEFAULT 0.1) RETURNS numeric LANGUAGE sql AS $$ SELECT amount * rate $$",
+            $"CREATE FUNCTION public.{name}_t(n integer) RETURNS TABLE(i integer) LANGUAGE sql AS $$ SELECT generate_series(1, n) $$",
+        ]);
+        try
+        {
+            await using var session = await Fixture.OpenSessionAsync();
+            var (call, callSink) = await RunAsync(session, [P("1", "int", 40), P("2", "int", 2)], $"CALL public.{name}($1::bigint, p_c => $2::integer);");
+            Assert.True(call.Status == ExecutionStatus.Ok, string.Join("; ", callSink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal(43, Convert.ToInt32(callSink.ResultSets.Single().Rows.Single()[0], System.Globalization.CultureInfo.InvariantCulture));
+
+            var (fn, fnSink) = await RunAsync(session, [P("1", "decimal", "200")], $"SELECT public.{name}_f($1::numeric);");
+            Assert.True(fn.Status == ExecutionStatus.Ok, string.Join("; ", fnSink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal(20m, Convert.ToDecimal(fnSink.ResultSets.Single().Rows.Single()[0], System.Globalization.CultureInfo.InvariantCulture));
+
+            var (srf, srfSink) = await RunAsync(session, [P("1", "string", "3")], $"SELECT * FROM public.{name}_t($1::integer);");
+            Assert.True(srf.Status == ExecutionStatus.Ok, string.Join("; ", srfSink.Errors.Select(e => e.Error.Message)));
+            Assert.Equal(3, srfSink.ResultSets.Single().Rows.Count);
+        }
+        finally
+        {
+            await Fixture.RunBatchesAsync([$"DROP PROCEDURE IF EXISTS public.{name}", $"DROP FUNCTION IF EXISTS public.{name}_f", $"DROP FUNCTION IF EXISTS public.{name}_t"]);
+        }
+    }
+
     protected override string IntType => "integer";
     protected override string TextType(int n) => $"varchar({n})";
     protected override string MoneyType => "numeric(12,2)";

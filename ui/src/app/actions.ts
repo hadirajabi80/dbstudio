@@ -16,16 +16,18 @@ import { useHistory } from '../store/history';
 import { useResults, viewKey } from '../store/results';
 import { createExecution, isRunning, type ExecutionState, type ResultSetState } from '../store/resultsReducer';
 import { isForeignSession, useSessions } from '../store/sessions';
-import { useSettings } from '../store/settings';
+import { openRoutinesInEditMode, useSettings } from '../store/settings';
 import { useTabs, type ConsoleTab } from '../store/tabs';
 import { SHORT_WINDOW, toast, useUi } from '../store/ui';
 import { displayShortcut } from '../commands/keys';
 import { pluralize } from '../components/common/text';
 import { getTabView } from '../components/layout/tabViews';
 import { runEditTab } from '../designer/editRun';
-import { peekEditSession } from '../designer/editSession';
+import { editSessionOf, peekEditSession, rememberEdit } from '../designer/editSession';
 import { EDIT_RUN_STOP_REASON, useDesignerUi } from '../designer/store';
 import { getEditor } from './editors';
+import { interceptRoutineRun, routineEditOf } from '../components/ExecuteRoutine/intercept';
+import { runCommand } from '../commands/registry';
 
 let localSeq = 0;
 
@@ -71,6 +73,11 @@ export interface RunOptions {
   params?: QueryParam[];
   /** Run the batches as given even in an "Edit:" tab (the atomic designer apply is skipped). */
   plain?: boolean;
+  /**
+   * The batches are not the console's editor text (Execute routine runs its call in the current console): their
+   * error lines are not marked in the editor.
+   */
+  detached?: boolean;
 }
 
 /**
@@ -138,7 +145,7 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
   const localId = `l${++localSeq}`;
   useResults.getState().begin(createExecution({
     localId, tabId, connectionId: conn.id, sessionId: useSessions.getState().byTab[tabId] ?? null, label, batches, maxRows,
-    confirmedDestructive: confirmed, params: params ?? null,
+    confirmedDestructive: confirmed, params: params ?? null, detached: opts.detached,
   }));
   if (!useUi.getState().resultsVisible) useUi.getState().toggle('resultsVisible');
   noteFirstRun(tabId);
@@ -171,10 +178,20 @@ export async function runInTab(tabId: string, label: RunLabel, batches: SqlBatch
   }
 }
 
-/** Run from toolbar / palette / global shortcut: ask the editor what to run. */
-export function runActive(label: RunLabel): void {
+/**
+ * Run from toolbar / palette / global shortcut: ask the editor what to run. In an "Edit:" console of a procedure or
+ * function, Run without a selection opens Execute routine instead of re-running the CREATE (applying it is Save);
+ * `asScript` runs the editor text anyway (the Run button's "Run script" menu item).
+ */
+export function runActive(label: RunLabel, opts: { asScript?: boolean } = {}): void {
   const tabId = useTabs.getState().activeId;
   if (!tabId || !consoleTab(tabId)) return;
+  if (!opts.asScript && routineEditOf(tabId)) {
+    const target = getEditor(tabId)?.getRunTarget(label);
+    if (target?.label === 'selection') void runInTab(tabId, 'selection', target.batches);
+    else interceptRoutineRun(tabId, label);
+    return;
+  }
   if (peekEditSession(tabId)) {
     void runEditTab(tabId).then((handled) => {
       if (!handled) runTargetOf(tabId, label);
@@ -198,7 +215,7 @@ export async function rerun(tabId: string, opts: RunOptions = {}): Promise<void>
   const e = useResults.getState().executions[useResults.getState().byTab[tabId]];
   if (!e) return;
   // A re-run asks again: a write override confirmed for one run is never carried over implicitly.
-  await runInTab(tabId, e.label, e.batches, { plain: true, ...opts });
+  await runInTab(tabId, e.label, e.batches, { plain: true, detached: e.detached, ...opts });
 }
 
 /**
@@ -384,6 +401,30 @@ export function openObject(connectionId: string, database: string | null, ref: O
   useTabs.getState().openObject(connectionId, database, ref, column);
 }
 
+/** Types "Open procedures and functions in edit mode" opens in an F4 "Edit:" console (the designer's script edit path). */
+const EDIT_ON_OPEN = new Set<string>(['proc', 'func', 'tablefunc', 'package', 'trigger']);
+
+/**
+ * The default "open" of an object (explorer double-click / Enter, Ctrl+P Enter). With "Open procedures and functions
+ * in edit mode" on, routines (and packages and triggers, which take the same script edit path) open in their "Edit:"
+ * console, and an already open one comes to the front; everything else, and every object with the setting off, opens
+ * the read-only object tab. Explicit commands (Edit / F4, Open DDL) do not come through here.
+ */
+export function activateObject(connectionId: string, database: string | null, ref: ObjectRef, column?: string | null): void {
+  if (!column && EDIT_ON_OPEN.has(ref.type) && openRoutinesInEditMode()) {
+    const open = useTabs.getState().tabs.find((t) => {
+      const e = t.kind === 'console' ? peekEditSession(t.id) : undefined;
+      return !!e && e.connectionId === connectionId && e.ref.type === ref.type && e.ref.name === ref.name && (e.ref.schema ?? null) === (ref.schema ?? null);
+    });
+    if (open) {
+      useTabs.getState().activate(open.id);
+      return;
+    }
+    if (runCommand('designer.edit', { kind: 'object', connectionId, database, ref })) return;
+  }
+  openObject(connectionId, database, ref, column);
+}
+
 export function reopenSql(sql: string, connectionId: string | null, database: string | null): void {
   newConsole(connectionId, database, sql);
 }
@@ -467,6 +508,56 @@ export async function openSqlFile(): Promise<void> {
   if (!f) return;
   const id = newConsole(undefined, undefined, f.content);
   useTabs.getState().markSaved(id, f.path, f.name);
+}
+
+export const OBJECT_NOUN: Record<string, string> = {
+  proc: 'procedure', func: 'function', tablefunc: 'function', view: 'view', mview: 'materialized view',
+  trigger: 'trigger', package: 'package', type: 'type', table: 'table',
+};
+
+/**
+ * Ctrl+S in an F4 "Edit:" console: save the object's changes to the database, like SSMS / Navicat / DataGrip (the
+ * console holds CREATE OR ALTER / CREATE OR REPLACE / DROP+CREATE for the object). SQLite views and triggers take the
+ * atomic apply (runEditTab); everything else runs the whole script on the tab's session. Saving the text to a .sql
+ * file stays on Save as (Ctrl+Shift+S).
+ */
+export async function saveEditToDatabase(tabId: string): Promise<void> {
+  const edit = editSessionOf(tabId);
+  const tab = consoleTab(tabId);
+  if (!edit || !tab) return;
+  const noun = OBJECT_NOUN[edit.ref.type] ?? edit.ref.type;
+  if (tab.connectionId !== edit.connectionId) {
+    toast('warning', `This console no longer points at ${edit.ref.name}'s connection`, 'Switch the connection back to save, or use Save as… to write a .sql file.');
+    return;
+  }
+  if (await runEditTab(tabId)) return; // SQLite view/trigger: atomic apply with its own toasts
+  const target = getEditor(tabId)?.getRunTarget('script');
+  if (!target) {
+    toast('info', 'Nothing to save');
+    return;
+  }
+  const before = useResults.getState().byTab[tabId];
+  // The text being saved: the "unsaved changes" dot of the toolbar's Save button compares with it.
+  const savedText = getEditor(tabId)?.getValue() ?? tab.text;
+  await runInTab(tabId, 'script', target.batches);
+  const id = useResults.getState().byTab[tabId];
+  if (!id || id === before) return; // did not start (cancelled confirm, no connection…): runInTab already said why
+  const settle = (e: ExecutionState | undefined): boolean => {
+    if (!e || isRunning(e)) return false;
+    if (e.status === 'ok') {
+      toast('success', `Saved ${noun} ${edit.ref.name}`, 'The changes were applied to the database.');
+      void useCatalog.getState().refresh(edit.connectionId);
+      // New "Compare with server" baseline.
+      void api.ddl(edit.connectionId, edit.database, edit.ref)
+        .then((d) => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, serverDdl: d.ddl, savedText }); })
+        .catch(() => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, savedText }); });
+    } else if (e.status === 'error') {
+      toast('error', `${edit.ref.name} was not saved`, 'The database reported an error; see Messages for the line.');
+    }
+    return true;
+  };
+  if (settle(useResults.getState().executions[id])) return;
+  const unsub = useResults.subscribe((s) => { if (settle(s.executions[id])) unsub(); });
 }
 
 export async function saveActiveFile(saveAs = false): Promise<void> {

@@ -44,6 +44,13 @@ for (let i = 1; i <= 200; i++) {
   if (i % 10 === 0) c.notes = null;
   customers.push(c);
 }
+// Right-to-left sample data (Persian, Arabic, mixed): renamed after the loop so the PRNG sequence stays the same.
+customers[1].name = 'علی رضایی';
+customers[2].name = 'مریم احمدی';
+customers[3].name = 'محمد عبدالله';
+customers[4].name = 'Sara سارا کریمی';
+customers[2].notes = 'Order #12 سفارش';
+customers[3].notes = '12 سفارش در انتظار ارسال';
 db.customers.insertMany(customers);
 
 // ---- products (~50): Decimal128 price, NumberLong stock, small Binary thumbnail, mixed rating

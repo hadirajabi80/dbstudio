@@ -16,6 +16,12 @@ export function diffEditorOptions(theme: string): monaco.editor.IStandaloneDiffE
     theme,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
+    // One quiet scrollbar per side: no combined diff overview ruler next to the editors' own rulers (two stacked
+    // rulers and a grey slider read as clutter), no per-side overview lanes; the tints mark the changes.
+    renderOverviewRuler: false,
+    overviewRulerLanes: 0,
+    overviewRulerBorder: false,
+    hideCursorInOverviewRuler: true,
   };
 }
 

@@ -48,6 +48,8 @@ import { analyzeSelect } from '../../filter/rewrite';
 import type { QueryCodegenArgs } from '../CodegenPanel/commands';
 import { OverflowToolbar, type OverflowItem } from '../layout/OverflowToolbar';
 import type { ObjectTarget } from '../../commands/types';
+import { ExecutedQueryLine } from './ExecutedQueryLine';
+import { resultStatement, type ExecutedQuery } from './executedQuery';
 import { applyServerFilter, originalBatch, originatingSelect, previewServerSql, serverFilterAvailability } from './serverFilter';
 import { GRID_EXPORT_MENU, RESULTS_CODE_ENTRY } from './toolbarModel';
 import './results.css';
@@ -298,6 +300,13 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
     if (items.length) showMenuBelow(el, items);
   };
   const codeCmd = codeArgs ? commandView(RESULTS_CODE_ENTRY.command, codeArgs) : null;
+  // The statement that produced this result set, as it ran (server filter included), for the line under the grid.
+  const stmt = useMemo(() => resultStatement(exec, rs, dialect), [exec.batches, exec.resultSets.length, rs.id, rs.batchIndex, dialect]); // eslint-disable-line react-hooks/exhaustive-deps
+  const queryDb = session?.database ?? tabDb ?? null;
+  const executed = useMemo<ExecutedQuery | null>(
+    () => (stmt ? { sql: stmt, params: exec.params ?? [], dialect, connectionId: exec.connectionId, database: queryDb } : null),
+    [stmt, exec.params, dialect, exec.connectionId, queryDb],
+  );
   const showCode = !!codeArgs && !!codeCmd?.enabled;
   const insertRow = () => {
     const g = gridController(key);
@@ -316,6 +325,7 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
             className="input xs borderless"
             placeholder="Search in results"
             aria-label="Search in results"
+            dir="auto"
             value={view.quickFilter}
             spellCheck={false}
             onChange={(e) => setView({ quickFilter: e.target.value })}
@@ -621,6 +631,7 @@ function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs:
           </span>
         )}
         <div className="flex-1" />
+        <ExecutedQueryLine gridKey={key} query={executed} />
         {sel && rs.columns[sel.col] && (
           <span className="muted mono">
             {rs.columns[sel.col].name}: {rs.columns[sel.col].dbType}

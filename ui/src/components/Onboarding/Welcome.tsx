@@ -4,7 +4,8 @@ import { connectAndOpen, openSampleDatabase, openSqliteFile } from '../../app/ac
 import { useConnections } from '../../store/connections';
 import { useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
-import { PROVIDER_LABEL, ProviderIcon } from '../common/icons';
+import { PROVIDER_LABEL } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Kbd } from '../Shortcuts/Kbd';
 
 const PROVIDERS: { id: ProviderId; blurb: string }[] = [
@@ -44,7 +45,7 @@ export function Welcome({ ready }: { ready: boolean }) {
             <div className="welcome-recent">
               {recent.map((c) => (
                 <button key={c.id} className="welcome-conn" onClick={() => connectAndOpen(c.id)} disabled={!ready}>
-                  <ProviderIcon providerId={c.providerId} color={null} size={20} />
+                  <ProviderLogo providerId={c.providerId} size={20} />
                   <span className="welcome-conn-text">
                     <span className="welcome-conn-name">
                       <ColorDot color={c.color} size={7} /> {c.name}
@@ -63,7 +64,7 @@ export function Welcome({ ready }: { ready: boolean }) {
           <div className="provider-cards">
             {PROVIDERS.map((p) => (
               <button key={p.id} className="provider-card" onClick={() => openDialog({ mode: 'new', providerId: p.id, connectAfter: true })} disabled={!ready && !loaded}>
-                <ProviderIcon providerId={p.id} color={null} size={32} />
+                <ProviderLogo providerId={p.id} size={32} />
                 <span className="provider-card-name">{PROVIDER_LABEL[p.id]}</span>
                 <span className="provider-card-blurb">{p.blurb}</span>
                 <ArrowRight size={16} className="provider-card-go" aria-hidden="true" />

@@ -87,4 +87,16 @@ describe('Parameters dialog', () => {
     expect(((await screen.findByLabelText('Value of :id')) as HTMLInputElement).value).toBe('3');
     act(() => useParams.getState().close(null));
   });
+
+  it('string values are typed with dir="auto" (Persian/mixed text); numeric kinds are not', async () => {
+    render(<ParamsDialogHost />);
+    void resolveParams('t4', 'c_prod', 'tsql', batch('SELECT * FROM t WHERE id = @id AND name = @name'));
+    const name = await screen.findByLabelText('Value of @name');
+    chooseOption(screen.getByLabelText('Type of @name'), { value: 'string' });
+    fireEvent.change(name, { target: { value: 'سلام world' } });
+    expect(screen.getByLabelText('Value of @name').getAttribute('dir')).toBe('auto');
+    chooseOption(screen.getByLabelText('Type of @id'), { value: 'int' });
+    expect(screen.getByLabelText('Value of @id').hasAttribute('dir')).toBe(false);
+    act(() => useParams.getState().close(null));
+  });
 });

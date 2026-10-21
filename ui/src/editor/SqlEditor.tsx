@@ -10,7 +10,9 @@ import { createIntel, type Intel } from '../intel';
 import { intelOptionsFromSettings } from './settings';
 import type { SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from './monaco-setup';
-import { baseMonacoOptions, remeasureAfterFonts } from './monacoOptions';
+import { baseMonacoOptions, remeasureAfterFonts, suggestMetrics } from './monacoOptions';
+import { bindEditorFontSize, editorFontSize } from './fontZoom';
+import { refreshSuggest, triggerSuggest } from './suggestKey';
 import { bindModel, setActiveBinding, type ModelBinding } from './registry';
 import { dismissEditorPopups, formatDocument, formatSelection, openSnippetPicker, runExplain } from './actions';
 import { getEditorConfig } from './config';
@@ -157,7 +159,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       // Every caller takes the statement away from the editor (run from the toolbar or Ctrl+Enter in a console,
       // multi-run, code, parameters): close the suggest list and parameter hints first (styles-r1-05).
       if (t && edRef.current) dismissEditorPopups(edRef.current);
-      return t ? { batches: t.batches, text: t.text } : null;
+      return t ? { batches: t.batches, text: t.text, label: t.label } : null;
     },
     insertText: (text: string) => {
       const ed = edRef.current;
@@ -178,6 +180,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     formatDocument: () => doFormat(false),
     formatSelection: () => doFormat(true),
     openSnippetPicker: () => { if (edRef.current) openSnippetPicker(edRef.current, bindingRef.current ?? undefined); },
+    triggerSuggest: () => { if (edRef.current) triggerSuggest(edRef.current); },
     explain: (mode: ExplainMode) => doExplain(mode),
   }), []);
 
@@ -208,7 +211,9 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       model,
       theme: p.theme === 'dark' ? THEME_IDS.dark : THEME_IDS.light,
       readOnly: !!p.readOnly,
-      fontSize: p.settings?.fontSize ?? 14,
+      // Settings.editor.fontSize, followed live and changed with Ctrl + wheel (bindEditorFontSize below)
+      fontSize: editorFontSize(),
+      ...suggestMetrics(editorFontSize()),
       fontLigatures: false,
       automaticLayout: true,
       minimap: { enabled: false },
@@ -232,6 +237,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       stickyScroll: { enabled: false },
     });
     edRef.current = ed;
+    const unbindFont = bindEditorFontSize(ed);
     guardEditorSuggest(ed);
     remeasureAfterFonts();
 
@@ -315,6 +321,12 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       id: 'dbstudio.explainActual', label: 'Explain Plan (Actual, runs the statement)', keybindings: [K.CtrlCmd | K.Shift | C.KeyL],
       contextMenuGroupId: 'navigation', contextMenuOrder: 3, run: () => { doExplain('actual'); },
     }));
+    // Ctrl+Space / Ctrl+I (⌃Space / ⌘I): replaces Monaco's binding, which does nothing while the widget shows its
+    // 'No suggestions.' / 'Loading…' message (editor/suggestKey.ts). Registered after Monaco's, so it wins.
+    subs.push(ed.addAction({
+      id: 'dbstudio.triggerSuggest', label: 'Trigger Suggest', keybindings: [(isMac() ? K.WinCtrl : K.CtrlCmd) | C.Space, K.CtrlCmd | C.KeyI],
+      contextMenuGroupId: '1_modification', contextMenuOrder: 1, precondition: '!editorReadonly', run: (x) => { triggerSuggest(x); },
+    }));
     subs.push(ed.addAction({ id: 'dbstudio.signatureHelp', label: 'Parameter Info', keybindings: [K.CtrlCmd | K.Shift | C.Space], run: (x) => x.trigger('dbstudio', 'editor.action.triggerParameterHints', {}) }));
 
     refreshSoft();
@@ -329,6 +341,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       if (softTimer.current) clearTimeout(softTimer.current);
       for (const s of subs) s.dispose();
       unbind();
+      unbindFont();
       ed.dispose();
       model.dispose();
       edRef.current = null;
@@ -353,6 +366,12 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   useEffect(() => {
     intelRef.current?.setCatalog(props.catalog);
     refreshSoft();
+    // a "Loading <schema>…" row is on screen: show the schema's objects now that the catalog has them
+    const b = bindingRef.current, ed = edRef.current;
+    if (b?.suggestLoading && ed) {
+      b.suggestLoading = false;
+      refreshSuggest(ed);
+    }
   }, [props.catalog]);
 
   useEffect(() => {
@@ -368,7 +387,6 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     const ed = edRef.current;
     const s = props.settings;
     if (!ed || !s) return;
-    ed.updateOptions({ fontSize: s.fontSize });
     ed.getModel()?.updateOptions({ tabSize: s.tabSize });
     intelRef.current?.setOptions(intelOptionsFromSettings(s, props.dialect));
     refreshSoft();

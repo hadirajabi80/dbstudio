@@ -61,7 +61,8 @@ export function makeGridTheme(theme: EffectiveTheme): Partial<Theme> {
     headerIconSize: 16,
     baseFontStyle: '13px',
     markerFontStyle: '11px',
-    fontFamily: cssVar('--font-mono', 'Cascadia Code, Consolas, monospace'),
+    // --font-grid: the mono stack plus fonts that shape Persian/Arabic (joined letters) on Windows and macOS
+    fontFamily: cssVar('--font-grid', cssVar('--font-mono', 'Cascadia Code, Consolas, Segoe UI, Tahoma, Geeza Pro, monospace')),
     editorFontSize: '13px',
     lineHeight: 1.4,
     roundingRadius: 3,

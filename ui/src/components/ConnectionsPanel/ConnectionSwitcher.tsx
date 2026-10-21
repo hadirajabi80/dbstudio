@@ -10,7 +10,7 @@ import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
 import { useRestoreFocus } from '../common/focus';
-import { ProviderIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Kbd } from '../Shortcuts/Kbd';
 
 interface Row {
@@ -183,7 +183,7 @@ function Switcher() {
                     choose(i);
                   }}
                 >
-                  {r.conn ? <ProviderIcon providerId={r.conn.providerId} color={null} size={16} /> : r.key === '__new' ? <Plus size={16} /> : <Database size={16} strokeWidth={1.5} />}
+                  {r.conn ? <ProviderLogo providerId={r.conn.providerId} size={16} /> : r.key === '__new' ? <Plus size={16} /> : <Database size={16} strokeWidth={1.5} />}
                   {r.conn && <ColorDot color={r.conn.color} size={8} />}
                   <span className="switcher-label">
                     {highlight(r.label, r.positions)}

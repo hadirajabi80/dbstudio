@@ -1,6 +1,6 @@
 import { Command as CommandIcon, Database, LoaderCircle, Search, SquareChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { insertIntoActiveEditor, openObject, preloadCatalog, selectTop } from '../../app/actions';
+import { activateObject, insertIntoActiveEditor, openObject, preloadCatalog, selectTop } from '../../app/actions';
 import { isMac } from '../../commands/keys';
 import { advertisedShortcuts, getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
 import type { ObjectTarget } from '../../commands/types';
@@ -13,7 +13,8 @@ import { dbKey, useCatalog } from '../../store/catalog';
 import { dialectOf, providerKind, useConnections } from '../../store/connections';
 import { getActiveConsole } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
-import { ColumnIcon, ObjectIcon, ProviderIcon } from '../common/icons';
+import { ColumnIcon, ObjectIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { ColorDot } from '../common/ConnectionBadge';
 import { useRestoreFocus } from '../common/focus';
 import { useExplorer } from '../Explorer/explorerStore';
@@ -120,7 +121,7 @@ export function runObjectHit(e: IndexEntry, how: 'open' | 'data' | 'insert' | 'r
   } else if (how === 'reveal') {
     useUi.getState().showDock('explorer');
     useExplorer.getState().reveal(t);
-  } else openObject(e.connectionId, e.database, e.ref, e.column);
+  } else activateObject(e.connectionId, e.database, e.ref, e.column);
 }
 
 /** Ctrl+Shift+P commands; Ctrl+P (or "@" in the command box) goes to any loaded object across connections. */
@@ -390,7 +391,7 @@ function ObjectRow({ it, i, sel, setSel, choose, connName }: {
       title={`${e.source ? SOURCE_ENTRY_LABEL[e.source.type] : e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type as CatalogObjectType]} ${e.name} — ${conn?.name ?? ''}`}
     >
       <span className="palette-icon">
-        {e.source ? <ProviderIcon providerId={conn?.providerId ?? ''} color={null} size={16} /> : e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type as CatalogObjectType} />}
+        {e.source ? <ProviderLogo providerId={conn?.providerId ?? ''} size={16} /> : e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type as CatalogObjectType} />}
       </span>
       <span className="palette-label">
         <Hl text={e.name} positions={it.match.positions} />

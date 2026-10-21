@@ -1,0 +1,57 @@
+/* Error boundary fallback (components/common/ErrorBoundary.tsx). Theme tokens only. */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--space-6);
+  color: var(--fg);
+}
+.error-boundary-root { position: fixed; inset: 0; background: var(--bg-app); }
+.error-boundary-tab { flex: 1; min-height: 0; background: var(--bg-panel); }
+.error-boundary-panel { flex: 1; min-height: 0; align-items: flex-start; padding: var(--space-4) var(--space-3); }
+.error-boundary-inline { justify-content: flex-start; padding: var(--space-3) 0; }
+
+.error-boundary-card {
+  width: 100%;
+  max-width: 460px;
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+.error-boundary-panel .error-boundary-card { padding: var(--space-3); box-shadow: none; }
+.error-boundary-head { display: flex; align-items: center; gap: var(--space-2); }
+.error-boundary-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: var(--radius);
+  background: var(--danger-soft); color: var(--danger-text);
+}
+.error-boundary-title { flex: 1; min-width: 0; font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.error-boundary-message {
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-2);
+  max-height: 120px; overflow: auto;
+  font-family: var(--font-mono); font-size: var(--text-sm);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  color: var(--danger-text);
+  background: var(--bg-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+}
+.error-boundary-hint { margin: 0 0 var(--space-3); color: var(--fg-muted); font-size: var(--text-sm); }
+.error-boundary-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* dialog: the panel is the dialog's whole content */
+.error-boundary-dialog { width: 460px; }
+.error-boundary-dialog .error-boundary { padding: 0; }
+.error-boundary-dialog .error-boundary-card { max-width: none; border: 0; border-radius: 0; box-shadow: none; padding: var(--space-4) var(--dialog-pad) var(--dialog-pad); }
+
+/* strip: one line inside a bar (tab strip, status bar) */
+.error-boundary-strip {
+  display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2);
+  min-height: 28px; padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  background: var(--danger-soft);
+}
+.error-boundary-strip .error-boundary-icon { color: var(--danger-text); flex-shrink: 0; }
+.error-boundary-strip-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

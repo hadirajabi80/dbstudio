@@ -13,6 +13,7 @@ import { snippetPickerItems } from '../snippets';
 import { getEditorConfig } from './config';
 import { FORMAT_MARKER_OWNER } from './actions';
 import { buildMonacoTheme } from '../theme/monacoTheme';
+import { followUpPayload } from './suggestKey';
 
 export const LANGUAGE_IDS: Record<Dialect, string> = {
   tsql: 'dbstudio-tsql',
@@ -143,7 +144,8 @@ function registerLanguage(dialect: Dialect): void {
       const typed = model.getValueInRange(insert);
       const typedHasSpace = /\s/.test(typed);
       const suggestions = res.items.map((it) => toSuggestion(it, model, b.uri, typed, typedHasSpace, insert, replace));
-      return { suggestions, incomplete: !!res.isIncomplete };
+      b.suggestLoading = res.items.some((it) => it.loading);
+      return { suggestions, incomplete: !!res.isIncomplete || b.suggestLoading };
     },
   });
 
@@ -259,7 +261,7 @@ function toSuggestion(
   }
   const follow = it.command === 'retrigger' ? 'editor.action.triggerSuggest' : it.command === 'signatureHelp' ? 'editor.action.triggerParameterHints' : '';
   return {
-    label: it.description ? { label: it.label, description: it.description } : it.label,
+    label: it.description || it.labelDetail ? { label: it.label, detail: it.labelDetail, description: it.description } : it.label,
     kind: KIND[it.kind],
     detail: it.detail,
     documentation: it.documentation ? { value: it.documentation } : undefined,
@@ -293,7 +295,9 @@ export function ensureMonacoSetup(): void {
     const b = bindingByUri(uri);
     if (!b) return;
     if (usageKey) b.accepted(usageKey);
-    if (follow) setTimeout(() => b.editor.trigger('dbstudio', follow, {}), 0);
+    // a follow-up suggest is automatic, not explicit: with nothing to offer (a schema whose objects are still
+    // loading, a database with no catalog) it shows nothing instead of an empty 'No suggestions.' box
+    if (follow) setTimeout(() => b.editor.trigger('dbstudio', follow, followUpPayload(follow)), 0);
   });
 
   monaco.editor.registerEditorOpener({

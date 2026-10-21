@@ -134,6 +134,8 @@ export class CatalogIndex {
   /** Called when a schema qualifier is not loaded (user typed `schema.`). */
   schemaRequester: ((schema: string) => void) | null = null;
   private readonly requestedSchemas = new Set<string>();
+  /** Every schema of the database (snapshot.schemaNames), loaded or not: offered as schema items, lazy-loaded on `schema.`. */
+  knownSchemaNames: string[] = [];
 
   constructor(spec: DialectSpec) {
     this.spec = spec;
@@ -165,6 +167,7 @@ export class CatalogIndex {
     if (!snap) {
       this.snapshot = null;
       this.schemas.clear();
+      this.knownSchemaNames = [];
       this.all.clear();
       this.colIndex = null;
       this.version++;
@@ -176,8 +179,16 @@ export class CatalogIndex {
     this.searchPath = this.spec.id === 'pgsql' && snap.searchPath?.length ? snap.searchPath.slice() : [snap.defaultSchema];
     this.database = snap.database;
     this.databases = snap.databases ?? [];
-    const keep = new Set<string>();
+    const names = snap.schemaNames ?? [];
     let changed = !sameConn;
+    if (names.join('\u0001') !== this.knownSchemaNames.join('\u0001')) {
+      // The schema list arrived (or changed): a schema requested before the list was known may now be loadable,
+      // so it can be requested again (the console's requester loads only schemas it finds in the list).
+      for (const n of names) if (!snap.schemas.some((s) => this.keyOfCatalog(s.name) === this.keyOfCatalog(n))) this.requestedSchemas.delete(n.toUpperCase());
+      this.knownSchemaNames = names.slice();
+      changed = true;
+    }
+    const keep = new Set<string>();
     if (!sameConn) this.schemas.clear();
     for (const sc of snap.schemas) {
       const key = this.keyOfCatalog(sc.name);
@@ -484,5 +495,17 @@ export class CatalogIndex {
   /** All schema names (loaded) for completion. */
   schemaNames(): string[] {
     return [...this.schemas.values()].map((s) => s.name);
+  }
+
+  /** Schemas the database has (snapshot.schemaNames) whose objects are not loaded yet. */
+  unloadedSchemaNames(): string[] {
+    return this.knownSchemaNames.filter((n) => !this.schemas.has(this.keyOfCatalog(n)));
+  }
+
+  /** A schema of this database that exists but is not loaded yet (`name.` then shows "Loading name…"). */
+  isUnloadedSchema(name: string, quoted = false): boolean {
+    const k = this.keyOf(name, quoted);
+    if (this.schemas.has(k) || this.builtinSchemas.has(k)) return false;
+    return this.knownSchemaNames.some((n) => this.keyOfCatalog(n) === k);
   }
 }

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CatalogObjectType, ConnectionProfile } from '../../api/types';
-import { connectAndOpen, newConsole, openObject } from '../../app/actions';
+import { activateObject, connectAndOpen, newConsole } from '../../app/actions';
 import { displayShortcut } from '../../commands/keys';
 import { hasCommand, runCommand } from '../../commands/registry';
 import type { CommandTarget } from '../../commands/types';
@@ -17,7 +17,8 @@ import { useSourceClients } from '../../store/sourceClients';
 import { connectionActivity, useSessions, type ConnectionActivity } from '../../store/sessions';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
-import { ColumnIcon, DatabaseIcon, ObjectIcon, ProviderIcon } from '../common/icons';
+import { ColumnIcon, DatabaseIcon, ObjectIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { activityTitle } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
@@ -127,7 +128,10 @@ export function contextMenuIdOf(r: TreeRow): string | null {
   return null;
 }
 
-/** Enter / double-click: tables & views open their data (when the data tab exists), other objects their details. */
+/**
+ * Enter / double-click: tables & views open their data (when the data tab exists), other objects their details, or
+ * routines their "Edit:" console with "Open procedures and functions in edit mode" (activateObject).
+ */
 function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
   if (r.kind === 'status' && r.status === 'load' && r.connectionId && r.loadSchema) {
     void useCatalog.getState().loadSchema(r.connectionId, r.database ?? null, r.loadSchema);
@@ -144,7 +148,7 @@ function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
     const t = targetOfRow(r);
     if (!t || t.kind !== 'object') return;
     if (r.kind === 'object' && isTabular(t.ref.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
-    openObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
+    activateObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
   } else toggle(r);
 }
 
@@ -347,6 +351,7 @@ export function Explorer() {
               placeholder={`Filter objects (${displayShortcut('Mod+F')})`}
               aria-label="Filter objects"
               value={filter}
+              dir="auto"
               spellCheck={false}
               onChange={(e) => ex().setFilter(e.target.value)}
               onKeyDown={(e) => {
@@ -414,7 +419,7 @@ export function Explorer() {
         <EmptyState
           icon={<Database size={32} strokeWidth={1.25} />}
           title="Add your first connection"
-          hint="SQL Server, Oracle or a SQLite file."
+          hint="SQL databases, Redis, MongoDB or Kafka."
           action={{ command: 'file.newConnection', label: 'New connection' }}
           secondary={{ command: 'file.sampleDb', label: 'Try the sample database' }}
         />
@@ -483,7 +488,7 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
   const conn = useConnections((s) => (r.kind === 'connection' ? s.connections.find((c) => c.id === r.connectionId) : undefined));
   const draggable = r.kind === 'object' || r.kind === 'column';
   let icon: ReactNode = null;
-  if (r.kind === 'connection' && conn) icon = <ProviderIcon providerId={conn.providerId} color={null} size={16} />;
+  if (r.kind === 'connection' && conn) icon = <ProviderLogo providerId={conn.providerId} size={16} />;
   else if (r.kind === 'cfolder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
   else if (r.kind === 'database') icon = <DatabaseIcon />;
   else if (r.kind === 'schema') icon = <span className="schema-glyph" aria-hidden="true">S</span>;
@@ -553,7 +558,7 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
         {r.expandable ? r.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
       </span>
       {icon && <span className="tree-icon">{icon}</span>}
-      <span className={`tree-label${r.kind === 'connection' ? ' strong' : ''}`}>
+      <span className={`tree-label${r.kind === 'connection' ? ' strong' : ''}`} dir="auto">
         <Highlight text={r.label} positions={r.match} />
       </span>
       {conn?.readOnly && <Lock size={11} className="tree-lock" aria-label="Read-only" />}

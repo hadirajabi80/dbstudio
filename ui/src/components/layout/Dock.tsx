@@ -4,6 +4,7 @@ import { displayShortcut } from '../../commands/keys';
 import { useCatalog } from '../../store/catalog';
 import { activityCounts, useSessions } from '../../store/sessions';
 import { DOCK_MAX, DOCK_MIN, useUi, type DockPanel } from '../../store/ui';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { Splitter } from '../common/Splitter';
 import { pluralize } from '../common/text';
 import { ConnectionsPanel } from '../ConnectionsPanel/ConnectionsPanel';
@@ -78,9 +79,12 @@ export function Dock() {
           ))}
         </div>
         <div className="dock-body" id={`dock-panel-${dock}`} role="tabpanel" aria-labelledby={`dock-tab-${dock}`}>
-          {dock === 'explorer' && <Explorer />}
-          {dock === 'history' && <HistoryPanel />}
-          {dock === 'connections' && <ConnectionsPanel />}
+          {/* One boundary per panel (keyed): a crashed panel leaves the dock tabs and the other panels usable. */}
+          <ErrorBoundary key={dock} area={`the ${TABS.find((t) => t.id === dock)?.label ?? 'side'} panel`} variant="panel">
+            {dock === 'explorer' && <Explorer />}
+            {dock === 'history' && <HistoryPanel />}
+            {dock === 'connections' && <ConnectionsPanel />}
+          </ErrorBoundary>
         </div>
       </aside>
       <Splitter

@@ -63,8 +63,12 @@ export interface CompletionItem {
   label: string;
   kind: CompletionKind;
   detail?: string;
-  /** Short right-aligned text (column type). */
+  /** Short right-aligned text (column type; a routine's `schema · function`). */
   description?: string;
+  /** Muted text right after the label (a routine's parameter list). */
+  labelDetail?: string;
+  /** A "Loading <schema>…" placeholder: its objects are on their way; the editor refreshes the list when they arrive. */
+  loading?: boolean;
   documentation?: string;
   insertText: string;
   isSnippet?: boolean;

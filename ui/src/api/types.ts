@@ -165,6 +165,8 @@ export interface CatalogSnapshot {
   schemas: CatalogSchema[];
   /** M2 (PostgreSQL): `current_schemas(true)` minus `pg_catalog`, in order; omitted for other dialects. */
   searchPath?: string[];
+  /** UI only (store/catalog.ts): every schema of the database, loaded or not (GET /schemas), for IntelliSense. */
+  schemaNames?: string[];
 }
 
 export interface ObjectRef { database: string | null; schema: string | null; name: string; type: CatalogObjectType }

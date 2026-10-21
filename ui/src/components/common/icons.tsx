@@ -1,41 +1,12 @@
-import {
-  Boxes, Columns3, Cylinder, Database, Eye, File, Folder, FunctionSquare, Hash, Key, Layers, Leaf, Link, Link2, Package, Server, Shapes,
-  SquareFunction, Table2, Waypoints, Zap,
-} from 'lucide-react';
-import type { CatalogObjectType, ProviderId } from '../../api/types';
-import { connColorCss } from '../../theme/connColors';
+import { Columns3, Database, Eye, Folder, FunctionSquare, Hash, Key, Layers, Link, Link2, Package, Shapes, SquareFunction, Table2, Zap } from 'lucide-react';
+import type { CatalogObjectType } from '../../api/types';
 
 // Iconography (docs/PLAN-M1.5.md section 3): lucide only, 16 px, stroke 1.5, currentColor; fixed object-type icons.
-
-const PROVIDER_ICON: Record<ProviderId, { Icon: typeof Server; label: string }> = {
-  sqlserver: { Icon: Server, label: 'SQL Server' },
-  oracle: { Icon: Database, label: 'Oracle' },
-  sqlite: { Icon: File, label: 'SQLite' },
-  // M2 (docs/PLAN-M2.md 1.3)
-  postgresql: { Icon: Cylinder, label: 'PostgreSQL' },
-  redis: { Icon: Boxes, label: 'Redis' },
-  mongodb: { Icon: Leaf, label: 'MongoDB' },
-  kafka: { Icon: Waypoints, label: 'Kafka' },
-};
+// Connection types are the exception: they show the product logo (theme/brand/ProviderLogo.tsx).
 
 export const PROVIDER_LABEL: Record<string, string> = {
   sqlserver: 'SQL Server', oracle: 'Oracle', sqlite: 'SQLite', postgresql: 'PostgreSQL', redis: 'Redis', mongodb: 'MongoDB', kafka: 'Kafka',
 };
-
-/** Provider glyph (Server / Database / File) on a provider-tinted tile; the connection colour is shown as a ring. */
-export function ProviderIcon({ providerId, color, size = 16 }: { providerId: ProviderId | string; color?: string | null; size?: number }) {
-  const p = PROVIDER_ICON[providerId as ProviderId] ?? { Icon: Database, label: providerId };
-  const ring = connColorCss(color);
-  return (
-    <span
-      className={`provider-icon provider-${providerId}`}
-      style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--bg-panel), 0 0 0 3.5px ${ring}` : undefined }}
-      aria-hidden="true"
-    >
-      <p.Icon size={Math.round(size * 0.68)} strokeWidth={2} data-stroke="" />
-    </span>
-  );
-}
 
 const OBJ_ICONS: Record<CatalogObjectType, typeof Table2> = {
   table: Table2,

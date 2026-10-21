@@ -1,15 +1,16 @@
 import {
   ChevronDown, CircleStop, Code, Database, GitCommitHorizontal, GitCompare, Layers, ListEnd, LoaderCircle, Lock, Play, RotateCcw, Rows3,
-  Sparkles, WandSparkles,
+  Save, Sparkles, WandSparkles,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { TxMode } from '../../api/types';
-import { cancelBlockedReason, effectiveDatabase, setTxMode } from '../../app/actions';
+import { cancelBlockedReason, effectiveDatabase, OBJECT_NOUN, setTxMode } from '../../app/actions';
 import { getEditor } from '../../app/editors';
+import { isEditDirty, peekEditSession } from '../../designer/editSession';
 import { useDesignerUi } from '../../designer/store';
-import { ariaKeyShortcuts, displayShortcut } from '../../commands/keys';
+import { ariaKeyShortcuts, displayShortcut, tooltipWithShortcut } from '../../commands/keys';
 import type { ContextEntry } from '../../commands/menuModel';
-import { getCommand, hasCommand } from '../../commands/registry';
+import { getCommand, hasCommand, runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { formatCount, formatDuration } from '../../lib/format';
 import { dbKey, useCatalog } from '../../store/catalog';
@@ -22,17 +23,32 @@ import { useTabs, type ConsoleTab } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { connColorCss, connColorName, isProductionColor } from '../../theme/connColors';
 import { showMenuBelow, type MenuItem } from '../common/Menu';
-import { ProviderIcon } from '../common/icons';
+import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Select } from '../common/Select';
 import { CommandButton } from '../layout/CommandButton';
 import { commandMenuItems } from '../layout/commandMenu';
 import { OverflowToolbar, type OverflowItem } from '../layout/OverflowToolbar';
+import { routineEditOf } from '../ExecuteRoutine/intercept';
+import './toolbar.css';
 
 const MAX_ROWS_OPTIONS = [500, 1000, 10000, 100000, 0];
 
 const CODE_ENTRIES: ContextEntry[] = [{ command: 'codegen.query', optional: true }, { command: 'codegen.open', optional: true }];
 /** Explain split-button menu: both modes, each with its shortcut (Ctrl+L / Ctrl+Shift+L). */
 const EXPLAIN_ENTRIES: ContextEntry[] = [{ command: 'explain.estimated' }, { command: 'explain.actual', optional: true }];
+
+/**
+ * Run's menu in an "Edit:" console of a procedure or function: Run executes the routine with the parameter form
+ * (the CREATE OR ALTER / OR REPLACE in the editor is what Save applies), the menu keeps running the text as a script.
+ */
+function executeEntries(noun: string, name: string): ContextEntry[] {
+  return [
+    { command: 'routine.execute', label: `Execute ${noun} ${name}…` },
+    { command: 'routine.runEditScript' },
+    'separator',
+    { command: 'file.save', label: `Save ${noun} to the database` },
+  ];
+}
 
 export function maxRowsLabel(n: number) {
   return n === 0 ? 'No limit' : formatCount(n);
@@ -42,7 +58,8 @@ export function maxRowsLabel(n: number) {
  * Per-console toolbar (section 3): Run, Run script, Cancel, Run on…, connection pill, database, tx mode, Explain,
  * Format, Code ▾, Compare (object edits), row limit. Every button dispatches a registered command. On narrow windows
  * or at high zoom the low-priority items (row limit, Code, Explain, Format, Run on…, tx mode) collapse into a "…" menu
- * instead of scrolling.
+ * instead of scrolling. F4 "Edit:" consoles add Save (file.save: to the database, a dot while unsaved); for procedures
+ * and functions Run becomes "Execute…" (the parameter form) with Run script and Save in its menu.
  */
 export function Toolbar({ tab }: { tab: ConsoleTab }) {
   useCommandContext();
@@ -53,6 +70,10 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   // An "Edit:" console's atomic apply cannot be stopped: Stop is dimmed and says why (features-r1-06).
   const editRunInFlight = useDesignerUi((s) => !!s.editRunInFlight[tab.id]);
   const cancelReason = editRunInFlight ? cancelBlockedReason(tab.id) : null;
+  // F4 "Edit:" consoles: Save (Ctrl+S) writes the object to the database; routines execute instead of re-running.
+  useDesignerUi((s) => s.edits[tab.id]); // re-render when a save refreshes the session's baseline
+  const edit = peekEditSession(tab.id);
+  const routineEdit = routineEditOf(tab.id);
   const defaultMax = useSettings((s) => s.settings.results.maxRows);
   const setMaxRows = useTabs((s) => s.setMaxRows);
   const connCat = useCatalog((s) => (tab.connectionId ? s.conns[tab.connectionId] : undefined));
@@ -79,6 +100,9 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   };
 
   const run = commandView('run.statement');
+  const noun = edit ? OBJECT_NOUN[edit.ref.type] ?? edit.ref.type : '';
+  const save = edit ? commandView('file.save', undefined, `Save ${noun} ${edit.ref.name} to the database`) : null;
+  const dirty = !!edit && isEditDirty(edit, tab.text);
   const explain = getCommand('explain.estimated');
   const codeItems: MenuItem[] = commandMenuItems(CODE_ENTRIES);
   const compare = commandView('designer.compareWithServer');
@@ -93,8 +117,36 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const explainReason = !conn ? `choose a connection first (${displayShortcut('Mod+Shift+K')})` : empty ? 'type a statement to explain' : null;
   const formatReason = empty ? 'the editor is empty' : null;
 
+  const runShortcuts = [run.shortcut, getCommand('run.script')?.shortcut].filter((k): k is string => !!k).map((k) => displayShortcut(k)).join(' or ');
   const items: OverflowItem[] = [
-    {
+    routineEdit ? {
+      id: 'run',
+      node: (
+        <span className="split-btn tb-exec">
+          <button
+            className={`btn btn-run split-main${prod ? ' prod' : ''}`}
+            onClick={() => runCommand('routine.execute')}
+            disabled={!conn || running}
+            title={tooltipWithShortcut(`Execute ${noun} ${routineEdit.ref.name} with parameters`, runShortcuts) + (prod ? ' — production connection' : '')}
+            aria-haspopup="dialog"
+            aria-keyshortcuts={ariaKeyShortcuts(run.shortcut)}
+            data-command="routine.execute"
+          >
+            <Play size={14} fill="currentColor" strokeWidth={1.5} /> <span className="btn-text">Execute…</span>
+          </button>
+          <button
+            className="btn btn-run split-caret-run"
+            aria-label="More run options"
+            aria-haspopup="menu"
+            title="Run options: execute, run the script, save"
+            disabled={!conn || running}
+            onClick={(e) => showMenuBelow(e.currentTarget, commandMenuItems(executeEntries(noun, routineEdit.ref.name)))}
+          >
+            <ChevronDown size={14} />
+          </button>
+        </span>
+      ),
+    } : {
       id: 'run',
       node: (
         <button
@@ -112,7 +164,29 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
         </button>
       ),
     },
-    { id: 'script', node: <CommandButton command="run.script" icon={<ListEnd size={16} strokeWidth={1.5} />} onRan={refocus} /> },
+    ...(save && edit ? [{
+      id: 'save',
+      node: (
+        <button
+          className={`btn btn-primary tb-save${dirty ? ' dirty' : ''}`}
+          onClick={() => {
+            save.run();
+            refocus();
+          }}
+          disabled={!save.enabled || running || editRunInFlight}
+          title={save.tooltip + (dirty ? ' — unsaved changes' : '')}
+          aria-label={dirty ? 'Save, unsaved changes' : 'Save'}
+          aria-keyshortcuts={ariaKeyShortcuts(save.shortcut)}
+          data-command="file.save"
+          data-dirty={dirty || undefined}
+        >
+          <Save size={14} strokeWidth={1.75} /> <span className="btn-text">Save</span>
+          {dirty && <span className="tb-dirty-dot" aria-hidden="true" />}
+        </button>
+      ),
+    }] : []),
+    // In a routine's "Edit:" console, F5 executes too; "Run script" lives in the Execute button's menu.
+    ...(routineEdit ? [] : [{ id: 'script', node: <CommandButton command="run.script" icon={<ListEnd size={16} strokeWidth={1.5} />} onRan={refocus} /> }]),
     { id: 'cancel', node: <CommandButton command="run.cancel" icon={<CircleStop size={16} strokeWidth={1.5} />} className={running && !cancelReason ? 'danger' : ''} disabledReason={cancelReason} onRan={refocus} /> },
     {
       id: 'multi', priority: 3, menu: () => commandMenuItems([{ command: 'run.multi' }]),
@@ -141,7 +215,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
         aria-keyshortcuts={ariaKeyShortcuts('Mod+Shift+K')}
         style={conn?.color ? ({ ['--conn-color' as string]: connColorCss(conn.color) }) : undefined}
       >
-        {conn ? <ProviderIcon providerId={conn.providerId} color={null} size={16} /> : <Sparkles size={16} strokeWidth={1.5} />}
+        {conn ? <ProviderLogo providerId={conn.providerId} size={16} /> : <Sparkles size={16} strokeWidth={1.5} />}
         {conn?.color && <span className="conn-pill-dot" aria-hidden="true" />}
         <span className={`conn-pill-name${conn ? '' : ' muted'}`}>{conn?.name ?? 'Choose connection'}</span>
         {conn?.readOnly && <Lock size={12} aria-label="Read-only" />}

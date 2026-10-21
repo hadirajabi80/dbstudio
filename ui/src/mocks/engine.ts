@@ -370,7 +370,15 @@ export class MockEngine {
     }
     s.state = 'idle';
     const elapsed = Math.round(performance.now() - started);
-    this.emit({ type: 'exec.done', executionId: xid, sessionId: s.sessionId, status, elapsedMs: elapsed, resultSets: rsId, rowsAffected: affected, txOpen: s.txOpen } as WsEvent);
+    // Out / in-out binds (Oracle OUT parameters): numbers come back as 42, text as 'mock', in-out as their input.
+    const outParams = status === 'ok'
+      ? (req.params ?? []).filter((p) => (p.direction === 'out' || p.direction === 'inout') && p.kind !== 'refcursor')
+        .map((p) => ({ name: p.name.replace(/^[@:$]/, ''), value: p.direction === 'inout' ? p.value : p.kind === 'int' || p.kind === 'decimal' || p.kind === 'float' ? 42 : 'mock' }))
+      : [];
+    this.emit({
+      type: 'exec.done', executionId: xid, sessionId: s.sessionId, status, elapsedMs: elapsed, resultSets: rsId, rowsAffected: affected, txOpen: s.txOpen,
+      ...(outParams.length ? { outParams } : {}),
+    } as WsEvent);
     this.changed(s);
     this.history.unshift({
       id: ++this.historySeq, connectionId: s.connectionId, database: s.database, sql: req.batches.map((b) => b.sql).join(';\n'), startedAt: ts(),
@@ -566,6 +574,12 @@ export class MockEngine {
         const t = SHOP_TABLES.find((x) => x.name === 'customers')!;
         out.sets.push({ columns: columnInfos(t, 'dbo'), rows: tableRows(t).slice(0, 1) });
         out.sets.push({ columns: columnInfos(SHOP_TABLES.find((x) => x.name === 'orders')!, 'dbo'), rows: tableRows(SHOP_TABLES.find((x) => x.name === 'orders')!).slice(0, 7) });
+      }
+      // Execute routine (SQL Server): `DECLARE @return_value int…; EXEC …; SELECT @return_value AS [Return value], @x AS [x];`
+      const outs = kw === 'DECLARE' ? /;\s*SELECT\s+((?:@\w+\s+AS\s+\[[^\]]+\]\s*,?\s*)+);?\s*$/i.exec(sql) : null;
+      if (outs) {
+        const names = [...outs[1].matchAll(/AS\s+\[([^\]]+)\]/gi)].map((m) => m[1]);
+        out.sets.push({ columns: names.map((n, i) => col(n, i === 0 ? 'int' : 'sql_variant', i === 0 ? 'int' : 'string', i)), rows: [names.map((_, i) => (i === 0 ? 0 : null))] });
       }
       return out;
     }

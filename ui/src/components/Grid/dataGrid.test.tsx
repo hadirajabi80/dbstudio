@@ -96,6 +96,30 @@ describe('DataGrid', () => {
     expect(shownColumns()[0].width).toBeGreaterThan(140);
   });
 
+  it('RTL values of text columns are right-aligned cells and drawn right-to-left; LTR text and numbers keep theirs', () => {
+    const rows: CellValue[][] = [[1, 'علی رضایی', 'Order #12 سفارش'], [2, 'Ada', '12 سفارش'], [3, 'محمد', null]];
+    render(<DataGrid {...props({ rows: list(rows), editability: EDITABLE })} />);
+    const get = probe.props!.getCellContent as (i: [number, number]) => { contentAlign?: string; displayData?: string; data?: unknown };
+    expect(get([1, 0]).contentAlign).toBe('right');
+    expect(get([1, 0]).data).toBe('علی رضایی'); // the editor gets the value unchanged
+    expect(get([2, 0]).contentAlign).toBe('left'); // mixed, Latin first
+    expect(get([1, 1]).contentAlign).toBe('left');
+    expect(get([2, 1]).contentAlign).toBe('right'); // numbers first, then Persian
+    expect(get([0, 0]).contentAlign).toBe('right'); // numbers as before
+    expect(get([2, 2]).displayData).toBe('NULL');
+    expect(get([2, 2]).contentAlign).toBe('left');
+    // The draw hook switches the canvas to RTL for the RTL cell only.
+    const drawCell = probe.props!.drawCell as (a: unknown, draw: () => void) => void;
+    const ctx = { direction: 'inherit', save() {}, restore() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {} } as Record<string, unknown>;
+    const seen: string[] = [];
+    const theme = { baseFontStyle: '13px', fontFamily: 'mono', cellHorizontalPadding: 8 };
+    for (const [c, r] of [[1, 0], [1, 1]] as const) {
+      drawCell({ ctx, rect: { x: 0, y: 0, width: 400, height: 28 }, col: c, row: r, cell: get([c, r]), theme }, () => seen.push(String(ctx.direction)));
+    }
+    expect(seen).toEqual(['rtl', 'inherit']);
+    expect(ctx.direction).toBe('inherit');
+  });
+
   it('Shift+F10 opens the cell context menu at the focused cell (design-04)', () => {
     render(<><DataGrid {...props({ editability: EDITABLE })} /><MenuHost /></>);
     selectCell(1, 2);

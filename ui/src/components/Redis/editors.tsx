@@ -62,6 +62,7 @@ function EditableCell({ value, disabled, onCommit, label, mono = true, numeric }
       <textarea
         className={`input redis-cell-input ${mono ? 'mono' : ''}`}
         aria-label={`Edit ${label}`}
+        dir={numeric ? undefined : 'auto'}
         autoFocus
         rows={Math.min(8, Math.max(1, draft.split('\n').length))}
         value={draft}
@@ -88,6 +89,7 @@ function EditableCell({ value, disabled, onCommit, label, mono = true, numeric }
   return (
     <div
       className={`redis-cell ${mono ? 'mono' : ''} ${disabled ? '' : 'editable'}`}
+      dir={numeric ? undefined : 'auto'}
       tabIndex={disabled ? -1 : 0}
       role={disabled ? undefined : 'button'}
       aria-label={disabled ? undefined : `${label}: ${value}. Press Enter to edit`}
@@ -112,6 +114,7 @@ function FilterBox({ value, onChange, placeholder, label }: { value: string; onC
   return (
     <input
       className="input redis-filter"
+      dir="auto"
       type="search"
       aria-label={label}
       placeholder={placeholder}
@@ -254,7 +257,7 @@ function PairTable({ rows, labels, readOnly, numericB, onEdit, onDelete, onResto
       <tbody>
         {rows.map((r) => (
           <tr key={r.a} className={`redis-row-${r.state}`}>
-            <td className="mono redis-cell-key" title={r.a}>{r.a}</td>
+            <td className="mono redis-cell-key" dir="auto" title={r.a}>{r.a}</td>
             <td><EditableCell value={r.b} label={`${labels[1]} of ${r.a}`} disabled={readOnly || r.state === 'deleted'} numeric={numericB} onCommit={(v) => onEdit(r.a, v)} /></td>
             {!readOnly && (
               <td className="redis-col-actions">
@@ -286,8 +289,8 @@ function AddPair({ labels, numericB, onAdd }: { labels: [string, string]; numeri
   };
   return (
     <div className="redis-add-row" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}>
-      <input ref={first} className="input mono" aria-label={`New ${labels[0].toLowerCase()}`} placeholder={labels[0]} value={a} onChange={(e) => setA(e.target.value)} />
-      <input className="input mono" aria-label={`New ${labels[1].toLowerCase()}`} placeholder={labels[1]} inputMode={numericB ? 'decimal' : undefined} value={b} onChange={(e) => setB(e.target.value)} />
+      <input ref={first} className="input mono" dir="auto" aria-label={`New ${labels[0].toLowerCase()}`} placeholder={labels[0]} value={a} onChange={(e) => setA(e.target.value)} />
+      <input className="input mono" dir={numericB ? undefined : 'auto'} aria-label={`New ${labels[1].toLowerCase()}`} placeholder={labels[1]} inputMode={numericB ? 'decimal' : undefined} value={b} onChange={(e) => setB(e.target.value)} />
       <button className="btn btn-xs" onClick={add}><Plus size={13} /> Add</button>
       {err && <span className="form-error" role="alert">{err}</span>}
     </div>
@@ -497,7 +500,7 @@ export function ListEditor({ cid, db, value, readOnly, reload, onError }: Editor
             <button className={side === 'left' ? 'on' : ''} aria-pressed={side === 'left'} onClick={() => setSide('left')}>LPUSH</button>
             <button className={side === 'right' ? 'on' : ''} aria-pressed={side === 'right'} onClick={() => setSide('right')}>RPUSH</button>
           </div>
-          <input className="input mono" aria-label="New element" placeholder="Element" value={push} onChange={(e) => setPush(e.target.value)} />
+          <input className="input mono" dir="auto" aria-label="New element" placeholder="Element" value={push} onChange={(e) => setPush(e.target.value)} />
           <button className="btn btn-xs" disabled={!push} onClick={() => void act(() => api.redis.editList(cid, db, value.key, { push: { side, values: [push] } }), `Pushed to the ${side}`).then(() => setPush(''))}><Plus size={13} /> Push</button>
         </div>
       )}
@@ -578,7 +581,7 @@ export function SetEditor({ cid, db, value, readOnly, reload, registerSave, onEr
       </div>
       {!readOnly && (
         <div className="redis-add-row" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}>
-          <input className="input mono" aria-label="New member" placeholder="Member" value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <input className="input mono" dir="auto" aria-label="New member" placeholder="Member" value={draft} onChange={(e) => setDraft(e.target.value)} />
           <button className="btn btn-xs" onClick={add}><Plus size={13} /> Add</button>
         </div>
       )}
@@ -588,12 +591,12 @@ export function SetEditor({ cid, db, value, readOnly, reload, registerSave, onEr
           <thead><tr><th>Member</th>{!readOnly && <th className="redis-col-actions" aria-label="Actions" />}</tr></thead>
           <tbody>
             {added.map((m) => (
-              <tr key={`+${m}`} className="redis-row-added"><td className="mono">{m}</td>
+              <tr key={`+${m}`} className="redis-row-added"><td className="mono" dir="auto">{m}</td>
                 <td className="redis-col-actions"><button className="icon-btn" aria-label={`Remove ${m}`} onClick={() => setAdded(added.filter((x) => x !== m))}><X size={14} /></button></td></tr>
             ))}
             {members.map((m) => (
               <tr key={m} className={removed.has(m) ? 'redis-row-deleted' : ''}>
-                <td className="mono">{m}</td>
+                <td className="mono" dir="auto">{m}</td>
                 {!readOnly && (
                   <td className="redis-col-actions">
                     {removed.has(m)
@@ -755,8 +758,8 @@ export function StreamEditor({ cid, db, value, readOnly, reload, onError }: Edit
             <div className="redis-add-row redis-stream-add">
               {fields.map(([k, v], i) => (
                 <span key={i} className="redis-pair">
-                  <input className="input mono" aria-label={`Entry field ${i + 1}`} placeholder="field" value={k} onChange={(e) => setFields(fields.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
-                  <input className="input mono" aria-label={`Entry value ${i + 1}`} placeholder="value" value={v} onChange={(e) => setFields(fields.map((r, j) => (j === i ? [r[0], e.target.value] : r)))}
+                  <input className="input mono" dir="auto" aria-label={`Entry field ${i + 1}`} placeholder="field" value={k} onChange={(e) => setFields(fields.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
+                  <input className="input mono" dir="auto" aria-label={`Entry value ${i + 1}`} placeholder="value" value={v} onChange={(e) => setFields(fields.map((r, j) => (j === i ? [r[0], e.target.value] : r)))}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEntry(); } }} />
                 </span>
               ))}
@@ -771,7 +774,7 @@ export function StreamEditor({ cid, db, value, readOnly, reload, onError }: Edit
                 {entries.map((e) => (
                   <tr key={e.id}>
                     <td className="mono" title={relTime(e.id)}>{e.id}</td>
-                    {columns.map((c) => <td key={c} className="mono redis-cell-clip" title={e.fields[c]}>{e.fields[c] ?? ''}</td>)}
+                    {columns.map((c) => <td key={c} className="mono redis-cell-clip" dir="auto" title={e.fields[c]}>{e.fields[c] ?? ''}</td>)}
                     {!readOnly && (
                       <td className="redis-col-actions">
                         <button className="icon-btn" aria-label={`Delete entry ${e.id}`} title="XDEL"
@@ -790,7 +793,7 @@ export function StreamEditor({ cid, db, value, readOnly, reload, onError }: Edit
         <div className="redis-table-wrap">
           {!readOnly && (
             <div className="redis-add-row">
-              <input className="input mono" aria-label="New group name" placeholder="group name" value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} />
+              <input className="input mono" dir="auto" aria-label="New group name" placeholder="group name" value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} />
               <input className="input mono" aria-label="Start ID" title="$ = only new entries, 0 = from the beginning" value={newGroup.id} onChange={(e) => setNewGroup({ ...newGroup, id: e.target.value })} />
               <button className="btn btn-xs" disabled={!newGroup.name}
                 onClick={() => void act(() => api.redis.editStream(cid, db, value.key, { groupCreate: { name: newGroup.name, id: newGroup.id || '$' } }), `Created group ${newGroup.name}`).then(() => setNewGroup({ name: '', id: '$' }))}>

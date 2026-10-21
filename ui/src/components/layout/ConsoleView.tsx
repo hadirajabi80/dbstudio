@@ -3,6 +3,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { ObjectRef, RunLabel, ServerDiagnostic, SqlBatch } from '../../api/types';
 import { cancelTab, catalogDatabase, openObject, runInTab } from '../../app/actions';
+import { interceptRoutineRun } from '../ExecuteRoutine/intercept';
 import { registerEditor } from '../../app/editors';
 import { SqlEditor } from '../../editor/SqlEditor';
 import type { SqlEditorHandle } from '../../editor/SqlEditor.types';
@@ -16,6 +17,7 @@ import { TipStrip } from '../Onboarding/TipStrip';
 import { Kbd } from '../Shortcuts/Kbd';
 import { runCommand } from '../../commands/registry';
 import type { EffectiveTheme } from '../../theme/useTheme';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import { Splitter } from '../common/Splitter';
 import { ResultsPane } from '../ResultsPane/ResultsPane';
 import { Toolbar } from '../Toolbar/Toolbar';
@@ -115,7 +117,10 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
 
   const editorRef = useCallback((h: SqlEditorHandle | null) => registerEditor(tabId, h), [tabId]);
   const onChange = useCallback((v: string) => updateText(tabId, v), [tabId, updateText]);
-  const onRun = useCallback((label: RunLabel, batches: SqlBatch[]) => void runInTab(tabId, label, batches), [tabId]);
+  // An "Edit:" console of a procedure or function executes the routine (Execute routine) instead of re-running its CREATE.
+  const onRun = useCallback((label: RunLabel, batches: SqlBatch[]) => {
+    if (!interceptRoutineRun(tabId, label)) void runInTab(tabId, label, batches);
+  }, [tabId]);
   const onCancel = useCallback(() => void cancelTab(tabId), [tabId]);
   const onOpenObject = useCallback(
     (ref: ObjectRef) => connectionId && openObject(connectionId, ref.database ?? catDb, ref),
@@ -153,7 +158,7 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
 
   // Errors and Oracle compile errors of the last run become editor markers.
   const externalDiagnostics = useMemo<ServerDiagnostic[] | undefined>(() => {
-    if (!exec) return undefined;
+    if (!exec || exec.detached) return undefined;
     const out: ServerDiagnostic[] = [...exec.diagnostics];
     for (const m of exec.messages) {
       if (m.severity !== 'error' || m.line === null || m.source === 'client') continue;
@@ -229,7 +234,9 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
               onDoubleClick={() => setTabSplit(tab.id, null)}
             />
             <div className="results-host" data-region="results" ref={resultsRef} style={{ flexBasis: `${shown * 100}%`, ...(minPx ? { minHeight: minPx } : {}) }}>
-              <ResultsPane tabId={tab.id} dialect={dialect} theme={theme} onClose={() => useUi.getState().toggle('resultsVisible')} />
+              <ErrorBoundary area="the results" variant="panel">
+                <ResultsPane tabId={tab.id} dialect={dialect} theme={theme} onClose={() => useUi.getState().toggle('resultsVisible')} />
+              </ErrorBoundary>
             </div>
           </>
         )}

@@ -75,7 +75,7 @@ export function RecordView(p: RecordViewProps) {
                   {canEdit ? (
                     <ValueEditor column={c} value={v} nullText={nullText} dialect={p.dialect} onSet={(nv) => p.onSet!(i, nv)} />
                   ) : (
-                    <span className={`rv-ro${v === null ? ' null' : ''}${isNumericKind(c.kind) ? ' num' : ''}`}>{formatCell(v, c, fmt)}</span>
+                    <span className={`rv-ro${v === null ? ' null' : ''}${isNumericKind(c.kind) ? ' num' : ''}`} dir={isNumericKind(c.kind) ? undefined : 'auto'}>{formatCell(v, c, fmt)}</span>
                   )}
                   {fk && v !== null && p.onNavigateFk && (
                     <button className="icon-btn xs" title={`Go to referenced row in ${fk.refTable}`} aria-label={`Go to ${fk.refTable}`}
@@ -134,6 +134,7 @@ function ValueEditor({ column, value, nullText, dialect, onSet }: { column: Colu
   const props = {
     className: `input xs rv-input${error ? ' invalid' : ''}`,
     'aria-label': column.name,
+    dir: isNumericKind(column.kind) ? undefined : 'auto',
     value: text,
     placeholder: value === null ? nullText : '',
     spellCheck: false,

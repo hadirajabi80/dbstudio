@@ -106,7 +106,7 @@ export function KeyDetail(p: KeyDetailProps) {
       <header className="redis-detail-header">
         <div className="redis-detail-title">
           {value && <span className="redis-type-badge large" style={{ color: TYPE_COLOR[value.type], borderColor: TYPE_COLOR[value.type] }}>{typeIcon(value.type, 13)}{TYPE_LABEL[value.type]}</span>}
-          <h2 className="mono redis-detail-key" title={p.keyName}>{p.keyName}</h2>
+          <h2 className="mono redis-detail-key" dir="auto" title={p.keyName}>{p.keyName}</h2>
         </div>
         {value && (
           <div className="redis-detail-meta" aria-label="Key details">

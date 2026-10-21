@@ -513,6 +513,7 @@
   font-size: var(--fs);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
   background: var(--bg-editor);
   color: var(--fg);
   min-height: 0;
