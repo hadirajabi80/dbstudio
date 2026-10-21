@@ -93,9 +93,12 @@ export interface TreeInput {
   searchColumns?: boolean;
 }
 
-/** Databases shown under a connection; `[null]` when the provider has no database level (Oracle) or none were returned. */
+/**
+ * Databases shown under a connection; `[null]` when the provider has no database level (Oracle) or none were returned.
+ * A list that is being reloaded stays (the store keeps it 'ready' while it revalidates).
+ */
 export function databasesOf(conn: ConnectionProfile, cat: ConnCatalog | undefined): (string | null)[] | null {
-  if (!cat || cat.status !== 'ready' || !cat.databases) return null;
+  if (!cat || cat.status === 'error' || !cat.databases) return null;
   if (!hasDatabaseLevel(conn.providerId) && conn.providerId !== 'sqlite') return [null];
   if (cat.databases.databases.length === 0) return [null];
   return cat.databases.databases;
@@ -128,7 +131,9 @@ function sortedConnections(list: ConnectionProfile[]) {
 }
 
 function isBusy(input: TreeInput, cid: string): boolean {
-  if (input.conns[cid]?.status === 'loading') return true;
+  // An explicit "Refresh catalog" reloads the database list: the root spins (quietly) while its rows stay. Quiet
+  // per-schema revalidations (save of an edited object, catalog.changed) show nothing.
+  if (input.conns[cid]?.status === 'loading' || input.conns[cid]?.revalidating) return true;
   for (const d of Object.values(input.dbs)) {
     if (d.connectionId !== cid) continue;
     if (d.schemasStatus === 'loading') return true;
@@ -172,7 +177,9 @@ function addConnection(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, 
   });
   if (!open) return;
   if (isSourceConnection(c)) return addSourceChildren(rows, input, c, depth + 1, id);
-  if (!cat || cat.status === 'loading' || cat.status === 'idle') return status(rows, id, depth + 1, 'loading', 'Connecting…');
+  // A list that is already shown stays while it reloads (refresh, save): never collapse it into a status row.
+  const shown = !!cat?.databases && cat.status !== 'error';
+  if (!cat || (!shown && (cat.status === 'loading' || cat.status === 'idle'))) return status(rows, id, depth + 1, 'loading', 'Connecting…');
   if (cat.status === 'error') return status(rows, id, depth + 1, 'error', cat.error ?? 'Failed to connect');
   const dbs = databasesOf(c, cat) ?? [];
   if (dbs.length === 1 && (dbs[0] === null || c.providerId === 'sqlite')) {
@@ -194,7 +201,9 @@ function addConnection(rows: TreeRow[], input: TreeInput, c: ConnectionProfile, 
 
 function addSchemas(rows: TreeRow[], input: TreeInput, cid: string, db: string | null, depth: number, parent: string) {
   const d = input.dbs[dbKey(cid, db)];
-  if (!d || d.schemasStatus === 'idle' || d.schemasStatus === 'loading') return status(rows, parent, depth, 'loading', 'Loading schemas…');
+  // A schema list that is already shown stays while it reloads: only a first load shows "Loading schemas…".
+  const shown = !!d?.schemasResp && d.schemasStatus !== 'error';
+  if (!d || (!shown && (d.schemasStatus === 'idle' || d.schemasStatus === 'loading'))) return status(rows, parent, depth, 'loading', 'Loading schemas…');
   if (d.schemasStatus === 'error') return status(rows, parent, depth, 'error', d.schemasError ?? 'Failed to load schemas');
   const list = d.schemasResp?.schemas ?? [];
   if (list.length === 0) return status(rows, parent, depth, 'empty', 'No schemas');

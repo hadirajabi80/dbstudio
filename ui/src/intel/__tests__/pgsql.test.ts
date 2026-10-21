@@ -32,13 +32,15 @@ describe('PG completion: sources and columns', () => {
     expect(r.items.some((x) => x.kind === 'table')).toBe(false);
   });
 
-  it('P2 SELECT * FROM | → public objects first, then the sales schema; pg_catalog below; no columns', () => {
+  it('P2 SELECT * FROM | → the schemas (public = default), then the public objects; pg_catalog below; no columns', () => {
     const r = complete('pgsql', 'SELECT * FROM |');
-    const top = labels(r.items, 11);
+    expect(labels(r.items, 2).sort()).toEqual(['public', 'sales']);
+    expect(find(r.items, 'public', (x) => x.kind === 'schema')!.detail).toBe('default schema');
+    const top = labels(r.items, 2 + 11);
     expect(top).toEqual(expect.arrayContaining(['customers', 'orders', 'products', 'countries', 'order_lines', 'customer_orders', 'customer_totals', 'orders_of']));
     expect(find(r.items, 'customer_totals')!.detail).toBe('public · materialized view');
     const sales = indexOf(r.items, 'sales', (x) => x.kind === 'schema');
-    expect(sales).toBeGreaterThan(indexOf(r.items, 'customer_totals'));
+    expect(sales).toBeLessThan(indexOf(r.items, 'customer_totals'));
     const sys = indexOf(r.items, 'pg_stat_activity');
     expect(sys).toBeGreaterThan(indexOf(r.items, 'customers'));
     expect(sys).toBeGreaterThan(indexOf(r.items, 'customer_orders'));

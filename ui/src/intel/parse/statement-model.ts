@@ -8,7 +8,9 @@ export type ClauseKind =
   /** PostgreSQL `expr::|` / `CAST(expr AS |`: a data type. */
   | 'cast'
   /** Procedural expression (PL/SQL statement, T-SQL SET/PRINT/IF condition): variables, functions, packages. */
-  | 'expr';
+  | 'expr'
+  /** T-SQL `USE |`: a database name. */
+  | 'use';
 
 export type ScopeKind =
   | 'select' | 'insert' | 'update' | 'delete' | 'merge' | 'cte' | 'subquery' | 'exists' | 'values' | 'plsqlBlock'

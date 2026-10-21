@@ -43,9 +43,11 @@ describe('4.14 T-SQL completion', () => {
     expect(find(r.items, 'Name')!.insertText).toBe('Name'); // unambiguous → bare
   });
 
-  it('#5 SELECT * FROM | → dbo tables/views, Sales schema; no columns, no functions', () => {
+  it('#5 SELECT * FROM | → the schemas / databases, then the dbo tables/views; no columns, no functions', () => {
     const r = complete('tsql', 'SELECT * FROM |');
-    const top = labels(r.items, 7);
+    // containers first (a handful), so they stay on the first screen however many tables there are (WP1 item 1)
+    expect(labels(r.items, 5).sort()).toEqual(['Sales', 'dbo', 'master', 'shop', 'tempdb']);
+    const top = labels(r.items, 5 + 7);
     expect(top).toEqual(expect.arrayContaining(['Customers', 'Orders', 'OrderLines', 'Products', 'Countries', 'vActiveCustomers']));
     expect(find(r.items, 'Sales', (x) => x.kind === 'schema')).toBeTruthy();
     expect(r.items.some((x) => x.kind === 'column' || x.kind === 'function')).toBe(false);

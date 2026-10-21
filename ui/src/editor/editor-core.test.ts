@@ -80,6 +80,18 @@ describe('run-target', () => {
     const i = setup('tsql', 'SELECT 1\nGO\nSELECT 2');
     expect(resolveRunTarget(i, 'u', 'script', 0, null)!.batches).toHaveLength(2);
   });
+  it('ignoreSelection: the whole document even with a selection (Ctrl+S in an "Edit:" console)', () => {
+    const text = 'CREATE OR ALTER PROCEDURE dbo.p AS\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND';
+    const i = setup('tsql', text);
+    const sel: [number, number] = [text.indexOf('SELECT 2'), text.indexOf('SELECT 2') + 'SELECT 2'.length];
+    expect(resolveRunTarget(i, 'u', 'script', 0, sel)!.label).toBe('selection');
+    const t = resolveRunTarget(i, 'u', 'script', 0, sel, { ignoreSelection: true })!;
+    expect(t.label).toBe('script');
+    expect(t.text).toBe(text);
+    expect(t.range).toEqual([0, text.length]);
+    expect(t.batches.map((b) => b.sql).join('\n')).toContain('CREATE OR ALTER PROCEDURE');
+    expect(t.batches.map((b) => b.sql).join('\n')).toContain('SELECT 2');
+  });
   it('Oracle EXEC is rewritten; SQL*Plus commands produce no batches', () => {
     const i = setup('plsql', 'EXEC p(1)\nSET SERVEROUTPUT ON');
     expect(resolveRunTarget(i, 'u', 'statement', 2, null)!.batches[0].sql).toBe('BEGIN p(1); END;');

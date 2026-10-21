@@ -3,6 +3,7 @@
 // "Loading <schema>…" row while a schema's objects are lazy-loaded (never an empty list).
 import { describe, expect, it, vi } from 'vitest';
 import type { CatalogSnapshot } from '../../api/types';
+import { TOP_CONTAINERS } from '../complete/completer';
 import { createIntel } from '../index';
 import type { CompletionItem, Dialect } from '../types';
 import { complete, find, fixtures } from './helpers';
@@ -40,17 +41,43 @@ describe('SQL Server: databases and schemas', () => {
   const intel = intelWith('tsql', { schemaNames: ['dbo', 'Sales', 'Billing'] });
   const at = (sql: string) => complete('tsql', sql, undefined, intel);
 
-  it('offers the other schemas (loaded or not) and the other databases in FROM, below the default schema objects', () => {
+  it('offers every schema (the default one too, loaded or not) and every database (the current one too) in FROM, above the tables', () => {
     const r = at('SELECT * FROM |');
-    expect(schemas(r.items)).toEqual(expect.arrayContaining(['Sales', 'Billing']));
-    expect(schemas(r.items)).not.toContain('dbo');
-    expect(databases(r.items).sort()).toEqual(['master', 'tempdb']);
-    const firstContainer = r.items.findIndex((x) => x.kind === 'schema' || x.kind === 'database');
-    expect(r.items.findIndex((x) => x.label === 'Customers')).toBeLessThan(firstContainer);
+    expect(schemas(r.items).sort()).toEqual(['Billing', 'Sales', 'dbo']);
+    expect(databases(r.items).sort()).toEqual(['master', 'shop', 'tempdb']);
+    expect(find(r.items, 'dbo', (x) => x.kind === 'schema')?.detail).toBe('default schema');
+    expect(find(r.items, 'shop', (x) => x.kind === 'database')?.detail).toBe('current database');
+    const lastContainer = r.items.map((x) => x.kind === 'schema' || x.kind === 'database').lastIndexOf(true);
+    expect(r.items.findIndex((x) => x.label === 'Customers')).toBeGreaterThan(lastContainer);
     for (const x of r.items.filter((i) => i.kind === 'schema' || i.kind === 'database')) {
       expect(x.insertText.endsWith('.'), x.label).toBe(true);
       expect(x.command, x.label).toBe('retrigger');
     }
+    // the other schemas rank a little above the default schema, the databases after the schemas
+    const pos = (label: string) => r.items.findIndex((x) => x.label === label && (x.kind === 'schema' || x.kind === 'database'));
+    expect(pos('Sales')).toBeLessThan(pos('dbo'));
+    expect(pos('dbo')).toBeLessThan(pos('shop'));
+    expect(pos('shop')).toBeLessThan(pos('master'));
+    expect(find(r.items, 'dbo', (x) => x.kind === 'schema')?.usageKey).toBe('schema:dbo');
+  });
+
+  it('`dbo.` and the current database `shop.` resolve: the default schema\'s objects / the schemas', () => {
+    expect(at('SELECT * FROM dbo.|').items.map((x) => x.label)).toContain('Customers');
+    expect(schemas(at('SELECT * FROM shop.|').items)).toEqual(expect.arrayContaining(['dbo', 'Sales']));
+  });
+
+  it('EXEC | offers the databases too (`db.schema.proc`), below the procedures', () => {
+    const r = at('EXEC |');
+    expect(r.items[0].kind).toBe('procedure');
+    expect(databases(r.items).sort()).toEqual(['master', 'shop', 'tempdb']);
+    expect(schemas(r.items)).toEqual(expect.arrayContaining(['dbo', 'Sales', 'Billing']));
+    expect(find(r.items, 'shop', (x) => x.kind === 'database')?.insertText).toBe('shop.');
+  });
+
+  it('DDL object names offer the schemas (default included) but no databases', () => {
+    const r = at('DROP TABLE |');
+    expect(schemas(r.items)).toEqual(expect.arrayContaining(['dbo', 'Sales']));
+    expect(databases(r.items)).toEqual([]);
   });
 
   it('keeps schema items for a typed prefix (not only fuzzy matches)', () => {
@@ -80,6 +107,101 @@ describe('SQL Server: databases and schemas', () => {
     expect(loading(r2.items)).toHaveLength(1);
     expect(loading(r2.items)[0].insertText).toBe('inv');
     expect(loading(r2.items)[0].filterText).toBe('inv');
+  });
+});
+
+describe('the default schema is offered in every dialect (a database with only dbo / public / main / the own schema)', () => {
+  it.each([
+    ['tsql', { schemaNames: ['dbo'] }, 'dbo', 'default schema'],
+    ['pgsql', { schemaNames: ['public'] }, 'public', 'default schema'],
+    ['plsql', { schemaNames: ['SHOP'] }, 'SHOP', 'default schema'],
+    ['sqlite', {}, 'main', 'default database'],
+  ] as const)('%s', (dialect, patch, name, detail) => {
+    const base = JSON.parse(JSON.stringify(fixtures[dialect])) as CatalogSnapshot;
+    const def = base.schemas.filter((s) => s.name === base.defaultSchema);
+    const names = 'schemaNames' in patch ? { schemaNames: [...patch.schemaNames] } : {};
+    const intel = intelWith(dialect, { ...names, schemas: def });
+    const r = complete(dialect, 'SELECT * FROM |', undefined, intel);
+    const item = find(r.items, name, (x) => x.kind === 'schema');
+    expect(item, `${name} offered`).toBeTruthy();
+    expect(item!.detail).toBe(detail);
+    expect(item!.insertText).toBe(name + '.');
+    expect(item!.command).toBe('retrigger');
+    // typed: still there
+    expect(find(complete(dialect, `SELECT * FROM ${name.slice(0, 2)}|`, undefined, intel).items, name, (x) => x.kind === 'schema')).toBeTruthy();
+  });
+});
+
+describe('T-SQL `USE |`', () => {
+  const intel = intelWith('tsql', { schemaNames: ['dbo', 'Sales'] });
+  const at = (sql: string) => complete('tsql', sql, undefined, intel);
+
+  it('lists the databases (the name only: no dot, no retrigger), the current one last', () => {
+    const r = at('USE |');
+    expect(databases(r.items).sort()).toEqual(['master', 'shop', 'tempdb']);
+    expect(r.items.every((x) => x.kind === 'database')).toBe(true);
+    for (const x of r.items) {
+      expect(x.insertText, x.label).toBe(x.label);
+      expect(x.command, x.label).toBeUndefined();
+    }
+    expect(r.items.at(-1)?.label).toBe('shop');
+    expect(find(r.items, 'shop')?.detail).toBe('current database');
+  });
+
+  it('filters by the typed prefix and quotes when needed', () => {
+    expect(databases(at('USE ma|').items)).toEqual(['master']);
+    const odd = intelWith('tsql', { databases: ['my db', 'shop'] });
+    expect(find(complete('tsql', 'USE |', undefined, odd).items, 'my db')?.insertText).toBe('[my db]');
+  });
+
+  it('after the name (and in a later statement) databases are no longer offered', () => {
+    expect(databases(at('USE shop |').items)).toEqual([]);
+    expect(databases(at('USE shop;\nSELECT 1 |').items)).toEqual([]);
+  });
+
+  it('PostgreSQL has no USE: no database items', () => {
+    expect(databases(complete('pgsql', 'USE |').items)).toEqual([]);
+  });
+});
+
+describe('ranking with a big catalog (300 tables)', () => {
+  function big(dialect: Dialect, schemaNames: string[]) {
+    const base = JSON.parse(JSON.stringify(fixtures[dialect])) as CatalogSnapshot;
+    const def = base.schemas.find((s) => s.name === base.defaultSchema)!;
+    const objects = Array.from({ length: 300 }, (_, i) => ({ n: `T${String(i).padStart(3, '0')}_${['Order', 'Customer', 'Item'][i % 3]}`, t: 'table', c: [['Id', 'int', 0, 1, 0, null]] }));
+    def.objects = [...def.objects, ...objects] as typeof def.objects;
+    return intelWith(dialect, { schemaNames, schemas: [def] });
+  }
+  const FIRST_SCREEN = 12;
+
+  it.each([
+    ['tsql', ['dbo', 'Sales', 'Billing'], ['dbo', 'Sales', 'Billing', 'shop', 'master', 'tempdb']],
+    ['pgsql', ['public', 'sales', 'audit'], ['public', 'sales', 'audit']],
+    ['plsql', ['SHOP', 'HR', 'FINANCE'], ['SHOP', 'HR', 'FINANCE']],
+  ] as const)('%s: the schemas and databases are on the first screen of `FROM |`, followed by tables', (dialect, names, want) => {
+    const r = complete(dialect, 'SELECT * FROM |', undefined, big(dialect, [...names]));
+    const first = r.items.slice(0, FIRST_SCREEN);
+    expect(first.filter((x) => x.kind === 'schema' || x.kind === 'database').map((x) => x.label).sort()).toEqual([...want].sort());
+    expect(first.some((x) => x.kind === 'table')).toBe(true);
+  });
+
+  it('many schemas: only the budget ranks above the tables (the default schema and the current database first)', () => {
+    const many = ['dbo', ...Array.from({ length: 40 }, (_, i) => `s${String(i).padStart(2, '0')}`)];
+    const r = complete('tsql', 'SELECT * FROM |', undefined, big('tsql', many));
+    const first = r.items.slice(0, FIRST_SCREEN);
+    const containers = first.filter((x) => x.kind === 'schema' || x.kind === 'database');
+    expect(containers.length).toBeLessThanOrEqual(TOP_CONTAINERS);
+    expect(containers.map((x) => x.label)).toEqual(expect.arrayContaining(['dbo', 'shop']));
+    expect(first.filter((x) => x.kind === 'table').length).toBeGreaterThanOrEqual(FIRST_SCREEN - TOP_CONTAINERS);
+    // the rest are still offered (below the tables) and come up by prefix
+    expect(schemas(r.items)).toHaveLength(many.length);
+    const typed = complete('tsql', 'SELECT * FROM s39|', undefined, big('tsql', many));
+    expect(typed.items[0].label).toBe('s39');
+  });
+
+  it('a typed prefix decides: `sa` puts the Sales schema first', () => {
+    const r = complete('tsql', 'SELECT * FROM Sal|', undefined, big('tsql', ['dbo', 'Sales']));
+    expect(r.items[0].label).toBe('Sales');
   });
 });
 

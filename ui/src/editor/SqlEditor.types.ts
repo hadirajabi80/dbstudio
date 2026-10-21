@@ -52,10 +52,18 @@ export interface SqlEditorProps {
   parameterHint?: boolean;
 }
 
+export interface RunTargetOptions {
+  /** Resolve as if nothing were selected (the selection stays as it is in the editor). */
+  ignoreSelection?: boolean;
+}
+
 export interface SqlEditorHandle {
   focus(): void;
-  /** Same resolution the editor uses for Ctrl+Enter. Null when the document is empty. */
-  getRunTarget(label: RunLabel): { batches: SqlBatch[]; text: string; /** "selection" when the selection is what runs. */ label?: RunLabel } | null;
+  /**
+   * Same resolution the editor uses for Ctrl+Enter. Null when the document is empty. `ignoreSelection` resolves as if
+   * nothing were selected (Ctrl+S in an "Edit:" console saves the whole CREATE/ALTER, never just the selection).
+   */
+  getRunTarget(label: RunLabel, opts?: RunTargetOptions): { batches: SqlBatch[]; text: string; /** "selection" when the selection is what runs. */ label?: RunLabel } | null;
   insertText(text: string): void;
   revealLine(line: number, col?: number): void;
   getValue(): string;

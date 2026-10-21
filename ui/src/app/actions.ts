@@ -531,7 +531,8 @@ export async function saveEditToDatabase(tabId: string): Promise<void> {
     return;
   }
   if (await runEditTab(tabId)) return; // SQLite view/trigger: atomic apply with its own toasts
-  const target = getEditor(tabId)?.getRunTarget('script');
+  // The whole CREATE / ALTER, never just the selection: a selected statement must not be "saved" on its own.
+  const target = getEditor(tabId)?.getRunTarget('script', { ignoreSelection: true });
   if (!target) {
     toast('info', 'Nothing to save');
     return;
@@ -546,7 +547,8 @@ export async function saveEditToDatabase(tabId: string): Promise<void> {
     if (!e || isRunning(e)) return false;
     if (e.status === 'ok') {
       toast('success', `Saved ${noun} ${edit.ref.name}`, 'The changes were applied to the database.');
-      void useCatalog.getState().refresh(edit.connectionId);
+      // Only the object's schema, revalidated in place: the explorer keeps its rows (no full refresh, no flash).
+      void useCatalog.getState().revalidate(edit.connectionId, catalogDatabase(edit.connectionId, edit.ref.database ?? edit.database), [edit.ref.schema]);
       // New "Compare with server" baseline.
       void api.ddl(edit.connectionId, edit.database, edit.ref)
         .then((d) => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, serverDdl: d.ddl, savedText }); })

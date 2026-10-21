@@ -1,9 +1,10 @@
 // Ctrl+S in an F4 "Edit:" console saves the object to the database (SSMS / Navicat / DataGrip), not to a .sql file.
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initCommands } from '../commands';
 import { runCommand } from '../commands/registry';
 import { useDesignerUi } from '../designer/store';
 import type { SqlEditorHandle } from '../editor/SqlEditor.types';
+import { dbKey, useCatalog } from '../store/catalog';
 import { useConnections } from '../store/connections';
 import { useResults } from '../store/results';
 import { useSessions } from '../store/sessions';
@@ -37,20 +38,23 @@ beforeAll(async () => {
 const ref = { database: null, schema: 'main', name: 'refresh_totals', type: 'proc' as const };
 const SCRIPT = 'SELECT 1';
 
-function fakeEditor(text: string): SqlEditorHandle {
+/** A fake editor whose run target follows the real resolution: a selection wins unless `ignoreSelection`. */
+function fakeEditor(text: string, selection?: string): SqlEditorHandle {
   return {
     focus: () => undefined,
     insertText: () => undefined,
     revealLine: () => undefined,
     getValue: () => text,
-    getRunTarget: () => ({ text, batches: [{ sql: text, line: 1, col: 1 }] }),
+    getRunTarget: (label, opts) => (selection && !opts?.ignoreSelection
+      ? { text: selection, batches: [{ sql: selection, line: 1, col: 1 }], label: 'selection' }
+      : { text, batches: [{ sql: text, line: 1, col: 1 }], label }),
   };
 }
 
-function editTab(connectionId = 'c_shop'): string {
-  const id = useTabs.getState().newConsole({ connectionId, text: SCRIPT, title: 'Edit: refresh_totals' });
-  useDesignerUi.getState().registerEdit(id, { connectionId: 'c_shop', database: null, ref, serverDdl: SCRIPT, dialect: 'sqlite' });
-  registerEditor(id, fakeEditor(SCRIPT));
+function editTab(connectionId = 'c_shop', text = SCRIPT, selection?: string): string {
+  const id = useTabs.getState().newConsole({ connectionId, text, title: 'Edit: refresh_totals' });
+  useDesignerUi.getState().registerEdit(id, { connectionId: 'c_shop', database: null, ref, serverDdl: text, dialect: 'sqlite' });
+  registerEditor(id, fakeEditor(text, selection));
   useTabs.getState().activate(id);
   return id;
 }
@@ -78,6 +82,68 @@ describe('Ctrl+S (file.save) in an object edit console', () => {
     const exec = useResults.getState().executions[useResults.getState().byTab[id]];
     expect(exec?.status).toBe('ok');
     mock.server.events.removeListener('request:start', listener);
+  });
+
+  it('saves the whole CREATE / ALTER even when a statement is selected (no need to deselect)', async () => {
+    const whole = 'SELECT 1;\nSELECT 2';
+    const sent: string[][] = [];
+    const listener = ({ request }: { request: Request }) => {
+      if (request.method === 'POST' && /\/sessions\/[^/]+\/execute$/.test(request.url)) {
+        void request.clone().json().then((b: { batches: { sql: string }[] }) => sent.push(b.batches.map((x) => x.sql)));
+      }
+    };
+    mock.server.events.on('request:start', listener);
+    const id = editTab('c_shop', whole, 'SELECT 2');
+
+    await runCommand('file.save');
+
+    await until(() => useUi.getState().toasts.some((t) => t.text === 'Saved procedure refresh_totals') && sent.length > 0);
+    expect(sent).toEqual([[whole]]);
+    const exec = useResults.getState().executions[useResults.getState().byTab[id]];
+    expect(exec?.label).toBe('script');
+    mock.server.events.removeListener('request:start', listener);
+  });
+
+  it('revalidates only the object\'s schema after the save: no full refresh, and the explorer never sees "loading"', async () => {
+    const cat = useCatalog.getState();
+    await cat.loadDatabases('c_shop');
+    await cat.ensureDefault('c_shop', 'main');
+    await cat.loadSchemas('c_shop', 'main');
+    expect(useCatalog.getState().dbs[dbKey('c_shop', 'main')]?.loaded.main).toBeDefined();
+    const realRefresh = useCatalog.getState().refresh;
+    const refresh = vi.fn(async () => undefined);
+    useCatalog.setState({ refresh });
+    const transitions: string[] = [];
+    const unsub = useCatalog.subscribe((s) => {
+      const d = s.dbs[dbKey('c_shop', 'main')];
+      if (s.conns.c_shop?.status === 'loading') transitions.push('databases');
+      if (d?.schemasStatus === 'loading') transitions.push('schemas');
+      for (const [name, st] of Object.entries(d?.schemaStatus ?? {})) if (st === 'loading') transitions.push(name);
+    });
+    const refreshBodies: unknown[] = [];
+    const listener = ({ request }: { request: Request }) => {
+      if (request.method === 'POST' && request.url.endsWith('/catalog/refresh')) void request.clone().json().then((b) => refreshBodies.push(b));
+    };
+    mock.server.events.on('request:start', listener);
+    try {
+      editTab();
+      mock.ctx.requests.length = 0;
+      await runCommand('file.save');
+      await until(() => useUi.getState().toasts.some((t) => t.text === 'Saved procedure refresh_totals'));
+      // the schema is fetched again (revalidated) …
+      await until(() => mock.hits('/catalog').some((r) => r.url.searchParams.get('schemas') === 'main'));
+      await until(() => !useCatalog.getState().dbs[dbKey('c_shop', 'main')]?.revalidating?.main);
+      expect(refreshBodies).toEqual([{ database: 'main', schemas: ['main'] }]);
+      // … without the full refresh (database list, every schema) and without a single 'loading' state
+      expect(refresh).not.toHaveBeenCalled();
+      expect(mock.hits('/catalog/databases')).toHaveLength(0);
+      expect(transitions).toEqual([]);
+      expect(useCatalog.getState().dbs[dbKey('c_shop', 'main')]?.schemaStatus.main).toBe('ready');
+    } finally {
+      unsub();
+      useCatalog.setState({ refresh: realRefresh });
+      mock.server.events.removeListener('request:start', listener);
+    }
   });
 
   it('refuses when the console was pointed at another connection, and says how to save a file instead', async () => {
