@@ -426,6 +426,17 @@
 .er-edge.ghost .er-edge-ring {
   stroke: var(--border-strong);
 }
+/* disabled key (NOCHECK CONSTRAINT): dotted, after ghost so it stays recognisable on cross-schema edges too */
+.er-edge.disabled .er-edge-line {
+  stroke-dasharray: 1 4;
+  stroke-width: 1.8;
+}
+.er-status-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning);
+}
 .er-edge.hl .er-edge-line,
 .er-edge.hl .er-edge-mark,
 .er-edge.hl .er-edge-ring {

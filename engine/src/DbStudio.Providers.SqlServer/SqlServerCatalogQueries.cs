@@ -6,9 +6,13 @@ namespace DbStudio.Providers.SqlServer;
 /// </summary>
 public static class SqlServerCatalogQueries
 {
-    /// <summary>Hides sys/INFORMATION_SCHEMA/guest and role-owned schemas (db_owner etc.).</summary>
+    /// <summary>
+    /// Hides sys/INFORMATION_SCHEMA, and guest and role-owned schemas (db_owner, db_datareader...) unless they hold objects:
+    /// old databases often keep their tables in a schema created with <c>AUTHORIZATION db_owner</c> or another role.
+    /// </summary>
     public const string SchemaFilter =
-        "s.name NOT IN ('sys','INFORMATION_SCHEMA','guest') AND s.principal_id NOT IN (SELECT principal_id FROM sys.database_principals WHERE type='R')";
+        "s.name NOT IN ('sys','INFORMATION_SCHEMA') AND ((s.name<>'guest' AND s.principal_id NOT IN (SELECT principal_id FROM sys.database_principals WHERE type='R')) " +
+        "OR EXISTS (SELECT 1 FROM sys.objects xo WHERE xo.schema_id=s.schema_id AND xo.is_ms_shipped=0))";
 
     public const string ObjectTypeList = "'U','V','P','PC','FN','IF','TF','FS','FT','SN','SO','TR'";
 
@@ -48,20 +52,32 @@ public static class SqlServerCatalogQueries
         "FROM sys.key_constraints kc JOIN sys.index_columns ic ON ic.object_id=kc.parent_object_id AND ic.index_id=kc.unique_index_id " +
         "WHERE kc.schema_id=@sid ORDER BY kc.parent_object_id, kc.name, ic.key_ordinal";
 
-    /// <summary>Both directions (outgoing from @sid and incoming to @sid); names resolved server-side.</summary>
+    /// <summary>
+    /// Both directions: outgoing (parent table in @sid) and incoming (referenced table in @sid). Names come from explicit
+    /// joins to sys.objects / sys.schemas / sys.columns (LEFT: a referenced table the login cannot see yields NULL names,
+    /// which the reader reports instead of producing an edge to ""), the parent side is filtered by the parent table's
+    /// schema (not fk.schema_id). Mapped by column name (<see cref="SqlServerCatalogReader.ReadForeignKeyRow"/>).
+    /// Works on SQL Server 2005+ at any compatibility level.
+    /// </summary>
     public const string ForeignKeys =
-        "SELECT fk.object_id, fk.name, fk.parent_object_id, fk.referenced_object_id, fkc.constraint_column_id, fkc.parent_column_id, fkc.referenced_column_id, " +
-        "OBJECT_SCHEMA_NAME(fk.parent_object_id) AS parent_schema, OBJECT_NAME(fk.parent_object_id) AS parent_table, " +
-        "COL_NAME(fk.parent_object_id, fkc.parent_column_id) AS parent_column, " +
-        "OBJECT_SCHEMA_NAME(fk.referenced_object_id) AS ref_schema, OBJECT_NAME(fk.referenced_object_id) AS ref_table, " +
-        "COL_NAME(fk.referenced_object_id, fkc.referenced_column_id) AS ref_column " +
-        "FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id=fk.object_id " +
-        "WHERE fk.schema_id=@sid OR fk.referenced_object_id IN (SELECT object_id FROM sys.objects WHERE schema_id=@sid) " +
+        "SELECT fk.object_id AS fk_id, fk.name AS fk_name, fk.parent_object_id AS parent_id, po.schema_id AS parent_schema_id, " +
+        "ps.name AS parent_schema, po.name AS parent_table, pc.name AS parent_column, " +
+        "ro.schema_id AS ref_schema_id, rs.name AS ref_schema, ro.name AS ref_table, rc.name AS ref_column, " +
+        "fkc.constraint_column_id AS ordinal, fk.is_disabled, fk.is_not_trusted " +
+        "FROM sys.foreign_keys fk " +
+        "JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id=fk.object_id " +
+        "LEFT JOIN sys.objects po ON po.object_id=fk.parent_object_id " +
+        "LEFT JOIN sys.schemas ps ON ps.schema_id=po.schema_id " +
+        "LEFT JOIN sys.columns pc ON pc.object_id=fkc.parent_object_id AND pc.column_id=fkc.parent_column_id " +
+        "LEFT JOIN sys.objects ro ON ro.object_id=fk.referenced_object_id " +
+        "LEFT JOIN sys.schemas rs ON rs.schema_id=ro.schema_id " +
+        "LEFT JOIN sys.columns rc ON rc.object_id=fkc.referenced_object_id AND rc.column_id=fkc.referenced_column_id " +
+        "WHERE po.schema_id=@sid OR ro.schema_id=@sid " +
         "ORDER BY fk.object_id, fkc.constraint_column_id";
 
     public const string Parameters =
         "SELECT p.object_id, p.parameter_id, p.name, t.name AS type_name, p.max_length, p.precision, p.scale, p.is_output, p.has_default_value, " +
-        "CAST(p.default_value AS nvarchar(4000)) AS default_value, p.is_readonly " +
+        "CAST(p.default_value AS nvarchar(4000)) AS default_value " +
         "FROM sys.parameters p JOIN sys.types t ON t.user_type_id=p.user_type_id " +
         "WHERE p.object_id IN (SELECT object_id FROM sys.objects WHERE schema_id=@sid AND type IN ('P','PC','FN','IF','TF','FS','FT')) " +
         "ORDER BY p.object_id, p.parameter_id";
@@ -75,6 +91,13 @@ public static class SqlServerCatalogQueries
         "tt.type_table_object_id " +
         "FROM sys.types t LEFT JOIN sys.types bt ON bt.user_type_id=t.system_type_id " +
         "LEFT JOIN sys.table_types tt ON tt.user_type_id=t.user_type_id " +
+        "WHERE t.is_user_defined=1 AND t.schema_id=@sid";
+
+    /// <summary>SQL Server 2005 (no table types: sys.table_types and sys.types.is_table_type are 2008+). Same columns as <see cref="UserTypes"/>.</summary>
+    public const string UserTypes2005 =
+        "SELECT t.user_type_id, t.name, bt.name AS base_type, t.max_length, t.precision, t.scale, t.is_nullable, CAST(0 AS bit) AS is_table_type, " +
+        "CAST(NULL AS int) AS type_table_object_id " +
+        "FROM sys.types t LEFT JOIN sys.types bt ON bt.user_type_id=t.system_type_id " +
         "WHERE t.is_user_defined=1 AND t.schema_id=@sid";
 
     public const string TableTypeColumns =
@@ -104,19 +127,24 @@ public static class SqlServerCatalogQueries
         "WHERE i.object_id=@id AND i.index_id>0 AND i.is_hypothetical=0 " +
         "ORDER BY i.index_id, ic.is_included_column, ic.key_ordinal, ic.index_column_id";
 
+    /// <summary>Outgoing FKs of one table, names by explicit joins (NULL when the referenced table is not visible). Mapped by column name.</summary>
     public const string DetailForeignKeys =
-        "SELECT fk.name, fk.delete_referential_action_desc, fk.update_referential_action_desc, fkc.constraint_column_id, " +
-        "COL_NAME(fk.parent_object_id, fkc.parent_column_id) AS parent_column, " +
-        "OBJECT_SCHEMA_NAME(fk.referenced_object_id) AS ref_schema, OBJECT_NAME(fk.referenced_object_id) AS ref_table, " +
-        "COL_NAME(fk.referenced_object_id, fkc.referenced_column_id) AS ref_column " +
+        "SELECT fk.name AS fk_name, fk.delete_referential_action_desc AS on_delete, fk.update_referential_action_desc AS on_update, " +
+        "fkc.constraint_column_id AS ordinal, pc.name AS parent_column, rs.name AS ref_schema, ro.name AS ref_table, rc.name AS ref_column, " +
+        "fk.is_disabled, fk.is_not_trusted " +
         "FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id=fk.object_id " +
+        "LEFT JOIN sys.columns pc ON pc.object_id=fkc.parent_object_id AND pc.column_id=fkc.parent_column_id " +
+        "LEFT JOIN sys.objects ro ON ro.object_id=fk.referenced_object_id " +
+        "LEFT JOIN sys.schemas rs ON rs.schema_id=ro.schema_id " +
+        "LEFT JOIN sys.columns rc ON rc.object_id=fkc.referenced_object_id AND rc.column_id=fkc.referenced_column_id " +
         "WHERE fk.parent_object_id=@id ORDER BY fk.name, fkc.constraint_column_id";
 
     public const string DetailReferencedBy =
-        "SELECT fk.name, OBJECT_SCHEMA_NAME(fk.parent_object_id) AS parent_schema, OBJECT_NAME(fk.parent_object_id) AS parent_table, " +
-        "COL_NAME(fk.parent_object_id, fkc.parent_column_id) AS parent_column " +
+        "SELECT fk.name AS fk_name, ps.name AS parent_schema, po.name AS parent_table, pc.name AS parent_column " +
         "FROM sys.foreign_keys fk JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id=fk.object_id " +
-        "WHERE fk.referenced_object_id=@id ORDER BY parent_schema, parent_table, fk.name, fkc.constraint_column_id";
+        "JOIN sys.objects po ON po.object_id=fk.parent_object_id JOIN sys.schemas ps ON ps.schema_id=po.schema_id " +
+        "LEFT JOIN sys.columns pc ON pc.object_id=fkc.parent_object_id AND pc.column_id=fkc.parent_column_id " +
+        "WHERE fk.referenced_object_id=@id ORDER BY ps.name, po.name, fk.name, fkc.constraint_column_id";
 
     public const string DetailCheckConstraints =
         "SELECT cc.name, cc.definition FROM sys.check_constraints cc WHERE cc.parent_object_id=@id ORDER BY cc.name";
@@ -154,7 +182,7 @@ public static class SqlServerCatalogQueries
         [nameof(Databases)] = Databases, [nameof(CurrentDatabase)] = CurrentDatabase, [nameof(DefaultSchema)] = DefaultSchema,
         [nameof(ServerInfo)] = ServerInfo, [nameof(Schemas)] = Schemas, [nameof(SchemaId)] = SchemaId, [nameof(Objects)] = Objects,
         [nameof(Columns)] = Columns, [nameof(KeyConstraints)] = KeyConstraints, [nameof(ForeignKeys)] = ForeignKeys,
-        [nameof(Parameters)] = Parameters, [nameof(Synonyms)] = Synonyms, [nameof(UserTypes)] = UserTypes,
+        [nameof(Parameters)] = Parameters, [nameof(Synonyms)] = Synonyms, [nameof(UserTypes)] = UserTypes, [nameof(UserTypes2005)] = UserTypes2005,
         [nameof(TableTypeColumns)] = TableTypeColumns, [nameof(ObjectIdByName)] = ObjectIdByName, [nameof(DetailColumns)] = DetailColumns,
         [nameof(DetailIndexes)] = DetailIndexes, [nameof(DetailForeignKeys)] = DetailForeignKeys, [nameof(DetailReferencedBy)] = DetailReferencedBy,
         [nameof(DetailCheckConstraints)] = DetailCheckConstraints, [nameof(DetailTriggers)] = DetailTriggers,

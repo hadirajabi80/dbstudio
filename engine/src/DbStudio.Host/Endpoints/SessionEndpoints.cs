@@ -136,7 +136,7 @@ public static class SessionEndpoints
             }
             // Browser mode: stream the file as an attachment.
             var fileName = $"result-{rs + 1}{ExportFormats.Extension(format)}";
-            http.Response.ContentType = ExportFormats.ContentType(format) + "; charset=utf-8";
+            http.Response.ContentType = ExportFormats.ContentType(format) + (ExportFormats.IsBinary(format) ? "" : "; charset=utf-8");
             http.Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
             await exports.ExportStoredAsync(xid, rs, format, options, http.Response.Body, ct);
             return Results.Empty;

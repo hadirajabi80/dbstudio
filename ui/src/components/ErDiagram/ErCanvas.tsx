@@ -497,6 +497,11 @@ export function ErCanvas({ c, tabId, visible, label, fkEnabled, fkReason }: ErCa
             </div>
           ))}
           <div className="er-tip-meta">{edgeTip.optional ? 'Optional (nullable)' : 'Mandatory'}{edgeTip.self ? ' · self-reference' : ''}</div>
+          {(edgeTip.disabled || edgeTip.notTrusted) && (
+            <div className="er-tip-meta er-status-warn">
+              {edgeTip.disabled ? 'Disabled (NOCHECK): not enforced' : 'Not trusted: existing rows were not checked (WITH NOCHECK)'}
+            </div>
+          )}
         </div>
       )}
       {model && (

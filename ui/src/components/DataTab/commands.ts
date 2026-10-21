@@ -11,6 +11,7 @@ import { useEdits } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
 import { useTabs, type ViewTab } from '../../store/tabs';
 import { useUi } from '../../store/ui';
+import type { FileFormat } from '../Grid/clientExport';
 import { activeGridController, gridController, type GridController } from '../Grid/controller';
 import { hasOpenEditor } from '../Grid/overlayEditor';
 import { registerTabView } from '../layout/tabViews';
@@ -40,8 +41,9 @@ const COPY_FORMATS: { id: string; format: CopyFormat; title: string; shortcut?: 
   { id: 'grid.copyAs.insert', format: 'sql-insert', title: 'Copy as SQL INSERT' },
 ];
 
-const EXPORTS: { id: string; format: 'csv' | 'json' | 'sql-insert'; title: string }[] = [
+const EXPORTS: { id: string; format: FileFormat; title: string }[] = [
   { id: 'grid.export.csv', format: 'csv', title: 'Export CSV…' },
+  { id: 'grid.export.xlsx', format: 'xlsx', title: 'Export Excel (.xlsx)…' },
   { id: 'grid.export.json', format: 'json', title: 'Export JSON…' },
   { id: 'grid.export.sqlInsert', format: 'sql-insert', title: 'Export SQL INSERT…' },
 ];
@@ -127,7 +129,7 @@ export const GRID_COMMANDS: Command<never>[] = [
     when: (a?: unknown) => !!gridOf(a)?.copyAs, run: (a?: unknown) => gridOf(a)?.copyAs?.(f.format, !!gridArgs(a).all),
   })),
   ...EXPORTS.map((e): Command<never> => ({
-    id: e.id, title: e.title, category: 'Grid', scope: 'grid', icon: 'Download', keywords: 'export save file download',
+    id: e.id, title: e.title, category: 'Grid', scope: 'grid', icon: 'Download', keywords: `export save file download${e.format === 'xlsx' ? ' excel spreadsheet workbook' : ''}`,
     when: (a?: unknown) => !!gridOf(a)?.exportAs, run: (a?: unknown) => gridOf(a)?.exportAs?.(e.format),
   })),
   {

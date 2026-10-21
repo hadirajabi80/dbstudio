@@ -14,7 +14,14 @@ public static class ObjectTypes
 /// <param name="SearchPathIndex">M2 (PostgreSQL): position in <c>current_schemas(true)</c>; null when not on the search path.</param>
 public sealed record SchemaInfo(string Name, int? ObjectCount = null, int? SearchPathIndex = null);
 
-public sealed record SchemaCatalog(string? Database, string Name, IReadOnlyList<CatalogObject> Objects);
+public sealed record SchemaCatalog(string? Database, string Name, IReadOnlyList<CatalogObject> Objects)
+{
+    /// <summary>Other schemas whose tables have foreign keys to a table of this schema (the ER diagram loads them, one hop).</summary>
+    public IReadOnlyList<string> ReferencingSchemas { get; init; } = [];
+
+    /// <summary>Foreign keys of this schema's tables left out because the referenced table or its columns are not visible to the login.</summary>
+    public int HiddenForeignKeys { get; init; }
+}
 
 public sealed class CatalogObject
 {
@@ -40,7 +47,10 @@ public sealed class CatalogObject
 public sealed record CatalogColumn(string Name, string TypeText, bool Nullable, bool IsPk, int Flags = 0, string? Comment = null);
 
 /// <param name="RefSchema">Referenced schema (SQLite: database name, usually "main").</param>
-public sealed record ForeignKeyRef(string Name, IReadOnlyList<string> Columns, string? RefSchema, string RefTable, IReadOnlyList<string> RefColumns);
+/// <param name="IsDisabled">SQL Server: the key is disabled (<c>NOCHECK CONSTRAINT</c>) and not enforced.</param>
+/// <param name="IsNotTrusted">SQL Server: existing rows were not checked (<c>WITH NOCHECK</c>, or a disabled key).</param>
+public sealed record ForeignKeyRef(string Name, IReadOnlyList<string> Columns, string? RefSchema, string RefTable, IReadOnlyList<string> RefColumns,
+    bool IsDisabled = false, bool IsNotTrusted = false);
 
 /// <param name="Direction">in | out | inout | return.</param>
 public sealed record ParamInfo(string Name, string TypeText, string Direction, bool HasDefault);

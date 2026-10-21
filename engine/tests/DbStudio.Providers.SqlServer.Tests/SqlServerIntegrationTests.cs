@@ -253,4 +253,107 @@ public sealed class SqlServerIntegrationTests(SqlServerFixture fixture) : IClass
     }
 
     private static string[] ColumnKindsOf(RecordingSink.RecordedResultSet rs) => rs.Columns.Select(c => c.Kind).ToArray();
+
+    /// <summary>
+    /// ER diagram relationships on an "old" database: compatibility level 100, a case-sensitive Persian collation,
+    /// composite, cross-schema, unique-constraint / unique-index targets, disabled and untrusted keys, a schema owned by
+    /// db_owner, Unicode names, and a login that cannot see some referenced tables.
+    /// </summary>
+    [SkippableFact]
+    public async Task Catalog_ForeignKeys_OnAnOldStyleDatabase()
+    {
+        RequireAvailable();
+        var endpoint = fixture.Endpoint!;
+        const string db = "fk_legacy";
+        const string lowUser = "fk_legacy_reader", lowPassword = "Fk_Legacy_2026!x";
+        await using (var admin = await fixture.Provider.OpenSessionAsync(SqlServerBackend.Profile(endpoint, "master", "c_it_fk_admin"), endpoint.Password,
+                         new SessionOptions("s_it_fk", "master", TransactionMode.Auto, false), CancellationToken.None))
+        {
+            string[] setup =
+            [
+                $"IF DB_ID('{db}') IS NOT NULL BEGIN ALTER DATABASE [{db}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{db}]; END",
+                $"IF SUSER_ID('{lowUser}') IS NOT NULL DROP LOGIN [{lowUser}]",
+                $"CREATE DATABASE [{db}] COLLATE Persian_100_CS_AS",
+                $"ALTER DATABASE [{db}] SET COMPATIBILITY_LEVEL = 100",
+                $"CREATE LOGIN [{lowUser}] WITH PASSWORD = '{lowPassword}', CHECK_POLICY = OFF",
+                $"USE [{db}]; EXEC('CREATE SCHEMA Sales'); EXEC('CREATE SCHEMA hr AUTHORIZATION db_owner');",
+                $"""
+                USE [{db}];
+                CREATE TABLE dbo.Countries (Id INT NOT NULL CONSTRAINT PK_Countries PRIMARY KEY, Code CHAR(2) NOT NULL CONSTRAINT UQ_Countries_Code UNIQUE);
+                CREATE TABLE dbo.[مشتری] (Id INT NOT NULL PRIMARY KEY, CountryCode CHAR(2) NULL CONSTRAINT FK_Customer_Country REFERENCES dbo.Countries(Code), Name NVARCHAR(50) NULL);
+                CREATE UNIQUE INDEX UX_Customer_Name ON dbo.[مشتری](Name);
+                CREATE TABLE dbo.Orders (Id INT NOT NULL, Rev INT NOT NULL, CustomerId INT NOT NULL,
+                    CONSTRAINT PK_Orders PRIMARY KEY (Id, Rev), CONSTRAINT FK_Orders_Customer FOREIGN KEY (CustomerId) REFERENCES dbo.[مشتری](Id));
+                CREATE TABLE Sales.Invoices (Id INT PRIMARY KEY, OrderId INT NOT NULL, OrderRev INT NOT NULL, CustName NVARCHAR(50) NULL,
+                    CONSTRAINT FK_Invoices_Orders FOREIGN KEY (OrderId, OrderRev) REFERENCES dbo.Orders(Id, Rev),
+                    CONSTRAINT FK_Invoices_CustName FOREIGN KEY (CustName) REFERENCES dbo.[مشتری](Name));
+                CREATE TABLE hr.Staff (Id INT PRIMARY KEY, CountryId INT NULL);
+                ALTER TABLE hr.Staff WITH NOCHECK ADD CONSTRAINT FK_Staff_Countries FOREIGN KEY (CountryId) REFERENCES dbo.Countries(Id);
+                ALTER TABLE dbo.Orders NOCHECK CONSTRAINT FK_Orders_Customer;
+                CREATE USER [{lowUser}] FOR LOGIN [{lowUser}];
+                GRANT SELECT ON dbo.[مشتری] TO [{lowUser}];
+                GRANT SELECT ON Sales.Invoices TO [{lowUser}];
+                """,
+            ];
+            var (summary, sink) = await RunAsync(admin, 0, true, setup.Select((s, i) => new SqlBatch(s, i + 1, 1)).ToArray());
+            Assert.True(summary.Status == ExecutionStatus.Ok, sink.Describe());
+        }
+
+        var profile = SqlServerBackend.Profile(endpoint, db, "c_it_fk");
+        await using (var reader = await fixture.Provider.OpenCatalogReaderAsync(profile, endpoint.Password, CancellationToken.None))
+        {
+            var schemas = (await reader.ListSchemasAsync(db, CancellationToken.None)).Select(s => s.Name).ToList();
+            Assert.Contains("hr", schemas); // owned by db_owner, but holds a table
+            Assert.DoesNotContain("db_owner", schemas);
+            Assert.DoesNotContain("guest", schemas);
+
+            var dbo = await reader.LoadSchemaAsync(db, "dbo", CancellationToken.None);
+            Assert.Equal(new[] { "Sales", "hr" }, dbo.ReferencingSchemas);
+            Assert.Equal(0, dbo.HiddenForeignKeys);
+            var toUnique = Assert.Single(dbo.Objects.Single(o => o.Name == "مشتری").ForeignKeys);
+            Assert.Equal(("dbo", "Countries", "Code"), (toUnique.RefSchema, toUnique.RefTable, Assert.Single(toUnique.RefColumns)));
+            var disabled = Assert.Single(dbo.Objects.Single(o => o.Name == "Orders").ForeignKeys);
+            Assert.True(disabled.IsDisabled);
+            Assert.True(disabled.IsNotTrusted);
+            Assert.Equal("مشتری", disabled.RefTable);
+
+            var sales = await reader.LoadSchemaAsync(db, "Sales", CancellationToken.None);
+            var invoiceFks = sales.Objects.Single(o => o.Name == "Invoices").ForeignKeys.OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
+            Assert.Equal(new[] { "FK_Invoices_CustName", "FK_Invoices_Orders" }, invoiceFks.Select(f => f.Name));
+            Assert.Equal(new[] { "Name" }, invoiceFks[0].RefColumns); // FK to a unique index
+            Assert.Equal(new[] { "OrderId", "OrderRev" }, invoiceFks[1].Columns);
+            Assert.Equal(new[] { "Id", "Rev" }, invoiceFks[1].RefColumns);
+            Assert.Empty(sales.ReferencingSchemas);
+
+            var hr = await reader.LoadSchemaAsync(db, "hr", CancellationToken.None);
+            var untrusted = Assert.Single(hr.Objects.Single(o => o.Name == "Staff").ForeignKeys);
+            Assert.False(untrusted.IsDisabled);
+            Assert.True(untrusted.IsNotTrusted);
+
+            var details = await reader.GetObjectDetailsAsync(new ObjectRef(db, "dbo", "Orders", ObjectTypes.Table), CancellationToken.None);
+            Assert.True(Assert.Single(details.ForeignKeys).IsDisabled);
+            Assert.Contains(details.ReferencedBy, r => r.Schema == "Sales" && r.Table == "Invoices" && r.Columns.SequenceEqual(new[] { "OrderId", "OrderRev" }));
+            var ddl = await reader.GetDdlAsync(new ObjectRef(db, "Sales", "Invoices", ObjectTypes.Table), CancellationToken.None);
+            Assert.Contains("REFERENCES [dbo].[Orders] ([Id], [Rev])", ddl.Ddl);
+        }
+
+        // A login that sees dbo.مشتری and Sales.Invoices only: keys to tables it cannot see are counted, never drawn as "" edges.
+        var low = SqlServerBackend.Profile(endpoint with { User = lowUser, Password = lowPassword }, db, "c_it_fk_low");
+        await using (var reader = await fixture.Provider.OpenCatalogReaderAsync(low, lowPassword, CancellationToken.None))
+        {
+            var dbo = await reader.LoadSchemaAsync(db, "dbo", CancellationToken.None);
+            var customer = Assert.Single(dbo.Objects);
+            Assert.Empty(customer.ForeignKeys);
+            Assert.Equal(1, dbo.HiddenForeignKeys);
+            Assert.Equal(new[] { "Sales" }, dbo.ReferencingSchemas);
+
+            var sales = await reader.LoadSchemaAsync(db, "Sales", CancellationToken.None);
+            var fk = Assert.Single(sales.Objects.Single().ForeignKeys);
+            Assert.Equal(("FK_Invoices_CustName", "مشتری"), (fk.Name, fk.RefTable));
+            Assert.Equal(1, sales.HiddenForeignKeys);
+
+            var details = await reader.GetObjectDetailsAsync(new ObjectRef(db, "Sales", "Invoices", ObjectTypes.Table), CancellationToken.None);
+            Assert.Equal("FK_Invoices_CustName", Assert.Single(details.ForeignKeys).Name);
+        }
+    }
 }

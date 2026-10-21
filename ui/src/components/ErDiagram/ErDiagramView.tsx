@@ -1,7 +1,7 @@
 // ER diagram tab (docs/PLAN-M2.md section 3): toolbar (scope, add tables, search, column mode, types, filters, layout,
 // fit, export), the canvas with minimap, the details pane and a status line. The diagram is built from the catalog
 // store only (CatalogObject c / pk / fk), loading the schemas its scope needs.
-import { ChevronDown, Download, LoaderCircle, PanelRight, Search, Waypoints, X } from 'lucide-react';
+import { ChevronDown, Download, LoaderCircle, PanelRight, Search, TriangleAlert, Waypoints, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { layoutScopeKey } from '../../api/er';
@@ -23,7 +23,7 @@ import { DetailsPane } from './DetailsPane';
 import { ErCanvas } from './ErCanvas';
 import { FkDialog } from './fkDialog';
 import { ER_LAYOUT_MENU } from './menus';
-import { schemasOfScope } from './model';
+import { oneHopSchemas, relationshipSummary, schemasOfScope } from './model';
 import { diagramTitle } from './open';
 import { ErController, type ErTabState, type ViewOptions } from './store';
 import { syntheticSchemas } from './synthetic';
@@ -91,8 +91,20 @@ export function ErDiagramView({ tab, visible }: TabViewProps) {
     else if (snapshot) c.setCatalog(snapshot.schemas, snapshot.defaultSchema);
   }, [c, synth, snapshot]);
 
-  const catalogReady = !!synth || (!!snapshot && needed.every((s) => db?.schemaStatus[s] === 'ready' || db?.schemaStatus[s] === 'error'));
+  // One FK hop: the schemas the scope's tables reference and the schemas referencing them (engine `refBy`), so
+  // cross-schema keys in both directions are drawn with real cards (old databases spread tables over owner schemas).
+  const settled = (s: string) => db?.schemaStatus[s] === 'ready' || db?.schemaStatus[s] === 'error';
+  const neededReady = !!snapshot && needed.every(settled);
+  const hop = useMemo(() => (synthetic || !neededReady || !snapshot ? [] : oneHopSchemas(snapshot.schemas, needed)), [synthetic, neededReady, snapshot, needed]);
+  const hopKey = hop.join('\u0000');
+  useEffect(() => {
+    if (!hopKey) return;
+    for (const s of hopKey.split('\u0000')) void useCatalog.getState().loadSchema(cid, database, s);
+  }, [cid, database, hopKey]);
+
+  const catalogReady = !!synth || (neededReady && hop.every(settled));
   const catalogError = needed.map((s) => db?.schemaError[s]).find(Boolean) ?? (db?.schemasError || null);
+  const hopErrors = hop.filter((s) => db?.schemaStatus[s] === 'error');
   useEffect(() => {
     if (catalogReady && phase === 'loading') void c.start();
   }, [c, catalogReady, phase]);
@@ -127,6 +139,7 @@ export function ErDiagramView({ tab, visible }: TabViewProps) {
   const setOpt = <K extends keyof ViewOptions>(k: K, v: ViewOptions[K]) => c.setOption(k, v);
   const members = useMemo(() => new Set(model?.nodes.filter((n) => !n.ghost).map((n) => n.key) ?? []), [model]);
   const selected = selection.length === 1 ? model?.byKey.get(selection[0]) : focusKey && !selection.length ? model?.byKey.get(focusKey) : undefined;
+  const summary = useMemo(() => (model ? relationshipSummary(model) : null), [model]);
   const saveText = synthetic ? 'generated (not saved)' : save === 'saving' ? 'saving layout…' : save === 'pending' ? 'unsaved changes' : save === 'saved' ? 'layout saved' : save === 'error' ? 'layout not saved' : 'auto layout';
 
   return (
@@ -244,7 +257,17 @@ export function ErDiagramView({ tab, visible }: TabViewProps) {
         {options.details && <DetailsPane c={c} tabId={tab.id} />}
       </div>
       <div className="er-status" role="status" aria-live="polite">
-        <span>{model ? `${model.memberCount} table${model.memberCount === 1 ? '' : 's'} · ${model.edges.length} FK${model.edges.length === 1 ? '' : 's'}` : '…'}</span>
+        <span title={summary?.title ?? undefined} data-testid="er-summary">{summary ? summary.text : '…'}</span>
+        {summary?.warn && (
+          <span className="er-status-warn" title={summary.title ?? undefined}>
+            <TriangleAlert size={12} aria-hidden="true" /> Some relationships are not visible to this login
+          </span>
+        )}
+        {hopErrors.length > 0 && (
+          <span className="er-status-warn" title={hopErrors.map((s) => `${s}: ${db?.schemaError[s] ?? 'failed'}`).join('\n')}>
+            <TriangleAlert size={12} aria-hidden="true" /> Could not load {hopErrors.join(', ')}
+          </span>
+        )}
         <span className={`er-status-save ${save}`} title={saveError ?? undefined}>{saveText}</span>
         {conn && <span className="er-status-conn">{conn.name}{conn.readOnly ? ' · read-only' : ''}</span>}
         <span className="flex-1" />

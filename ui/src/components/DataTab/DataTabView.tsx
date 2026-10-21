@@ -38,6 +38,7 @@ import { DistinctValuesPopover } from '../FilterBar/DistinctValues';
 import { FilterBar, type FilterBarCloseReason } from '../FilterBar/FilterBar';
 import type { SelectionAggregates } from '../Grid/aggregate';
 import { AggregateStrip } from '../Grid/AggregateStrip';
+import type { FileFormat } from '../Grid/clientExport';
 import { DataGrid, rowValue, type GridSelectionInfo, type RowRef } from '../Grid/DataGrid';
 import { findTable, foreignKeys, referencingTables, tableEditability, type FkLink } from '../Grid/editability';
 import { overlayRows } from '../Grid/overlay';
@@ -528,7 +529,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   }, []);
 
   /** Export the loaded rows as the grid shows them (client-only filters, committed edits); full values are fetched. */
-  const exportAs = async (format: 'csv' | 'json' | 'sql-insert') => {
+  const exportAs = async (format: FileFormat) => {
     const g = gridController(gridKey);
     if (!g?.exportVisible) return;
     await g.exportVisible(format, {

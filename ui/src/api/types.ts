@@ -135,6 +135,8 @@ export interface CatalogForeignKey {
   rs: string | null;  // referenced schema
   rt: string;         // referenced table
   rcols: string[];    // referenced columns
+  dis?: boolean;      // isDisabled: SQL Server NOCHECK CONSTRAINT (not enforced)
+  nt?: boolean;       // isNotTrusted: existing rows not checked (WITH NOCHECK, or disabled)
 }
 export interface CatalogPackageMember {
   n: string;
@@ -267,7 +269,7 @@ export type CellValue =
 export interface RowsPage { columns: ColumnInfo[]; rows: CellValue[][]; total: number; truncated: boolean }
 export interface CellResponse { kind: 'string' | 'binary'; value: string; len: number }
 
-export type ExportFormat = 'csv' | 'json' | 'sql-insert';
+export type ExportFormat = 'csv' | 'json' | 'sql-insert' | 'xlsx';
 export interface ExportOptions { delimiter?: string; header?: boolean; nullAs?: string; tableName?: string }
 export interface ResultSetExportRequest { format: ExportFormat; path: string | null; options: ExportOptions }
 export interface QueryExportRequest { sessionId: string; sql: string; format: ExportFormat; path: string; options: ExportOptions }

@@ -111,7 +111,7 @@ public class ExportWriterTests
     [Fact]
     public void UnknownFormat_IsValidationError()
     {
-        var ex = Assert.Throws<EngineException>(() => ExportFormats.Create("xlsx", new MemoryStream(), new ExportOptions(), Dialect.TSql));
+        var ex = Assert.Throws<EngineException>(() => ExportFormats.Create("ods", new MemoryStream(), new ExportOptions(), Dialect.TSql));
         Assert.Equal(ErrorCodes.Validation, ex.Code);
     }
 }

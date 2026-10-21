@@ -12,7 +12,7 @@ export const GRID_COPY_AS_MENU: ContextEntry[] = [
 
 /** Toolbar "Export ▾" menu (results pane and Data tab); copy items act on all visible rows (args.all). */
 export const GRID_EXPORT_MENU: ContextEntry[] = [
-  c('grid.export.csv'), c('grid.export.json'), c('grid.export.sqlInsert'), 'separator',
+  c('grid.export.csv'), c('grid.export.xlsx'), c('grid.export.json'), c('grid.export.sqlInsert'), 'separator',
   c('grid.copyAs.tsv', 'Copy all as TSV'), c('grid.copyAs.csv', 'Copy all as CSV'), c('grid.copyAs.json', 'Copy all as JSON'),
   c('grid.copyAs.markdown', 'Copy all as Markdown'), c('grid.copyAs.insert', 'Copy all as SQL INSERT'),
 ];
@@ -43,7 +43,7 @@ export const RESULTS_CODE_ENTRY: Extract<ContextEntry, { command: string }> = { 
 export const RESULTS_TOOLBAR: ContextEntry[] = [
   c('grid.filter'), c('grid.clearSort'), c('grid.applyServerFilter'), 'separator',
   c('grid.insertRow'), c('grid.undo'), c('grid.redo'), c('grid.revertAll'), c('grid.submitChanges'), c('grid.previewChanges'), 'separator',
-  RESULTS_CODE_ENTRY, c('grid.export.csv'), c('grid.export.json'), c('grid.export.sqlInsert'), c('grid.toggleRecordView'), c('grid.toggleValueViewer'),
+  RESULTS_CODE_ENTRY, c('grid.export.csv'), c('grid.export.xlsx'), c('grid.export.json'), c('grid.export.sqlInsert'), c('grid.toggleRecordView'), c('grid.toggleValueViewer'),
   c('grid.copyColumnNames'),
 ];
 
@@ -51,6 +51,6 @@ export const RESULTS_TOOLBAR: ContextEntry[] = [
 export const DATATAB_TOOLBAR: ContextEntry[] = [
   c('dataTab.reload'), c('grid.filter'), c('grid.clearSort'), 'separator',
   c('grid.insertRow'), c('grid.undo'), c('grid.redo'), c('grid.revertAll'), c('grid.submitChanges'), c('grid.previewChanges'), 'separator',
-  c('grid.export.csv'), c('grid.export.json'), c('grid.export.sqlInsert'), c('dataTab.codegen'), c('dataTab.design'),
+  c('grid.export.csv'), c('grid.export.xlsx'), c('grid.export.json'), c('grid.export.sqlInsert'), c('dataTab.codegen'), c('dataTab.design'),
   c('grid.toggleRecordView'),
 ];

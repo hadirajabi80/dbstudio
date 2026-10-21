@@ -57,8 +57,13 @@ export function validateFilePath(v: unknown, name = 'path', platform: NodeJS.Pla
   return p.normalize(v);
 }
 
-export function validateFileContent(v: unknown): string {
-  if (typeof v !== 'string') throw new ValidationError('content must be a string');
+/** Text, or bytes for binary files (an .xlsx export arrives as a Uint8Array over IPC). */
+export function validateFileContent(v: unknown): string | Uint8Array {
+  if (ArrayBuffer.isView(v) && !(v instanceof DataView)) {
+    if (v.byteLength > LIMITS.writeChars) throw new ValidationError('content is too large');
+    return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  }
+  if (typeof v !== 'string') throw new ValidationError('content must be a string or bytes');
   if (v.length > LIMITS.writeChars) throw new ValidationError('content is too large');
   return v;
 }

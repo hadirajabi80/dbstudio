@@ -12,15 +12,17 @@ function Legend() {
   return (
     <div className="er-legend" aria-label="Notation">
       <div className="er-legend-title">Notation</div>
-      <svg width="200" height="78" viewBox="0 0 200 78" aria-hidden="true" className="er-legend-svg">
+      <svg width="200" height="96" viewBox="0 0 200 96" aria-hidden="true" className="er-legend-svg">
         <g className="er-edge"><path className="er-edge-line" d="M10 14H150" /><path className="er-edge-mark" d="M22 14L10 8M22 14L10 20M26 8V20M143 8V20M138 8V20" /></g>
         <g className="er-edge optional"><path className="er-edge-line" d="M10 44H150" /><path className="er-edge-mark" d="M22 44L10 38M22 44L10 50M143 38V50" /><circle className="er-edge-ring" cx="29.5" cy="44" r="3.5" /><circle className="er-edge-ring" cx="135" cy="44" r="3.5" /></g>
         <g className="er-edge ghost"><path className="er-edge-line" d="M10 70H150" /></g>
+        <g className="er-edge disabled"><path className="er-edge-line" d="M10 88H150" /></g>
       </svg>
       <ul className="er-legend-list">
         <li><span>many ─ one</span> required foreign key (crow's foot on the referencing table)</li>
         <li><span>dashed</span> optional: the FK columns are nullable</li>
         <li><span>dotted</span> to a table outside the diagram (click it to add)</li>
+        <li><span>sparse dots</span> disabled key (NOCHECK): not enforced</li>
       </ul>
     </div>
   );
@@ -99,7 +101,7 @@ export function DetailsPane({ c, tabId }: { c: ErController; tabId: string }) {
             {outgoing.map((e) => (
               <li key={e.id}>
                 <button type="button" className="er-details-link" onClick={() => model.byKey.get(e.to) && c.focusCard(e.to)}>
-                  <span className="er-details-fk">{e.name}</span>
+                  <span className="er-details-fk">{e.name}{e.disabled && <span className="er-status-warn" title="NOCHECK CONSTRAINT: not enforced"> · disabled</span>}</span>
                   <span className="er-details-pair">{e.cols.join(', ')} <ArrowRight size={11} aria-hidden="true" /> {label(e.to)}{e.rcols.length ? ` (${e.rcols.join(', ')})` : ''}</span>
                 </button>
               </li>
@@ -115,7 +117,7 @@ export function DetailsPane({ c, tabId }: { c: ErController; tabId: string }) {
               <li key={e.id}>
                 <button type="button" className="er-details-link" onClick={() => c.focusCard(e.from)}>
                   <span className="er-details-fk">{label(e.from)}</span>
-                  <span className="er-details-pair">{e.cols.join(', ')} · {e.name}</span>
+                  <span className="er-details-pair">{e.cols.join(', ')} · {e.name}{e.disabled ? ' (disabled)' : ''}</span>
                 </button>
               </li>
             ))}

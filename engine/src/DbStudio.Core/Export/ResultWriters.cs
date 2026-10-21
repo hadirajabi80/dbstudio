@@ -20,16 +20,20 @@ public interface IResultWriter : IAsyncDisposable
 
 public static class ExportFormats
 {
-    public const string Csv = "csv", Json = "json", SqlInsert = "sql-insert";
+    public const string Csv = "csv", Json = "json", SqlInsert = "sql-insert", Xlsx = "xlsx";
 
-    public static bool IsKnown(string? format) => format is Csv or Json or SqlInsert;
+    public static bool IsKnown(string? format) => format is Csv or Json or SqlInsert or Xlsx;
 
-    public static string Extension(string format) => format switch { Json => ".json", SqlInsert => ".sql", _ => ".csv" };
+    /// <summary>Binary formats (no charset in the Content-Type).</summary>
+    public static bool IsBinary(string format) => format is Xlsx;
+
+    public static string Extension(string format) => format switch { Json => ".json", SqlInsert => ".sql", Xlsx => ".xlsx", _ => ".csv" };
 
     public static string ContentType(string format) => format switch
     {
         Json => "application/json",
         SqlInsert => "application/sql",
+        Xlsx => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         _ => "text/csv",
     };
 
@@ -39,7 +43,8 @@ public static class ExportFormats
         Csv => new CsvResultWriter(stream, options),
         Json => new JsonResultWriter(stream),
         SqlInsert => new SqlInsertResultWriter(stream, options, dialect),
-        _ => throw EngineException.Validation($"Unknown export format '{format}'. Expected csv, json or sql-insert."),
+        Xlsx => new XlsxResultWriter(stream, options),
+        _ => throw EngineException.Validation($"Unknown export format '{format}'. Expected csv, json, sql-insert or xlsx."),
     };
 
     /// <summary>Text of a cell for text formats: full values (not the 32 KB wire preview), binary as 0x-hex.</summary>

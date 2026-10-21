@@ -66,9 +66,9 @@ public sealed class SqlServerCatalogReader : ICatalogReader
         var keys = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.KeyConstraints, r => new RawKey(
             r.GetInt32(0), r.GetString(1), r.GetString(2).Trim(), r.GetInt32(3), r.GetByte(4)), ct, p).ConfigureAwait(false);
 
-        var fkRows = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.ForeignKeys, r => new RawFk(
-            r.GetInt32(0), r.GetString(1), r.GetInt32(2), SqlDb.Str(r, 7), SqlDb.Str(r, 8) ?? "",
-            SqlDb.Str(r, 9) ?? "", SqlDb.Str(r, 12) ?? "", SqlDb.Str(r, 10), SqlDb.Str(r, 11) ?? ""), ct, p).ConfigureAwait(false);
+        ForeignKeyOrdinals? fkOrdinals = null;
+        var fkRows = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.ForeignKeys,
+            r => ReadForeignKeyRow(r, fkOrdinals ??= new ForeignKeyOrdinals(r)), ct, p).ConfigureAwait(false);
 
         var paramRows = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.Parameters, r => (
             ObjectId: r.GetInt32(0), Id: r.GetInt32(1), Name: r.GetString(2),
@@ -78,10 +78,12 @@ public sealed class SqlServerCatalogReader : ICatalogReader
         var synonyms = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.Synonyms, r => (
             Name: r.GetString(0), Base: r.GetString(1), TargetType: SqlDb.Str(r, 2)?.Trim()), ct, p).ConfigureAwait(false);
 
-        var userTypes = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.UserTypes, r => (
+        // SQL Server 2005 has no table types (sys.table_types / sys.types.is_table_type are 2008+).
+        var hasTableTypes = !IsSqlServer2005OrOlder(_conn.ServerVersion);
+        var userTypes = await SqlDb.QueryAsync(_conn, hasTableTypes ? SqlServerCatalogQueries.UserTypes : SqlServerCatalogQueries.UserTypes2005, r => (
             Id: r.GetInt32(0), Name: r.GetString(1), IsTable: SqlDb.Bool(r, 7)), ct, p).ConfigureAwait(false);
 
-        var ttColumns = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.TableTypeColumns, r => (
+        var ttColumns = !hasTableTypes ? [] : await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.TableTypeColumns, r => (
             TypeId: r.GetInt32(0), Col: new CatalogColumn(r.GetString(2),
                 SqlServerNames.TypeText(r.GetString(3), r.GetInt16(4), r.GetByte(5), r.GetByte(6)), SqlDb.Bool(r, 7), false,
                 (SqlDb.Bool(r, 8) ? 1 : 0) | (SqlDb.Bool(r, 9) ? 2 : 0))), ct, p).ConfigureAwait(false);
@@ -92,17 +94,10 @@ public sealed class SqlServerCatalogReader : ICatalogReader
             .ToDictionary(g => g.Key, g => g.OrderBy(k => k.Ordinal).Select(k => k.ColumnId).ToList());
         var colsByObject = columns.GroupBy(c => c.ObjectId).ToDictionary(g => g.Key, g => g.OrderBy(c => c.ColumnId).ToList());
 
-        // Outgoing FKs of tables in this schema. (Incoming FKs from other schemas appear when those schemas load.)
-        var fksByParent = fkRows.Where(f => byId.ContainsKey(f.ParentId))
-            .GroupBy(f => f.FkId)
-            .Select(g =>
-            {
-                var first = g.First();
-                return (first.ParentId, Fk: new ForeignKeyRef(first.Name, g.Select(x => x.ParentColumn).ToList(),
-                    first.RefSchema, first.RefTable, g.Select(x => x.RefColumn).ToList()));
-            })
-            .GroupBy(x => x.ParentId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Fk).ToList());
+        // Outgoing FKs of tables in this schema; the schemas of incoming FKs are reported (ReferencingSchemas) so the
+        // ER diagram can load them, and FKs whose target the login cannot see are counted instead of becoming "" edges.
+        var fkSet = GroupForeignKeys(fkRows, sid);
+        var fksByParent = fkSet.ByParent;
 
         var paramsByObject = paramRows.GroupBy(x => x.ObjectId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id)
             .Select(x => x.Id == 0
@@ -110,7 +105,9 @@ public sealed class SqlServerCatalogReader : ICatalogReader
                 : new ParamInfo(x.Name, x.Type, x.IsOutput ? "out" : "in", x.HasDefault))
             .ToList());
 
-        var synonymMap = synonyms.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+        // Ordinal: a case-sensitive database may hold synonyms that differ only in case.
+        var synonymMap = new Dictionary<string, (string Name, string Base, string? TargetType)>(StringComparer.Ordinal);
+        foreach (var s in synonyms) synonymMap.TryAdd(s.Name, s);
         var result = new List<CatalogObject>(objects.Count + userTypes.Count);
         foreach (var o in objects.OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase))
         {
@@ -150,7 +147,11 @@ public sealed class SqlServerCatalogReader : ICatalogReader
             });
         }
 
-        return new SchemaCatalog(_conn.Database, schema, result);
+        return new SchemaCatalog(_conn.Database, schema, result)
+        {
+            ReferencingSchemas = fkSet.ReferencingSchemas,
+            HiddenForeignKeys = fkSet.Hidden,
+        };
     }
 
     public async Task<ObjectDetails> GetObjectDetailsAsync(ObjectRef obj, CancellationToken ct)
@@ -177,7 +178,8 @@ public sealed class SqlServerCatalogReader : ICatalogReader
                      ?? new HashSet<string>();
 
         var referencedBy = (await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.DetailReferencedBy, r => (
-                Fk: r.GetString(0), Schema: SqlDb.Str(r, 1), Table: SqlDb.Str(r, 2) ?? "", Col: SqlDb.Str(r, 3) ?? ""), ct, ("@id", id))
+                Fk: r.GetString(r.GetOrdinal("fk_name")), Schema: SqlDb.Str(r, r.GetOrdinal("parent_schema")),
+                Table: SqlDb.Str(r, r.GetOrdinal("parent_table")) ?? "", Col: SqlDb.Str(r, r.GetOrdinal("parent_column")) ?? ""), ct, ("@id", id))
             .ConfigureAwait(false))
             .GroupBy(x => (x.Schema, x.Table, x.Fk))
             .Select(g => new ReferencedBy(g.Key.Schema, g.Key.Table, g.Key.Fk, g.Select(x => x.Col).ToList()))
@@ -199,7 +201,7 @@ public sealed class SqlServerCatalogReader : ICatalogReader
 
         var columns = detailCols.Select(c => c.Detail with { IsPk = pkCols.Contains(c.Detail.Name) }).ToList();
         var indexDetails = indexes.Select(i => new IndexDetail(i.Name, i.IsUnique, i.KeyColumns.Select(k => k.Name).ToList(), i.TypeDesc, i.IsPrimaryKey)).ToList();
-        var fkRefs = fks.Select(f => new ForeignKeyRef(f.Name, f.Columns, f.RefSchema, f.RefTable, f.RefColumns)).ToList();
+        var fkRefs = fks.Select(f => new ForeignKeyRef(f.Def.Name, f.Def.Columns, f.Def.RefSchema, f.Def.RefTable, f.Def.RefColumns, f.IsDisabled, f.IsNotTrusted)).ToList();
 
         return new ObjectDetails(obj with { Schema = schema }, columns, indexDetails, fkRefs, referencedBy, triggers, parameters, rowCount,
             new DateTimeOffset(DateTime.SpecifyKind(found.Created, DateTimeKind.Unspecified), TimeSpan.Zero),
@@ -263,7 +265,7 @@ public sealed class SqlServerCatalogReader : ICatalogReader
         var fks = await ReadForeignKeysAsync(objectId, ct).ConfigureAwait(false);
         var checks = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.DetailCheckConstraints,
             r => new SqlServerCheckDefinition(r.GetString(0), r.GetString(1)), ct, ("@id", objectId)).ConfigureAwait(false);
-        return new SqlServerTableDefinition(schema, name, cols.Select(c => c.Def).ToList(), indexes, fks, checks);
+        return new SqlServerTableDefinition(schema, name, cols.Select(c => c.Def).ToList(), indexes, fks.Select(f => f.Def).ToList(), checks);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -361,18 +363,25 @@ public sealed class SqlServerCatalogReader : ICatalogReader
         }).ToList();
     }
 
-    private async Task<List<SqlServerForeignKeyDefinition>> ReadForeignKeysAsync(int objectId, CancellationToken ct)
+    private sealed record DetailForeignKey(SqlServerForeignKeyDefinition Def, bool IsDisabled, bool IsNotTrusted);
+
+    /// <summary>Outgoing FKs of one table; keys whose referenced table or columns are not visible to the login are left out.</summary>
+    private async Task<List<DetailForeignKey>> ReadForeignKeysAsync(int objectId, CancellationToken ct)
     {
         var rows = await SqlDb.QueryAsync(_conn, SqlServerCatalogQueries.DetailForeignKeys, r => (
-            Name: r.GetString(0), Del: r.GetString(1), Upd: r.GetString(2), Col: SqlDb.Str(r, 4) ?? "",
-            RefSchema: SqlDb.Str(r, 5) ?? "dbo", RefTable: SqlDb.Str(r, 6) ?? "", RefCol: SqlDb.Str(r, 7) ?? ""),
+            Name: r.GetString(r.GetOrdinal("fk_name")), Del: r.GetString(r.GetOrdinal("on_delete")), Upd: r.GetString(r.GetOrdinal("on_update")),
+            Col: SqlDb.Str(r, r.GetOrdinal("parent_column")), RefSchema: SqlDb.Str(r, r.GetOrdinal("ref_schema")),
+            RefTable: SqlDb.Str(r, r.GetOrdinal("ref_table")), RefCol: SqlDb.Str(r, r.GetOrdinal("ref_column")),
+            Disabled: SqlDb.Bool(r, r.GetOrdinal("is_disabled")), NotTrusted: SqlDb.Bool(r, r.GetOrdinal("is_not_trusted"))),
             ct, ("@id", objectId)).ConfigureAwait(false);
-        return rows.GroupBy(x => x.Name).Select(g =>
-        {
-            var f = g.First();
-            return new SqlServerForeignKeyDefinition(f.Name, g.Select(x => x.Col).ToList(), f.RefSchema, f.RefTable,
-                g.Select(x => x.RefCol).ToList(), f.Del, f.Upd);
-        }).ToList();
+        return rows.GroupBy(x => x.Name, StringComparer.Ordinal)
+            .Where(g => g.All(x => x.Col is not null && x.RefSchema is not null && x.RefTable is not null && x.RefCol is not null))
+            .Select(g =>
+            {
+                var f = g.First();
+                return new DetailForeignKey(new SqlServerForeignKeyDefinition(f.Name, g.Select(x => x.Col!).ToList(), f.RefSchema!, f.RefTable!,
+                    g.Select(x => x.RefCol!).ToList(), f.Del, f.Upd), f.Disabled, f.NotTrusted);
+            }).ToList();
     }
 
     private async Task<string> SequenceDdlAsync(string full, int id, CancellationToken ct)
@@ -392,5 +401,67 @@ public sealed class SqlServerCatalogReader : ICatalogReader
     private sealed record RawObject(int Id, string Name, string Type, string? Comment);
     private sealed record RawColumn(int ObjectId, int ColumnId, string Name, string TypeText, bool Nullable, bool IsIdentity, bool IsComputed, string? Comment);
     private sealed record RawKey(int ParentId, string Name, string Type, int ColumnId, int Ordinal);
-    private sealed record RawFk(int FkId, string Name, int ParentId, string? ParentSchema, string ParentTable, string ParentColumn, string RefColumn, string? RefSchema, string RefTable);
+
+    // ---------------------------------------------------------------- foreign keys (pure, unit tested)
+
+    /// <summary>"9.00.5000" (SQL Server 2005) and older: no table types.</summary>
+    public static bool IsSqlServer2005OrOlder(string? serverVersion) =>
+        int.TryParse((serverVersion ?? "").Split('.')[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
+        && major is > 0 and < 10;
+
+    /// <summary>One column pair of a foreign key (<see cref="SqlServerCatalogQueries.ForeignKeys"/>); names are null when not visible.</summary>
+    public sealed record ForeignKeyRow(int FkId, string Name, int ParentId, int? ParentSchemaId, string? ParentSchema, string? ParentTable,
+        string? ParentColumn, int? RefSchemaId, string? RefSchema, string? RefTable, string? RefColumn, int Ordinal, bool IsDisabled, bool IsNotTrusted);
+
+    /// <summary>Column positions of the FK query, resolved once by name (the select list can change without breaking the mapping).</summary>
+    public sealed class ForeignKeyOrdinals(System.Data.IDataRecord r)
+    {
+        public readonly int FkId = r.GetOrdinal("fk_id"), Name = r.GetOrdinal("fk_name"), ParentId = r.GetOrdinal("parent_id"),
+            ParentSchemaId = r.GetOrdinal("parent_schema_id"), ParentSchema = r.GetOrdinal("parent_schema"), ParentTable = r.GetOrdinal("parent_table"),
+            ParentColumn = r.GetOrdinal("parent_column"), RefSchemaId = r.GetOrdinal("ref_schema_id"), RefSchema = r.GetOrdinal("ref_schema"),
+            RefTable = r.GetOrdinal("ref_table"), RefColumn = r.GetOrdinal("ref_column"), Ordinal = r.GetOrdinal("ordinal"),
+            IsDisabled = r.GetOrdinal("is_disabled"), IsNotTrusted = r.GetOrdinal("is_not_trusted");
+    }
+
+    public static ForeignKeyRow ReadForeignKeyRow(System.Data.IDataRecord r, ForeignKeyOrdinals o)
+    {
+        static int? Int(System.Data.IDataRecord r, int i) => r.IsDBNull(i) ? null : Convert.ToInt32(r.GetValue(i), System.Globalization.CultureInfo.InvariantCulture);
+        return new ForeignKeyRow(Int(r, o.FkId) ?? 0, SqlDb.Str(r, o.Name) ?? "", Int(r, o.ParentId) ?? 0, Int(r, o.ParentSchemaId),
+            SqlDb.Str(r, o.ParentSchema), SqlDb.Str(r, o.ParentTable), SqlDb.Str(r, o.ParentColumn), Int(r, o.RefSchemaId),
+            SqlDb.Str(r, o.RefSchema), SqlDb.Str(r, o.RefTable), SqlDb.Str(r, o.RefColumn), Int(r, o.Ordinal) ?? 0,
+            SqlDb.Bool(r, o.IsDisabled), SqlDb.Bool(r, o.IsNotTrusted));
+    }
+
+    /// <param name="ByParent">Outgoing FKs per parent object id (parent table in the loaded schema).</param>
+    /// <param name="ReferencingSchemas">Other schemas whose tables reference a table of the loaded schema.</param>
+    /// <param name="Hidden">Outgoing FKs left out: the referenced table or a column name is not visible to the login.</param>
+    public sealed record ForeignKeySet(Dictionary<int, List<ForeignKeyRef>> ByParent, IReadOnlyList<string> ReferencingSchemas, int Hidden);
+
+    /// <summary>Groups the FK rows of one schema load (both directions) into the outgoing keys per table.</summary>
+    public static ForeignKeySet GroupForeignKeys(IEnumerable<ForeignKeyRow> rows, int schemaId)
+    {
+        var byParent = new Dictionary<int, List<ForeignKeyRef>>();
+        var referencing = new SortedSet<string>(StringComparer.Ordinal);
+        var hidden = 0;
+        foreach (var g in rows.GroupBy(r => r.FkId))
+        {
+            var cols = g.OrderBy(r => r.Ordinal).ToList();
+            var first = cols[0];
+            if (first.ParentSchemaId != schemaId)
+            {
+                // incoming from another schema: that schema's load carries the key itself
+                if (first.RefSchemaId == schemaId && !string.IsNullOrEmpty(first.ParentSchema)) referencing.Add(first.ParentSchema);
+                continue;
+            }
+            if (cols.Any(c => string.IsNullOrEmpty(c.ParentColumn) || string.IsNullOrEmpty(c.RefSchema) || string.IsNullOrEmpty(c.RefTable) || string.IsNullOrEmpty(c.RefColumn)))
+            {
+                hidden++;
+                continue;
+            }
+            if (!byParent.TryGetValue(first.ParentId, out var list)) byParent[first.ParentId] = list = [];
+            list.Add(new ForeignKeyRef(first.Name, cols.Select(c => c.ParentColumn!).ToList(), first.RefSchema, first.RefTable!,
+                cols.Select(c => c.RefColumn!).ToList(), first.IsDisabled, first.IsNotTrusted));
+        }
+        return new ForeignKeySet(byParent, referencing.ToList(), hidden);
+    }
 }

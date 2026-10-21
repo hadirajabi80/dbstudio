@@ -8,7 +8,7 @@ import { diagramBounds } from './edges';
 
 export type Role =
   | 'bg' | 'card' | 'cardGhost' | 'header' | 'stripTable' | 'stripView' | 'stripGhost' | 'title' | 'titleMuted'
-  | 'col' | 'type' | 'badgePk' | 'badgeFk' | 'badgeText' | 'more' | 'sep' | 'edge' | 'edgeOptional' | 'edgeGhost' | 'mark' | 'ring';
+  | 'col' | 'type' | 'badgePk' | 'badgeFk' | 'badgeText' | 'more' | 'sep' | 'edge' | 'edgeOptional' | 'edgeGhost' | 'edgeDisabled' | 'mark' | 'ring';
 
 export type SceneItem =
   | { kind: 'rect'; role: Role; x: number; y: number; w: number; h: number; r?: number }
@@ -50,7 +50,7 @@ export function buildScene(input: SceneInput): Scene {
   for (const e of model.edges) {
     const g = edges.get(e.id);
     if (!g) continue;
-    items.push({ kind: 'path', role: e.ghost ? 'edgeGhost' : e.optional ? 'edgeOptional' : 'edge', d: g.d });
+    items.push({ kind: 'path', role: e.disabled ? 'edgeDisabled' : e.ghost ? 'edgeGhost' : e.optional ? 'edgeOptional' : 'edge', d: g.d });
     items.push({ kind: 'path', role: 'mark', d: g.marks });
     for (const r of g.rings) items.push({ kind: 'circle', role: 'ring', cx: r.cx, cy: r.cy, r: r.r });
   }
@@ -139,6 +139,7 @@ export function roleStyles(t: SceneTheme): Record<Role, RoleStyle> {
     edge: { stroke: t.muted, width: 1.4 },
     edgeOptional: { stroke: t.muted, width: 1.4, dash: [5, 4] },
     edgeGhost: { stroke: t.borderStrong, width: 1.2, dash: [3, 3] },
+    edgeDisabled: { stroke: t.muted, width: 1.8, dash: [1, 4] },
     mark: { stroke: t.muted, width: 1.4 },
     ring: { fill: t.panel, stroke: t.muted, width: 1.4 },
   };

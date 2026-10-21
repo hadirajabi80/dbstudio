@@ -68,7 +68,7 @@ describe('ER diagram view', () => {
     expect(card('v_customer_orders').className).toContain('view');
     expect(document.querySelectorAll('.er-edges [data-edge].er-edge')).toHaveLength(5);
     expect(screen.getByRole('application', { name: /ER: Shop/ })).toBeInTheDocument();
-    expect(screen.getByText(/7 tables · 5 FKs/)).toBeInTheDocument();
+    expect(screen.getByText(/7 tables · 5 relationships/)).toBeInTheDocument();
     // details pane summary with nothing selected
     expect(screen.getByRole('complementary', { name: 'Diagram details' })).toHaveTextContent('Relationships5');
   });
@@ -99,7 +99,7 @@ describe('ER diagram view', () => {
     expect(activeController()!.state.selection).toEqual(['main.events']);
     fireEvent.keyDown(events, { key: 'Delete', code: 'Delete' });
     await until(() => !screen.queryByRole('button', { name: /^Table events,/ }));
-    expect(screen.getByText(/6 tables · 4 FKs/)).toBeInTheDocument();
+    expect(screen.getByText(/6 tables · 4 relationships/)).toBeInTheDocument();
     // moved card + debounced save (800 ms)
     const c = activeController()!;
     const before = c.state.positions['main.orders'];
