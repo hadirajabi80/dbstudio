@@ -11,6 +11,7 @@ import { iconPath, windowStateFile } from './paths';
 import { chromeArg, chromeInfo, desktopOs, windowChrome } from './platform';
 import { UI_URL } from './protocol';
 import type { TitleBarThemeArgs } from './validate';
+import { secondaryWindowBounds } from './windows-core';
 
 interface WindowState { x?: number; y?: number; width: number; height: number; maximized: boolean }
 
@@ -36,6 +37,12 @@ function loadState(): WindowState {
   } catch {
     return DEFAULT_STATE;
   }
+}
+
+function secondaryState(position?: { x: number; y: number }): WindowState {
+  const main = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())?.getBounds();
+  const area = position ? screen.getDisplayNearestPoint(position).workArea : main ? screen.getDisplayMatching(main).workArea : screen.getPrimaryDisplay().workArea;
+  return { ...secondaryWindowBounds(position, area, main), maximized: false };
 }
 
 function trackState(win: BrowserWindow): void {
@@ -113,10 +120,18 @@ export interface CreateWindowOptions {
   devUrl?: string;
   /** false keeps the window hidden (smoke test). */
   show?: boolean;
+  // ---- windows
+  /** 'secondary': a detached tab window (src/main/windows.ts): its size and position are not remembered. */
+  kind?: 'main' | 'secondary';
+  /** Secondary windows: screen point the window opens at (e.g. where a tab was dropped). */
+  position?: { x: number; y: number };
+  /** Extra webPreferences.additionalArguments (the window role). */
+  extraArgs?: string[];
 }
 
 export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
-  const state = loadState();
+  const secondary = o.kind === 'secondary';
+  const state = secondary ? secondaryState(o.position) : loadState();
   const icon = iconPath();
   const os = desktopOs();
   const osRelease = release();
@@ -150,11 +165,12 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
       allowRunningInsecureContent: false,
       webviewTag: false,
       spellcheck: false,
-      additionalArguments: [`${APP_VERSION_ARG}${o.appVersion}`, chromeArg(chromeInfo(os, osRelease))],
+      additionalArguments: [`${APP_VERSION_ARG}${o.appVersion}`, chromeArg(chromeInfo(os, osRelease)), ...(o.extraArgs ?? [])],
     },
   });
   if (state.maximized) win.maximize();
-  trackState(win);
+  // Only the main window remembers its size and position.
+  if (!secondary) trackState(win);
 
   if (o.show !== false) win.once('ready-to-show', () => win.show());
   // Keep the native background in sync with OS theme changes (visible during reloads); a transparent one stays so.

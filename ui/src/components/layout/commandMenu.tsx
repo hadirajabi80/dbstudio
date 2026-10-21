@@ -10,11 +10,15 @@ import { isMac } from '../../commands/keys';
 import { getCommand } from '../../commands/registry';
 import { commandView } from '../../commands/useCommands';
 import type { MenuItem } from '../common/Menu';
+// Editor groups and detached windows (components/EditorGroups/commands.ts)
+import { Columns2, SquareArrowOutDownLeft, SquareArrowOutUpRight } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
   Activity, ArrowRightLeft, Ban, Binary, Braces, Check, ChevronsDownUp, CircleStop, ClipboardCopy, CloudUpload, Code, Code2, CodeXml, Columns3, Command, Copy, Database, Download, Eraser, Eye, File, FileCode2, FileDiff, FileText, Filter, FolderOpen, Funnel, FunnelX, Gauge, GitCommitHorizontal, GitCompare, Hash, History, House, Info, KeyRound, Keyboard, Layers, LayoutList, Link, ListChecks, ListEnd, ListTree, Maximize2, Monitor, Moon, Network, Package, PanelLeft, Pencil, PencilRuler, Pin, Play, Plug, Plus, Redo2, RefreshCw, RotateCcw, Rows2, Rows3, Save, Scissors, ScrollText, Search, Settings, ShieldAlert, Sparkles, SquareChevronRight, SquareFunction, SquarePen, SquareTerminal, Sun, SunMoon, Table2, TableProperties, TextCursorInput, Timer, Trash, Trash2, Undo2, Unplug, Upload, Variable, Wand, WandSparkles, Workflow, X, Zap, ZoomIn, ZoomOut,
   Boxes, ChartBar, Clock, Cylinder, FileInput, FileOutput, Import, Key, Leaf, ListFilter, MessageSquare, PanelsTopLeft, Radio, Send, Skull, Users, Waypoints,
 };
+
+Object.assign(ICONS, { Columns2, SquareArrowOutDownLeft, SquareArrowOutUpRight });
 
 /** True when `name` resolves to an icon (tests: every menu command has a drawable icon). */
 export function hasCommandIcon(name: string | undefined): boolean {

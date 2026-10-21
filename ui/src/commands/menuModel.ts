@@ -259,6 +259,12 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   tab: [
     c('tab.close'), c('tab.closeOthers'), 'separator', c('tab.rename'), c('tab.duplicate'),
     { command: 'designer.compareWithServer', optional: true, hideDisabled: true }, 'separator', c('tab.reopenClosed'),
+    // Editor groups and windows (components/EditorGroups/commands.ts)
+    'separator', c('view.splitRight', true), c('view.splitDown', true),
+    { command: 'view.moveTabToNextGroup', optional: true, hideDisabled: true },
+    { command: 'view.openInNewWindow', optional: true, hideDisabled: true },
+    { command: 'view.reattachTab', optional: true, hideDisabled: true },
+    { command: 'view.closeGroup', optional: true, hideDisabled: true },
   ],
   'history.entry': [
     c('history.openEntry'), c('history.insertEntry'), c('history.copyEntry'), c('history.togglePin'), 'separator', c('history.deleteEntry'),

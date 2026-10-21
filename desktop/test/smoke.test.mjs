@@ -40,12 +40,20 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
   assert.equal(r.error, undefined, r.error);
 
   assert.equal(r.hasBridge, true);
+  // ---- windows: closeDetachedWindow, getDetachedTabs, listDetachedTabs, onDetachedTabs, onTabsReattached,
+  // openTabWindow, reattachTabs, reportDetachedTabs, windowRole
   assert.deepEqual(r.keys, [
-    'appVersion', 'checkForUpdates', 'configureUpdates', 'getEngineInfo', 'getUpdateStatus', 'loadWorkspace',
-    'onEngineRestarted', 'onMenuCommand', 'onUpdateStatus', 'openExternal', 'platform', 'quitAndInstall',
-    'readTextFile', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu', 'showOpenDialog',
-    'showSaveDialog', 'writeTextFile',
+    'appVersion', 'checkForUpdates', 'closeDetachedWindow', 'configureUpdates', 'getDetachedTabs', 'getEngineInfo',
+    'getUpdateStatus', 'listDetachedTabs', 'loadWorkspace', 'onDetachedTabs',
+    'onEngineRestarted', 'onMenuCommand', 'onTabsReattached', 'onUpdateStatus', 'openExternal', 'openTabWindow', 'platform', 'quitAndInstall',
+    'readTextFile', 'reattachTabs', 'reportDetachedTabs', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu', 'showOpenDialog',
+    'showSaveDialog', 'windowRole', 'writeTextFile',
   ]);
+  assert.equal(r.windowRole, 'main');
+  assert.equal(r.badTabWindowRejected, true);
+  assert.equal(r.detachedInMain, null);
+  assert.equal(r.tabWindowOpened, true);
+  assert.deepEqual(r.detachedIds, ['t_smoke']);
   assert.equal(r.platform, 'electron');
   // OS info outside the bridge contract (WP-K): window.dbstudioPlatform and <html class="platform-<os>">.
   const os = process.platform === 'win32' || process.platform === 'darwin' ? process.platform : 'linux';

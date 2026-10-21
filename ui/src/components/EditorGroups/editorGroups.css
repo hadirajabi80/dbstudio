@@ -1,0 +1,132 @@
+/* Editor groups (split editor), tab drag and drop, detached windows. Tokens only. */
+
+/* ---------- groups: tab strips and tab bodies are positioned over their group's area ---------- */
+.editor-groups {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.editor-groups > .eg-header {
+  position: absolute;
+  height: var(--tabbar-h);
+  z-index: 2;
+  min-width: 0;
+}
+.editor-groups > .eg-header > .tabbar {
+  height: 100%;
+}
+.editor-groups > .eg-slot {
+  position: absolute;
+  flex: none;
+  isolation: isolate;
+  min-width: 0;
+}
+/* The active tab of a group without focus keeps its surface but drops the accent underline. */
+.editor-groups.multi > .eg-header:not(.focused) .tab.active::after {
+  background: var(--border-strong);
+}
+.editor-groups.multi > .eg-header:not(.focused) .tab.active {
+  color: var(--fg-muted);
+}
+
+/* ---------- splitters between groups ---------- */
+.editor-groups > .eg-splitter {
+  position: absolute;
+  z-index: 6;
+}
+.eg-splitter.vertical {
+  width: 1px;
+  margin-left: -1px;
+}
+.eg-splitter.horizontal {
+  height: 1px;
+  margin-top: -1px;
+}
+.eg-splitter > .splitter {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- tab strip: drop markers, group actions ---------- */
+.tabbar > .tabbar-fill {
+  flex: 1;
+  min-width: var(--space-4);
+}
+.tabbar > .tabbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  flex-shrink: 0;
+}
+.tabbar-actions:empty {
+  display: none;
+}
+.tabbar-actions .tabbar-reattach {
+  gap: 6px;
+  white-space: nowrap;
+}
+.tab > .tab-drop-mark {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--bg-app);
+  pointer-events: none;
+  z-index: 1;
+}
+.tab > .tab-drop-mark.before {
+  left: -1px;
+}
+.tab > .tab-drop-mark.after {
+  right: -2px;
+}
+.tabbar.drop-end > .tabbar-fill {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tab.dragging {
+  opacity: 0.45;
+}
+
+/* ---------- drop zones over a group's body while a tab is dragged ---------- */
+.editor-groups > .eg-drop {
+  position: absolute;
+  z-index: 20;
+}
+.eg-drop > .eg-drop-zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.985);
+  transition:
+    left var(--dur) var(--ease),
+    top var(--dur) var(--ease),
+    width var(--dur) var(--ease),
+    height var(--dur) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.eg-drop > .eg-drop-zone.on {
+  opacity: 1;
+  transform: none;
+}
+.eg-drop-zone > .eg-drop-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  box-shadow: var(--shadow-popup);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}

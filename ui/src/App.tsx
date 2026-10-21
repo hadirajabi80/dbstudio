@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { boot } from './app/boot';
+import { boot, bootDetached } from './app/boot';
 import { handleMenuCommand } from './app/commands';
 import { useUpdateWiring } from './app/updates';
 import { windowTitle } from './app/windowTitle';
@@ -13,15 +13,13 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { focusFirst, focusIsLost } from './components/common/focus';
 import { MenuHost, useMenu } from './components/common/Menu';
 import { Toasts } from './components/common/Toasts';
-import { ConsoleView } from './components/layout/ConsoleView';
 import { Dock } from './components/layout/Dock';
 import { SettingsDialog } from './components/layout/SettingsDialog';
-import { TabBar } from './components/layout/TabBar';
+import { EditorGroups } from './components/EditorGroups/EditorGroups';
 import { TopBar } from './components/layout/TopBar';
-import { TabErrorBoundary, useFocusFallback, useTabFocusRequests, ViewTabHost } from './components/layout/ViewTabHost';
+import { useFocusFallback, useTabFocusRequests } from './components/layout/ViewTabHost';
 import './components/layout/layout.css';
 import { MultiRunDialog } from './components/MultiRun/MultiRunDialog';
-import { ObjectTabView } from './components/ObjectTab/ObjectTab';
 import { Welcome } from './components/Onboarding/Welcome';
 import { ParamsDialogHost } from './components/ParamsDialog/ParamsDialog';
 import { ExecuteRoutineHost } from './components/ExecuteRoutine/ExecuteRoutineDialog';
@@ -32,6 +30,7 @@ import { DesignerHost } from './designer/host';
 import { useDesignerUi } from './designer/store';
 import './designer/designer.css';
 import { getPlatform } from './platform';
+import { isDetachedWindow } from './platform/windows';
 import { useConnections } from './store/connections';
 import { useParams } from './store/params';
 import { useSettings } from './store/settings';
@@ -76,6 +75,8 @@ export default function App() {
 function Shell() {
   const theme = useEffectiveTheme();
   const [ready, setReady] = useState(booted);
+  // A window opened by "Open in new window" shows its tabs only: no workspace autosave, no updater, dock hidden.
+  const [detached] = useState(isDetachedWindow);
 
   useEffect(() => {
     // StrictMode mounts effects twice in dev; the module-level flag keeps boot (and its requests) to one run.
@@ -84,8 +85,8 @@ function Shell() {
       return;
     }
     booted = true;
-    void boot().finally(() => setReady(true));
-  }, []);
+    void (detached ? bootDetached() : boot()).finally(() => setReady(true));
+  }, [detached]);
 
   useEffect(() => {
     const off = installKeyDispatcher();
@@ -97,12 +98,12 @@ function Shell() {
   }, []);
 
   useWindowTitle();
-  useUpdateWiring();
   useFocusFallback();
   useTabFocusRequests();
 
   return (
-    <div className="app">
+    <div className={`app${detached ? ' detached-window' : ''}`}>
+      {!detached && <UpdateWiring />}
       <ErrorBoundary area="the top bar" variant="strip">
         <TopBar theme={theme} />
       </ErrorBoundary>
@@ -223,7 +224,6 @@ function EngineBanner() {
 
 function Main({ theme, ready }: { theme: EffectiveTheme; ready: boolean }) {
   const tabs = useTabs((s) => s.tabs);
-  const activeId = useTabs((s) => s.activeId);
   const hadTabs = useRef(tabs.length > 0);
 
   // Closing the last tab: focus the first welcome action instead of leaving focus on <body>.
@@ -241,35 +241,23 @@ function Main({ theme, ready }: { theme: EffectiveTheme; ready: boolean }) {
     <div className="main">
       <Dock />
       <section className="workspace" aria-label="Workspace">
-        {tabs.length > 0 && (
-          <ErrorBoundary area="the tab strip" variant="strip">
-            <TabBar />
-          </ErrorBoundary>
-        )}
-        <div className="workspace-body">
-          {tabs.length === 0 ? (
+        {tabs.length === 0 ? (
+          <div className="workspace-body">
             <ErrorBoundary area="the welcome page" variant="tab">
               <Welcome ready={ready} />
             </ErrorBoundary>
-          ) : (
-            tabs.map((t) =>
-              t.kind === 'console' ? (
-                <TabErrorBoundary key={t.id} tab={t} visible={t.id === activeId}>
-                  <ConsoleView tab={t} theme={theme} visible={t.id === activeId} />
-                </TabErrorBoundary>
-              ) : t.kind === 'object' ? (
-                <div key={t.id} className="view-tab-host" data-tab-host={t.id} style={{ display: t.id === activeId ? 'contents' : 'none' }}>
-                  <TabErrorBoundary tab={t} visible={t.id === activeId}>
-                    <ObjectTabView tab={t} theme={theme} visible={t.id === activeId} />
-                  </TabErrorBoundary>
-                </div>
-              ) : (
-                <ViewTabHost key={t.id} tab={t} theme={theme} visible={t.id === activeId} />
-              ),
-            )
-          )}
-        </div>
+          </div>
+        ) : (
+          // Editor groups: one tab strip per group; every tab body stays mounted while hidden or moved between groups.
+          <EditorGroups theme={theme} />
+        )}
       </section>
     </div>
   );
+}
+
+/** Auto-update wiring runs in the main window only (a detached window shows tabs, nothing else). */
+function UpdateWiring() {
+  useUpdateWiring();
+  return null;
 }

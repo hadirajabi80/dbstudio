@@ -3,11 +3,16 @@
 import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron';
 import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus } from '../../../ui/src/platform/bridge';
 import { desktopOs, htmlPlatformClasses, htmlPlatformVars, parseChromeArg, type DesktopPlatformInfo } from '../main/platform';
-import { APP_VERSION_ARG, IPC } from '../shared/channels';
+import { APP_VERSION_ARG, IPC, WINDOW_ROLE_ARG } from '../shared/channels';
 
 function readAppVersion(): string {
   const arg = process.argv.find((a) => a.startsWith(APP_VERSION_ARG));
   return arg ? arg.slice(APP_VERSION_ARG.length) : '0.0.0';
+}
+
+// ---- windows
+function readWindowRole(): 'main' | 'detached' {
+  return process.argv.includes(`${WINDOW_ROLE_ARG}detached`) ? 'detached' : 'main';
 }
 
 function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
@@ -34,6 +39,17 @@ const bridge: DbStudioBridge = {
   loadWorkspace: () => ipcRenderer.invoke(IPC.loadWorkspace) as Promise<unknown | null>,
   saveWorkspace: (data: unknown) => ipcRenderer.invoke(IPC.saveWorkspace, data) as Promise<void>,
   setTitle: (title: string) => { ipcRenderer.send(IPC.setTitle, title); },
+  // ---- windows: tabs in their own windows (desktop/src/main/windows.ts validates every payload)
+  windowRole: readWindowRole(),
+  openTabWindow: (opts: { tabs: unknown[]; position?: { x: number; y: number } }) => ipcRenderer.invoke(IPC.openTabWindow, opts) as Promise<boolean>,
+  getDetachedTabs: () => ipcRenderer.invoke(IPC.getDetachedTabs) as Promise<unknown[] | null>,
+  reportDetachedTabs: (tabs: unknown[]) => { ipcRenderer.send(IPC.reportDetachedTabs, tabs); },
+  reattachTabs: (tabs: unknown[]) => ipcRenderer.invoke(IPC.reattachTabs, tabs) as Promise<boolean>,
+  closeDetachedWindow: () => { ipcRenderer.send(IPC.closeDetachedWindow); },
+  listDetachedTabs: () => ipcRenderer.invoke(IPC.listDetachedTabs) as Promise<unknown[]>,
+  onDetachedTabs: (cb: (tabs: unknown[]) => void) => subscribe<unknown[]>(IPC.detachedTabs, cb),
+  onTabsReattached: (cb: (e: { tabs: unknown[]; closed: boolean }) => void) => subscribe<{ tabs: unknown[]; closed: boolean }>(IPC.tabsReattached, cb),
+  // ---- end windows
   // Page zoom in the renderer itself (no IPC): Chromium scales devicePixelRatio, so canvases stay sharp.
   setZoomFactor: (factor: number) => {
     if (typeof factor !== 'number' || !Number.isFinite(factor)) return;
