@@ -45,6 +45,10 @@ public sealed class ProviderFeatures
     public IPlanReader PlanReader(string providerId) => _plans(providerId) ?? throw NotSupported(providerId, "explain plans");
     public IParamBinder? Binder(string providerId) => _binders(providerId);
 
+    /// <summary>Object list and dependency readers (WP3), implemented by the providers themselves.</summary>
+    public static DbStudio.Core.Providers.IObjectBrowserProvider ObjectBrowser(DbStudio.Core.Providers.IDbProvider provider) =>
+        provider as DbStudio.Core.Providers.IObjectBrowserProvider ?? throw NotSupported(provider.Id, "the object browser");
+
     private static EngineException NotSupported(string providerId, string what) =>
         new(400, ErrorCodes.NotSupported, $"The provider '{providerId}' does not support {what}.");
 }

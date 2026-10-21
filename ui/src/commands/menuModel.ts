@@ -191,7 +191,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('connections.delete'),
   ],
   'explorer.container': [
-    c('connections.openConsole'), 'separator',
+    c('objects.open', true), c('connections.openConsole'), 'separator',
     n('designer.newTable'), n('designer.newView'), n('designer.newProcedure'), n('designer.newFunction'), n('designer.newPackage'),
     n('designer.newTrigger'), 'separator',
     c('connections.refreshCatalog'), c('er.open', true), c('explorer.copyName'),
@@ -199,7 +199,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.table': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
     c('designer.edit', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
-    c('er.openRelated', true), n('er.openSelected'), n('designer.newTrigger'), 'separator',
+    c('er.openRelated', true), n('er.openSelected'), c('objects.dependencies', true), n('designer.newTrigger'), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newTable', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.truncate'), h('explorer.drop'),
@@ -207,7 +207,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.view': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
     c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
-    c('er.openRelated', true), 'separator',
+    c('er.openRelated', true), c('objects.dependencies', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newView', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.drop'),
@@ -215,13 +215,14 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.routine': [
     // Procedures, functions and Oracle packages (hidden for triggers and on SQLite): the parameter form.
     { command: 'routine.execute', optional: true, hideDisabled: true, label: 'Execute…' }, 'separator',
-    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), 'separator',
+    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
+    c('objects.dependencies', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newProcedure', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.drop'),
   ],
   'explorer.object': [
-    c('explorer.openDdl'), c('explorer.copyDdl'), c('designer.edit', true), 'separator',
+    c('explorer.openDdl'), c('explorer.copyDdl'), c('designer.edit', true), c('objects.dependencies', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('connections.refreshCatalog'), 'separator',
     h('explorer.drop'),

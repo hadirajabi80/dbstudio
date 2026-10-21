@@ -149,6 +149,8 @@ function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
     if (!t || t.kind !== 'object') return;
     if (r.kind === 'object' && isTabular(t.ref.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
     activateObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
+  } else if ((r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') && hasCommand('objects.open') && runCommand('objects.open', targetOfRow(r))) {
+    if (!r.expanded) toggle(r, true); // WP3: Enter / double-click shows the Objects tab of the node (and expands it)
   } else toggle(r);
 }
 
@@ -543,6 +545,7 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('.tree-row-actions')) return;
         if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column' || (r.kind === 'source' && !r.expandable)) onActivate();
+        else if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') onActivate(); // WP3: the Objects tab
       }}
       onContextMenu={onMenu}
       title={title}

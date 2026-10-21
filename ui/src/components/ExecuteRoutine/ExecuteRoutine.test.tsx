@@ -93,14 +93,14 @@ describe('Execute routine dialog', () => {
     act(() => useExecuteRoutine.getState().close());
   });
 
-  it('runs with bind values in a new console holding the call, shows the outputs, and remembers the values', async () => {
+  it('"Run in console": bind values, a new console holding the call, the outputs, and the values remembered', async () => {
     const execute = vi.spyOn(mock.ctx.engine, 'execute');
     render(<ExecuteRoutineHost />);
     act(() => useExecuteRoutine.getState().open(MONTHLY));
     const year = await screen.findByLabelText('Value of Year');
     fireEvent.change(year, { target: { value: '2024' } });
     await act(async () => {
-      fireEvent.keyDown(year, { key: 'Enter', ctrlKey: true });
+      fireEvent.click(screen.getByRole('button', { name: /^Run in console/ }));
     });
     await until(() => execute.mock.calls.length > 0);
     const req = execute.mock.calls[0][1] as ExecuteRequest;
@@ -130,13 +130,15 @@ describe('Execute routine dialog', () => {
     act(() => useExecuteRoutine.getState().open({ connectionId: 'c_ora', database: null, ref: { database: null, schema: 'SHOP', name: 'ORDER_API', type: 'package' } }));
     await screen.findByLabelText('Value of P_CUST');
     expect(preview()).toBe('BEGIN\n  SHOP.ORDER_API.CREATE_ORDER(P_CUST => :p_cust, P_TOTAL => :p_total);\nEND;');
-    const { chooseOption } = await import('../../test/select');
-    chooseOption(screen.getByLabelText('Package member'), 'GET_TOTAL');
+    // Members are pills (a radio group).
+    expect(screen.getByRole('radiogroup', { name: 'Package member' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'CREATE_ORDER' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: 'GET_TOTAL' }));
     const id = await screen.findByLabelText('Value of P_ID');
     expect(preview()).toBe('BEGIN\n  :result := SHOP.ORDER_API.GET_TOTAL(P_ID => :p_id);\nEND;');
     fireEvent.change(id, { target: { value: '5' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^Execute/ }));
+      fireEvent.click(screen.getByRole('button', { name: /^Run in console/ }));
     });
     await until(() => execute.mock.calls.length > 0);
     expect((execute.mock.calls[0][1] as ExecuteRequest).params).toEqual([
@@ -185,7 +187,7 @@ describe('Run in an "Edit:" console of a procedure', () => {
     const v = await screen.findByLabelText('Value of Id');
     fireEvent.change(v, { target: { value: '1' } });
     await act(async () => {
-      fireEvent.keyDown(v, { key: 'Enter', ctrlKey: true });
+      fireEvent.click(screen.getByRole('button', { name: /^Run in console/ }));
     });
     await until(() => execute.mock.calls.length > 0);
     // ran in the edit console itself; its editor text (the CREATE) is untouched

@@ -159,6 +159,7 @@ try
     api.MapMeta()
         .MapConnections()
         .MapCatalog()
+        .MapObjects() // WP3: object list + dependencies
         .MapSessions()
         .MapExecutions()
         .MapHistory()

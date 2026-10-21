@@ -11,8 +11,15 @@ namespace DbStudio.Providers.PostgreSql;
 /// PostgreSQL provider (docs/PLAN-PG.md 2, Npgsql 9.x): sessions on dedicated unpooled connections, pooled catalog /
 /// designer / diagnostics connections, <c>PREPARE</c>-based server diagnostics.
 /// </summary>
-public sealed class PostgreSqlProvider : IDbProvider
+public sealed class PostgreSqlProvider : IDbProvider, IObjectBrowserProvider
 {
+    // ---- WP3 object browser (dependencies + object list) over the catalog reader's pooled connections.
+    public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        new PgDependencyReader((PgCatalogReader)await OpenCatalogReaderAsync(profile, password, ct).ConfigureAwait(false));
+
+    public async Task<IObjectListReader> OpenObjectListReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        new PgDependencyReader((PgCatalogReader)await OpenCatalogReaderAsync(profile, password, ct).ConfigureAwait(false));
+
     static PostgreSqlProvider() => PgDriver.EnsureInitialized();
 
     public string Id => "postgresql";

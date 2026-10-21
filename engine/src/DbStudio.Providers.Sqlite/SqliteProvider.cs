@@ -7,8 +7,15 @@ using Microsoft.Data.Sqlite;
 namespace DbStudio.Providers.Sqlite;
 
 /// <summary>SQLite via Microsoft.Data.Sqlite (docs/PLAN.md 2.5). Profile props: path, readOnly, createIfMissing, attach.</summary>
-public sealed class SqliteProvider : IDbProvider
+public sealed class SqliteProvider : IDbProvider, IObjectBrowserProvider
 {
+    // ---- WP3 object browser (dependencies + object list) on a catalog connection.
+    public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        new SqliteDependencyReader(await SqliteConnections.OpenAsync(profile, forceReadOnly: false, ct).ConfigureAwait(false));
+
+    public async Task<IObjectListReader> OpenObjectListReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        new SqliteDependencyReader(await SqliteConnections.OpenAsync(profile, forceReadOnly: false, ct).ConfigureAwait(false));
+
     private static readonly SqliteDdlGenerator Ddl = new();
     private static readonly SqlitePrepareDiagnostics Prepare = new();
 

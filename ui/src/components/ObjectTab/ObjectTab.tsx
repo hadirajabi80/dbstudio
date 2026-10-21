@@ -1,5 +1,5 @@
 import { Code2, Copy, KeyRound, LoaderCircle, PencilRuler, Play, RefreshCw, SquareTerminal } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import type { DdlResponse, ObjectDetails } from '../../api/types';
 import { copyText, newConsole, selectTop } from '../../app/actions';
@@ -16,8 +16,13 @@ import { useSettings } from '../../store/settings';
 import type { ObjectTab as ObjectTabT } from '../../store/tabs';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { ObjectIcon } from '../common/icons';
+import { dependencyCount } from '../Dependencies/model';
+import { useObjectSectionRequests, type ObjectSectionId } from './sectionRequests';
 
-type Section = 'ddl' | 'columns' | 'indexes' | 'fks' | 'refs' | 'params';
+// WP3: the Dependencies section loads its code (and data) when first shown.
+const DependenciesPanel = lazy(() => import('../Dependencies/DependenciesPanel').then((m) => ({ default: m.DependenciesPanel })));
+
+type Section = ObjectSectionId;
 
 const noop = () => {};
 
@@ -60,6 +65,14 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
     if (tab.column) setSection('columns');
   }, [tab.column]);
 
+  // "Show dependencies" (and other commands) ask for a section of this tab.
+  const sectionRequest = useObjectSectionRequests((s) => s.requests[tab.id]);
+  useEffect(() => {
+    if (sectionRequest) setSection(sectionRequest.section);
+  }, [sectionRequest]);
+  const [depCount, setDepCount] = useState<number | undefined>(undefined);
+  const onDepsLoaded = useCallback((g: Parameters<typeof dependencyCount>[0]) => setDepCount(dependencyCount(g)), []);
+
   const qualified = qualifiedName(ref, dialect, { always: true });
   // Non-destructive formatted view of the DDL (WP-H); "DDL in console" and Copy keep the stored text.
   const formatted = useFormattedDdl(ddl?.ddl ?? null, dialect);
@@ -73,7 +86,9 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
     { id: 'fks', label: 'Foreign keys', count: details?.foreignKeys.length, show: !!details?.foreignKeys.length },
     { id: 'refs', label: 'Referenced by', count: details?.referencedBy.length, show: !!details?.referencedBy.length },
     { id: 'params', label: 'Parameters', count: details?.parameters.length, show: !!details?.parameters.length },
+    { id: 'deps', label: 'Dependencies', count: depCount, show: true },
   ];
+  const execute = commandView('routine.execute', target, 'Execute…');
 
   return (
     <div className="object-tab" style={{ display: visible ? undefined : 'none' }}>
@@ -92,6 +107,11 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
         {isTabular(ref.type) && (
           <button className="btn btn-xs" onClick={() => selectTop(tab.connectionId, tab.database, ref, 1000)}>
             <Play size={12} /> Select top 1000
+          </button>
+        )}
+        {execute.enabled && (
+          <button className="btn btn-xs" onClick={execute.run} title="Execute with a parameter form (no need to open it for editing)">
+            <Play size={12} fill="currentColor" /> Execute…
           </button>
         )}
         {designable && (
@@ -127,7 +147,11 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
         {ddl && section === 'ddl' && <FormattedToggle {...formatted.toggle} />}
       </div>
       <div className="object-body">
-        {section === 'ddl' ? (
+        {section === 'deps' ? (
+          <Suspense fallback={<div className="object-loading"><LoaderCircle size={16} className="spin" /></div>}>
+            <DependenciesPanel cacheId={tab.id} connectionId={tab.connectionId} database={tab.database} objectRef={ref} dialect={dialect} onLoaded={onDepsLoaded} />
+          </Suspense>
+        ) : section === 'ddl' ? (
           error.ddl ? (
             <div className="object-error">Could not load DDL: {error.ddl}</div>
           ) : ddl ? (

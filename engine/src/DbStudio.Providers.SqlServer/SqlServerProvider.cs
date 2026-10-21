@@ -7,7 +7,7 @@ using Microsoft.Data.SqlClient;
 namespace DbStudio.Providers.SqlServer;
 
 /// <summary>Microsoft SQL Server provider (Microsoft.Data.SqlClient, ScriptDom diagnostics).</summary>
-public sealed class SqlServerProvider : IDbProvider
+public sealed class SqlServerProvider : IDbProvider, IObjectBrowserProvider
 {
     public string Id => "sqlserver";
     public string DisplayName => "Microsoft SQL Server";
@@ -63,6 +63,28 @@ public sealed class SqlServerProvider : IDbProvider
         {
             await conn.OpenAsync(ct).ConfigureAwait(false);
             return new SqlServerCatalogReader(conn);
+        }
+        catch
+        {
+            await conn.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    // ---- WP3 object browser (dependencies + object list): one pooled catalog connection per call.
+    public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
+
+    public async Task<IObjectListReader> OpenObjectListReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
+
+    private static async Task<SqlServerDependencyReader> OpenBrowserAsync(ConnectionProfile profile, string? password, CancellationToken ct)
+    {
+        var conn = new SqlConnection(SqlServerConnectionStrings.Build(profile, password, pooling: true));
+        try
+        {
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            return new SqlServerDependencyReader(conn);
         }
         catch
         {
