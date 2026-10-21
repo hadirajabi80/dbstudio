@@ -386,6 +386,10 @@
   --border-focus: var(--focus-ring);
   --border-control: var(--border-strong);   /* deprecated alias (M1.5 QA): --border-strong is the control boundary */
   --bg-editor: var(--bg-panel);
+  /* code previews outside Monaco (snippets): the code theme's surface; theme/activeTheme.ts sets them inline when a
+     code theme other than "Match app theme" is chosen */
+  --code-bg: var(--bg-panel);
+  --code-fg: var(--fg);
   --bg-tooltip: var(--bg-elevated);
   --fs: var(--text-md);
   --fs-sm: var(--text-sm);

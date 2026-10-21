@@ -1,4 +1,4 @@
-import type { DbStudioBridge, TitleBarTheme } from './bridge';
+import type { DbStudioBridge, NotificationOptions, TitleBarTheme } from './bridge';
 import type { Platform } from './types';
 
 function baseName(p: string): string {
@@ -41,5 +41,7 @@ export function createElectronPlatform(b: DbStudioBridge): Platform {
     ...(typeof b.quitAndInstall === 'function' ? { quitAndInstall: () => b.quitAndInstall!() } : {}),
     ...(typeof b.setTitleBarTheme === 'function' ? { setTitleBarTheme: (t: TitleBarTheme) => b.setTitleBarTheme!(t) } : {}),
     ...(typeof b.showAppMenu === 'function' ? { showAppMenu: (pos: { x: number; y: number }) => b.showAppMenu!(pos) } : {}),
+    // ---- notifications
+    ...(typeof b.showNotification === 'function' ? { showNotification: (o: NotificationOptions) => b.showNotification!(o) } : {}),
   };
 }

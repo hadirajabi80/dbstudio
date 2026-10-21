@@ -172,6 +172,22 @@ export function validateMenuPosition(v: unknown): { x: number; y: number } {
   return { x: coord(v.x, 'x'), y: coord(v.y, 'y') };
 }
 
+// ---- notifications
+/** showNotification({ title, body }): plain one-line strings (control characters become spaces), capped. */
+export function validateNotification(v: unknown): { title: string; body: string } {
+  if (!isPlainObject(v)) throw new ValidationError('notification must be an object');
+  if (typeof v.title !== 'string' || !v.title.trim()) throw new ValidationError('title must be a non-empty string');
+  if (v.body !== undefined && typeof v.body !== 'string') throw new ValidationError('body must be a string');
+  const clean = (s: string, max: number) => s.replace(CONTROL_CHARS, ' ').trim().slice(0, max);
+  return { title: clean(v.title, 120), body: clean(typeof v.body === 'string' ? v.body : '', 300) };
+}
+
+/** OS notifications only reach a user who is looking elsewhere: never over a focused, visible window. */
+export function shouldShowNotification(win: { isFocused(): boolean; isVisible(): boolean; isMinimized(): boolean } | null | undefined): boolean {
+  if (!win) return true;
+  return !win.isFocused() || !win.isVisible() || win.isMinimized();
+}
+
 /** Serializes the workspace payload (already structured-cloned by IPC) and enforces a size cap. */
 export function serializeWorkspace(v: unknown): string {
   if (v === undefined) throw new ValidationError('workspace data is required');

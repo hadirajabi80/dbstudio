@@ -18,6 +18,7 @@ import { editedValue, sameValue, useEditBuffer, useEdits, type CellEdit, type Pe
 import { useSettings } from '../../store/settings';
 import { toast } from '../../store/ui';
 import { makeGridTheme } from '../../theme/gridTheme';
+import { useThemeRevision } from '../../theme/activeTheme';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { isHidden } from '../common/focus';
 import { pluralize } from '../common/text';
@@ -173,8 +174,10 @@ export function DataGrid(p: DataGridProps) {
   const buffer = useEditBuffer(gridKey);
   const edits = useEdits;
   const fmt = useMemo(() => ({ nullText, dateFormat }), [nullText, dateFormat]);
-  const gridTheme = useMemo<Partial<Theme>>(() => makeGridTheme(theme), [theme]);
-  const colors = useMemo(() => cellColors(theme), [theme]);
+  // themeRev: a switch between two themes of the same mode (Dark → Nord) changes the colours too
+  const themeRev = useThemeRevision();
+  const gridTheme = useMemo<Partial<Theme>>(() => makeGridTheme(theme), [theme, themeRev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colors = useMemo(() => cellColors(theme), [theme, themeRev]); // eslint-disable-line react-hooks/exhaustive-deps
   const nullColor = gridTheme.textLight ?? 'gray';
   const mutedColor = gridTheme.textMedium ?? 'gray';
   const editable = !!editability?.editable;
@@ -256,7 +259,7 @@ export function DataGrid(p: DataGridProps) {
     }
     // The open editor captured the old theme's colours: commit it so it re-opens with the new ones.
     void commitOpenEditor();
-  }, [theme]);
+  }, [theme, themeRev]);
 
   // ---------------------------------------------------------------- columns
   const fontFamily = gridTheme.fontFamily ?? 'monospace';

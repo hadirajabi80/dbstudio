@@ -1,9 +1,10 @@
 // Window chrome follows the app theme (Electron only): the theme setting drives the window's native light/dark mode
 // (so Mica / vibrancy behind the glass top bar and native menus match the app), and on Windows the caption buttons
-// (titleBarOverlay) take the top bar's colours from the tokens. Sent whenever the theme or the page zoom changes.
+// (titleBarOverlay) take the top bar's colours from the tokens of the active app theme. Sent whenever the theme or the page zoom changes.
 import { getPlatform } from '../platform';
 import type { TitleBarTheme } from '../platform/bridge';
 import { useSettings } from '../store/settings';
+import { appTokens, getActiveTheme } from './activeTheme';
 import { blend, parseColor, themeTokens, toHex, type TokenMap } from './index';
 import type { EffectiveTheme } from './useTheme';
 
@@ -33,7 +34,9 @@ export function syncTitleBar(theme?: EffectiveTheme): void {
   if (typeof document === 'undefined' || !p.setTitleBarTheme) return;
   const html = document.documentElement;
   const eff: EffectiveTheme = theme ?? (html.dataset.theme === 'dark' ? 'dark' : 'light');
-  const tokens = themeTokens(eff);
+  // the effective tokens: the chosen app theme of that mode (theme/themes.ts), not just the tokens.css block
+  const active = getActiveTheme();
+  const tokens = active.base === eff ? appTokens(active) : themeTokens(eff);
   let colors: { color: string; symbolColor: string };
   try {
     colors = titleBarOverlayColors(tokens, html.classList.contains('native-material'));

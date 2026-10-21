@@ -43,7 +43,9 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
   assert.deepEqual(r.keys, [
     'appVersion', 'checkForUpdates', 'configureUpdates', 'getEngineInfo', 'getUpdateStatus', 'loadWorkspace',
     'onEngineRestarted', 'onMenuCommand', 'onUpdateStatus', 'openExternal', 'platform', 'quitAndInstall',
-    'readTextFile', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu', 'showOpenDialog',
+    'readTextFile', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu',
+    'showNotification', // ---- notifications
+    'showOpenDialog',
     'showSaveDialog', 'writeTextFile',
   ]);
   assert.equal(r.platform, 'electron');

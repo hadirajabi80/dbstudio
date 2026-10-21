@@ -1,0 +1,44 @@
+/* Status bar update chip (UpdateChip.tsx). Tokens only. */
+.sb-update {
+  gap: 6px;
+  color: var(--fg-muted);
+}
+.sb-update.tone-accent {
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+.sb-update.tone-busy {
+  color: var(--fg);
+}
+.sb-update.tone-warning {
+  color: var(--fg-muted);
+}
+/* ready: a small filled pill, the one call to action in the status bar */
+.sb-update.ready {
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.sb-update.ready:hover {
+  background: var(--accent-hover);
+}
+.sb-update-label {
+  font-variant-numeric: tabular-nums;
+}
+.sb-update-bar {
+  position: relative;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.sb-update-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--dur) var(--ease);
+}

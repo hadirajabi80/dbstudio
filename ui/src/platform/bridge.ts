@@ -56,6 +56,20 @@ export interface DbStudioBridge {
   setTitleBarTheme?(theme: TitleBarTheme): void;
   /** Windows (no native menu bar with the overlay title bar): pops the application menu up at a window position. */
   showAppMenu?(pos: { x: number; y: number }): void;
+
+  // ---- notifications
+  /**
+   * Additive (optional, older preloads lack it): an OS notification (Electron Notification), shown only while the
+   * window is not focused; clicking it brings the window back. Fire-and-forget.
+   */
+  showNotification?(opts: NotificationOptions): void;
+}
+
+// ---- notifications
+/** showNotification: a short title and one line of body text (main caps both). */
+export interface NotificationOptions {
+  title: string;
+  body: string;
 }
 
 export type UpdateMode = 'install' | 'notify' | 'disabled';

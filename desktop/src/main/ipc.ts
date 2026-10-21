@@ -1,5 +1,5 @@
 // IPC handlers behind window.dbstudio. Every handler checks the sender's origin and validates its arguments.
-import { BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, dialog, ipcMain, Menu, Notification, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import * as fs from 'node:fs';
 import type { EngineInfo } from '../../../ui/src/platform/bridge';
 import { IPC } from '../shared/channels';
@@ -20,6 +20,9 @@ import {
   validateUpdateCheckArgs,
   validateUpdateConfig,
   type TitleBarThemeArgs,
+  // ---- notifications
+  shouldShowNotification,
+  validateNotification,
 } from './validate';
 import { isAllowedUrl } from './window';
 
@@ -143,6 +146,21 @@ export function registerIpc(deps: IpcDeps): void {
   on(IPC.showAppMenu, (_e, win, pos) => {
     const p = validateMenuPosition(pos);
     Menu.getApplicationMenu()?.popup({ window: win, x: p.x, y: p.y });
+  });
+
+  // ---- notifications
+  // An OS notification (update available / ready) only while the window is in the background; a click brings it back.
+  on(IPC.notify, (_e, win, opts) => {
+    const n = validateNotification(opts);
+    if (!Notification.isSupported() || !shouldShowNotification(win)) return;
+    const note = new Notification({ title: n.title, body: n.body, silent: false });
+    note.on('click', () => {
+      if (win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    });
+    note.show();
   });
 
   ipcMain.removeAllListeners(IPC.setTitle);

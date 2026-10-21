@@ -111,6 +111,28 @@ describe('update and window-chrome IPC', () => {
   });
 });
 
+// ---- notifications
+describe('notification IPC', () => {
+  it('showNotification: one-line title and body, capped; bad input rejected', () => {
+    assert.deepEqual(v.validateNotification({ title: 'DbStudio 1.1.0 is ready', body: 'Restart to update.' }), { title: 'DbStudio 1.1.0 is ready', body: 'Restart to update.' });
+    assert.deepEqual(v.validateNotification({ title: ' a\nb ' }), { title: 'a b', body: '' });
+    assert.equal(v.validateNotification({ title: 'x'.repeat(500), body: 'y'.repeat(1000) }).title.length, 120);
+    assert.equal(v.validateNotification({ title: 'x', body: 'y'.repeat(1000) }).body.length, 300);
+    for (const bad of [undefined, null, 'hi', [], {}, { title: '' }, { title: '   ' }, { title: 5 }, { title: 'x', body: 7 }]) {
+      assert.throws(() => v.validateNotification(bad), v.ValidationError, JSON.stringify(bad));
+    }
+  });
+
+  it('only notifies when the window is in the background', () => {
+    const win = (focused, visible = true, minimized = false) => ({ isFocused: () => focused, isVisible: () => visible, isMinimized: () => minimized });
+    assert.equal(v.shouldShowNotification(win(true)), false);
+    assert.equal(v.shouldShowNotification(win(false)), true);
+    assert.equal(v.shouldShowNotification(win(true, false)), true);
+    assert.equal(v.shouldShowNotification(win(true, true, true)), true);
+    assert.equal(v.shouldShowNotification(null), true);
+  });
+});
+
 describe('fs-utils', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dbstudio-test-'));
   it('atomicWriteFile replaces content and leaves no temp files', async () => {

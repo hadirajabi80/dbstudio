@@ -26,6 +26,9 @@ export const IPC = {
   setTitleBarTheme: 'dbstudio:set-titlebar-theme',
   /** renderer -> main (send) */
   showAppMenu: 'dbstudio:show-app-menu',
+  // ---- notifications
+  /** renderer -> main (send): an OS notification while the window is not focused */
+  notify: 'dbstudio:notify',
 } as const;
 
 /** Passed to the renderer through webPreferences.additionalArguments, read by the preload. */

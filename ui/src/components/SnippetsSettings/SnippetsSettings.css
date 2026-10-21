@@ -50,11 +50,11 @@
 
 /* ---- code (SnippetCode): Monaco's token classes colour the runs; the block follows the editor surface ---- */
 /* no ligatures, like Monaco (Cascadia Code would draw <> and != as single glyphs) */
-.snip-code-view { margin: 0; font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.55; color: var(--fg); tab-size: 4; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+.snip-code-view { margin: 0; font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.55; color: var(--code-fg, var(--fg)); tab-size: 4; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
 .snip-code-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.55em; }
 .snip-code {
   padding: var(--space-2) var(--space-3);
-  background: var(--bg-editor); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  background: var(--code-bg, var(--bg-editor)); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
 }
 .snip-preview:not(.snip-code-colored) { color: var(--fg-muted); }
 /* list previews: a few lines, each clipped with an ellipsis */
@@ -69,7 +69,7 @@ code.snip-ph { padding: 0 2px; }
 /* ---- body editor (monacoBodyEditor): a form field around a small Monaco editor ---- */
 .snip-body-editor {
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden;
-  background: var(--bg-editor);
+  background: var(--code-bg, var(--bg-editor));
 }
 .snip-body-editor:focus-within { border-color: var(--border-focus); outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .snip-body-editor.invalid { border-color: var(--danger); }

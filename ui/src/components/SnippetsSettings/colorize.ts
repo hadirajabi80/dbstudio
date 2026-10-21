@@ -6,6 +6,7 @@ import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from '../../editor/monaco-
 import type { Dialect } from '../../api/types';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import type { CodeToken } from './code';
+import { themeRevision } from '../../theme/activeTheme';
 
 const cache = new Map<string, CodeToken[][]>();
 const CACHE_MAX = 500;
@@ -50,7 +51,8 @@ export function colorizeSql(text: string, dialect: Dialect, theme: EffectiveThem
     monaco.editor.setTheme(THEME_IDS[theme]);
     appliedTheme = theme;
   }
-  const key = `${dialect}\u0001${theme}\u0001${text}`;
+  // the revision: a cached line's mtkN classes belong to the code theme that was active then
+  const key = `${dialect}\u0001${theme}\u0001${themeRevision()}\u0001${text}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const model = modelFor(dialect);
