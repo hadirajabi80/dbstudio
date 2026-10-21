@@ -27,7 +27,10 @@ await Promise.all([
   build({ ...common, entryPoints: ['src/preload/preload.ts'], outfile: 'out/preload.js' }),
   build({
     ...common,
-    entryPoints: ['src/main/engine-process.ts', 'src/main/validate.ts', 'src/main/fs-utils.ts', 'src/main/csp.ts', 'src/main/platform.ts', 'src/main/updater-core.ts'],
+    entryPoints: ['src/main/engine-process.ts', 'src/main/validate.ts', 'src/main/fs-utils.ts', 'src/main/csp.ts', 'src/main/platform.ts', 'src/main/updater-core.ts',
+      // ---- windows
+      'src/main/windows-core.ts',
+    ],
     outdir: 'out/lib',
     sourcemap: false,
   }),

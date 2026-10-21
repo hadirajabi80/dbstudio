@@ -12,6 +12,23 @@ export const IPC = {
   loadWorkspace: 'dbstudio:load-workspace',
   saveWorkspace: 'dbstudio:save-workspace',
   setTitle: 'dbstudio:set-title',
+  // ---- windows (detached tab windows: src/main/windows.ts)
+  openTabWindow: 'dbstudio:open-tab-window',
+  /** detached window: the tabs it shows */
+  getDetachedTabs: 'dbstudio:get-detached-tabs',
+  /** detached window -> main (send) */
+  reportDetachedTabs: 'dbstudio:report-detached-tabs',
+  /** detached window: hand tabs back to the main window */
+  reattachTabs: 'dbstudio:reattach-tabs',
+  /** detached window -> main (send) */
+  closeDetachedWindow: 'dbstudio:close-detached-window',
+  /** main window: tabs of every detached window */
+  listDetachedTabs: 'dbstudio:list-detached-tabs',
+  /** main -> main window */
+  detachedTabs: 'dbstudio:detached-tabs',
+  /** main -> main window */
+  tabsReattached: 'dbstudio:tabs-reattached',
+  // ---- end windows
   /** main -> renderer */
   menuCommand: 'dbstudio:menu-command',
   /** main -> renderer */
@@ -30,6 +47,9 @@ export const IPC = {
 
 /** Passed to the renderer through webPreferences.additionalArguments, read by the preload. */
 export const APP_VERSION_ARG = '--dbstudio-app-version=';
+// ---- windows
+/** additionalArguments of a detached tab window ("detached"); the main window has none. */
+export const WINDOW_ROLE_ARG = '--dbstudio-window-role=';
 
 /** Every MenuCommand in the contract. The type assertions below fail to compile if the contract changes. */
 export const MENU_COMMANDS = [

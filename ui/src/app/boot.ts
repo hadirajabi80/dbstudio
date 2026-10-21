@@ -4,6 +4,7 @@ import { engineSocket } from '../api/ws';
 import { hasCommand, runCommand } from '../commands/registry';
 import { pluralize } from '../components/common/text';
 import { getPlatform } from '../platform';
+import { isDetachedWindow } from '../platform/windows';
 import { useCatalog } from '../store/catalog';
 import { providerKind, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
@@ -14,6 +15,7 @@ import { useSourceClients } from '../store/sourceClients';
 import { useTabs, type WorkspaceData } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
 import { preloadCatalog } from './actions';
+import { bootDetachedTabs, liveDetachedTabs, wireMainWindowTabs } from './detach';
 import { MULTIRUN_VIEW, targetTabId, type MultiRunState } from './multiRun';
 import { restoreZoom } from './zoom';
 
@@ -67,7 +69,8 @@ export async function reattachSessions(notify = true): Promise<void> {
  */
 function releaseSessionsOnPageHide(): void {
   window.addEventListener('pagehide', () => {
-    if (getPlatform().kind !== 'browser') return;
+    // A detached window (desktop) that closes takes its consoles' sessions with it, like a browser page.
+    if (getPlatform().kind !== 'browser' && !isDetachedWindow()) return;
     const cfg = getClientConfig();
     if (!cfg) return;
     const { sessions, byTab } = useSessions.getState();
@@ -154,7 +157,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startWorkspaceAutosave(): void {
   useTabs.subscribe((s, prev) => {
-    if (s.tabs === prev.tabs && s.activeId === prev.activeId) return;
+    if (s.tabs === prev.tabs && s.activeId === prev.activeId && s.groups === prev.groups && s.layout === prev.layout && s.detached === prev.detached) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       void getPlatform().saveWorkspace(useTabs.getState().serialize());
@@ -165,7 +168,8 @@ function startWorkspaceAutosave(): void {
   });
 }
 
-export async function boot(): Promise<void> {
+/** Engine connection info, the socket and the restart handler. False when the engine cannot be reached. */
+async function connectEngine(): Promise<boolean> {
   const platform = getPlatform();
   wireSocket();
   try {
@@ -174,7 +178,7 @@ export async function boot(): Promise<void> {
     engineSocket.connect(info);
   } catch (e) {
     useUi.getState().setEngineError(`Cannot get engine connection info: ${errorMessage(e)}`);
-    return;
+    return false;
   }
   platform.onEngineRestarted((info) => {
     configureClient(info);
@@ -188,18 +192,45 @@ export async function boot(): Promise<void> {
       `Open transactions were lost; sessions are recreated on the next run.${streams ? ` ${pluralize(streams, 'live view')} stopped.` : ''}`,
       openEngineLogAction());
   });
+  return true;
+}
 
+/** Settings and connections; the engine error banner when the engine cannot be reached. Returns the error. */
+async function loadBasics(): Promise<string | null> {
   await Promise.all([useSettings.getState().load(), useConnections.getState().load()]);
   restoreZoom();
   const connErr = useConnections.getState().error;
   useUi.getState().setEngineError(connErr ? `Cannot reach the DbStudio engine: ${connErr}` : null);
+  return connErr;
+}
+
+/** Catalogs of the tabs' connections, one request per connection and database. */
+function preloadTabCatalogs(): void {
+  const seen = new Set<string>();
+  for (const t of useTabs.getState().tabs) {
+    if (!t.connectionId) continue;
+    const k = `${t.connectionId}|${t.database ?? ''}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    void preloadCatalog(t.connectionId, t.database);
+  }
+}
+
+export async function boot(): Promise<void> {
+  const platform = getPlatform();
+  if (!(await connectEngine())) return;
+  const connErr = await loadBasics();
 
   try {
+    // Tabs open in detached windows right now stay there (this window was reloaded); the others come back here.
+    const live = await liveDetachedTabs();
     const ws = (await platform.loadWorkspace()) as WorkspaceData | null;
-    if (ws) useTabs.getState().restore(ws);
+    if (ws) useTabs.getState().restore(ws, { liveDetached: live });
+    else if (live.length) useTabs.getState().setDetached(live);
   } catch (e) {
     console.warn('[boot] workspace restore failed', e);
   }
+  wireMainWindowTabs();
   const ids = new Set(useConnections.getState().connections.map((c) => c.id));
   // Drop object tabs of deleted connections; keep consoles but unbind them.
   for (const t of useTabs.getState().tabs) {
@@ -213,17 +244,25 @@ export async function boot(): Promise<void> {
   if (useTabs.getState().tabs.length === 0 && firstSql) {
     useTabs.getState().newConsole({ connectionId: firstSql.id });
   }
-  const seen = new Set<string>();
-  for (const t of useTabs.getState().tabs) {
-    if (!t.connectionId) continue;
-    const k = `${t.connectionId}|${t.database ?? ''}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    void preloadCatalog(t.connectionId, t.database);
-  }
+  preloadTabCatalogs();
   // Sessions of the previous page/renderer: adopt them by tab id, list the rest as unused (logic-08).
   if (!connErr) await reattachSessions(true);
   releaseSessionsOnPageHide();
   startWorkspaceAutosave();
   // History loads when its panel mounts (and after each run); no request here.
+}
+
+/**
+ * Boot of a detached window (desktop "Open in new window"): the same engine, settings and connections, but only the
+ * tabs the main process handed over, no workspace autosave (main keeps the tabs) and the side panel hidden.
+ * Sessions of the main window are not adopted here.
+ */
+export async function bootDetached(): Promise<void> {
+  // Not persisted: the main window's layout stays as it is.
+  useUi.setState({ explorerVisible: false, historyVisible: false });
+  if (!(await connectEngine())) return;
+  await loadBasics();
+  await bootDetachedTabs();
+  preloadTabCatalogs();
+  releaseSessionsOnPageHide();
 }

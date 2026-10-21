@@ -27,6 +27,12 @@ const PHASE1 = `(async () => {
   r.titleBar = window.dbstudioPlatform && window.dbstudioPlatform.titleBar;
   await b.saveWorkspace({ tabs: [{ id: 1, text: 'select 1' }] });
   r.workspace = await b.loadWorkspace();
+  // ---- windows: detached tab windows (validation, registry round trip)
+  r.windowRole = b.windowRole;
+  r.badTabWindowRejected = await b.openTabWindow({ tabs: 'x' }).then(() => false, () => true);
+  r.detachedInMain = await b.getDetachedTabs();
+  r.tabWindowOpened = await b.openTabWindow({ tabs: [{ kind: 'console', id: 't_smoke', title: 'Smoke', text: 'select 1' }] });
+  r.detachedIds = (await b.listDetachedTabs()).map((t) => t.id);
   const tryWorker = (make) => new Promise((res) => {
     const t = setTimeout(() => res('timeout'), 3000);
     try {

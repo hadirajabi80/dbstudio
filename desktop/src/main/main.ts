@@ -20,6 +20,8 @@ import { runSmoke } from './smoke';
 import { createUpdater } from './updater';
 import type { UpdateController } from './updater-core';
 import { applyTitleBarTheme, createMainWindow, installCsp, uiEntryUrl } from './window';
+import { registerWindowIpc } from './windows';
+import type { DetachedWindows } from './windows-core';
 
 const APP_ID = 'com.dbstudio.desktop';
 const smokeTest = process.env.DBSTUDIO_SMOKE === '1';
@@ -58,6 +60,12 @@ function main(): void {
   let quitting = false;
   let engineStartedOnce = false;
   let updates: Promise<UpdateController> | null = null;
+  /** Detached tab windows (src/main/windows.ts). */
+  let detachedWindows: DetachedWindows<BrowserWindow> | null = null;
+  /** Engine events go to every window: detached windows use the same engine. */
+  const sendToAll = (channel: string, ...args: unknown[]) => {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, ...args);
+  };
 
   let launch: EngineLaunch;
   try {
@@ -143,7 +151,7 @@ function main(): void {
     askRestart,
     onRestarted: (info) => {
       log.write('main', `engine restarted at ${info.baseUrl}`);
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.engineRestarted, info);
+      sendToAll(IPC.engineRestarted, info);
     },
     onStartFailed: (err) => { void showStartFailure(err); },
     onGaveUp: () => app.quit(),
@@ -154,7 +162,7 @@ function main(): void {
   const restartEngine = () => {
     // A user-requested restart; the renderer is notified exactly like after a crash.
     supervisor.start().then(
-      (info) => mainWindow?.webContents.send(IPC.engineRestarted, info),
+      (info) => sendToAll(IPC.engineRestarted, info),
       () => undefined,
     );
   };
@@ -182,6 +190,18 @@ function main(): void {
       updates: () => updates!,
       onTitleBarTheme: applyTitleBarTheme,
     });
+    // ---- windows: tabs opened in windows of their own
+    detachedWindows = registerWindowIpc({
+      preloadPath: path.join(__dirname, 'preload.js'),
+      appVersion: app.getVersion(),
+      devUrl,
+      primary: () => mainWindow,
+      show: !smokeTest,
+      onCreated: (win) => {
+        win.on('page-title-updated', (e) => { if (titleLocked) e.preventDefault(); });
+        win.webContents.on('render-process-gone', (_e, details) => log.write('main', `detached window renderer gone: ${details.reason} (${details.exitCode})`));
+      },
+    });
     Menu.setApplicationMenu(buildMenu({ isDev: !app.isPackaged, onRestartEngine: supervisor.isExternal ? undefined : restartEngine }));
 
     // Dev runs show Electron's icon in the Dock; packaged builds get build/icon.icns from the bundle.
@@ -205,6 +225,7 @@ function main(): void {
 
   const cleanup = () => {
     quitting = true;
+    detachedWindows?.closeAll();
     void updates?.then((u) => u.dispose());
     supervisor.shutdown(); // synchronous tree kill: taskkill /T /F, or SIGKILL to the process group
   };
@@ -235,7 +256,11 @@ function main(): void {
       show: !smokeTest,
     });
     win.on('page-title-updated', (e) => { if (titleLocked) e.preventDefault(); });
-    win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
+    win.on('closed', () => {
+      if (mainWindow === win) mainWindow = null;
+      // Detached windows close with the main window; their tabs are in its workspace and come back next time.
+      detachedWindows?.closeAll();
+    });
     win.webContents.on('render-process-gone', (_e, details) => {
       log.write('main', `renderer gone: ${details.reason} (${details.exitCode})`);
       if (details.reason !== 'clean-exit' && !quitting && mainWindow === win) loadUi();

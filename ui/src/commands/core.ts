@@ -67,6 +67,14 @@ function tabIdOf(args: unknown): string | null {
   return isTabTarget(args) ? args.tabId : useTabs.getState().activeId;
 }
 
+/** The other tabs of the tab's editor group. */
+function siblingTabIds(id: string | null): string[] {
+  if (!id) return [];
+  const s = useTabs.getState();
+  const group = s.groups.find((g) => g.tabIds.includes(id));
+  return (group ? group.tabIds : s.tabs.map((t) => t.id)).filter((x) => x !== id);
+}
+
 function anchorOf(selector: string) {
   const el = document.querySelector<HTMLElement>(selector);
   if (!el) return null;
@@ -112,10 +120,10 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: (a?: unknown) => { const id = tabIdOf(a); if (id) void closeTab(id); },
   },
   {
-    id: 'tab.closeOthers', title: 'Close other tabs', category: 'Tabs', icon: 'X', when: (a?: unknown) => !!tabIdOf(a) && useTabs.getState().tabs.length > 1,
+    // With split editor groups, "other tabs" are the other tabs of the tab's group.
+    id: 'tab.closeOthers', title: 'Close other tabs', category: 'Tabs', icon: 'X', when: (a?: unknown) => siblingTabIds(tabIdOf(a)).length > 0,
     run: (a?: unknown) => {
-      const id = tabIdOf(a);
-      if (id) for (const t of useTabs.getState().tabs.filter((x) => x.id !== id)) void closeTab(t.id);
+      for (const id of siblingTabIds(tabIdOf(a))) void closeTab(id);
     },
   },
   {

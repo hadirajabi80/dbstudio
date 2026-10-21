@@ -41,6 +41,26 @@ export interface DbStudioBridge {
    */
   setZoomFactor?(factor: number): void;
 
+  // ---- windows (additive, optional): tabs detached into their own windows (desktop/src/main/windows.ts) ----
+  /** 'detached': a window opened by openTabWindow, showing tabs moved out of the main window. */
+  windowRole?: 'main' | 'detached';
+  /** Opens the tabs (serialized workspace tabs) in a new window near `position` (screen coordinates). */
+  openTabWindow?(opts: { tabs: unknown[]; position?: { x: number; y: number } }): Promise<boolean>;
+  /** Detached window: the tabs it shows (as opened, or as last reported); null in the main window. */
+  getDetachedTabs?(): Promise<unknown[] | null>;
+  /** Detached window: reports its tabs (main keeps them, so nothing is lost when the app quits). */
+  reportDetachedTabs?(tabs: unknown[]): void;
+  /** Detached window: hands tabs back to the main window, which shows them. */
+  reattachTabs?(tabs: unknown[]): Promise<boolean>;
+  /** Detached window: closes the window once it has no tabs left. */
+  closeDetachedWindow?(): void;
+  /** Main window: every tab open in a detached window right now. */
+  listDetachedTabs?(): Promise<unknown[]>;
+  /** Main window: the tabs of the detached windows changed. Returns an unsubscribe function. */
+  onDetachedTabs?(cb: (tabs: unknown[]) => void): () => void;
+  /** Main window: tabs moved back (closed: false) or left in a detached window the user closed (closed: true). */
+  onTabsReattached?(cb: (e: { tabs: unknown[]; closed: boolean }) => void): () => void;
+
   // ---- Additive (optional, older preloads lack them): auto-update and the Windows title bar overlay. ----
   /** Update status pushed by the main process (desktop/src/main/updater-core.ts). Returns an unsubscribe function. */
   onUpdateStatus?(cb: (status: UpdateStatus) => void): () => void;
