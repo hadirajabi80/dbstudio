@@ -169,8 +169,13 @@ public sealed class RedisClient : IDataSourceClient
         }
     }
 
+    /// <summary>Set when Disconnect / the idle reaper starts closing the client: streams treat failures after it as "closed", not errors.</summary>
+    public bool IsClosing => Volatile.Read(ref _closing) != 0;
+    private int _closing;
+
     public async ValueTask DisposeAsync()
     {
+        Interlocked.Exchange(ref _closing, 1);
         try
         {
             await Mux.CloseAsync(allowCommandsToComplete: false).ConfigureAwait(false);

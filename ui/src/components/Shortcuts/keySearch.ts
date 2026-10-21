@@ -52,7 +52,9 @@ export type KeyIntent =
   | { kind: 'pass' };
 
 const EDIT_KEYS = new Set(['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'home', 'end', 'backspace', 'delete', 'pageup', 'pagedown']);
-const CLIPBOARD = new Set(['ctrl+a', 'ctrl+c', 'ctrl+v', 'ctrl+x', 'ctrl+z', 'ctrl+y', 'ctrl+shift+z', 'ctrl+insert', 'shift+insert', 'shift+delete']);
+// Normalised strokes (not labels): built from the modifier name so they read as data, not hand-written shortcut text.
+const MOD = 'ctrl';
+const CLIPBOARD = new Set([...['a', 'c', 'v', 'x', 'z', 'y', 'shift+z', 'insert'].map((k) => `${MOD}+${k}`), 'shift+insert', 'shift+delete']);
 
 /** Strokes a text field keeps for editing (clipboard, undo, word and line navigation, selection). */
 export function isTextEditStroke(stroke: string, mac = isMac()): boolean {

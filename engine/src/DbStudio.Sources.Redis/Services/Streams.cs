@@ -133,10 +133,11 @@ public sealed class PubSubStream(RedisClient client, IReadOnlyList<string> chann
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
         }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (ex is ObjectDisposedException || client.IsClosing)
         {
-            // The source client was closed under the stream (Disconnect, idle reaper): the StreamManager ends it with
-            // "source-closed" right after; wait for that cancellation instead of failing the stream with an error.
+            // The source client was closed under the stream (Disconnect, idle reaper), possibly mid-SUBSCRIBE (the pipe
+            // reader is completed then: InvalidOperationException): the StreamManager ends it with "source-closed" right
+            // after; wait for that cancellation instead of failing the stream with an error.
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
