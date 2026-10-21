@@ -125,7 +125,11 @@ function checkDylib(engineDir, arch) {
   const kind = run('file', [dylib]);
   const wanted = arch === 'x64' ? 'x86_64' : 'arm64';
   if (!kind.includes(wanted)) fail(`${dylib} is not ${wanted}: ${kind.trim()}`);
-  const deps = run('otool', ['-L', dylib]).split('\n').slice(1).map((l) => l.trim().split(' ')[0]).filter(Boolean);
+  // `otool -L` on a dylib lists its own install name (LC_ID_DYLIB, e.g. /usr/local/lib/librdkafka.1.dylib from the
+  // Confluent build) before its dependencies; that id is not a dependency, so take it from `otool -D` and skip it.
+  const ownId = run('otool', ['-D', dylib]).split('\n').slice(1).map((l) => l.trim()).find(Boolean);
+  const deps = run('otool', ['-L', dylib]).split('\n').slice(1).map((l) => l.trim().split(' ')[0]).filter(Boolean)
+    .filter((d) => d !== ownId);
   const foreign = deps.filter((d) => !/^(\/usr\/lib\/|\/System\/|@rpath\/librdkafka|@loader_path\/librdkafka|librdkafka)/.test(d));
   if (foreign.length > 0) fail(`${dylib} links non-system libraries: ${foreign.join(', ')}`);
   const mb = (statSync(dylib).size / 1024 / 1024).toFixed(1);
