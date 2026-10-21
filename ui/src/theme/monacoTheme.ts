@@ -1,10 +1,13 @@
-// Monaco themes `dbstudio-light` / `dbstudio-dark`, derived from the CSS tokens (docs/PLAN-M1.5.md section 3):
+// Monaco themes, derived from the CSS tokens (docs/PLAN-M1.5.md section 3):
 // background from --bg-panel, keywords --syn-keyword (accent family), strings, comments, numbers from --syn-*,
 // widgets (suggest, hover, find, context menu, quick input) from the surface/selection tokens.
 //
-// Both themes are built from tokens.css itself (theme/index.ts), not from the live <html> styles, so
-// ensureMonacoSetup() can define both before the first editor paints, and a theme switch only calls setTheme.
+// The themes are built from tokens.css itself (theme/index.ts) plus the overrides of the chosen app / code theme
+// (theme/themes.ts), not from the live <html> styles, so ensureMonacoSetup() can define them before the first editor
+// paints. Monaco's theme is global: both THEME_IDS (`dbstudio-light` / `dbstudio-dark`, which every editor passes
+// for the app's base mode) are defined as the *effective* code theme, so an editor mounting later never resets it.
 // No literal colours here: every value comes from a token (QA 5.1 lint).
+import { editorColors, getActiveTheme, type ActiveTheme } from './activeTheme';
 import { firstColor, parseColor, themeTokens, toHex, type Rgba, type TokenMap } from './index';
 import type { EffectiveTheme } from './useTheme';
 
@@ -207,14 +210,29 @@ export function buildMonacoTheme(theme: EffectiveTheme, tokens: TokenMap = theme
   return { base: dark ? 'vs-dark' : 'vs', inherit: true, rules, colors };
 }
 
-/** Re-defines the effective theme from the current tokens and applies it to every editor. */
-export async function applyMonacoTheme(theme: EffectiveTheme): Promise<void> {
+/** The Monaco theme of a selection: the code theme's colours, or the app theme's for "Match app theme". */
+export function effectiveMonacoTheme(t: ActiveTheme = getActiveTheme()): MonacoThemeData {
+  const ed = editorColors(t);
+  return buildMonacoTheme(ed.base, ed.tokens);
+}
+
+/** Defines both DbStudio theme ids as the effective code theme (editor/monaco-setup.ts defineThemes, and every switch). */
+export function defineMonacoThemes(
+  editor: { defineTheme(id: string, data: MonacoThemeData): void },
+  ids: { readonly light: string; readonly dark: string },
+): void {
+  const data = effectiveMonacoTheme();
+  editor.defineTheme(ids.light, data);
+  editor.defineTheme(ids.dark, data);
+}
+
+/** Re-defines the effective code theme and applies it to every editor (Monaco's theme is global). */
+export async function applyMonacoTheme(): Promise<void> {
   try {
     const [{ ensureMonacoSetup, THEME_IDS }, monaco] = await Promise.all([import('../editor/monaco-setup'), import('../editor/monaco')]);
     ensureMonacoSetup();
-    const id = theme === 'dark' ? THEME_IDS.dark : THEME_IDS.light;
-    monaco.editor.defineTheme(id, buildMonacoTheme(theme));
-    monaco.editor.setTheme(id);
+    defineMonacoThemes(monaco.editor, THEME_IDS);
+    monaco.editor.setTheme(getActiveTheme().base === 'dark' ? THEME_IDS.dark : THEME_IDS.light);
   } catch (e) {
     console.warn('[theme] monaco theme update failed', e);
   }

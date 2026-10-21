@@ -7,7 +7,7 @@ import { api } from '../../api/client';
 import type { Snippet } from '../../api/types';
 import { useSettings } from '../../store/settings';
 import { useUi } from '../../store/ui';
-import { SettingsDialog } from './SettingsDialog';
+import { SettingsDialog } from './settings/SettingsDialog';
 
 /** The section is a lazy chunk: its first load can take a while on a busy machine. */
 const LAZY = { timeout: 10000 };

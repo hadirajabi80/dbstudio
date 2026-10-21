@@ -46,7 +46,9 @@ it('electron app: bridge, engine handshake, CSP, restart, clean quit', { timeout
     'appVersion', 'checkForUpdates', 'closeDetachedWindow', 'configureUpdates', 'getDetachedTabs', 'getEngineInfo',
     'getUpdateStatus', 'listDetachedTabs', 'loadWorkspace', 'onDetachedTabs',
     'onEngineRestarted', 'onMenuCommand', 'onTabsReattached', 'onUpdateStatus', 'openExternal', 'openTabWindow', 'platform', 'quitAndInstall',
-    'readTextFile', 'reattachTabs', 'reportDetachedTabs', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu', 'showOpenDialog',
+    'readTextFile', 'reattachTabs', 'reportDetachedTabs', 'saveWorkspace', 'setTitle', 'setTitleBarTheme', 'setZoomFactor', 'showAppMenu',
+    'showNotification', // ---- notifications
+    'showOpenDialog',
     'showSaveDialog', 'windowRole', 'writeTextFile',
   ]);
   assert.equal(r.windowRole, 'main');

@@ -873,76 +873,7 @@ html.native-material .topbar {
   text-align: center;
 }
 
-/* ---------- settings ---------- */
-.settings-layout {
-  display: flex;
-  gap: var(--space-5);
-  min-height: 380px;
-}
-.settings-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 168px;
-  flex-shrink: 0;
-}
-.settings-nav-item {
-  text-align: left;
-  height: 30px;
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-.settings-nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-.settings-nav-item.active {
-  background: var(--bg-selected);
-  color: var(--fg);
-  font-weight: var(--weight-strong);
-}
-.settings-body {
-  flex: 1;
-  min-width: 0;
-}
-.settings-row {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: var(--space-3);
-  align-items: start;
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.settings-label {
-  display: flex;
-  flex-direction: column;
-  padding-top: 5px;
-}
-.settings-hint {
-  font-size: var(--text-xs);
-  color: var(--fg-muted);
-}
-.settings-control {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  align-items: flex-start;
-}
-/* long wrapped checkbox labels: the box aligns with the first line */
-.settings-control .check {
-  align-items: flex-start;
-}
-.settings-control .check input {
-  margin-top: 2px;
-}
-.settings-control .select-trigger {
-  width: auto;
-  min-width: 200px;
-}
+/* ---------- settings: components/layout/settings/settings.css ---------- */
 
 /* ---------- welcome / onboarding ---------- */
 .welcome,

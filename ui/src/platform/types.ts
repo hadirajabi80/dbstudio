@@ -1,6 +1,6 @@
-import type { EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus } from './bridge';
+import type { EngineInfo, FileFilter, MenuCommand, NotificationOptions, TitleBarTheme, UpdateStatus } from './bridge';
 
-export type { EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus };
+export type { EngineInfo, FileFilter, MenuCommand, NotificationOptions, TitleBarTheme, UpdateStatus };
 
 /** What the app needs from its host. Electron delegates to window.dbstudio; the browser uses fallbacks. */
 export interface Platform {
@@ -39,4 +39,7 @@ export interface Platform {
   setTitleBarTheme?(theme: TitleBarTheme): void;
   /** Desktop only (Windows overlay title bar, which hides the native menu bar): the application menu as a popup. */
   showAppMenu?(pos: { x: number; y: number }): void;
+  // ---- notifications
+  /** Desktop only: an OS notification while the window is in the background (main decides; fire-and-forget). */
+  showNotification?(opts: NotificationOptions): void;
 }

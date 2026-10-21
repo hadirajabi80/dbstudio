@@ -1,7 +1,7 @@
 // Sandboxed preload: exposes window.dbstudio (the DbStudioBridge contract from ui/src/platform/bridge.ts).
 // Only `electron` may be required at runtime; esbuild inlines ../shared/channels.
 import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron';
-import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand, TitleBarTheme, UpdateStatus } from '../../../ui/src/platform/bridge';
+import type { DbStudioBridge, EngineInfo, FileFilter, MenuCommand, NotificationOptions, TitleBarTheme, UpdateStatus } from '../../../ui/src/platform/bridge';
 import { desktopOs, htmlPlatformClasses, htmlPlatformVars, parseChromeArg, type DesktopPlatformInfo } from '../main/platform';
 import { APP_VERSION_ARG, IPC, WINDOW_ROLE_ARG } from '../shared/channels';
 
@@ -63,6 +63,8 @@ const bridge: DbStudioBridge = {
   quitAndInstall: () => ipcRenderer.invoke(IPC.updatesQuitAndInstall) as Promise<boolean>,
   setTitleBarTheme: (theme: TitleBarTheme) => { ipcRenderer.send(IPC.setTitleBarTheme, theme); },
   showAppMenu: (pos: { x: number; y: number }) => { ipcRenderer.send(IPC.showAppMenu, pos); },
+  // ---- notifications
+  showNotification: (opts: NotificationOptions) => { ipcRenderer.send(IPC.notify, opts); },
 };
 
 contextBridge.exposeInMainWorld('dbstudio', bridge);

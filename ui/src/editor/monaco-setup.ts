@@ -12,7 +12,7 @@ import { formatRange, formatSql, type FormatWarning } from '../format';
 import { snippetPickerItems } from '../snippets';
 import { getEditorConfig } from './config';
 import { FORMAT_MARKER_OWNER } from './actions';
-import { buildMonacoTheme } from '../theme/monacoTheme';
+import { defineMonacoThemes } from '../theme/monacoTheme';
 import { followUpPayload } from './suggestKey';
 
 export const LANGUAGE_IDS: Record<Dialect, string> = {
@@ -78,8 +78,7 @@ function installStyles(): void {
 
 /** Both DbStudio themes, built from the design tokens (theme/monacoTheme.ts) before the first editor paints. */
 function defineThemes(): void {
-  monaco.editor.defineTheme(THEME_IDS.light, buildMonacoTheme('light'));
-  monaco.editor.defineTheme(THEME_IDS.dark, buildMonacoTheme('dark'));
+  defineMonacoThemes(monaco.editor, THEME_IDS);
 }
 
 function registerLanguage(dialect: Dialect): void {

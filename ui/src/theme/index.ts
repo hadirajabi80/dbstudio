@@ -76,18 +76,30 @@ export function resolveTokens(raw: Record<string, string>): TokenMap {
 }
 
 let cache: Record<EffectiveTheme, TokenMap> | null = null;
+const overrideCache = new WeakMap<object, Record<EffectiveTheme, TokenMap | undefined>>();
 
-/** Resolved tokens of a theme, parsed from tokens.css (works for both themes whatever <html> shows). */
-export function themeTokens(theme: EffectiveTheme, css: string = tokensCss): TokenMap {
+/**
+ * Resolved tokens of a theme, parsed from tokens.css (works for both themes whatever <html> shows). `overrides` are
+ * raw declarations layered on top of the base block before var() resolution (an app theme of themes.ts), so aliases
+ * such as `--kind-table: var(--obj-table)` follow an overridden `--obj-table`.
+ */
+export function themeTokens(theme: EffectiveTheme, overrides?: Readonly<Record<string, string>> | null, css: string = tokensCss): TokenMap {
   if (css !== tokensCss) {
     const b = parseTokenBlocks(css);
-    return resolveTokens(theme === 'dark' ? b.dark : b.light);
+    return resolveTokens({ ...(theme === 'dark' ? b.dark : b.light), ...overrides });
   }
   if (!cache) {
     const b = parseTokenBlocks(tokensCss);
     cache = { light: resolveTokens(b.light), dark: resolveTokens(b.dark) };
   }
-  return cache[theme];
+  if (!overrides || Object.keys(overrides).length === 0) return cache[theme];
+  let entry = overrideCache.get(overrides);
+  if (!entry) overrideCache.set(overrides, (entry = { light: undefined, dark: undefined }));
+  if (!entry[theme]) {
+    const b = parseTokenBlocks(tokensCss);
+    entry[theme] = resolveTokens({ ...(theme === 'dark' ? b.dark : b.light), ...overrides });
+  }
+  return entry[theme]!;
 }
 
 // ------------------------------------------------------------------ colours

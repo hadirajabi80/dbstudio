@@ -15,6 +15,7 @@ import { useUi } from '../../store/ui';
 import { connColorName } from '../../theme/connColors';
 import { ColorDot } from '../common/ConnectionBadge';
 import { ProviderLogo } from '../../theme/brand/ProviderLogo';
+import { UpdateChip } from './UpdateChip';
 
 const WS_LABEL: Record<string, string> = {
   idle: 'Engine: idle', connecting: 'Engine: connecting…', open: 'Engine connected', reconnecting: 'Engine: reconnecting…',
@@ -101,6 +102,7 @@ export function StatusBar() {
       )}
       {tab?.kind === 'console' && cursor && <span className="sb-item muted tabular">Ln {cursor.line}, Col {cursor.col}</span>}
       {tab?.kind === 'console' && <span className="sb-item muted">{dialectName(conn?.providerId)}</span>}
+      <UpdateChip />
       <button className="sb-item sb-button" onClick={() => runCommand('view.shortcuts')} title={`Keyboard shortcuts (${displayShortcut('F1')})`} aria-label="Keyboard shortcuts">
         <Keyboard size={12} />
       </button>
