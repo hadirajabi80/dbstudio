@@ -1,0 +1,84 @@
+{
+  "explainVersion": "1",
+  "stages": [
+    {
+      "$cursor": {
+        "queryPlanner": {
+          "namespace": "shop.orders",
+          "indexFilterSet": false,
+          "parsedQuery": { "status": { "$eq": "paid" } },
+          "winningPlan": {
+            "stage": "PROJECTION_SIMPLE",
+            "transformBy": { "customerId": 1, "total": 1, "_id": 0 },
+            "inputStage": {
+              "stage": "FETCH",
+              "inputStage": {
+                "stage": "IXSCAN",
+                "keyPattern": { "status": 1, "createdAt": -1 },
+                "indexName": "status_1_createdAt_-1",
+                "isMultiKey": false,
+                "direction": "forward",
+                "indexBounds": { "status": [ "[\"paid\", \"paid\"]" ], "createdAt": [ "[MaxKey, MinKey]" ] }
+              }
+            }
+          },
+          "rejectedPlans": []
+        },
+        "executionStats": {
+          "executionSuccess": true,
+          "nReturned": 500,
+          "executionTimeMillis": 6,
+          "totalKeysExamined": 500,
+          "totalDocsExamined": 500,
+          "executionStages": {
+            "stage": "PROJECTION_SIMPLE",
+            "nReturned": 500,
+            "executionTimeMillisEstimate": 1,
+            "works": 501,
+            "advanced": 500,
+            "transformBy": { "customerId": 1, "total": 1, "_id": 0 },
+            "inputStage": {
+              "stage": "FETCH",
+              "nReturned": 500,
+              "executionTimeMillisEstimate": 1,
+              "works": 501,
+              "advanced": 500,
+              "docsExamined": 500,
+              "inputStage": {
+                "stage": "IXSCAN",
+                "nReturned": 500,
+                "executionTimeMillisEstimate": 0,
+                "works": 501,
+                "advanced": 500,
+                "indexName": "status_1_createdAt_-1",
+                "keysExamined": 500
+              }
+            }
+          }
+        }
+      },
+      "nReturned": 500,
+      "executionTimeMillisEstimate": 2
+    },
+    {
+      "$group": { "_id": "$customerId", "spent": { "$sum": "$total" } },
+      "maxAccumulatorMemoryUsageBytes": { "spent": 12800 },
+      "totalOutputDataSizeBytes": 30250,
+      "usedDisk": false,
+      "spills": 0,
+      "nReturned": 180,
+      "executionTimeMillisEstimate": 3
+    },
+    {
+      "$sort": { "sortKey": { "spent": -1 } },
+      "totalDataSizeSortedBytesEstimate": 41200,
+      "usedDisk": false,
+      "spills": 0,
+      "nReturned": 180,
+      "executionTimeMillisEstimate": 4
+    }
+  ],
+  "serverInfo": { "host": "mongo-0", "port": 27017, "version": "7.0.14" },
+  "command": { "aggregate": "orders", "pipeline": [], "cursor": {}, "$db": "shop" },
+  "ok": 1.0
+}

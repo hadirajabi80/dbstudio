@@ -1,0 +1,494 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Country": {
+      "type": "object",
+      "title": "Country",
+      "description": "ISO countries",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string"
+        },
+        "isoCode": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "ISO 3166-1 alpha-2"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "isoCode"
+      ],
+      "additionalProperties": false
+    },
+    "Customer": {
+      "type": "object",
+      "title": "Customer",
+      "description": "People who buy things",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Display name"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "countryId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "profile": {
+          "description": "Free-form preferences"
+        },
+        "tags": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "isActive",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "Product": {
+      "type": "object",
+      "title": "Product",
+      "description": "Row of public.products",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "sku": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "price": {
+          "type": "number"
+        },
+        "stock": {
+          "type": "integer"
+        },
+        "attributes": {},
+        "thumbnail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "contentEncoding": "base64"
+        }
+      },
+      "required": [
+        "id",
+        "sku",
+        "name",
+        "price",
+        "stock"
+      ],
+      "additionalProperties": false
+    },
+    "Order": {
+      "type": "object",
+      "title": "Order",
+      "description": "Row of public.orders",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "customerId": {
+          "type": "integer"
+        },
+        "orderDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "new",
+            "paid",
+            "shipped",
+            "cancelled"
+          ]
+        },
+        "total": {
+          "type": "number"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "orderDate",
+        "status",
+        "total"
+      ],
+      "additionalProperties": false
+    },
+    "OrderLine": {
+      "type": "object",
+      "title": "OrderLine",
+      "description": "Row of public.order_lines",
+      "properties": {
+        "orderId": {
+          "type": "integer"
+        },
+        "lineNo": {
+          "type": "integer"
+        },
+        "productId": {
+          "type": "integer"
+        },
+        "qty": {
+          "type": "integer"
+        },
+        "unitPrice": {
+          "type": "number"
+        },
+        "lineTotal": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "GENERATED ALWAYS AS (qty * unit_price) STORED",
+          "readOnly": true
+        }
+      },
+      "required": [
+        "orderId",
+        "lineNo",
+        "productId",
+        "qty",
+        "unitPrice"
+      ],
+      "additionalProperties": false
+    },
+    "TypeZoo": {
+      "type": "object",
+      "title": "TypeZoo",
+      "description": "One column per PostgreSQL type family",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "small": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "big": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "price": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 20
+        },
+        "day": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "atLocal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "opens": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "time"
+        },
+        "opensTz": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "time"
+        },
+        "wait": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "duration"
+        },
+        "doc": {},
+        "spec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mac": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {},
+        "search": {},
+        "during": {},
+        "counts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          }
+        },
+        "statuses": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "enum": [
+              "new",
+              "paid",
+              "shipped",
+              "cancelled"
+            ]
+          }
+        },
+        "user": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Reserved word as a column name"
+        },
+        "camelCase": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Mixed case needs quoting"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "CustomerTotal": {
+      "type": "object",
+      "title": "CustomerTotal",
+      "description": "Row of public.customer_totals",
+      "properties": {
+        "customerId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100
+        },
+        "orders": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "revenue": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "OrdersOfRow": {
+      "type": "object",
+      "title": "OrdersOfRow",
+      "description": "Row of public.orders_of",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "Invoice": {
+      "type": "object",
+      "title": "Invoice",
+      "description": "Issued invoices",
+      "properties": {
+        "invoiceId": {
+          "type": "integer",
+          "readOnly": true
+        },
+        "customerId": {
+          "type": "integer"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "paid": {
+          "type": "boolean"
+        },
+        "pdf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "contentEncoding": "base64"
+        }
+      },
+      "required": [
+        "invoiceId",
+        "customerId",
+        "issuedAt",
+        "amount",
+        "paid"
+      ],
+      "additionalProperties": false
+    },
+    "CustomerOrdersRow": {
+      "type": "object",
+      "title": "CustomerOrdersRow",
+      "description": "Row of CustomerOrders",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "total": {
+          "type": "number"
+        },
+        "orderDate": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "new",
+            "paid",
+            "shipped",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "total",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -65,7 +65,7 @@ public static class SqlTokenizer
                 while (i < n && depth > 0)
                 {
                     if (sql[i] == '\n') { line++; lineStart = i + 1; i++; continue; }
-                    if (dialect == Dialect.TSql && sql[i] == '/' && i + 1 < n && sql[i + 1] == '*') { depth++; i += 2; continue; }
+                    if (DialectInfo.NestedBlockComments(dialect) && sql[i] == '/' && i + 1 < n && sql[i + 1] == '*') { depth++; i += 2; continue; }
                     if (sql[i] == '*' && i + 1 < n && sql[i + 1] == '/') { depth--; i += 2; continue; }
                     i++;
                 }
@@ -84,8 +84,32 @@ public static class SqlTokenizer
                 continue;
             }
 
-            // N'..' (T-SQL/Oracle national), X'..' (SQLite blob) prefixes
-            if ((c is 'N' or 'n' or 'X' or 'x') && i + 1 < n && sql[i + 1] == '\'')
+            if (dialect == Dialect.PgSql)
+            {
+                // PostgreSQL: E'..' (backslash escapes), U&'..', $$..$$ / $tag$..$tag$ dollar quoting (function bodies).
+                if (c is 'E' or 'e' && i + 1 < n && sql[i + 1] == '\'')
+                {
+                    i++;
+                    ReadEscapeString(sql, ref i, ref line, ref lineStart);
+                    tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
+                    continue;
+                }
+                if (c is 'U' or 'u' && i + 2 < n && sql[i + 1] == '&' && sql[i + 2] == '\'')
+                {
+                    i += 2;
+                    ReadQuoted(sql, ref i, '\'', ref line, ref lineStart);
+                    tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
+                    continue;
+                }
+                if (c == '$' && TryDollarQuote(sql, ref i, ref line, ref lineStart))
+                {
+                    tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
+                    continue;
+                }
+            }
+
+            // N'..' (T-SQL/Oracle national), X'..' (SQLite blob / PostgreSQL hex bit string), B'..' (PostgreSQL bit string) prefixes
+            if (((c is 'N' or 'n' or 'X' or 'x') || (dialect == Dialect.PgSql && c is 'B' or 'b')) && i + 1 < n && sql[i + 1] == '\'')
             {
                 i++;
                 ReadQuoted(sql, ref i, '\'', ref line, ref lineStart);
@@ -100,7 +124,8 @@ public static class SqlTokenizer
                 continue;
             }
 
-            if (c == '"' || (c == '[' && dialect != Dialect.PlSql) || (c == '`' && dialect == Dialect.Sqlite))
+            // [ is a quoted identifier in T-SQL/SQLite, an array subscript in PostgreSQL.
+            if (c == '"' || (c == '[' && dialect is Dialect.TSql or Dialect.Sqlite) || (c == '`' && dialect == Dialect.Sqlite))
             {
                 var close = c == '[' ? ']' : c;
                 ReadQuoted(sql, ref i, close, ref line, ref lineStart);
@@ -129,8 +154,11 @@ public static class SqlTokenizer
                 continue;
             }
 
-            if ((c == ':' || c == '?' || c == '$' || (c == '@' && dialect != Dialect.TSql)) && i + 1 < n
-                && (IsWordPart(sql[i + 1]) || char.IsDigit(sql[i + 1])) && !(c == ':' && i > 0 && sql[i - 1] == ':'))
+            // PostgreSQL: ? ?| ?& are jsonb operators, never placeholders.
+            if ((c == ':' || (c == '?' && dialect != Dialect.PgSql) || c == '$' || (c == '@' && dialect != Dialect.TSql)) && i + 1 < n
+                && (IsWordPart(sql[i + 1]) || char.IsDigit(sql[i + 1])) && !(c == ':' && i > 0 && sql[i - 1] == ':')
+                // PostgreSQL: $1 (digits), :name / @name (letter or _): arr[1:3] and @> stay operators.
+                && (dialect != Dialect.PgSql || (c == '$' ? char.IsAsciiDigit(sql[i + 1]) : char.IsLetter(sql[i + 1]) || sql[i + 1] == '_')))
             {
                 i++;
                 while (i < n && IsWordPart(sql[i])) i++;
@@ -138,14 +166,14 @@ public static class SqlTokenizer
                 continue;
             }
 
-            if (c == '?')
+            if (c == '?' && dialect != Dialect.PgSql)
             {
                 i++;
                 tokens.Add(new SqlToken(SqlTokenKind.Parameter, "?", start, i, tokLine, tokCol));
                 continue;
             }
 
-            if (c is '(' or ')' or ',' or '.' or ';')
+            if (c is '(' or ')' or ',' or '.' or ';' || (dialect == Dialect.PgSql && c is '[' or ']'))
             {
                 i++;
                 tokens.Add(new SqlToken(SqlTokenKind.Punct, c.ToString(), start, i, tokLine, tokCol));
@@ -187,6 +215,52 @@ public static class SqlTokenizer
         }
     }
 
+    /// <summary>PostgreSQL E'…': a backslash escapes the next char; '' still doubles. i points at the opening quote.</summary>
+    private static void ReadEscapeString(string sql, ref int i, ref int line, ref int lineStart)
+    {
+        i++;
+        while (i < sql.Length)
+        {
+            var ch = sql[i];
+            if (ch == '\n') { line++; lineStart = i + 1; }
+            if (ch == '\\')
+            {
+                if (i + 1 < sql.Length && sql[i + 1] == '\n') { line++; lineStart = i + 2; }
+                i += 2;
+                continue;
+            }
+            if (ch == '\'')
+            {
+                if (i + 1 < sql.Length && sql[i + 1] == '\'') { i += 2; continue; }
+                i++;
+                return;
+            }
+            i++;
+        }
+        i = Math.Min(i, sql.Length);
+    }
+
+    /// <summary>PostgreSQL $$…$$ / $tag$…$tag$ (tag = [A-Za-z_][A-Za-z0-9_]*); false when '$' does not open one ($1 is a parameter).</summary>
+    private static bool TryDollarQuote(string sql, ref int i, ref int line, ref int lineStart)
+    {
+        var j = i + 1;
+        if (j < sql.Length && sql[j] != '$')
+        {
+            if (!(char.IsLetter(sql[j]) || sql[j] == '_')) return false;
+            j++;
+            while (j < sql.Length && (char.IsLetterOrDigit(sql[j]) || sql[j] == '_')) j++;
+            if (j >= sql.Length || sql[j] != '$') return false;
+        }
+        if (j >= sql.Length) return false;
+        var tag = sql[i..(j + 1)];
+        var close = sql.IndexOf(tag, j + 1, StringComparison.Ordinal);
+        var end = close < 0 ? sql.Length : close + tag.Length;
+        for (var k = i; k < end; k++)
+            if (sql[k] == '\n') { line++; lineStart = k + 1; }
+        i = end;
+        return true;
+    }
+
     private static bool TryOracleQString(string sql, ref int i, ref int line, ref int lineStart)
     {
         var p = i;
@@ -225,6 +299,13 @@ public static class SqlTokenizer
 
             if (t.IsPunct('(')) parenDepth++;
             else if (t.IsPunct(')')) parenDepth = Math.Max(0, parenDepth - 1);
+            else if (dialect == Dialect.PgSql)
+            {
+                // Dollar-quoted bodies are single tokens; only SQL-standard bodies (BEGIN ATOMIC … END, PG14+) nest.
+                if (t.IsWord("BEGIN") && k + 1 < tokens.Count && tokens[k + 1].IsWord("ATOMIC")) blockDepth++;
+                else if (blockDepth > 0 && t.IsWord("CASE")) blockDepth++;
+                else if (blockDepth > 0 && t.IsWord("END")) blockDepth--;
+            }
             else if (isBlockStatement && t.Kind == SqlTokenKind.Word)
             {
                 var u = t.Upper;
@@ -258,7 +339,7 @@ public static class SqlTokenizer
     private static bool StartsBlock(IReadOnlyList<SqlToken> tokens, int k, Dialect dialect)
     {
         var t = tokens[k];
-        if (t.Kind != SqlTokenKind.Word) return false;
+        if (t.Kind != SqlTokenKind.Word || dialect == Dialect.PgSql) return false;
         var u = t.Upper;
         if (dialect == Dialect.PlSql && u is "BEGIN" or "DECLARE") return true;
         if (u != "CREATE") return false;

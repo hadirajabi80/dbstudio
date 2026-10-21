@@ -8,7 +8,7 @@ import {
   bindNameOf, friendlyParam, DIALECT_LABEL, localName, membersOf, objectLabel, pkMembers, proceduresClassName, routineFnName, routineSqlName,
   typeNameOf, type Member,
 } from '../shape';
-import { crudSql, defaultsNote, qi, rewriteQuery, trimStatement, type ParamStyle } from '../sqlgen';
+import { crudSql, defaultsNote, qi, quoteAlias, rewriteQuery, trimStatement, type ParamStyle } from '../sqlgen';
 import { resolveType, type ResolvedType } from '../types';
 import { commentText, dq, Writer } from '../writer';
 
@@ -20,6 +20,8 @@ interface Ctx {
   usings: Set<string>;
   /** Tables in this generation run (EF navigations). */
   tables: CgTable[];
+  /** C# base names of overloaded routines (method / record names); others use their own name. */
+  routineNames?: Map<CgRoutine, OverloadName>;
 }
 
 interface Unit {
@@ -33,9 +35,19 @@ const PROVIDER: Record<Dialect, { ns: string; conn: string; param: string; prefi
   tsql: { ns: 'Microsoft.Data.SqlClient', conn: 'SqlConnection', param: 'SqlParameter', prefix: '@' },
   plsql: { ns: 'Oracle.ManagedDataAccess.Client', conn: 'OracleConnection', param: 'OracleParameter', prefix: '' },
   sqlite: { ns: 'Microsoft.Data.Sqlite', conn: 'SqliteConnection', param: 'SqliteParameter', prefix: '@' },
-  // M2-0 placeholder (PG-C owns the PostgreSQL flavour, docs/PLAN-PG.md 4.1).
-  pgsql: { ns: 'Npgsql', conn: 'NpgsqlConnection', param: 'NpgsqlParameter', prefix: '@' },
+  // Npgsql binds `@name` placeholders to parameters named without the prefix.
+  pgsql: { ns: 'Npgsql', conn: 'NpgsqlConnection', param: 'NpgsqlParameter', prefix: '' },
 };
+
+/** C# method base name of a routine (overloads with the same C# signature get a numeric suffix). */
+function fnBase(r: CgRoutine, ctx: Ctx): string {
+  return ctx.routineNames?.get(r)?.fn ?? r.name;
+}
+
+/** Base name of a routine's generated row / result types (unique per overload). */
+function typeBase(r: CgRoutine, ctx: Ctx): string {
+  return ctx.routineNames?.get(r)?.type ?? r.name;
+}
 
 // ---------------- types ----------------
 
@@ -92,9 +104,77 @@ const ORACLE_DB_TYPE: Record<string, string> = {
   sys_refcursor: 'RefCursor', 'ref cursor': 'RefCursor',
 };
 
+const PG_DB_TYPE: Record<string, string> = {
+  smallint: 'Smallint', int2: 'Smallint', smallserial: 'Smallint', serial2: 'Smallint',
+  integer: 'Integer', int: 'Integer', int4: 'Integer', serial: 'Integer', serial4: 'Integer', oid: 'Oid',
+  bigint: 'Bigint', int8: 'Bigint', bigserial: 'Bigint', serial8: 'Bigint',
+  numeric: 'Numeric', decimal: 'Numeric', money: 'Money', real: 'Real', float4: 'Real', 'double precision': 'Double', float8: 'Double', float: 'Double',
+  boolean: 'Boolean', bool: 'Boolean', text: 'Text', varchar: 'Varchar', 'character varying': 'Varchar', char: 'Char', character: 'Char', bpchar: 'Char',
+  name: 'Name', citext: 'Citext', uuid: 'Uuid', date: 'Date', timestamp: 'Timestamp', 'timestamp without time zone': 'Timestamp',
+  timestamptz: 'TimestampTz', 'timestamp with time zone': 'TimestampTz', time: 'Time', 'time without time zone': 'Time', timetz: 'TimeTz',
+  'time with time zone': 'TimeTz', interval: 'Interval', bytea: 'Bytea', json: 'Json', jsonb: 'Jsonb', xml: 'Xml', inet: 'Inet', cidr: 'Cidr',
+  macaddr: 'MacAddr', macaddr8: 'MacAddr8', point: 'Point', line: 'Line', lseg: 'LSeg', box: 'Box', path: 'Path', polygon: 'Polygon', circle: 'Circle',
+  tsvector: 'TsVector', tsquery: 'TsQuery', hstore: 'Hstore', bit: 'Bit', 'bit varying': 'Varbit', varbit: 'Varbit', pg_lsn: 'PgLsn',
+  int4range: 'IntegerRange', int8range: 'BigIntRange', numrange: 'NumericRange', tsrange: 'TimestampRange', tstzrange: 'TimestampTzRange',
+  daterange: 'DateRange', int4multirange: 'IntegerMultirange', int8multirange: 'BigIntMultirange', nummultirange: 'NumericMultirange',
+  tsmultirange: 'TimestampMultirange', tstzmultirange: 'TimestampTzMultirange', datemultirange: 'DateMultirange', refcursor: 'Refcursor',
+};
+
+/** NpgsqlDbType of a PostgreSQL type; enums go as text (the SQL casts them), types Npgsql cannot name as Unknown. */
+function pgDbType(t: ResolvedType): string {
+  if (t.array && t.element) return `NpgsqlDbType.Array | ${pgDbType(t.element)}`;
+  if (t.enumLabels?.length) return 'NpgsqlDbType.Text';
+  return `NpgsqlDbType.${PG_DB_TYPE[t.base] ?? 'Unknown'}`;
+}
+
+/** Type text of a PostgreSQL column/parameter for casts and store types (`character varying(100)` stays as reported). */
+function pgTypeText(dbType: string): string {
+  return dbType.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * `::type` cast for a PostgreSQL placeholder whose value is sent as text: enums (and enum arrays) always; with
+ * `textValues` (Dapper, which types a string as text) also json / jsonb / xml, which have no implicit cast from text.
+ */
+function pgCast(t: ResolvedType, dbType: string, textValues: boolean): string {
+  const e = t.array && t.element ? t.element : t;
+  if (e.enumLabels?.length || !e.known) return `::${pgTypeText(dbType)}`;
+  if (textValues && /^(json|jsonb|xml)$/.test(e.base)) return `::${pgTypeText(dbType)}`;
+  return '';
+}
+
+/** Store type EF Core / [Column(TypeName)] must name because Npgsql's default mapping of the CLR type differs. */
+function pgStoreType(t: ResolvedType, dbType: string): string | null {
+  if (t.array && t.element) {
+    const inner = pgStoreType(t.element, t.element.dbType);
+    return inner ? `${inner}[]` : null;
+  }
+  if (/^(json|jsonb|xml|money|citext|cidr|macaddr8|name)$/.test(t.base)) return t.base;
+  if (/^(char|character|bpchar)$/.test(t.base)) return pgTypeText(dbType).toLowerCase();
+  if (t.base === 'timetz' || t.base === 'time with time zone') return 'time with time zone';
+  // DateTime maps to timestamp with time zone by default (Npgsql 6+).
+  if (t.base === 'timestamp' || t.base === 'timestamp without time zone') return pgTypeText(dbType).toLowerCase();
+  return null;
+}
+
+/** Npgsql CLR types for PostgreSQL types the generators read as `object`. */
+const PG_OBJECT_HINT: Record<string, string> = {
+  point: 'NpgsqlPoint', line: 'NpgsqlLine', lseg: 'NpgsqlLSeg', box: 'NpgsqlBox', path: 'NpgsqlPath', polygon: 'NpgsqlPolygon', circle: 'NpgsqlCircle',
+  tsvector: 'NpgsqlTsVector', tsquery: 'NpgsqlTsQuery', hstore: 'Dictionary<string, string?>', bit: 'BitArray', varbit: 'BitArray',
+  'bit varying': 'BitArray', pg_lsn: 'NpgsqlLogSequenceNumber', record: 'object[]',
+};
+
+function pgObjectHint(base: string): string {
+  if (PG_OBJECT_HINT[base]) return PG_OBJECT_HINT[base];
+  if (/multirange$/.test(base)) return 'NpgsqlRange<T>[]';
+  if (/range$/.test(base)) return 'NpgsqlRange<T>';
+  return 'a provider type or a value converter';
+}
+
 function providerDbType(dialect: Dialect, t: ResolvedType): string {
   if (dialect === 'tsql') return `SqlDbType.${SQL_DB_TYPE[t.base] ?? 'Variant'}`;
   if (dialect === 'plsql') return `OracleDbType.${ORACLE_DB_TYPE[t.base] ?? 'Varchar2'}`;
+  if (dialect === 'pgsql') return pgDbType(t);
   const st: Record<string, string> = { int64: 'Integer', int32: 'Integer', int16: 'Integer', uint8: 'Integer', bool: 'Integer', float64: 'Real', float32: 'Real', binary: 'Blob' };
   return `SqliteType.${st[t.logical] ?? 'Text'}`;
 }
@@ -151,12 +231,24 @@ function initializer(m: Member, o: CodegenOptions): string {
   if (m.nullable || isValueType(m.type, o) || !o.nullableReferenceTypes || o.requiredMembers) return '';
   const b = baseType(m.type, o);
   if (b === 'string') return ' = "";';
-  if (b === 'byte[]') return ' = [];';
+  if (b.endsWith('[]')) return ' = [];';
   return ' = null!;';
 }
 
 function todo(m: Member): string | null {
   return m.type.known ? null : `// TODO: unmapped type ${m.col.dbType}`;
+}
+
+/** Comment lines above a property: unmapped types, and for PostgreSQL enums, intervals and types read as object. */
+function memberNotes(m: Member, d: Dialect): string[] {
+  const td = todo(m);
+  if (d !== 'pgsql') return td ? [td] : [];
+  const t = m.type.array && m.type.element ? m.type.element : m.type;
+  if (td) return [td];
+  if (t.enumLabels?.length) return [`// enum: ${t.enumLabels.join(', ')}`];
+  if (t.logical === 'interval') return ['// NpgsqlInterval for month parts (TimeSpan has no months)'];
+  if (t.logical === 'object') return [`// TODO: ${t.base} is read as object; map it to ${pgObjectHint(t.base)} (NpgsqlTypes).`];
+  return [];
 }
 
 function bindOf(m: Member): string {
@@ -182,13 +274,14 @@ function modelType(w: Writer, typeName: string, members: Member[], t: { comment?
     members.forEach((m, i) => {
       if (i) w.blank();
       summary(w, m.col.comment);
-      const td = todo(m);
-      if (td) w.line(td);
+      for (const note of memberNotes(m, ctx.d)) w.line(note);
       if (annotate) {
         if (m.col.pk && t?.kind === 'table') w.line('[Key]');
         if (m.col.identity) w.line('[DatabaseGenerated(DatabaseGeneratedOption.Identity)]');
         else if (m.col.computed) w.line('[DatabaseGenerated(DatabaseGeneratedOption.Computed)]');
-        if (bindOf(m) !== m.col.name) w.line(`[Column(${dq(m.col.name)})]`);
+        const storeType = ctx.d === 'pgsql' ? pgStoreType(m.type, m.col.dbType) : null;
+        if (storeType) w.line(`[Column(${bindOf(m) !== m.col.name ? `${dq(m.col.name)}, ` : ''}TypeName = ${dq(storeType)})]`);
+        else if (bindOf(m) !== m.col.name) w.line(`[Column(${dq(m.col.name)})]`);
         if (!m.nullable && !isValueType(m.type, o)) w.line('[Required]');
         if (m.type.length && m.type.logical === 'string') w.line(`[StringLength(${m.type.length})]`);
         else if (m.type.length && m.type.logical === 'binary') w.line(`[MaxLength(${m.type.length})]`);
@@ -201,11 +294,37 @@ function modelType(w: Writer, typeName: string, members: Member[], t: { comment?
 
 // ---------------- Dapper ----------------
 
+/** PostgreSQL `::type` casts per bind name of the members whose values are sent as text (see pgCast). */
+function pgCasts(members: Member[], d: Dialect, textValues: boolean): Map<string, string> {
+  const out = new Map<string, string>();
+  if (d !== 'pgsql') return out;
+  for (const m of members) {
+    const c = pgCast(m.type, m.col.dbType, textValues);
+    if (c) out.set(bindOf(m), c);
+  }
+  return out;
+}
+
+/** Dapper has no parameter mapping for Npgsql-native CLR types (IPAddress, PhysicalAddress): a pass-through handler. */
+function dapperPassThroughHandler(w: Writer, o: CodegenOptions, types: string[]) {
+  const n = o.nullableReferenceTypes ? 'T?' : 'T';
+  w.line('/// <summary>');
+  w.line('/// Lets Dapper pass Npgsql-native values straight to the provider. Register once at startup:');
+  for (const t of types) w.line(`/// <c>SqlMapper.AddTypeHandler(new NpgsqlPassThroughHandler&lt;${t}&gt;());</c>`);
+  w.line('/// </summary>');
+  w.allman('public sealed class NpgsqlPassThroughHandler<T> : SqlMapper.TypeHandler<T>', () => {
+    w.line(`public override void SetValue(IDbDataParameter parameter, ${n} value) => parameter.Value = (object${o.nullableReferenceTypes ? '?' : ''})value ?? DBNull.Value;`);
+    w.blank();
+    w.line(`public override ${n} Parse(object value) => (T)value;`);
+  });
+}
+
 function dapperRepository(w: Writer, t: CgTable, typeName: string, members: Member[], ctx: Ctx) {
   const { d, o } = ctx;
   ctx.usings.add('System.Data');
   ctx.usings.add('Dapper');
-  const ph = d === 'plsql' ? (n: string) => `:${n}` : (n: string) => `@${n}`;
+  const casts = pgCasts(members, d, true);
+  const ph = d === 'plsql' ? (n: string) => `:${n}` : (n: string) => `@${n}${casts.get(n) ?? ''}`;
   const byCol = new Map(members.map((m) => [m.col, m]));
   const crud = crudSql(t, d, {
     placeholder: ph,
@@ -299,12 +418,12 @@ interface RoutineArg {
   optional: boolean;
 }
 
-function routineArgs(r: CgRoutine, ctx: Ctx): RoutineArg[] {
-  const scope = new NameScope(['db', 'ct', 'cmd', 'p', 'rows', 'value', 'context', 'oracle', 'returnValue']);
+function routineArgs(r: CgRoutine, ctx: Ctx, allRequired = ctx.routineNames?.get(r)?.allRequired ?? false): RoutineArg[] {
+  const scope = new NameScope(['db', 'ct', 'cmd', 'p', 'rows', 'value', 'context', 'oracle', 'returnValue', ...(ctx.d === 'pgsql' ? ['callArgs', 'sql', 'reader', 'row'] : [])]);
   const args = callParams(r)
     .filter((p) => p.direction === 'in' || p.direction === 'inout')
     .map((p) => {
-      const optional = p.hasDefault;
+      const optional = p.hasDefault && !allRequired;
       const type = paramType(ctx.d, p, ctx.o, optional || p.direction === 'inout');
       return { p, local: scope.take(localName(bindNameOf(p), ctx.o)), type, optional };
     });
@@ -334,12 +453,12 @@ function outsOf(r: CgRoutine, ctx: Ctx): OutInfo[] {
 
 function resultRowType(r: CgRoutine, ctx: Ctx): string | null {
   if (!r.resultColumns?.length) return null;
-  return typeNameOf(`${r.package ? r.package + '_' : ''}${r.name}_row`, ctx.o, false);
+  return typeNameOf(`${r.package ? r.package + '_' : ''}${typeBase(r, ctx)}_row`, ctx.o, false);
 }
 
 /** Result record of a routine with OUT parameters (and the T-SQL return value). */
 function resultRecord(r: CgRoutine, ctx: Ctx, rowsDecl: string | null, outs: OutInfo[]): { name: string; decl: string } {
-  const name = typeNameOf(`${r.package ? r.package + '_' : ''}${r.name}_result`, ctx.o, false);
+  const name = typeNameOf(`${r.package ? r.package + '_' : ''}${typeBase(r, ctx)}_result`, ctx.o, false);
   const fields: string[] = [];
   if (rowsDecl) fields.push(`${rowsDecl} Rows`);
   for (const out of outs) {
@@ -354,13 +473,17 @@ function dapperRoutine(w: Writer, r: CgRoutine, ctx: Ctx, receiver: string | nul
   const { d, o } = ctx;
   ctx.usings.add('System.Data');
   ctx.usings.add('Dapper');
+  if (d === 'pgsql') {
+    pgRoutine(w, r, ctx, receiver, decls, 'dapper');
+    return;
+  }
   const outs = outsOf(r, ctx);
   if (d === 'plsql' && outs.some((x) => x.cursor)) {
     adoRoutine(w, r, ctx, receiver, decls, true);
     return;
   }
   const args = routineArgs(r, ctx);
-  const fn = routineFnName(r.name, o);
+  const fn = routineFnName(fnBase(r, ctx), o);
   const sqlName = routineSqlName(r, d, qi);
   const rowType = resultRowType(r, ctx);
   const ret = returnParam(r);
@@ -428,9 +551,19 @@ function sizeArg(t: ResolvedType, output = false, dialect: Dialect = 'tsql'): st
 
 // ---------------- ADO.NET ----------------
 
-function addParam(w: Writer, ctx: Ctx, cmd: string, bind: string, value: string, nullable: boolean) {
+/** Npgsql writes a DateTimeOffset to timestamptz only with offset 0: convert it to UTC first. */
+function pgUtc(value: string, t: ResolvedType, nullable: boolean): string {
+  if (t.array || t.logical !== 'datetimeoffset' || !/^(timestamptz|timestamp with time zone)$/.test(t.base)) return value;
+  return `${value}${nullable ? '?' : ''}.ToUniversalTime()`;
+}
+
+function addParam(w: Writer, ctx: Ctx, cmd: string, bind: string, value: string, nullable: boolean, type?: ResolvedType) {
+  if (ctx.d === 'pgsql' && type) value = pgUtc(value, type, nullable);
   const v = nullable ? `(object?)${value} ?? DBNull.Value` : value;
-  if (ctx.d === 'plsql') w.line(`${cmd}.Parameters.Add(new OracleParameter(${dq(bind)}, ${v}));`);
+  if (ctx.d === 'pgsql' && type) {
+    ctx.usings.add('NpgsqlTypes');
+    w.line(`${cmd}.Parameters.Add(new NpgsqlParameter(${dq(bind)}, ${pgDbType(type)}) { Value = ${v} });`);
+  } else if (ctx.d === 'plsql') w.line(`${cmd}.Parameters.Add(new OracleParameter(${dq(bind)}, ${v}));`);
   else w.line(`${cmd}.Parameters.AddWithValue(${dq(PROVIDER[ctx.d].prefix + bind)}, ${v});`);
 }
 
@@ -440,7 +573,8 @@ function adoRepository(w: Writer, t: CgTable, typeName: string, members: Member[
   ctx.usings.add('System.Data');
   ctx.usings.add('System.Data.Common');
   ctx.usings.add(prov.ns);
-  const ph = d === 'plsql' ? (n: string) => `:${n}` : (n: string) => `@${n}`;
+  const casts = pgCasts(members, d, false);
+  const ph = d === 'plsql' ? (n: string) => `:${n}` : (n: string) => `@${n}${casts.get(n) ?? ''}`;
   const byCol = new Map(members.map((m) => [m.col, m]));
   const crud = crudSql(t, d, { placeholder: ph, bindName: (c) => bindOf(byCol.get(c)!), newline: SQL_NL });
   const pk = pkMembers(members, t.primaryKey);
@@ -457,10 +591,10 @@ function adoRepository(w: Writer, t: CgTable, typeName: string, members: Member[
   const bindEntity = (cols: CgColumn[]) => {
     for (const c of cols) {
       const m = byCol.get(c)!;
-      addParam(w, ctx, 'cmd', bindOf(m), `entity.${m.name}`, m.nullable || !isValueType(m.type, o));
+      addParam(w, ctx, 'cmd', bindOf(m), `entity.${m.name}`, m.nullable || !isValueType(m.type, o), m.type);
     }
   };
-  const bindKeys = () => pk.forEach((m) => addParam(w, ctx, 'cmd', bindOf(m), localName(m.col.name, o), false));
+  const bindKeys = () => pk.forEach((m) => addParam(w, ctx, 'cmd', bindOf(m), localName(m.col.name, o), false, m.type));
 
   if (o.include.interface) {
     w.allman(`public interface I${repo}`, () => {
@@ -558,12 +692,16 @@ function adoRepository(w: Writer, t: CgTable, typeName: string, members: Member[
  */
 function adoRoutine(w: Writer, r: CgRoutine, ctx: Ctx, receiver: string | null, decls: Writer, dapperReader = false) {
   const { d, o } = ctx;
+  if (d === 'pgsql') {
+    pgRoutine(w, r, ctx, receiver, decls, 'ado');
+    return;
+  }
   const prov = PROVIDER[d];
   ctx.usings.add('System.Data');
   ctx.usings.add(prov.ns);
   const args = routineArgs(r, ctx);
   const outs = outsOf(r, ctx);
-  const fn = routineFnName(r.name, o);
+  const fn = routineFnName(fnBase(r, ctx), o);
   const sqlName = routineSqlName(r, d, qi);
   const ret = returnParam(r);
   const castConn = receiver === null && dapperReader;
@@ -687,7 +825,228 @@ function newParam(d: Dialect, p: CgParam, t: ResolvedType, direction: string): s
     const size = t.logical === 'string' || t.logical === 'binary' ? `, Size = ${t.length ?? 32767}` : '';
     return `new OracleParameter { ParameterName = ${dq(bindNameOf(p))}, OracleDbTypeEx = ${providerDbType(d, t)}, Direction = ${direction}${size} }`;
   }
+  if (d === 'pgsql') return `new NpgsqlParameter(${dq(pgBind(p))}, ${providerDbType(d, t)}) { Direction = ${direction} }`;
   return `new SqliteParameter(${dq(p.name)}, ${providerDbType(d, t)}) { Direction = ${direction} }`;
+}
+
+// ---------------- PostgreSQL routines ----------------
+
+/** Bind name of a PostgreSQL routine parameter (`@p_qty` / "p_qty"). */
+function pgBind(p: CgParam): string {
+  return bindNameOf(p).replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+/**
+ * `RETURNS TABLE (...)` / `RETURNS SETOF x` (or a function with known result columns): the function is called in FROM
+ * and returns rows. Without result columns (SETOF record, an unknown shape) the rows are dynamic / a DataTable.
+ */
+function isSetReturning(r: CgRoutine): boolean {
+  const ret = returnParam(r);
+  if (r.kind !== 'func') return false;
+  return !!r.resultColumns?.length || (!!ret && /^(table\s*\(|setof\s)/i.test(ret.dbType.trim()));
+}
+
+/** PostgreSQL routine input: unnamed parameters get the bind names arg1, arg2, ... */
+function withPgParamNames(r: CgRoutine): CgRoutine {
+  let n = 0;
+  const params = r.params.map((p) => {
+    if (p.direction === 'return' || p.name) return p;
+    const named = { ...p, name: `arg${++n}` };
+    UNNAMED.add(named);
+    return named;
+  });
+  return n ? { ...r, params } : r;
+}
+
+/** Parameters pgRoutine0 named `argN` (unnamed in the database). */
+const UNNAMED = new WeakSet<CgParam>();
+
+interface PgCallItem {
+  /** Argument text in the call (`@p_qty`, `p_qty => @p_qty`, `NULL`). */
+  text: string;
+  arg: RoutineArg | null;
+  /** Optional argument: only passed when the C# value is not null, so the server default applies otherwise. */
+  conditional: boolean;
+}
+
+/**
+ * Arguments of a PostgreSQL call in declaration order. Procedure OUT parameters are passed as NULL; from the first
+ * optional argument on, named notation lets an omitted argument fall back to its default.
+ */
+function pgCallItems(r: CgRoutine, args: RoutineArg[], ctx: Ctx, textValues: boolean): PgCallItem[] {
+  const byParam = new Map(args.map((a) => [a.p, a]));
+  const items: PgCallItem[] = [];
+  let named = false;
+  for (const p of callParams(r)) {
+    const nameSql = qi(bindNameOf(p), 'pgsql');
+    if (p.direction === 'out') {
+      // Function OUT parameters are result columns; procedures take a NULL placeholder for them.
+      if (r.kind === 'proc') items.push({ text: named ? `${nameSql} => NULL` : 'NULL', arg: null, conditional: false });
+      continue;
+    }
+    const a = byParam.get(p);
+    if (!a) continue;
+    const t = resolveType('pgsql', p.dbType, { numberOneAsBool: ctx.o.numberOneAsBool });
+    const ph = `@${pgBind(p)}${pgCast(t, p.dbType, textValues)}`;
+    // Unnamed parameters cannot use named notation: they are always passed (NULL when omitted).
+    if (a.optional && !UNNAMED.has(p)) named = true;
+    items.push({ text: named ? `${nameSql} => ${ph}` : ph, arg: a, conditional: a.optional && named });
+  }
+  return items;
+}
+
+function pgRoutine(w: Writer, r: CgRoutine, ctx: Ctx, receiver: string | null, decls: Writer, mode: 'dapper' | 'ado') {
+  const { o } = ctx;
+  const d: Dialect = 'pgsql';
+  const dapper = mode === 'dapper';
+  ctx.usings.add('System.Data');
+  if (!dapper) {
+    ctx.usings.add('Npgsql');
+    ctx.usings.add('NpgsqlTypes');
+  }
+  const args = routineArgs(r, ctx);
+  // A refcursor OUT value is the cursor's name (FETCH it in the same transaction).
+  const outs = outsOf(r, ctx).map((x) => ({ ...x, cursor: false }));
+  const fn = routineFnName(fnBase(r, ctx), o);
+  const sqlName = routineSqlName(r, d, qi);
+  const ret = returnParam(r);
+  const setof = isSetReturning(r);
+  const isVoid = r.kind === 'func' && !!ret && /^void$/i.test(ret.dbType.trim());
+  const rowType = setof ? resultRowType(r, ctx) : null;
+  const rowMembers = rowType && r.resultColumns ? membersOf(r.resultColumns, d, o, rowType) : [];
+  const items = pgCallItems(r, args, ctx, dapper);
+  const conditional = items.some((i) => i.conditional);
+  const record = outs.length && !setof ? resultRecord(r, ctx, null, outs) : null;
+  if (record) decls.line(record.decl);
+
+  // SQL text: CALL for procedures, SELECT f(...) for scalar functions, SELECT ... FROM f(...) for rows.
+  let head: string;
+  if (r.kind === 'proc') head = 'CALL ';
+  else if (setof && rowMembers.length) {
+    const cols = rowMembers.map((m) => {
+      const col = qi(m.col.name, d);
+      return dapper && bindOf(m).toLowerCase() !== m.col.name.toLowerCase() ? `${col} AS ${quoteAlias(bindOf(m), d)}` : col;
+    });
+    head = `SELECT ${cols.join(', ')} FROM `;
+  } else if (setof || outs.length) head = 'SELECT * FROM ';
+  else head = 'SELECT ';
+  const fixedArgs = items.filter((i) => !i.conditional).map((i) => i.text).join(', ');
+  const sqlExpr = conditional
+    ? `$${dq(`${head}${sqlName}(`.replace(/[{}]/g, '$&$&') + '\u0001' + ')').replace('\u0001', '{string.Join(", ", callArgs)}')}`
+    : dq(`${head}${sqlName}(${fixedArgs})`);
+
+  const scalar = !record && !setof && r.kind === 'func' && !!ret && !isVoid ? resolveType(d, ret.dbType, { numberOneAsBool: o.numberOneAsBool }) : null;
+  let retType: string | null;
+  if (record) retType = record.name;
+  else if (setof) retType = rowType ? `IReadOnlyList<${rowType}>` : dapper ? 'IReadOnlyList<dynamic>' : 'DataTable';
+  else if (scalar) retType = csType(scalar, true, o);
+  else retType = dapper ? null : 'int';
+  const params = [receiver ? `this ${receiver} db` : null, argList(args), 'CancellationToken ct = default'].filter(Boolean).join(', ');
+  const sig = (isAsync: boolean) => `public ${receiver === null ? '' : 'static '}${isAsync ? 'async ' : ''}${retType ? `Task<${retType}>` : 'Task'} ${fn}(${params})`;
+  summary(w, `Calls ${objectLabel(r)}.`);
+
+  /** `var callArgs = ...` lines: the argument list of a call with optional arguments (ADO.NET adds their parameters too). */
+  const callArgLines = (param: (a: RoutineArg) => void) => {
+    const lead: PgCallItem[] = [];
+    let i = 0;
+    while (i < items.length && !items[i].conditional) lead.push(items[i++]);
+    w.line(lead.length ? `var callArgs = new List<string> { ${lead.map((x) => dq(x.text)).join(', ')} };` : 'var callArgs = new List<string>();');
+    for (const x of lead) if (x.arg) param(x.arg);
+    for (; i < items.length; i++) {
+      const x = items[i];
+      if (x.conditional && x.arg) {
+        if (dapper) w.line(`if (${x.arg.local} is not null) callArgs.Add(${dq(x.text)});`);
+        else {
+          w.allman(`if (${x.arg.local} is not null)`, () => {
+            w.line(`callArgs.Add(${dq(x.text)});`);
+            param(x.arg!);
+          });
+        }
+      } else {
+        w.line(`callArgs.Add(${dq(x.text)});`);
+        if (x.arg) param(x.arg);
+      }
+    }
+  };
+
+  if (dapper) {
+    const obj = args.length ? `new { ${args.map((a) => (a.local === pgBind(a.p) ? a.local : `${pgBind(a.p)} = ${a.local}`)).join(', ')} }` : 'null';
+    const def = `new CommandDefinition(${conditional ? 'sql' : sqlExpr}, ${obj}, cancellationToken: ct)`;
+    const pre = () => {
+      if (!conditional) return;
+      callArgLines(() => {});
+      w.line(`var sql = ${sqlExpr};`);
+    };
+    if (record) {
+      w.allman(sig(true), () => {
+        pre();
+        w.line('// OUT / INOUT values come back as one row.');
+        w.line(`var row = (IDictionary<string, object${o.nullableReferenceTypes ? '?' : ''}>)await db.QuerySingleAsync(${def});`);
+        w.line(`return new ${record.name}(${outs.map((x) => fromObject(`row[${dq(bindNameOf(x.p))}]`, x.type, true, o)).join(', ')});`);
+      });
+      return;
+    }
+    let expr: string;
+    let isAsync = false;
+    if (setof) {
+      expr = `(await db.${rowType ? `QueryAsync<${rowType}>` : 'QueryAsync'}(${def})).AsList()`;
+      isAsync = true;
+    } else if (scalar) expr = `db.ExecuteScalarAsync<${retType}>(${def})`;
+    else expr = `db.ExecuteAsync(${def})`;
+    if (!conditional) {
+      w.line(`${sig(isAsync)} =>`);
+      w.indent().line(`${expr};`).dedent();
+    } else {
+      w.allman(sig(isAsync), () => {
+        pre();
+        w.line(`return ${expr};`);
+      });
+    }
+    return;
+  }
+
+  // ADO.NET (also the EF Core flavor, on the context's NpgsqlConnection).
+  const addParam = (a: RoutineArg) => {
+    const t = resolveType(d, a.p.dbType, { numberOneAsBool: o.numberOneAsBool });
+    const nullable = a.optional || a.p.direction === 'inout';
+    const value = pgUtc(a.local, t, nullable);
+    const v = (a.optional && !conditionalArg(a)) || !isValueType(t, o) || a.p.direction === 'inout' ? `(object?)${value} ?? DBNull.Value` : value;
+    w.line(`cmd.Parameters.Add(new NpgsqlParameter(${dq(pgBind(a.p))}, ${pgDbType(t)}) { Value = ${v} });`);
+  };
+  const conditionalArg = (a: RoutineArg) => items.some((x) => x.arg === a && x.conditional);
+  w.allman(sig(true), () => {
+    w.line('await using var cmd = db.CreateCommand();');
+    if (conditional) {
+      callArgLines(addParam);
+      w.line(`cmd.CommandText = ${sqlExpr};`);
+    } else {
+      w.line(`cmd.CommandText = ${sqlExpr};`);
+      for (const x of items) if (x.arg) addParam(x.arg);
+    }
+    w.line('if (db.State != ConnectionState.Open) await db.OpenAsync(ct);');
+    if (record) {
+      w.line('// OUT / INOUT values come back as one row.');
+      w.line('await using var reader = await cmd.ExecuteReaderAsync(ct);');
+      w.line('await reader.ReadAsync(ct);');
+      w.line(`return new ${record.name}(${outs.map((x, i) => `reader.IsDBNull(${i}) ? null : ${readerGet(x.type, o, i, 'reader')}`).join(', ')});`);
+    } else if (setof) {
+      ctx.usings.add('System.Data.Common');
+      w.line('await using var reader = await cmd.ExecuteReaderAsync(ct);');
+      if (rowType) {
+        w.line(`var rows = new List<${rowType}>();`);
+        w.line(`while (await reader.ReadAsync(ct)) rows.Add(Map${rowType}(reader));`);
+      } else {
+        w.line('var rows = new DataTable();');
+        w.line('rows.Load(reader);');
+      }
+      w.line('return rows;');
+    } else if (scalar) {
+      w.line('var value = await cmd.ExecuteScalarAsync(ct);');
+      w.line(`return ${fromObject('value', scalar, true, o)};`);
+    } else {
+      w.line('return await cmd.ExecuteNonQueryAsync(ct);');
+    }
+  });
 }
 
 // ---------------- EF Core ----------------
@@ -714,15 +1073,28 @@ function efConfiguration(w: Writer, t: CgTable, typeName: string, members: Membe
         if (m.type.logical === 'string' && m.type.length) calls.push(`.HasMaxLength(${m.type.length})`);
         if (m.type.logical === 'binary' && m.type.length) calls.push(`.HasMaxLength(${m.type.length})`);
         if (m.type.logical === 'decimal' && m.type.precision) calls.push(`.HasPrecision(${m.type.precision}, ${m.type.scale ?? 0})`);
+        const storeType = d === 'pgsql' ? pgStoreType(m.type, m.col.dbType) : null;
+        if (storeType) calls.push(`.HasColumnType(${dq(storeType)})`);
         if (!m.nullable && !isValueType(m.type, o)) calls.push('.IsRequired()');
-        if (m.col.identity) calls.push('.ValueGeneratedOnAdd()');
+        if (m.col.identity && d === 'pgsql' && /^int(16|32|64)$/.test(m.type.logical)) calls.push('.UseIdentityByDefaultColumn()');
+        else if (m.col.identity) calls.push('.ValueGeneratedOnAdd()');
         else if (m.col.computed) calls.push('.ValueGeneratedOnAddOrUpdate()');
         // A server default: EF Core leaves the column out of the INSERT while the property holds its CLR default.
         else if (m.col.hasDefault && t.kind === 'table' && !pk.includes(m)) calls.push('.ValueGeneratedOnAdd()');
         if (m.type.logical === 'rowversion') calls.push('.IsRowVersion()');
         const cm = commentText(m.col.comment);
         if (cm && t.kind === 'table') calls.push(`.HasComment(${dq(cm)})`);
-        if (m.type.logical === 'object') {
+        const el = m.type.array && m.type.element ? m.type.element : m.type;
+        if (d === 'pgsql' && el.enumLabels?.length) {
+          w.line(`// ${m.col.name} is the PostgreSQL enum ${m.col.dbType} (${el.enumLabels.join(', ')}); a string is written as text, so map a C# enum with`);
+          w.line('// NpgsqlDataSourceBuilder.MapEnum<T>() + modelBuilder.HasPostgresEnum<T>() (or a value converter) before saving changes.');
+        }
+        if (d === 'pgsql' && el.logical === 'object') {
+          w.line(`// TODO: ${el.base} is read as object; map it to ${pgObjectHint(el.base)} (NpgsqlTypes) and remove the Ignore.`);
+          w.line(`builder.Ignore(e => e.${m.name});`);
+          continue;
+        }
+        if (m.type.logical === 'object' && d !== 'pgsql') {
           w.line(`// TODO: unmapped type ${m.col.dbType}; map it with a value converter or a provider type (e.g. NetTopologySuite).`);
           w.line(`builder.Ignore(e => e.${m.name});`);
           continue;
@@ -767,7 +1139,7 @@ function efRoutine(w: Writer, r: CgRoutine, ctx: Ctx, decls: Writer) {
   }
   ctx.usings.add('Microsoft.EntityFrameworkCore');
   const args = routineArgs(r, ctx);
-  const fn = routineFnName(r.name, o);
+  const fn = routineFnName(fnBase(r, ctx), o);
   const sqlName = routineSqlName(r, d, qi);
   const rowType = resultRowType(r, ctx);
   const ret = returnParam(r);
@@ -785,7 +1157,9 @@ function efRoutine(w: Writer, r: CgRoutine, ctx: Ctx, decls: Writer) {
     w.indent().line(`(await context.Database.SqlQuery<${csType(rt, true, o)}>($"SELECT ${sqlName}(${callArgs}) AS \\"Value\\"").ToListAsync(ct)).FirstOrDefault();`).dedent();
     return;
   }
-  const call = d === 'plsql' ? `BEGIN ${sqlName}(${named}); END;` : `EXEC ${sqlName}${named ? ' ' + named : ''}`;
+  // PostgreSQL: named notation, so the argument order of the C# method (required first) does not matter.
+  const pgArgs = d === 'pgsql' ? args.map((a) => `${qi(bindNameOf(a.p), d)} => {${a.local}}`).join(', ') : '';
+  const call = d === 'plsql' ? `BEGIN ${sqlName}(${named}); END;` : d === 'pgsql' ? `CALL ${sqlName}(${pgArgs})` : `EXEC ${sqlName}${named ? ' ' + named : ''}`;
   if (rowType) {
     w.line(`${sig(`List<${rowType}>`)} =>`);
     w.indent().line(`await context.Database.SqlQuery<${rowType}>($${dq(call)}).ToListAsync(ct);`).dedent();
@@ -896,7 +1270,9 @@ function routineUnit(objs: CgRoutine[], ctx: Ctx, flavor: string, container: { n
     else dapperRoutine(body, r, ctx, receiver, decls);
     // ADO wrappers with typed rows need a mapper.
     const rowType = resultRowType(r, ctx);
-    if (rowType && r.resultColumns && (flavor === 'adonet' || (flavor === 'efcore' && outsOf(r, ctx).length))) {
+    // EF Core wraps PostgreSQL functions with ADO.NET too (efRoutine).
+    const efAdo = flavor === 'efcore' && (outsOf(r, ctx).length > 0 || (d === 'pgsql' && r.kind === 'func'));
+    if (rowType && r.resultColumns && (flavor === 'adonet' || efAdo)) {
       ctx.usings.add('System.Data.Common');
       body.blank();
       mapperFor(body, rowType, membersOf(r.resultColumns, d, o, rowType), o);
@@ -925,22 +1301,91 @@ function routineUnit(objs: CgRoutine[], ctx: Ctx, flavor: string, container: { n
   return w.toString();
 }
 
+/**
+ * C# names for overloaded routines (PostgreSQL functions, Oracle package members): overloads keep the method name while
+ * their C# parameter types differ and get a numeric suffix otherwise; their row / result types are always numbered.
+ */
+function overloadNames(objects: CgObject[], ctx: Ctx): Map<CgRoutine, OverloadName> {
+  const out = new Map<CgRoutine, OverloadName>();
+  const groups = new Map<string, CgRoutine[]>();
+  const add = (r: CgRoutine) => {
+    const k = [r.schema, r.package, r.name].join('.').toLowerCase();
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  };
+  for (const x of objects) {
+    if (isRoutine(x)) add(x);
+    else if (x.kind === 'package') x.members.forEach(add);
+  }
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const required = ctx.d === 'pgsql' ? ambiguousOptionals(list, ctx) : new Set<CgRoutine>();
+    const signatures = new Set<string>();
+    list.forEach((r, i) => {
+      const sig = argTypes(routineArgs(r, ctx, required.has(r))).join(',');
+      const type = i === 0 ? r.name : `${r.name}_${i + 1}`;
+      out.set(r, { fn: signatures.has(sig) ? type : r.name, type, allRequired: required.has(r) });
+      signatures.add(sig);
+    });
+  }
+  return out;
+}
+
+interface OverloadName {
+  fn: string;
+  type: string;
+  /** Defaulted parameters stay required C# arguments: optional ones would make calls ambiguous between overloads. */
+  allRequired?: boolean;
+}
+
+const argTypes = (args: RoutineArg[]) => args.map((a) => a.type.text.replace(/\?$/, ''));
+
+/**
+ * PostgreSQL overloads whose optional C# arguments overlap another overload: `f(amount)` and `f(amount, rate = null)`
+ * both accept `F(1m)`, which C# rejects as ambiguous. Those overloads take every argument.
+ */
+function ambiguousOptionals(list: CgRoutine[], ctx: Ctx): Set<CgRoutine> {
+  const shapes = list.map((r) => {
+    const args = routineArgs(r, ctx, false);
+    return { r, types: argTypes(args), min: args.filter((a) => !a.optional).length };
+  });
+  const out = new Set<CgRoutine>();
+  for (const a of shapes) {
+    for (const b of shapes) {
+      if (a === b) continue;
+      // Some argument count both accept, with the same C# types up to it, and a defaulted argument involved.
+      const lo = Math.max(a.min, b.min);
+      const hi = Math.min(a.types.length, b.types.length);
+      for (let n = lo; n <= hi; n++) {
+        const optional = n < a.types.length || n < b.types.length;
+        if (optional && a.types.slice(0, n).join(',') === b.types.slice(0, n).join(',')) {
+          out.add(a.r);
+          out.add(b.r);
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export function generateCSharp(input: CgInput, o: CodegenOptions): GeneratedFile[] {
   const d = input.dialect;
   const flavor = o.flavor;
-  const tables = input.objects.filter(isTable);
+  const objects = d === 'pgsql' ? input.objects.map((x) => (isRoutine(x) ? withPgParamNames(x) : x)) : input.objects;
+  const tables = objects.filter(isTable);
   const typeNames = new Map<CgTable, string>();
   for (const t of tables) typeNames.set(t, typeNameOf(t.name, o));
   const units: Unit[] = [];
+  const routineNames = overloadNames(objects, { d, o, usings: new Set(), tables });
 
   const unitFor = (name: string, label: string, fn: (w: Writer, ctx: Ctx) => void) => {
-    const ctx: Ctx = { d, o, usings: new Set(), tables };
+    const ctx: Ctx = { d, o, usings: new Set(), tables, routineNames };
     const w = new Writer();
     fn(w, ctx);
     if (!w.isEmpty) units.push({ name, label, usings: ctx.usings, body: w.toString() });
   };
 
-  for (const obj of input.objects) {
+  for (const obj of objects) {
     if (isTable(obj)) {
       const typeName = typeNames.get(obj)!;
       const members = membersOf(obj.columns, d, o, typeName);
@@ -963,7 +1408,7 @@ export function generateCSharp(input: CgInput, o: CodegenOptions): GeneratedFile
   }
 
   if (flavor !== 'model' && o.include.procedures) {
-    const routines = input.objects.filter(isRoutine);
+    const routines = objects.filter(isRoutine);
     const bySchema = new Map<string, CgRoutine[]>();
     for (const r of routines) {
       const k = r.schema ?? '';
@@ -974,12 +1419,25 @@ export function generateCSharp(input: CgInput, o: CodegenOptions): GeneratedFile
       if (o.combined) {
         unitFor(name, `${schema || 'default'} routines`, (w, ctx) => w.append(routineUnit(list, ctx, flavor, { name, kind: 'static', label: `Procedures and functions of ${schema || 'the database'}.` })));
       } else {
-        for (const r of list) unitFor(`${name}.${pascal(r.name)}`, objectLabel(r), (w, ctx) => w.append(routineUnit([r], ctx, flavor, { name, kind: 'static', label: `Procedures and functions of ${schema || 'the database'}.` })));
+        for (const r of list) unitFor(`${name}.${pascal(typeBase(r, { d, o, usings: new Set(), tables, routineNames }))}`, objectLabel(r), (w, ctx) => w.append(routineUnit([r], ctx, flavor, { name, kind: 'static', label: `Procedures and functions of ${schema || 'the database'}.` })));
       }
     }
-    for (const pkg of input.objects.filter((x): x is CgPackage => x.kind === 'package')) {
+    for (const pkg of objects.filter((x): x is CgPackage => x.kind === 'package')) {
       const name = pascal(pkg.name);
       unitFor(name, objectLabel(pkg), (w, ctx) => w.append(routineUnit(pkg.members, ctx, flavor, { name, kind: 'package', label: `Wrappers for package ${objectLabel(pkg)}.` })));
+    }
+  }
+
+  // Dapper cannot bind IPAddress / PhysicalAddress parameters without a type handler.
+  if (d === 'pgsql' && flavor === 'dapper' && o.include.repository) {
+    const native = new Set<string>();
+    for (const t of tables) for (const m of membersOf(t.columns, d, o, typeNames.get(t)!)) if (/^(IPAddress|PhysicalAddress)$/.test(m.type.cs)) native.add(m.type.cs);
+    if (native.size) {
+      unitFor('NpgsqlPassThroughHandler', 'Dapper type handler', (w, ctx) => {
+        ctx.usings.add('System.Data');
+        ctx.usings.add('Dapper');
+        dapperPassThroughHandler(w, o, [...native].sort());
+      });
     }
   }
 
@@ -1002,6 +1460,9 @@ function assemble(units: Unit[], input: CgInput, o: CodegenOptions): GeneratedFi
     if (/\b(Task|ValueTask)\b/.test(text)) usings.add('System.Threading.Tasks');
     if (/\bCancellationToken\b/.test(text)) usings.add('System.Threading');
     if (/\.(FirstOrDefault|Select|Cast)\(|\.ToList\(\)/.test(text)) usings.add('System.Linq');
+    if (/\bIPAddress\b/.test(text)) usings.add('System.Net');
+    if (/\bPhysicalAddress\b/.test(text)) usings.add('System.Net.NetworkInformation');
+    if (/\bNpgsqlDbType\./.test(text)) usings.add('NpgsqlTypes');
     const sorted = [...usings].sort((a, b) => {
       const sa = a.startsWith('System') ? 0 : 1;
       const sb = b.startsWith('System') ? 0 : 1;

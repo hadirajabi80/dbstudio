@@ -7,7 +7,8 @@ import type { DialectSpec } from '../dialect/spec';
 
 /**
  * Lexer state between lines ('' = normal). Encoded as a string so Monaco can compare states cheaply.
- * `c<depth>` block comment, `s` single-quoted string, `q<closer>` Oracle q-quote.
+ * `c<depth>` block comment, `s` single-quoted string, `q<closer>` Oracle q-quote, `e` PostgreSQL E-string,
+ * `d<tag>` PostgreSQL dollar-quoted body (`d` alone for `$$`).
  */
 export type LexState = string;
 
@@ -30,13 +31,22 @@ const Q_CLOSERS: Record<string, string> = { '[': ']', '{': '}', '<': '>', '(': '
 
 const ORACLE_ATTRS = new Set(['TYPE', 'ROWTYPE', 'FOUND', 'NOTFOUND', 'ROWCOUNT', 'ISOPEN', 'BULK_ROWCOUNT', 'BULK_EXCEPTIONS']);
 
-const OPS3 = ['->>'];
+const OPS3: Record<string, string[]> = {
+  tsql: [],
+  plsql: [],
+  sqlite: ['->>'],
+  pgsql: ['->>', '#>>', '!~*', '||/', '<->', '<<=', '>>=', '-|-', '@@@'],
+};
 const OPS2_COMMON = ['<>', '!=', '<=', '>=', '||', '::'];
 const OPS2: Record<string, string[]> = {
   tsql: [...OPS2_COMMON, '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '!<', '!>', '<<', '>>'],
   plsql: [...OPS2_COMMON, ':=', '=>', '**', '..', '<<', '>>'],
   sqlite: [...OPS2_COMMON, '->', '==', '<<', '>>'],
+  pgsql: [...OPS2_COMMON, '->', '#>', '@>', '<@', '?|', '?&', '#-', '~*', '!~', '@@', '@?', '&&', '<<', '>>', '|/', ':=', '=>', '..', '&<', '&>'],
 };
+
+/** Dollar-quote tag characters (`$tag$`): letters, digits (not first) and `_`; never `$`. */
+const DOLLAR_TAG = /\$([\p{L}_][\p{L}\p{N}_]*)?\$/uy;
 
 export class Lexer {
   private readonly text: string;
@@ -44,7 +54,9 @@ export class Lexer {
   private readonly isTsql: boolean;
   private readonly isOracle: boolean;
   private readonly isSqlite: boolean;
+  private readonly isPg: boolean;
   private readonly ops2: string[];
+  private readonly ops3: string[];
   pos: number;
   line: number;
   lineStart: number;
@@ -59,7 +71,9 @@ export class Lexer {
     this.isTsql = spec.id === 'tsql';
     this.isOracle = spec.id === 'plsql';
     this.isSqlite = spec.id === 'sqlite';
+    this.isPg = spec.id === 'pgsql';
     this.ops2 = OPS2[spec.id];
+    this.ops3 = OPS3[spec.id];
     this.pos = pos;
     this.line = line;
     this.lineStart = lineStart;
@@ -130,7 +144,7 @@ export class Lexer {
   private scanBlockComment(p: number, depth: number): [number, number] {
     const t = this.text;
     const n = t.length;
-    const nested = this.isTsql;
+    const nested = this.isTsql || this.isPg;
     while (p < n) {
       const c = t.charCodeAt(p);
       if (c === 42 /* * */ && t.charCodeAt(p + 1) === 47 /* / */) {
@@ -158,6 +172,29 @@ export class Lexer {
       p++;
     }
     return [n, false];
+  }
+
+  /** PostgreSQL E'…' body after the quote: a backslash escapes the next character, `''` is a quote. */
+  private scanEString(p: number): [number, boolean] {
+    const t = this.text;
+    const n = t.length;
+    while (p < n) {
+      const c = t.charCodeAt(p);
+      if (c === 92 /* \ */) { p += 2; continue; }
+      if (c === 39) {
+        if (t.charCodeAt(p + 1) === 39) { p += 2; continue; }
+        return [p + 1, true];
+      }
+      p++;
+    }
+    return [n, false];
+  }
+
+  /** PostgreSQL dollar-quoted body after the opening `$tag$`: ends after the matching `$tag$`. */
+  private scanDollar(p: number, tag: string): [number, boolean] {
+    const closer = '$' + tag + '$';
+    const i = this.text.indexOf(closer, p);
+    return i < 0 ? [this.text.length, false] : [i + closer.length, true];
   }
 
   /** Oracle q'X...X' body after the delimiter char. */
@@ -206,6 +243,110 @@ export class Lexer {
       this.endState = ok ? '' : state;
       return this.multi('string', start, end, !ok);
     }
+    if (state === 'e') {
+      const [end, ok] = this.scanEString(start);
+      this.endState = ok ? '' : 'e';
+      return this.multi('string', start, end, !ok);
+    }
+    if (state[0] === 'd') {
+      const [end, ok] = this.scanDollar(start, state.slice(1));
+      this.endState = ok ? '' : state;
+      return this.multi('string', start, end, !ok);
+    }
+    return null;
+  }
+
+  /** An operator ending at `end` would swallow the start of a comment (`||` + block comment, `#-` + `-`). */
+  private opEndsInComment(end: number): boolean {
+    const a = this.text.charCodeAt(end - 1), b = this.text.charCodeAt(end);
+    return (a === 47 && b === 42) || (a === 45 && b === 45);
+  }
+
+  /**
+   * PostgreSQL-only tokens: psql meta-command lines, E'…' / U&'…' / B'…' / X'…' / N'…' strings, U&"…" identifiers,
+   * `$1` parameters, `$tag$…$tag$` dollar quoting, numbers (0x1F, 0o17, 0b101, 1_000), `:name` / `@name` parameters.
+   * Returns null when the character starts an ordinary token.
+   */
+  private nextPg(start: number, c: number, c1: number, wasLineStart: boolean): Token | null {
+    const t = this.text;
+    const n = t.length;
+    if (c === 92 /* \ */ && wasLineStart) {
+      let e = t.indexOf('\n', start);
+      if (e < 0) e = n;
+      if (e > start && t.charCodeAt(e - 1) === CH_CR) e--;
+      this.pos = e;
+      return this.make('meta', start, e);
+    }
+    if (c1 === 39) {
+      const lc = c | 0x20;
+      if (lc === 101 /* e */) {
+        const [end, ok] = this.scanEString(start + 2);
+        this.endState = ok ? '' : 'e';
+        return this.multi('string', start, end, !ok);
+      }
+      if (lc === 98 /* b */ || lc === 120 /* x */ || lc === 110 /* n */) {
+        const [end, ok] = this.scanString(start + 2, 39);
+        this.endState = ok ? '' : 's';
+        return this.multi('string', start, end, !ok);
+      }
+    }
+    if ((c === 85 || c === 117) && c1 === 38 /* & */) {
+      const c2 = t.charCodeAt(start + 2);
+      if (c2 === 39) {
+        const [end, ok] = this.scanString(start + 3, 39);
+        this.endState = ok ? '' : 's';
+        return this.multi('string', start, end, !ok);
+      }
+      if (c2 === 34) {
+        const [end, ok] = this.scanQuotedIdent(start + 3, 34, true);
+        this.pos = end;
+        return this.make('quotedIdent', start, end, undefined, !ok);
+      }
+    }
+    if (c === 36 /* $ */) {
+      if (isDigit(c1)) {
+        let p = start + 1;
+        while (p < n && isDigit(t.charCodeAt(p))) p++;
+        this.pos = p;
+        return this.make('param', start, p);
+      }
+      DOLLAR_TAG.lastIndex = start;
+      const m = DOLLAR_TAG.exec(t);
+      if (m) {
+        const tag = m[1] ?? '';
+        const [end, ok] = this.scanDollar(start + m[0].length, tag);
+        this.endState = ok ? '' : 'd' + tag;
+        return this.multi('string', start, end, !ok);
+      }
+      return null;
+    }
+    if (isDigit(c) || (c === 46 && isDigit(c1))) {
+      let p = start;
+      const radix = c === 48 ? (c1 | 0x20) : 0;
+      const digitRe = radix === 120 ? /[0-9a-fA-F]/ : radix === 111 ? /[0-7]/ : radix === 98 ? /[01]/ : null;
+      if (digitRe && digitRe.test(t[start + 2] ?? '')) {
+        p += 2;
+        while (p < n && (digitRe.test(t[p]) || (t[p] === '_' && digitRe.test(t[p + 1] ?? '')))) p++;
+      } else {
+        const digits = () => { while (p < n && (isDigit(t.charCodeAt(p)) || (t[p] === '_' && isDigit(t.charCodeAt(p + 1))))) p++; };
+        digits();
+        if (t.charCodeAt(p) === 46 && t.charCodeAt(p + 1) !== 46) { p++; digits(); }
+        const e = t.charCodeAt(p);
+        if ((e === 101 || e === 69) && (isDigit(t.charCodeAt(p + 1)) || ((t[p + 1] === '+' || t[p + 1] === '-') && isDigit(t.charCodeAt(p + 2))))) {
+          p += 2;
+          digits();
+        }
+      }
+      this.pos = p;
+      return this.make('number', start, p);
+    }
+    if ((c === 58 /* : */ && t.charCodeAt(start - 1) !== 58) || c === 64 /* @ */) {
+      if (!this.isIdentStart(c1)) return null;
+      let p = start + 1;
+      while (p < n && this.isIdentPart(t.charCodeAt(p)) && t.charCodeAt(p) !== 36) p++;
+      this.pos = p;
+      return this.make('param', start, p);
+    }
     return null;
   }
 
@@ -252,6 +393,10 @@ export class Lexer {
       const [end, ok] = this.scanString(start + 1, 39);
       this.endState = ok ? '' : 's';
       return this.multi('string', start, end, !ok);
+    }
+    if (this.isPg) {
+      const pg = this.nextPg(start, c, c1, wasLineStart);
+      if (pg) return pg;
     }
     // prefixed strings: N'..', Oracle q'..' / nq'..', SQLite X'..'
     if (c1 === 39 || (this.isOracle && (c === 110 || c === 78) && (c1 === 113 || c1 === 81) && t.charCodeAt(start + 2) === 39)) {
@@ -403,12 +548,12 @@ export class Lexer {
     }
     // operators
     const three = t.substr(start, 3);
-    if (this.isSqlite && OPS3.includes(three)) {
+    if (this.ops3.length && this.ops3.includes(three) && !(this.isPg && this.opEndsInComment(start + 3))) {
       this.pos = start + 3;
       return this.make('op', start, start + 3);
     }
     const two = t.substr(start, 2);
-    if (this.ops2.includes(two)) {
+    if (this.ops2.includes(two) && !(this.isPg && this.opEndsInComment(start + 2))) {
       this.pos = start + 2;
       return this.make('op', start, start + 2);
     }

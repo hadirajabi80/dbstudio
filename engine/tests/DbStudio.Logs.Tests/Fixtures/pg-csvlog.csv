@@ -1,0 +1,3 @@
+2026-10-18 13:02:11.213 UTC,"app","shop",4321,"10.0.0.5:5000",6712f0c2.10e1,3,"SELECT",2026-10-18 13:00:00 UTC,3/7,0,ERROR,42P01,"relation ""x"" does not exist",,,,,,"select *
+from x",15,,"psql","client backend",,0
+2026-10-18 13:03:00.000 UTC,,,1,,6712f0c2.1,1,,2026-10-18 13:00:00 UTC,,0,LOG,00000,"checkpoint starting: time",,,,,,,,,"","checkpointer",,0

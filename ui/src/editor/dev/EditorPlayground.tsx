@@ -8,12 +8,13 @@ import type { SqlEditorHandle } from '../SqlEditor.types';
 import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
 import plsqlShop from '../../intel/__tests__/fixtures/shop-plsql.json';
 import sqliteShop from '../../intel/__tests__/fixtures/shop-sqlite.json';
+import pgsqlShop from '../../intel/__tests__/fixtures/shop-pgsql.json';
 
 const CATALOGS: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
-  pgsql: sqliteShop as unknown as CatalogSnapshot, // M2-0 placeholder: PG-B loads shop-pgsql.json
+  pgsql: pgsqlShop as unknown as CatalogSnapshot,
 };
 
 const SAMPLES: Record<Dialect, string> = {
@@ -55,9 +56,28 @@ LIMIT 20;
 
 SELECT * FROM archive.orders_2020;
 `,
-  // M2-0 placeholder: PG-B adds the PostgreSQL sample.
-  pgsql: `-- PostgreSQL playground
-SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id LIMIT 20;
+  pgsql: `-- PostgreSQL playground: '.', '::' types, EXCLUDED., joins across sales, hover/F12
+SELECT c.name, o.total::numeric(10, 2), o.status
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE o.status = 'paid'::order_status
+LIMIT 20;
+
+INSERT INTO customers AS c (id, name)
+VALUES (1, 'x')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.
+RETURNING *;
+
+WITH moved AS (DELETE FROM orders WHERE id = 1 RETURNING *)
+SELECT  FROM moved;
+
+SELECT * FROM orders o JOIN sales.invoices i ON 
+
+DO $$
+BEGIN
+  RAISE NOTICE 'hello; world';
+END
+$$;
 `,
 };
 
@@ -103,7 +123,7 @@ export function EditorPlayground() {
             size="sm"
             style={{ width: 'auto' }}
             value={dialect}
-            options={[{ value: 'tsql', label: 'SQL Server (T-SQL)' }, { value: 'plsql', label: 'Oracle (PL/SQL)' }, { value: 'sqlite', label: 'SQLite' }]}
+            options={[{ value: 'tsql', label: 'SQL Server (T-SQL)' }, { value: 'plsql', label: 'Oracle (PL/SQL)' }, { value: 'sqlite', label: 'SQLite' }, { value: 'pgsql', label: 'PostgreSQL' }]}
             onChange={(d) => { setDialect(d); setTexts({ a: SAMPLES[d], b: 'SELECT * FROM ' }); }}
           />
         </label>

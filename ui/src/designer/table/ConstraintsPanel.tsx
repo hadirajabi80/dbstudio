@@ -160,6 +160,11 @@ export function KeysPanel({ table, dialect, features, readOnly, onChange }: Prop
               <input className="input xs mono" style={{ width: 220 }} value={x.filter ?? ''} placeholder="filter (optional)" disabled={readOnly} onChange={(e) => onChange(updateIndex(table, i, { filter: e.target.value || null }))} />
             </label>
           )}
+          {dialect === 'pgsql' && (
+            <span className="dz-note muted" title="The index model has no access method yet: the designer scripts USING btree. For GIN, GiST, hash or BRIN, edit the generated script.">
+              USING btree
+            </span>
+          )}
           <span className="dz-spacer" />
           <button type="button" className="icon-btn" aria-label={`Remove index ${x.name}`} title="Remove" disabled={readOnly} onClick={() => onChange(removeIndex(table, i))}>
             <Trash2 size={14} />
@@ -307,7 +312,7 @@ export function ChecksPanel({ table, dialect, readOnly, onChange }: Props) {
               className="input xs mono"
               style={{ flex: 1, width: 'auto' }}
               value={c.expression}
-              placeholder={dialect === 'plsql' ? 'AGE >= 0' : 'Age >= 0'}
+              placeholder={dialect === 'plsql' ? 'AGE >= 0' : dialect === 'pgsql' ? 'age >= 0' : 'Age >= 0'}
               disabled={readOnly}
               onChange={(e) => onChange(updateCheck(table, i, { expression: e.target.value }))}
             />

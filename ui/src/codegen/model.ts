@@ -15,6 +15,10 @@ export interface CgColumn {
   comment?: string | null;
   /** Wire kind (query columns from ColumnInfo); used when the type text is not in the mapping table. */
   kind?: ColumnKind;
+  /** PostgreSQL: labels of the column's enum type (catalog `type` object), in declaration order. */
+  enumLabels?: string[];
+  /** PostgreSQL: base type of the column's domain type (`email_address` → `text`). */
+  domainBase?: string;
 }
 
 export interface CgForeignKey {

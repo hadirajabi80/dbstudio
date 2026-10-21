@@ -124,7 +124,23 @@ export function planToText(plan: ExecPlanPayload): string {
 }
 
 export function dialectLabel(d: ExecPlanPayload['dialect']): string {
-  return d === 'tsql' ? 'SQL Server' : d === 'plsql' ? 'Oracle' : 'SQLite';
+  return d === 'tsql' ? 'SQL Server' : d === 'plsql' ? 'Oracle' : d === 'pgsql' ? 'PostgreSQL' : 'SQLite';
+}
+
+/** Indents an EXPLAIN (FORMAT JSON) document for the Raw tab; text that is not JSON is returned as is. */
+export function prettyJson(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json), null, 2);
+  } catch {
+    return json;
+  }
+}
+
+/** Raw tab text: ShowPlan XML and PostgreSQL JSON are indented, text plans (Oracle, SQLite) shown as they are. */
+export function rawText(plan: Pick<ExecPlanPayload, 'raw' | 'rawFormat'>): string {
+  if (plan.rawFormat === 'xml') return prettyXml(plan.raw);
+  if (plan.rawFormat === 'json') return prettyJson(plan.raw);
+  return plan.raw;
 }
 
 /** Indents ShowPlan XML for the Raw tab (one element per line). */

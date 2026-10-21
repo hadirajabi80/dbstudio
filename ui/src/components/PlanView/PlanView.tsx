@@ -4,7 +4,7 @@
 import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, FileText, Flame, ListTree, RotateCw } from 'lucide-react';
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ExecPlanPayload } from '../../api/types';
-import { dialectLabel, formatCost, formatPct, formatRows, planRows, planSummary, planToText, prettyXml, visibleRows, type PlanRow } from './model';
+import { dialectLabel, formatCost, formatPct, formatRows, planRows, planSummary, planToText, rawText, visibleRows, type PlanRow } from './model';
 import './PlanView.css';
 import { pluralize } from '../common/text';
 
@@ -75,7 +75,7 @@ export function PlanView({ plan, status = plan ? 'done' : 'running', error, sql,
   };
 
   const maxPct = Math.max(1, ...rows.map((r) => r.pct ?? 0));
-  const raw = plan ? (plan.rawFormat === 'xml' ? prettyXml(plan.raw) : plan.raw) : '';
+  const raw = plan ? rawText(plan) : '';
 
   return (
     <div className="pv" data-command-scope="plan">
@@ -192,7 +192,7 @@ export function PlanView({ plan, status = plan ? 'done' : 'running', error, sql,
         </div>
       )}
 
-      {plan && tab === 'raw' && <pre className="pv-raw" tabIndex={0} aria-label="Raw plan">{raw}</pre>}
+      {plan && tab === 'raw' && <pre className="pv-raw" tabIndex={0} aria-label="Raw plan" data-format={plan.rawFormat}>{raw}</pre>}
     </div>
   );
 }

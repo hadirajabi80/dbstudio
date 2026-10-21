@@ -57,6 +57,7 @@ class Parser {
   readonly tsql: boolean;
   readonly ora: boolean;
   readonly lite: boolean;
+  readonly pg: boolean;
 
   constructor(tokens: Token[], spec: DialectSpec, start: number, end: number) {
     this.t = tokens;
@@ -65,6 +66,7 @@ class Parser {
     this.tsql = spec.id === 'tsql';
     this.ora = spec.id === 'plsql';
     this.lite = spec.id === 'sqlite';
+    this.pg = spec.id === 'pgsql';
     const root = this.mkScope('other', null, null, start);
     this.m = { root, scopes: [root], tokens, chains: [], created: [], declared: [], start, end };
   }
@@ -150,7 +152,7 @@ class Parser {
       case 'GROUP': case 'ORDER': return nu === 'BY' ? u : null;
       case 'CONNECT': return nu === 'BY' ? u : null;
       case 'START': return nu === 'WITH' ? u : null;
-      case 'FOR': return nu === 'UPDATE' || nu === 'JSON' || nu === 'XML' || nu === 'BROWSE' || nu === 'READ' || nu === 'SYSTEM_TIME' ? u : null;
+      case 'FOR': return nu === 'UPDATE' || nu === 'JSON' || nu === 'XML' || nu === 'BROWSE' || nu === 'READ' || nu === 'SYSTEM_TIME' || (this.pg && (nu === 'SHARE' || nu === 'NO' || nu === 'KEY')) ? u : null;
       case 'OPTION': return this.tsql && this.t[k + 1]?.text === '(' ? u : null;
       case 'LIMIT': case 'WINDOW': return this.lite || t.kind === 'keyword' ? u : null;
       case 'OFFSET': {
@@ -219,6 +221,21 @@ class Parser {
       }
       if (tok.kind === 'punct' && tok.text === '(') {
         const nx = this.t[k + 1];
+        const pv = this.t[k - 1];
+        if (this.pg && nx && pv && isWord(pv) && ((pv.upper === 'FILTER' && isWord(nx) && nx.upper === 'WHERE') || (pv.upper === 'GROUP' && this.t[k - 2]?.upper === 'WITHIN' && isWord(nx) && nx.upper === 'ORDER' && this.t[k + 2]?.upper === 'BY'))) {
+          // aggregate FILTER (WHERE …) / WITHIN GROUP (ORDER BY …): a condition / sort list over the same sources
+          const resume = [...s.markers].reverse().find((m) => m.pos <= tok.start);
+          const isFilter = nx.upper === 'WHERE';
+          this.i += isFilter ? 2 : 3;
+          this.mark(s, isFilter ? 'where' : 'orderBy', this.t[this.i - 1].end);
+          this.scanExpr(s, () => false);
+          if (this.atP(')')) {
+            const close = this.t[this.i];
+            this.i++;
+            if (resume) this.mark(s, resume.clause, close.end, resume.data);
+          }
+          continue;
+        }
         if (nx && isWord(nx) && (nx.upper === 'SELECT' || (nx.upper === 'WITH' && isNameTok(this.t[k + 2])))) {
           const prev = this.t[k - 1];
           const kind: ScopeKind = prev && isWord(prev) && prev.upper === 'EXISTS' ? 'exists' : 'subquery';
@@ -311,7 +328,7 @@ class Parser {
     }
     switch (u) {
       case 'WITH': case 'SELECT': case 'VALUES': {
-        if (u === 'VALUES' && !this.lite) break;
+        if (u === 'VALUES' && !this.lite && !this.pg) break;
         this.parseQuery(c, 'select', null);
         return;
       }
@@ -322,7 +339,10 @@ class Parser {
       case 'MERGE': this.parseMerge(this.mkScope('merge', c, null, t.start)); return;
       case 'CREATE': this.parseCreate(c); return;
       case 'ALTER': this.parseAlter(c); return;
-      case 'DROP': case 'TRUNCATE': this.parseDropLike(c); return;
+      case 'DROP': case 'TRUNCATE':
+        if (this.pg && u === 'TRUNCATE') break;
+        this.parseDropLike(c);
+        return;
       case 'EXEC': case 'EXECUTE': case 'CALL':
         if (this.ora && u === 'EXECUTE' && this.at('IMMEDIATE', 1)) break;
         this.parseExec(c);
@@ -373,6 +393,7 @@ class Parser {
         if (this.tsql) { this.parseTsqlSet(c); return; }
         break;
     }
+    if (this.pg && this.parsePgStatement(c, u)) return;
     this.parseExprStatement(c);
   }
 
@@ -411,6 +432,14 @@ class Parser {
   parseQuery(parent: Scope, kind: ScopeKind, outer: Scope | null): Scope {
     const st = this.peek();
     const s = this.mkScope(kind, parent, outer, st ? st.start : this.prevEnd());
+    if (this.pg && kind === 'cte') {
+      // data-modifying CTE: WITH moved AS (DELETE … RETURNING *) — its output columns are the RETURNING list
+      const u0 = this.u();
+      if (u0 === 'INSERT') { this.parseInsert(s); return s; }
+      if (u0 === 'UPDATE') { this.parseUpdate(s); return s; }
+      if (u0 === 'DELETE') { this.parseDelete(s); return s; }
+      if (u0 === 'MERGE') { this.parseMerge(s); return s; }
+    }
     if (this.at('WITH')) {
       this.parseWith(s);
       const u = this.u();
@@ -485,6 +514,12 @@ class Parser {
       this.mark(s, 'select', sel.end);
       this.i++;
       this.skipSelectModifiers();
+      if (this.pg && this.at('ON') && this.atP('(', 1) && this.t[this.i - 1]?.upper === 'DISTINCT') {
+        // DISTINCT ON (exprs): an expression list over the query's sources, not a projection
+        this.i += 2;
+        this.scanExpr(s, () => false);
+        if (this.atP(')')) { this.mark(s, 'select', this.t[this.i].end); this.i++; }
+      }
       this.parseSelectList(s);
     } else if (this.at('VALUES')) {
       this.parseValuesRows(s);
@@ -695,6 +730,18 @@ class Parser {
         case 'RETURNING': {
           this.mark(s, 'returning', tok.end);
           this.i++;
+          if (this.pg) {
+            // RETURNING items are the statement's output columns (WITH x AS (DELETE … RETURNING *) SELECT … FROM x)
+            const stop = (j: number) => (this.t[j].kind === 'punct' && this.t[j].text === ',') || this.clauseAt(j) === 'INTO';
+            while (!this.eof()) {
+              const a = this.i;
+              this.scanExpr(s, stop);
+              if (this.i > a) s.projections.push(this.projection(a, this.i));
+              if (this.atP(',')) { this.i++; continue; }
+              break;
+            }
+            continue;
+          }
           this.scanExpr(s, (j) => this.clauseAt(j) === 'INTO');
           if (this.at('INTO')) { this.i++; this.mark(s, 'into', this.prevEnd(), { selectInto: true }); this.scanExpr(s, () => false); }
           continue;
@@ -801,9 +848,12 @@ class Parser {
         if (this.atP(')')) this.i++;
         return null;
       }
-    } else if (isWord(tok) && (tok.upper === 'LATERAL') && this.atP('(', 1)) {
+    } else if (isWord(tok) && (tok.upper === 'LATERAL') && (this.atP('(', 1) || (this.pg && isNameTok(this.peek(1))))) {
       this.i++;
       return this.parseTableSource(s, true, target);
+    } else if (this.pg && isWord(tok) && tok.upper === 'ONLY' && isNameTok(this.peek(1))) {
+      this.i++;
+      return this.parseTableSource(s, lateral, target);
     } else if (isNameTok(tok) || (tok.kind === 'param' && this.tsql)) {
       if (isWord(tok) && (this.clauseAt(this.i) !== null || this.joinAt() !== null)) return null;
       if (isWord(tok) && tok.kind === 'keyword' && !['LEFT', 'RIGHT', 'TABLE'].includes(tok.upper) && this.spec.statementStarts.has(tok.upper)) return null;
@@ -828,6 +878,7 @@ class Parser {
         this.scanExpr(s, () => false);
         ref.argsRange = [a, this.curStart()];
         if (this.atP(')')) this.i++;
+        if (this.pg && this.at('WITH') && this.at('ORDINALITY', 1)) { this.i += 2; ref.withOrdinality = true; }
       }
     } else {
       return null;
@@ -851,11 +902,17 @@ class Parser {
       this.i++;
     }
     if (this.atP('(') && (ref.kind === 'subquery' || ref.kind === 'values' || ref.kind === 'function') && ref.alias) {
+      // alias column list: `AS g(n)`, or a column definition list `AS x(a int, b numeric(10, 2))` (first name per item)
       const cols: string[] = [];
       this.i++;
-      while (!this.eof() && !this.atP(')')) {
+      let depth = 0;
+      let expectName = true;
+      while (!this.eof() && !(depth === 0 && this.atP(')'))) {
         const ct = this.t[this.i];
-        if (isNameTok(ct)) cols.push(namePart(ct).text);
+        if (ct.kind === 'punct' && ct.text === '(') depth++;
+        else if (ct.kind === 'punct' && ct.text === ')') depth--;
+        else if (depth === 0 && ct.kind === 'punct' && ct.text === ',') expectName = true;
+        else if (expectName && depth === 0 && isNameTok(ct)) { cols.push(namePart(ct).text); expectName = false; }
         this.i++;
       }
       if (this.atP(')')) this.i++;
@@ -922,7 +979,7 @@ class Parser {
         alias: null, aliasRange: null, nameRange: [parts[0].range[0], last.range[1]], range: [parts[0].range[0], last.range[1]], isTarget: true,
       };
       if (this.tsql && this.at('WITH') && this.atP('(', 1)) { this.i++; this.skipParens(); }
-      if ((this.lite || this.ora) && (this.at('AS') || (this.ora && this.isAliasCandidate(this.peek()) && !this.atP('(')))) {
+      if ((this.lite || this.ora || this.pg) && (this.at('AS') || (this.ora && this.isAliasCandidate(this.peek()) && !this.atP('(')))) {
         if (this.at('AS')) this.i++;
         const at = this.peek();
         if (isNameTok(at)) { ref.alias = namePart(at!).text; ref.aliasRange = [at!.start, at!.end]; this.i++; }
@@ -943,6 +1000,11 @@ class Parser {
       s.insertColumns = cols;
       if (this.atP(')')) { this.mark(s, 'unknown', this.t[this.i].end); this.i++; }
     }
+    if (this.pg && this.at('OVERRIDING')) {
+      this.i++;
+      while (this.at('SYSTEM') || this.at('USER') || this.at('VALUE')) this.i++;
+      this.mark(s, 'unknown', this.prevEnd());
+    }
     if (this.tsql && this.at('OUTPUT')) {
       this.mark(s, 'unknown', this.t[this.i].end);
       this.i++;
@@ -962,13 +1024,28 @@ class Parser {
     while (!this.eof() && !this.atP(';')) {
       if (this.at('ON') && this.at('CONFLICT', 1)) {
         this.i += 2;
-        if (this.atP('(')) { this.mark(s, 'insertColumns', this.t[this.i].end); this.skipParens(); }
-        if (this.at('WHERE')) { this.i++; this.scanExpr(s, (k) => this.t[k].upper === 'DO'); }
-        if (this.at('DO')) this.i++;
-        if (this.at('NOTHING')) { this.i++; continue; }
+        if (this.pg) this.mark(s, 'unknown', this.prevEnd(), { conflict: 'target' });
+        if (this.atP('(')) {
+          this.mark(s, 'insertColumns', this.t[this.i].end, this.pg ? { conflict: 'columns' } : undefined);
+          this.skipParens();
+          if (this.pg && this.t[this.i - 1]?.text === ')' && this.t[this.i - 1].kind === 'punct') this.mark(s, 'unknown', this.prevEnd(), { conflict: 'action' });
+        } else if (this.pg && this.at('ON') && this.at('CONSTRAINT', 1)) {
+          this.i += 2;
+          if (isNameTok(this.peek())) this.i++;
+          this.mark(s, 'unknown', this.prevEnd(), { conflict: 'action' });
+        }
+        if (this.at('WHERE')) {
+          this.i++;
+          if (this.pg && s.targetTable && !s.sources.includes(s.targetTable)) s.sources.push(s.targetTable);
+          this.mark(s, 'where', this.prevEnd());
+          this.scanExpr(s, (k) => this.t[k].upper === 'DO');
+          if (this.pg) this.mark(s, 'unknown', this.prevEnd(), { conflict: 'action' });
+        }
+        if (this.at('DO')) { this.i++; if (this.pg) this.mark(s, 'unknown', this.prevEnd(), { conflict: 'do' }); }
+        if (this.at('NOTHING')) { this.i++; if (this.pg) this.mark(s, 'unknown', this.prevEnd()); continue; }
         if (this.at('UPDATE') && this.at('SET', 1)) {
           this.i++;
-          if (s.targetTable) s.sources.push(s.targetTable);
+          if (s.targetTable && !s.sources.includes(s.targetTable)) s.sources.push(s.targetTable);
           this.parseSetClause(s);
           if (this.at('WHERE')) { s.hasWhere = true; this.mark(s, 'where', this.t[this.i].end); this.i++; this.scanExpr(s, (k) => this.clauseAt(k) === 'RETURNING'); }
         }
@@ -1045,6 +1122,13 @@ class Parser {
       if (this.at('INTO')) { this.i++; this.parseName(true); if (this.atP('(')) this.skipParens(); }
     }
     if (this.at('FROM')) { s.hasFrom = true; this.parseFromList(s); }
+    if (this.pg && this.at('USING')) {
+      // DELETE FROM t USING u, v WHERE …: the USING sources join the scope
+      s.hasFrom = true;
+      this.mark(s, 'from', this.t[this.i].end);
+      this.i++;
+      this.parseSourceList(s);
+    }
     if (this.at('WHERE')) {
       s.hasWhere = true;
       this.mark(s, 'where', this.t[this.i].end);
@@ -1369,22 +1453,43 @@ class Parser {
         return;
       }
       case 'INDEX': {
+        if (this.pg && this.at('CONCURRENTLY')) this.i++;
         if (this.at('IF') && this.at('NOT', 1)) this.i += 3;
         this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'newName' } });
-        this.parseName();
+        if (!(this.pg && this.at('ON'))) this.parseName();
         if (this.at('ON')) {
           this.i++;
+          if (this.pg && this.at('ONLY')) this.i++;
           this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
           const parts = this.parseName();
           const ref: TableRef | undefined = parts.length ? { kind: 'table', parts, alias: null, aliasRange: null, nameRange: [parts[0].range[0], parts[parts.length - 1].range[1]], range: [parts[0].range[0], parts[parts.length - 1].range[1]] } : undefined;
+          if (this.pg && this.at('USING') && isNameTok(this.peek(1))) this.i += 2;
           if (this.atP('(') && ref) {
             this.mark(c, 'ddl', this.t[this.i].end, { ddl: { what: 'columnOf', table: ref } });
             this.skipParens();
+          }
+          if (this.pg && ref) {
+            // INCLUDE (cols) / WITH (storage) / WHERE predicate over the table's columns
+            while (!this.eof() && !this.atP(';')) {
+              if (this.at('INCLUDE') && this.atP('(', 1)) { this.i++; this.mark(c, 'ddl', this.t[this.i].end, { ddl: { what: 'columnOf', table: ref } }); this.skipParens(); continue; }
+              if (this.at('WHERE')) {
+                const w = this.mkScope('select', c, null, this.t[this.i].start);
+                w.sources.push({ ...ref });
+                this.i++;
+                this.mark(w, 'where', this.prevEnd());
+                this.scanExpr(w, () => false);
+                this.endScope(w);
+                continue;
+              }
+              if (this.atP('(')) this.skipParens(); else this.i++;
+            }
           }
         }
         return;
       }
       case 'PROC': case 'PROCEDURE': case 'FUNCTION': case 'TRIGGER': case 'PACKAGE': case 'TYPE':
+        if (this.pg && (obj === 'FUNCTION' || obj === 'PROCEDURE')) { this.parsePgRoutine(c); return; }
+        if (this.pg && obj === 'TRIGGER') { this.parsePgTrigger(c); return; }
         if (this.tsql) { this.parseTsqlRoutine(c, obj); return; }
         if (this.ora) { this.parsePlsqlUnit(c, obj); return; }
         if (this.lite && obj === 'TRIGGER') { this.parseSqliteTrigger(c); return; }
@@ -1523,6 +1628,7 @@ class Parser {
     }
     this.i++;
     if (this.at('IF') && this.at('EXISTS', 1)) this.i += 2;
+    if (this.pg && this.at('ONLY')) this.i++;
     this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
     const parts = this.parseName();
     if (!parts.length) return;
@@ -1576,6 +1682,201 @@ class Parser {
       if (this.isTsqlStmtStart(this.t[this.i], this.i)) return;
       if (this.atP(',')) { this.i++; this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: obj } }); continue; }
       this.i++;
+    }
+  }
+
+  // ------------------------------------------------------------ PostgreSQL
+
+  /** PostgreSQL-only statement forms; returns false to fall back to the generic statement parser. */
+  parsePgStatement(c: Scope, u: string): boolean {
+    const t = this.t[this.i];
+    switch (u) {
+      case 'DO': {
+        // DO [LANGUAGE x] $ … $: the body is a string; nothing to resolve
+        this.mark(c, 'unknown', t.end);
+        while (!this.eof() && !this.atP(';')) this.i++;
+        return true;
+      }
+      case 'TABLE': {
+        // TABLE name ≡ SELECT * FROM name
+        const s = this.mkScope('select', c, null, t.start);
+        s.hasFrom = true;
+        this.mark(s, 'from', t.end);
+        this.i++;
+        if (this.at('ONLY')) this.i++;
+        this.parseTableSource(s, false);
+        this.parseQueryClauses(s);
+        this.endScope(s);
+        return true;
+      }
+      case 'EXPLAIN': {
+        this.i++;
+        while (this.at('ANALYZE') || this.at('ANALYSE') || this.at('VERBOSE')) this.i++;
+        if (this.atP('(')) this.skipParens();
+        this.mark(c, 'unknown', this.prevEnd(), { statementStart: true });
+        if (!this.eof() && !this.atP(';')) this.parseStatement(c);
+        return true;
+      }
+      case 'TRUNCATE': {
+        this.i++;
+        if (this.at('TABLE')) this.i++;
+        if (this.at('ONLY')) this.i++;
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
+        while (!this.eof() && !this.atP(';')) {
+          if (this.atP(',')) { this.i++; this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } }); continue; }
+          this.i++;
+        }
+        return true;
+      }
+      case 'REFRESH': {
+        // REFRESH MATERIALIZED VIEW [CONCURRENTLY] name [WITH [NO] DATA]
+        this.i++;
+        while (this.at('MATERIALIZED') || this.at('VIEW') || this.at('CONCURRENTLY')) this.i++;
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'MATERIALIZED' } });
+        while (!this.eof() && !this.atP(';')) this.i++;
+        return true;
+      }
+      case 'COMMENT': {
+        // COMMENT ON TABLE|VIEW|COLUMN|FUNCTION|… name IS '…'
+        if (!this.at('ON', 1)) return false;
+        this.i += 2;
+        let obj = this.u();
+        if (obj === 'MATERIALIZED') { this.i++; obj = 'MATERIALIZED'; }
+        if (!obj) return true;
+        this.i++;
+        if (obj === 'COLUMN') {
+          this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
+          const parts = this.parseName();
+          if (parts.length >= 2) {
+            const tparts = parts.slice(0, -1);
+            const ref: TableRef = { kind: 'table', parts: tparts, alias: null, aliasRange: null, nameRange: [tparts[0].range[0], tparts[tparts.length - 1].range[1]], range: [tparts[0].range[0], tparts[tparts.length - 1].range[1]] };
+            this.mark(c, 'ddl', parts[parts.length - 1].range[0], { ddl: { what: 'columnOf', table: ref } });
+          }
+        } else {
+          if (obj === 'VIEW') obj = 'VIEW';
+          this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: obj } });
+          this.parseName();
+        }
+        while (!this.eof() && !this.atP(';')) this.i++;
+        return true;
+      }
+      case 'COPY': {
+        // COPY table [(cols)] FROM|TO … / COPY (query) TO …
+        this.i++;
+        if (this.atP('(')) {
+          this.i++;
+          this.parseQuery(c, 'select', null);
+          if (this.atP(')')) this.i++;
+        } else {
+          this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
+          const parts = this.parseName();
+          if (parts.length && this.atP('(')) {
+            const ref: TableRef = { kind: 'table', parts, alias: null, aliasRange: null, nameRange: [parts[0].range[0], parts[parts.length - 1].range[1]], range: [parts[0].range[0], parts[parts.length - 1].range[1]] };
+            this.mark(c, 'ddl', this.t[this.i].end, { ddl: { what: 'columnOf', table: ref } });
+            this.skipParens();
+          }
+        }
+        this.mark(c, 'unknown', this.prevEnd());
+        while (!this.eof() && !this.atP(';')) this.i++;
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  /** CREATE [OR REPLACE] FUNCTION|PROCEDURE name([mode] [name] type [DEFAULT expr], …) [RETURNS …] attributes AS body. */
+  parsePgRoutine(c: Scope): void {
+    this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'newName' } });
+    this.parseName();
+    const b = this.mkScope('plsqlBlock', c, null, this.curStart());
+    if (this.atP('(')) {
+      this.i++;
+      while (!this.eof() && !this.atP(')')) {
+        let direction = 'in';
+        const mode = this.u();
+        if (mode === 'IN' || mode === 'OUT' || mode === 'INOUT' || mode === 'VARIADIC') {
+          this.i++;
+          direction = mode === 'OUT' ? 'out' : mode === 'INOUT' ? 'inout' : 'in';
+          if (mode === 'IN' && this.at('OUT')) { this.i++; direction = 'inout'; }
+        }
+        // "name type" or just "type": a name is followed by another word
+        const nt = this.peek();
+        if (isNameTok(nt) && isNameTok(this.peek(1)) && !this.at('DEFAULT', 1)) {
+          this.i++;
+          b.localVars.set(this.varKey(namePart(nt!).text), { name: namePart(nt!).text, kind: 'param', type: '', range: [nt!.start, nt!.end], direction });
+        }
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'dataType' } });
+        const type = this.readType();
+        if (nt && b.localVars.get(this.varKey(namePart(nt).text))) b.localVars.get(this.varKey(namePart(nt).text))!.type = type;
+        while (!this.eof() && !this.atP(',') && !this.atP(')')) { if (this.atP('(')) this.skipParens(); else this.i++; }
+        if (this.atP(',')) { this.i++; continue; }
+      }
+      if (this.atP(')')) this.i++;
+    }
+    while (!this.eof() && !this.atP(';')) {
+      if (this.at('RETURNS')) {
+        this.i++;
+        if (this.at('TABLE') && this.atP('(', 1)) { this.i++; this.parseColumnDefs(c); continue; }
+        if (this.at('SETOF')) this.i++;
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'dataType' } });
+        this.readType();
+        continue;
+      }
+      if (this.at('BEGIN') && this.at('ATOMIC', 1)) {
+        // SQL-standard body: statements over the parameters
+        this.i += 2;
+        this.mark(b, 'unknown', this.prevEnd(), { statementStart: true });
+        this.parseStatementList(b, wordSet('END'));
+        if (this.at('END')) this.i++;
+        continue;
+      }
+      if (this.at('RETURN') && !this.atP(';', 1)) {
+        this.i++;
+        this.mark(b, 'expr', this.prevEnd());
+        this.scanExpr(b, () => false);
+        continue;
+      }
+      if (this.atP('(')) this.skipParens(); else this.i++;
+    }
+    this.endScope(b);
+  }
+
+  /** CREATE [OR REPLACE] [CONSTRAINT] TRIGGER name BEFORE|AFTER|INSTEAD OF events ON table … EXECUTE FUNCTION f(). */
+  parsePgTrigger(c: Scope): void {
+    this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'newName' } });
+    this.parseName();
+    let table: TableRef | null = null;
+    while (!this.eof() && !this.atP(';')) {
+      if (this.at('ON')) {
+        this.i++;
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'TABLE' } });
+        const parts = this.parseName();
+        if (parts.length) table = { kind: 'table', parts, alias: null, aliasRange: null, nameRange: [parts[0].range[0], parts[parts.length - 1].range[1]], range: [parts[0].range[0], parts[parts.length - 1].range[1]] };
+        continue;
+      }
+      if (this.at('OF') && table === null) {
+        // UPDATE OF col, … (columns of the table that follows: not known yet)
+        this.i++;
+        continue;
+      }
+      if (this.at('WHEN') && this.atP('(', 1) && table) {
+        const w = this.mkScope('select', c, null, this.t[this.i].start);
+        for (const nm of ['NEW', 'OLD']) w.localVars.set(nm, { name: nm.toLowerCase(), kind: 'record', type: 'ROW', range: table.parts[0].range, rowtypeOf: table.parts });
+        this.i += 2;
+        this.mark(w, 'where', this.prevEnd());
+        this.scanExpr(w, () => false);
+        if (this.atP(')')) this.i++;
+        this.endScope(w);
+        continue;
+      }
+      if (this.at('EXECUTE') && (this.at('FUNCTION', 1) || this.at('PROCEDURE', 1))) {
+        this.i += 2;
+        this.mark(c, 'ddl', this.prevEnd(), { ddl: { what: 'objectName', objectType: 'FUNCTION' } });
+        this.parseName();
+        continue;
+      }
+      if (this.atP('(')) this.skipParens(); else this.i++;
     }
   }
 

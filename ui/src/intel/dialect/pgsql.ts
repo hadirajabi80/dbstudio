@@ -1,0 +1,74 @@
+import catalog from './data/pgsql-functions.json';
+import { buildSpec, type FunctionCatalogJson } from './spec';
+
+export const pgsqlSpec = buildSpec({
+  id: 'pgsql',
+  // PostgreSQL reserved words (incl. "reserved, can be function or type"), plus the statement words that are never
+  // used as plain identifiers in practice. COMMENT / CLUSTER / RELEASE stay identifiers (common column names).
+  keywords: `
+    ALL ANALYSE ANALYZE AND ANY ARRAY AS ASC ASYMMETRIC BOTH CASE CAST CHECK COLLATE COLUMN CONSTRAINT CREATE
+    CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEFAULT DEFERRABLE DESC
+    DISTINCT DO ELSE END EXCEPT FALSE FETCH FOR FOREIGN FROM GRANT GROUP HAVING IN INITIALLY INTERSECT INTO LATERAL
+    LEADING LIMIT LOCALTIME LOCALTIMESTAMP NOT NULL OFFSET ON ONLY OR ORDER PLACING PRIMARY REFERENCES RETURNING
+    SELECT SESSION_USER SOME SYMMETRIC SYSTEM_USER TABLE THEN TO TRAILING TRUE UNION UNIQUE USER USING VARIADIC WHEN
+    WHERE WINDOW WITH BY
+    AUTHORIZATION BINARY COLLATION CONCURRENTLY CROSS FREEZE FULL ILIKE INNER IS ISNULL JOIN LEFT LIKE NATURAL NOTNULL
+    OUTER OVERLAPS RIGHT SIMILAR TABLESAMPLE VERBOSE
+    INSERT UPDATE DELETE MERGE ALTER DROP TRUNCATE BEGIN COMMIT ROLLBACK SAVEPOINT EXPLAIN VACUUM COPY CALL SET SHOW
+    RESET REVOKE LISTEN NOTIFY REFRESH REINDEX DECLARE CURSOR VALUES EXISTS BETWEEN OVER PARTITION FILTER WITHIN
+    RECURSIVE MATERIALIZED CONFLICT NOTHING EXCLUDED`,
+  contextual: `
+    ABORT ACTION ADD ADMIN AFTER AGGREGATE ALWAYS ATTACH BEFORE BY CACHE CALLED CASCADE CHAIN COLUMNS COMMENTS CONFLICT
+    CONSTRAINTS CONTINUE CYCLE DATA DATABASE DEFAULTS DEFERRED DEFINER DEPENDS DETACH DOMAIN EACH ENUM EXCLUDE
+    EXCLUDING EXTENSION FIRST FOLLOWING FUNCTION FUNCTIONS GENERATED IDENTITY IF IMMUTABLE INCLUDE INCLUDING INDEX
+    INHERITS INSTEAD INVOKER KEY LANGUAGE LAST LEAKPROOF LOCAL LOCKED MATCH NEXT NO NOWAIT NULLS OF OFF OIDS OPTIONS
+    ORDINALITY OTHERS OWNED OWNER PARALLEL PARTITION PLANS POLICY PRECEDING PREPARE PROCEDURE PROCEDURES RANGE READ
+    RENAME REPLACE REPLICA RESTART RESTRICT RETURNS ROLE ROUTINE ROW ROWS RULE SCHEMA SECURITY SEQUENCE SERVER SESSION
+    SHARE SKIP STABLE START STATISTICS STORED STRICT SUBSCRIPTION SUPPORT TEMP TEMPORARY TIES TRANSACTION TRIGGER
+    TRUSTED TYPE UNBOUNDED UNLISTEN UNLOGGED UNTIL VIEW VOLATILE WORK WRAPPER WRITE XML YES ZONE COMMENT CLUSTER
+    RELEASE ATOMIC OVERRIDING SYSTEM VALUE GROUPING SETS ROLLUP CUBE`,
+  notAlias: 'LATERAL RETURNING ONLY TABLESAMPLE CROSS FILTER WITHIN OVER WINDOW',
+  statementStarts: `
+    SELECT INSERT UPDATE DELETE MERGE WITH CREATE ALTER DROP TRUNCATE BEGIN START COMMIT END ROLLBACK SAVEPOINT RELEASE
+    EXPLAIN ANALYZE VACUUM COPY CALL DO SET RESET SHOW GRANT REVOKE COMMENT LISTEN NOTIFY UNLISTEN REFRESH CLUSTER
+    REINDEX DECLARE FETCH CLOSE MOVE PREPARE EXECUTE DEALLOCATE DISCARD LOCK VALUES TABLE IMPORT SECURITY ABORT
+    CHECKPOINT LOAD REASSIGN`,
+  // `name`, `line` and `path` are types too, but far more common as column names: left out of the list.
+  dataTypes: `
+    smallint integer int int2 int4 int8 bigint serial smallserial bigserial numeric decimal real float4 float8 double
+    precision boolean bool text varchar character char bpchar uuid date time timetz timestamp timestamptz interval bytea
+    json jsonb jsonpath xml money inet cidr macaddr macaddr8 point lseg box polygon circle bit varbit tsvector tsquery
+    oid regclass regtype regproc int4range int8range numrange tsrange tstzrange daterange int4multirange int8multirange
+    nummultirange tsmultirange tstzmultirange datemultirange hstore citext record void trigger anyelement anyarray`,
+  catalog: catalog as FunctionCatalogJson,
+  quote: ['"', '"'],
+  caseFolding: 'lower',
+  batchSeparator: null,
+  identExtra: '$',
+  // keep in sync with ui/src/snippets/builtins.ts (pgsql); `\$` is a literal `$` in snippet syntax
+  snippets: [
+    { prefix: 'sel', label: 'sel', body: 'SELECT ${1:*}\nFROM ${2:table}$0', doc: 'SELECT ... FROM' },
+    { prefix: 'selw', label: 'selw', body: 'SELECT ${1:*}\nFROM ${2:table}\nWHERE ${3:condition}$0', doc: 'SELECT ... FROM ... WHERE' },
+    { prefix: 'ins', label: 'ins', body: 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})$0', doc: 'INSERT INTO ... VALUES' },
+    { prefix: 'upsert', label: 'upsert', body: 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})\nON CONFLICT (${4:key}) DO UPDATE SET ${5:column} = EXCLUDED.${5:column}$0', doc: 'INSERT ... ON CONFLICT DO UPDATE' },
+    { prefix: 'upd', label: 'upd', body: 'UPDATE ${1:table}\nSET ${2:column} = ${3:value}\nWHERE ${4:condition}$0', doc: 'UPDATE ... SET ... WHERE' },
+    { prefix: 'del', label: 'del', body: 'DELETE FROM ${1:table}\nWHERE ${2:condition}$0', doc: 'DELETE FROM ... WHERE' },
+    { prefix: 'cte', label: 'cte', body: 'WITH ${1:cte} AS (\n\tSELECT ${2:*}\n\tFROM ${3:table}\n)\nSELECT *\nFROM ${1:cte}$0', doc: 'Common table expression' },
+    { prefix: 'do', label: 'do', body: 'DO \\$\\$\nBEGIN\n\t$0\nEND\n\\$\\$;', doc: 'Anonymous PL/pgSQL block (DO $$ ... $$)' },
+    { prefix: 'fn', label: 'fn', body: 'CREATE OR REPLACE FUNCTION ${1:name}(${2:p_id integer})\nRETURNS ${3:integer}\nLANGUAGE plpgsql\nAS \\$\\$\nDECLARE\n\tv_result ${3:integer};\nBEGIN\n\t$0\n\tRETURN v_result;\nEND\n\\$\\$;', doc: 'CREATE OR REPLACE FUNCTION ... LANGUAGE plpgsql' },
+  ],
+  selectKeywords: 'DISTINCT, DISTINCT ON, CASE, CAST, NULL, COALESCE, NULLIF, EXISTS, NOT, ALL, ARRAY, ROW, LATERAL',
+  afterSourceKeywords: `
+    WHERE, INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN, CROSS JOIN, JOIN, LEFT JOIN LATERAL, CROSS JOIN LATERAL,
+    GROUP BY, ORDER BY, HAVING, WINDOW, LIMIT, OFFSET, FETCH FIRST, FOR UPDATE, FOR SHARE, TABLESAMPLE, UNION,
+    UNION ALL, EXCEPT, INTERSECT, RETURNING, AS`,
+  afterExprKeywords: `
+    AND, OR, NOT, IN, IS NULL, IS NOT NULL, IS DISTINCT FROM, LIKE, ILIKE, SIMILAR TO, BETWEEN, GROUP BY, ORDER BY,
+    HAVING, LIMIT, OFFSET, UNION, UNION ALL, EXCEPT, INTERSECT, RETURNING, FILTER (WHERE, OVER (`,
+  startKeywords: `
+    SELECT, INSERT INTO, UPDATE, DELETE FROM, MERGE INTO, WITH, WITH RECURSIVE, CREATE TABLE, CREATE TABLE IF NOT EXISTS,
+    CREATE INDEX, CREATE UNIQUE INDEX, CREATE OR REPLACE VIEW, CREATE MATERIALIZED VIEW, CREATE OR REPLACE FUNCTION,
+    CREATE OR REPLACE PROCEDURE, CREATE TYPE, CREATE SEQUENCE, CREATE SCHEMA, CREATE EXTENSION, ALTER TABLE, DROP TABLE,
+    TRUNCATE, DO, CALL, BEGIN, COMMIT, ROLLBACK, SAVEPOINT, EXPLAIN, EXPLAIN ANALYZE, VACUUM, ANALYZE,
+    REFRESH MATERIALIZED VIEW, GRANT, SET, SHOW, RESET, COPY, COMMENT ON, LISTEN, NOTIFY`,
+});

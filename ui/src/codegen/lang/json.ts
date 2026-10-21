@@ -8,6 +8,11 @@ import type { ResolvedType } from '../types';
 import { commentText } from '../writer';
 
 function sampleValue(t: ResolvedType): unknown {
+  // PostgreSQL arrays, enums and network types.
+  if (t.array && t.element) return [sampleValue(t.element)];
+  if (t.enumLabels?.length) return t.enumLabels[0];
+  if (t.base === 'inet' || t.base === 'cidr') return t.base === 'inet' ? '192.0.2.1' : '192.0.2.0/24';
+  if (t.base === 'macaddr') return '08:00:2b:01:02:03';
   switch (t.logical) {
     case 'bool':
       return true;
@@ -48,8 +53,26 @@ function sampleValue(t: ResolvedType): unknown {
 }
 
 function schemaFor(m: Member): Record<string, unknown> {
-  const t = m.type;
+  const s = typeSchema(m.type, m.nullable);
+  const c = commentText(m.col.comment);
+  if (c) s.description = c;
+  if (m.col.identity || m.col.computed || m.type.logical === 'rowversion') s.readOnly = true;
+  return s;
+}
+
+function typeSchema(t: ResolvedType, nullable: boolean): Record<string, unknown> {
   const s: Record<string, unknown> = {};
+  if (t.array && t.element) {
+    // PostgreSQL arrays (elements may be NULL unless the column is constrained).
+    s.type = nullable ? ['array', 'null'] : 'array';
+    s.items = typeSchema(t.element, false);
+    return s;
+  }
+  if (t.enumLabels?.length) {
+    s.type = nullable ? ['string', 'null'] : 'string';
+    s.enum = nullable ? [...t.enumLabels, null] : [...t.enumLabels];
+    return s;
+  }
   switch (t.logical) {
     case 'bool':
       s.type = 'boolean';
@@ -93,12 +116,9 @@ function schemaFor(m: Member): Record<string, unknown> {
       s.type = 'string';
       if (t.length && t.logical === 'string') s.maxLength = t.length;
   }
-  if (m.nullable) {
+  if (nullable) {
     if (typeof s.type === 'string') s.type = [s.type, 'null'];
   }
-  const c = commentText(m.col.comment);
-  if (c) s.description = c;
-  if (m.col.identity || m.col.computed || t.logical === 'rowversion') s.readOnly = true;
   return s;
 }
 

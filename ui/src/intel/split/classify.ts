@@ -63,10 +63,13 @@ export function classifyTokens(tokens: Token[], spec: DialectSpec): StatementKin
     case 'DECLARE': return spec.id === 'plsql' ? 'block' : 'declare';
     case 'BEGIN':
       if (spec.id === 'plsql') return 'block';
-      if (spec.id === 'sqlite') return 'tx';
+      if (spec.id === 'sqlite' || spec.id === 'pgsql') return 'tx';
       return n1 === 'TRAN' || n1 === 'TRANSACTION' || n1 === 'DISTRIBUTED' ? 'tx' : 'block';
     case 'COMMIT': case 'ROLLBACK': case 'SAVEPOINT': case 'SAVE': case 'RELEASE': return 'tx';
-    case 'END': return spec.id === 'sqlite' ? 'tx' : 'other';
+    case 'END': return spec.id === 'sqlite' || spec.id === 'pgsql' ? 'tx' : 'other';
+    case 'START': case 'ABORT': return spec.id === 'pgsql' ? 'tx' : 'other';
+    case 'DO': return spec.id === 'pgsql' ? 'block' : 'other';
+    case 'RESET': return spec.id === 'pgsql' ? 'set' : 'other';
     case 'SET': return 'set';
     case 'USE': return 'use';
     case 'GRANT': case 'REVOKE': case 'DENY': return 'grant';

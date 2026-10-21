@@ -17,6 +17,7 @@ const ALL = null;
 const T: Dialect[] = ['tsql'];
 const O: Dialect[] = ['plsql'];
 const S: Dialect[] = ['sqlite'];
+const P: Dialect[] = ['pgsql'];
 
 function def(prefix: string, name: string, dialects: Dialect[] | null, body: string): SnippetDef {
   return { id: `builtin:${prefix}:${dialects ? dialects.join('+') : 'all'}`, name, prefix, dialects, body, builtin: true };
@@ -60,4 +61,27 @@ export const BUILTIN_SNIPPETS: SnippetDef[] = [
   def('trg', 'CREATE TRIGGER', S, 'CREATE TRIGGER ${1:trg_name}\nAFTER ${2:INSERT} ON ${3:table}\nFOR EACH ROW\nBEGIN\n\t$0\nEND;'),
   def('tx', 'Transaction', S, 'BEGIN TRANSACTION;\n$0\nCOMMIT;'),
   def('upsert', 'INSERT … ON CONFLICT DO UPDATE', S, 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})\nON CONFLICT (${4:key}) DO UPDATE SET ${5:column} = excluded.${5:column};$0'),
+  // PostgreSQL (docs/PLAN-PG.md 3.7; the statement-start subset is mirrored in intel/dialect/pgsql.ts)
+  def('tbl', 'CREATE TABLE', P, 'CREATE TABLE ${1:name} (\n\t${2:id} bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n\t${3:name} text NOT NULL,\n\tcreated_at timestamptz NOT NULL DEFAULT now()\n);$0'),
+  def('upsert', 'INSERT … ON CONFLICT DO UPDATE', P, 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})\nON CONFLICT (${4:key}) DO UPDATE SET ${5:column} = EXCLUDED.${5:column}$0'),
+  def('do', 'DO $$ … $$ (anonymous block)', P, 'DO \\$\\$\nBEGIN\n\t$0\nEND\n\\$\\$;'),
+  def('fn', 'CREATE OR REPLACE FUNCTION (plpgsql)', P, 'CREATE OR REPLACE FUNCTION ${1:name}(${2:p_id integer})\nRETURNS ${3:integer}\nLANGUAGE plpgsql\nAS \\$\\$\nDECLARE\n\tv_result ${3:integer};\nBEGIN\n\t$0\n\tRETURN v_result;\nEND\n\\$\\$;'),
+  def('fnsql', 'CREATE OR REPLACE FUNCTION (sql)', P, 'CREATE OR REPLACE FUNCTION ${1:name}(${2:p_id integer})\nRETURNS ${3:integer}\nLANGUAGE sql\nSTABLE\nAS \\$\\$\n\tSELECT $0\n\\$\\$;'),
+  def('proc', 'CREATE OR REPLACE PROCEDURE', P, 'CREATE OR REPLACE PROCEDURE ${1:name}(${2:p_id integer})\nLANGUAGE plpgsql\nAS \\$\\$\nBEGIN\n\t$0\nEND\n\\$\\$;'),
+  def('trg', 'Trigger function + CREATE TRIGGER', P, 'CREATE OR REPLACE FUNCTION ${1:trg_name}_fn()\nRETURNS trigger\nLANGUAGE plpgsql\nAS \\$\\$\nBEGIN\n\t$0\n\tRETURN NEW;\nEND\n\\$\\$;\n\nCREATE OR REPLACE TRIGGER ${1:trg_name}\nBEFORE ${2:INSERT OR UPDATE} ON ${3:table}\nFOR EACH ROW EXECUTE FUNCTION ${1:trg_name}_fn();'),
+  def('tx', 'Transaction', P, 'BEGIN;\n$0\nCOMMIT;'),
+  def('sp', 'Savepoint', P, 'SAVEPOINT ${1:sp};\n$0\nRELEASE SAVEPOINT ${1:sp};'),
+  def('exc', 'BEGIN … EXCEPTION (PL/pgSQL)', P, 'BEGIN\n\t$1\nEXCEPTION\n\tWHEN ${2:unique_violation} THEN\n\t\t${3:NULL};\n\tWHEN OTHERS THEN\n\t\tRAISE;\nEND;$0'),
+  def('raise', 'RAISE NOTICE', P, "RAISE NOTICE '${1:%}', ${2:value};$0"),
+  def('ret', 'RETURNING *', P, 'RETURNING ${1:*}$0'),
+  def('gs', 'generate_series', P, 'generate_series(${1:1}, ${2:10}) AS ${3:g}(${4:n})$0'),
+  def('unnest', 'unnest … WITH ORDINALITY', P, 'unnest(${1:array}) WITH ORDINALITY AS ${2:u}(${3:value}, ord)$0'),
+  def('jsonb', "jsonb ->> 'key'", P, "${1:col} ->> '${2:key}'$0"),
+  def('jsonbagg', 'jsonb_agg(jsonb_build_object(…))', P, "jsonb_agg(jsonb_build_object(${1:'k', v}))$0"),
+  def('enum', 'CREATE TYPE … AS ENUM', P, "CREATE TYPE ${1:name} AS ENUM (${2:'a', 'b'});$0"),
+  def('mview', 'CREATE MATERIALIZED VIEW', P, 'CREATE MATERIALIZED VIEW ${1:name} AS\nSELECT $0;'),
+  def('idxc', 'CREATE INDEX CONCURRENTLY', P, 'CREATE INDEX CONCURRENTLY ${1:ix_name} ON ${2:table} (${3:column});$0'),
+  def('lock', 'SELECT … FOR UPDATE SKIP LOCKED', P, 'SELECT ${1:*}\nFROM ${2:table}\nWHERE ${3:condition}\nORDER BY ${4:id}\nLIMIT ${5:10}\nFOR UPDATE SKIP LOCKED;$0'),
+  def('cpy', 'COPY … FROM STDIN (csv)', P, 'COPY ${1:table} (${2:columns}) FROM STDIN WITH (FORMAT csv, HEADER);$0'),
+  def('explain', 'EXPLAIN (ANALYZE, BUFFERS)', P, 'EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)\n$0'),
 ];

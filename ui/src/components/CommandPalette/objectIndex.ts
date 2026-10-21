@@ -31,7 +31,8 @@ export interface SearchHit {
 
 /**
  * Type prefixes: `t:` tables (and Kafka topics), `v:` views, `p:` procedures, `f:` functions, `c:` columns,
- * M2: `k:` Redis keys, `coll:` Mongo collections.
+ * M2: `k:` Redis keys, `coll:` Mongo collections, `er:` tables and views opened as an ER diagram of their related
+ * tables (`er.openRelated`, DIAGRAM_PREFIX).
  */
 export const TYPE_PREFIXES: Record<string, (t: IndexEntry['type']) => boolean> = {
   t: (t) => t === 'table' || t === 'kafka.topic',
@@ -41,7 +42,11 @@ export const TYPE_PREFIXES: Record<string, (t: IndexEntry['type']) => boolean> =
   c: (t) => t === 'column',
   k: (t) => t === 'redis.key',
   coll: (t) => t === 'mongo.collection',
+  er: (t) => t === 'table' || t === 'view' || t === 'mview',
 };
+
+/** `er:` hits open the ER diagram of the object and its FK neighbours instead of the object itself. */
+export const DIAGRAM_PREFIX = 'er';
 
 const objectCache = new WeakMap<CatalogSchema, IndexEntry[]>();
 const columnCache = new WeakMap<CatalogSchema, IndexEntry[]>();
@@ -118,7 +123,7 @@ export interface ParsedQuery {
 }
 
 export function parseObjectQuery(q: string): ParsedQuery {
-  const m = /^\s*(coll|[tvpfck]):\s*(.*)$/i.exec(q);
+  const m = /^\s*(coll|er|[tvpfck]):\s*(.*)$/i.exec(q);
   if (m) return { prefix: m[1].toLowerCase(), pattern: m[2].trim() };
   return { prefix: null, pattern: q.trim() };
 }

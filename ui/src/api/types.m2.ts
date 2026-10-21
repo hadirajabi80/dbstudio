@@ -25,6 +25,11 @@ export interface RedisServerInfo {
   databases: number;
   /** shape chosen by M2-0; the feature package may refine — `INFO keyspace` (explorer db node counts). */
   keyspace: { db: number; keys: number; expires: number }[];
+  /** M2-R: the profile is read-only (writes answer 403 READ_ONLY). */
+  readOnly?: boolean;
+  /** M2-R: the profile's key delimiter (tree view) and SCAN count. */
+  delimiter?: string;
+  scanCount?: number;
 }
 
 /** `POST /redis/{cid}/keys/scan`. `cursor` is `'0'` to start; cluster cursors are `node@cursor;…`. */
@@ -83,6 +88,8 @@ export interface RedisStringValue extends RedisKeyHeader {
   /** shape chosen by M2-0; the feature package may refine — `hex` when the bytes are not valid UTF-8 (value is hex text). */
   encoding: 'utf8' | 'hex';
   isJson: boolean;
+  /** M2-R: `STRLEN` (bytes) of the full value. */
+  length?: number;
 }
 export interface RedisHashValue extends RedisKeyHeader {
   type: 'hash';
@@ -192,7 +199,17 @@ export interface RedisCommandResult {
   value: RedisReplyValue;
   elapsedMs: number;
 }
-export interface RedisCommandsResponse { results: RedisCommandResult[] }
+export interface RedisCommandsResponse {
+  results: RedisCommandResult[];
+  /** M2-R: the database selected after the batch (SELECT is tracked per request). */
+  db?: number;
+}
+/** M2-R: `GET /redis/{cid}/keys/{key}/stream/groups/{group}?db=` (XINFO CONSUMERS + first 100 of XPENDING). */
+export interface RedisStreamConsumer { name: string; pending: number; idleMs: number; inactiveMs: number | null }
+export interface RedisPendingEntry { id: string; consumer: string; idleMs: number; deliveries: number }
+export interface RedisStreamGroupDetail { group: string; consumers: RedisStreamConsumer[]; pending: RedisPendingEntry[] }
+/** M2-R: `GET /redis/{cid}/pubsub/channels?pattern=` (PUBSUB CHANNELS + NUMSUB + NUMPAT). */
+export interface RedisPubSubChannels { channels: { channel: string; subscribers: number }[]; patterns: number }
 
 /** `POST /redis/{cid}/publish`. */
 export interface RedisPublishRequest { channel: string; message: string }
@@ -272,6 +289,8 @@ export interface RedisAnalysisResult {
   ttl: { noTtl: number; buckets: { label: string; maxSeconds: number | null; keys: number }[] };
   /** shape chosen by M2-0; the feature package may refine — keys that have a TTL. */
   expiring: number;
+  /** M2-R: duration of the analysis. */
+  elapsedMs?: number;
 }
 
 /** `redis.monitor` stream item. */
@@ -379,7 +398,12 @@ export interface MongoAggregateRequest {
   allowDiskUse: boolean;
   maxTimeMs: number;
 }
-export interface MongoAggregateResponse { docs: MongoEjson[]; truncated: boolean }
+export interface MongoAggregateResponse {
+  docs: MongoEjson[];
+  truncated: boolean;
+  /** M2-M: a preview slice ended in `$out`/`$merge`, which previews never execute (the docs are the stage's input). */
+  writeStageSkipped?: boolean;
+}
 
 export type MongoExplainVerbosity = 'queryPlanner' | 'executionStats' | 'allPlansExecution';
 /** `POST …/explain`. */
@@ -391,6 +415,20 @@ export interface MongoExplainResponse {
   raw: MongoEjson;
   root: PlanNode;
   warnings: string[];
+  /** M2-M: headline numbers of the winning plan (Compass "Query performance summary"); stats are null for queryPlanner. */
+  summary?: MongoExplainSummary;
+}
+/** M2-M: summary of an explain (counts from `executionStats`, null when the verbosity has none). */
+export interface MongoExplainSummary {
+  nReturned: number | null;
+  docsExamined: number | null;
+  keysExamined: number | null;
+  executionTimeMs: number | null;
+  /** Index names used by the winning plan. */
+  indexes: string[];
+  collscan: boolean;
+  sortInMemory: boolean;
+  rejectedPlans: number;
 }
 
 /** `POST …/schema` → job. */
@@ -437,6 +475,18 @@ export interface MongoCreateIndexRequest {
 /** shape chosen by M2-0; the feature package may refine — `jobId` set when the build outlives 2 s (progress via jobs). */
 export interface MongoCreateIndexResponse { name: string; jobId: string | null }
 
+/** `GET`/`PUT /mongo/{cid}/db/{db}/profiling` (`db.setProfilingLevel`; PUT is READ_ONLY-guarded). 0 off, 1 slow ops, 2 all. */
+export interface MongoProfiling {
+  level: 0 | 1 | 2;
+  slowms: number;
+  sampleRate: number;
+}
+export interface MongoProfilingRequest {
+  level: 0 | 1 | 2;
+  slowms?: number;
+  sampleRate?: number;
+}
+
 /** `GET`/`PUT …/validation` (`collMod`). */
 export interface MongoValidation {
   validator: MongoEjson | null;
@@ -454,6 +504,8 @@ export interface MongoExportRequest {
   limit?: number | null;
   fields?: string[];
   path: string | null;
+  /** M2-M: JSON/JSONL flavour (default `relaxed`; `canonical` keeps every BSON type for a lossless re-import). */
+  ejsonMode?: 'relaxed' | 'canonical';
 }
 /** shape chosen by M2-0; the feature package may refine */
 export interface MongoExportResult { path: string | null; docs: number }
@@ -631,6 +683,10 @@ export interface KafkaFetchResult {
   scanned: number;
   /** shape chosen by M2-0; the feature package may refine — partitions that reached their target offset. */
   partitionsDone: number[];
+  /** M2-K: the fetch stopped at `timeoutMs` before every partition reached its end. */
+  timedOut?: boolean;
+  /** M2-K: more matching messages exist (limit or maxBytes reached). */
+  truncated?: boolean;
 }
 /** A decoded key/value/header. `text` null = null payload (tombstone/no key). */
 export interface KafkaDecoded {
@@ -865,6 +921,20 @@ export interface DiagramLayout {
   pan: [number, number];
   updatedAt: string;
   auto?: DiagramAutoLayout;
+  /** M2-ER: `schema.table` names added to the scope ("Add tables…", ghost click, "Show related"). */
+  added?: string[] | null;
+  /** M2-ER: cards whose position an auto layout keeps. */
+  pinned?: string[] | null;
+  /** M2-ER: view options (column mode, types, filters); opaque to the engine. */
+  options?: DiagramViewOptions | null;
+}
+/** M2-ER: what the cards show and which tables are filtered out. */
+export interface DiagramViewOptions {
+  columns?: 'all' | 'keys' | 'none';
+  types?: boolean;
+  onlyConnected?: boolean;
+  hideViews?: boolean;
+  details?: boolean;
 }
 /** Query of `GET /connections/{cid}/er/layouts`; `scope` is a scope key (see `layoutScopeKey` in ./er.ts). */
 export interface DiagramLayoutQuery { database?: string | null; scope?: string | null }

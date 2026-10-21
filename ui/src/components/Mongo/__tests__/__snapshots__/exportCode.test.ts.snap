@@ -1,0 +1,307 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`exportCode > aggregate → csharp 1`] = `
+"using System.Globalization;
+using MongoDB.Bson;
+using MongoDB.Driver;
+
+var client = new MongoClient("mongodb://localhost:27017");
+var coll = client.GetDatabase("shop").GetCollection<BsonDocument>("orders");
+
+PipelineDefinition<BsonDocument, BsonDocument> pipeline = new BsonDocument[]
+{
+    new BsonDocument("$match", new BsonDocument
+    {
+        { "status", "paid" },
+        { "createdAt", new BsonDocument("$gte", new BsonDateTime(DateTime.Parse("2024-01-01T00:00:00.000Z", null, DateTimeStyles.AdjustToUniversal))) },
+        { "customer", ObjectId.Parse("66f1a2b3c4d5e6f708192a3b") }
+    }),
+    new BsonDocument("$unwind", "$items"),
+    new BsonDocument("$group", new BsonDocument
+    {
+        { "_id", "$items.sku" },
+        { "qty", new BsonDocument("$sum", "$items.qty") },
+        { "revenue", new BsonDocument("$sum", Decimal128.Parse("0.0")) },
+        { "n", new BsonDocument("$sum", 1L) }
+    }),
+    new BsonDocument("$match", new BsonDocument
+    {
+        { "name", new BsonRegularExpression("^a", "i") },
+        { "ratio", 5.0 },
+        { "tags", new BsonArray { "a", "b" } },
+        { "ok", true },
+        { "nothing", BsonNull.Value }
+    }),
+    new BsonDocument("$sort", new BsonDocument("qty", -1)),
+    new BsonDocument("$limit", 10)
+};
+
+var results = await coll.Aggregate(pipeline).ToListAsync();
+foreach (var doc in results)
+{
+    Console.WriteLine(doc.ToJson());
+}"
+`;
+
+exports[`exportCode > aggregate → java 1`] = `
+"import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import org.bson.BsonRegularExpression;
+import org.bson.Document;
+import org.bson.types.Decimal128;
+import org.bson.types.ObjectId;
+
+public class Query {
+    public static void main(String[] args) {
+        try (MongoClient client = MongoClients.create("mongodb://localhost:27017")) {
+            MongoCollection<Document> coll = client.getDatabase("shop").getCollection("orders");
+
+            List<Document> pipeline = Arrays.asList(
+                new Document("$match", new Document("status", "paid")
+                        .append("createdAt", new Document("$gte", new Date(1704067200000L)))
+                        .append("customer", new ObjectId("66f1a2b3c4d5e6f708192a3b"))),
+                new Document("$unwind", "$items"),
+                new Document("$group", new Document("_id", "$items.sku")
+                        .append("qty", new Document("$sum", "$items.qty"))
+                        .append("revenue", new Document("$sum", Decimal128.parse("0.0")))
+                        .append("n", new Document("$sum", 1L))),
+                new Document("$match", new Document("name", new BsonRegularExpression("^a", "i"))
+                        .append("ratio", 5.0d)
+                        .append("tags", Arrays.asList("a", "b"))
+                        .append("ok", true)
+                        .append("nothing", null)),
+                new Document("$sort", new Document("qty", -1)),
+                new Document("$limit", 10));
+
+            for (Document doc : coll.aggregate(pipeline)) {
+                System.out.println(doc.toJson());
+            }
+        }
+    }
+}"
+`;
+
+exports[`exportCode > aggregate → node 1`] = `
+"import { MongoClient, Decimal128, Double, Long, ObjectId } from 'mongodb';
+
+const client = new MongoClient('mongodb://localhost:27017');
+const coll = client.db('shop').collection('orders');
+
+const pipeline = [
+  {
+    $match: {
+      status: 'paid',
+      createdAt: { $gte: new Date('2024-01-01T00:00:00.000Z') },
+      customer: new ObjectId('66f1a2b3c4d5e6f708192a3b')
+    }
+  },
+  { $unwind: '$items' },
+  {
+    $group: {
+      _id: '$items.sku',
+      qty: { $sum: '$items.qty' },
+      revenue: { $sum: Decimal128.fromString('0.0') },
+      n: { $sum: Long.fromString('1') }
+    }
+  },
+  {
+    $match: {
+      name: /^a/i,
+      ratio: new Double(5.0),
+      tags: ['a', 'b'],
+      ok: true,
+      nothing: null
+    }
+  },
+  { $sort: { qty: -1 } },
+  { $limit: 10 }
+];
+
+const cursor = coll.aggregate(pipeline);
+for await (const doc of cursor) {
+  console.log(doc);
+}
+await client.close();"
+`;
+
+exports[`exportCode > aggregate → python 1`] = `
+"from datetime import datetime, timezone
+from bson.objectid import ObjectId
+from bson.decimal128 import Decimal128
+from bson.int64 import Int64
+from bson.regex import Regex
+from pymongo import MongoClient
+
+client = MongoClient('mongodb://localhost:27017')
+coll = client['shop']['orders']
+
+pipeline = [
+    {
+        '$match': {
+            'status': 'paid',
+            'createdAt': {'$gte': datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)},
+            'customer': ObjectId('66f1a2b3c4d5e6f708192a3b')
+        }
+    },
+    {'$unwind': '$items'},
+    {
+        '$group': {
+            '_id': '$items.sku',
+            'qty': {'$sum': '$items.qty'},
+            'revenue': {'$sum': Decimal128('0.0')},
+            'n': {'$sum': Int64(1)}
+        }
+    },
+    {
+        '$match': {
+            'name': Regex('^a', 'i'),
+            'ratio': 5.0,
+            'tags': ['a', 'b'],
+            'ok': True,
+            'nothing': None
+        }
+    },
+    {'$sort': {'qty': -1}},
+    {'$limit': 10}
+]
+
+cursor = coll.aggregate(pipeline)
+for doc in cursor:
+    print(doc)"
+`;
+
+exports[`exportCode > aggregate → shell 1`] = `
+"db.getSiblingDB('shop').getCollection('orders').aggregate([
+  {
+    $match: {
+      status: "paid",
+      createdAt: { $gte: ISODate("2024-01-01T00:00:00.000Z") },
+      customer: ObjectId("66f1a2b3c4d5e6f708192a3b")
+    }
+  },
+  { $unwind: "$items" },
+  {
+    $group: {
+      _id: "$items.sku",
+      qty: { $sum: "$items.qty" },
+      revenue: { $sum: NumberDecimal("0.0") },
+      n: { $sum: NumberLong("1") }
+    }
+  },
+  {
+    $match: {
+      name: /^a/i,
+      ratio: 5.0,
+      tags: ["a", "b"],
+      ok: true,
+      nothing: null
+    }
+  },
+  { $sort: { qty: -1 } },
+  { $limit: 10 }
+]);"
+`;
+
+exports[`exportCode > find → csharp 1`] = `
+"using System.Globalization;
+using MongoDB.Bson;
+using MongoDB.Driver;
+
+var client = new MongoClient("mongodb://localhost:27017");
+var coll = client.GetDatabase("shop").GetCollection<BsonDocument>("orders");
+
+var filter = new BsonDocument
+{
+    { "status", "paid" },
+    { "total", new BsonDocument("$gt", 100) }
+};
+var projection = new BsonDocument { { "_id", 0 }, { "customer", 1 } };
+var sort = new BsonDocument("createdAt", -1);
+
+var results = await coll.Find(filter)
+    .Project(projection)
+    .Sort(sort)
+    .Skip(20)
+    .Limit(10)
+    .ToListAsync();
+foreach (var doc in results)
+{
+    Console.WriteLine(doc.ToJson());
+}"
+`;
+
+exports[`exportCode > find → java 1`] = `
+"import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import org.bson.Document;
+
+public class Query {
+    public static void main(String[] args) {
+        try (MongoClient client = MongoClients.create("mongodb://localhost:27017")) {
+            MongoCollection<Document> coll = client.getDatabase("shop").getCollection("orders");
+
+            Document filter = new Document("status", "paid")
+                .append("total", new Document("$gt", 100));
+            Document projection = new Document("_id", 0)
+                .append("customer", 1);
+            Document sort = new Document("createdAt", -1);
+
+            for (Document doc : coll.find(filter)
+                    .projection(projection)
+                    .sort(sort)
+                    .skip(20)
+                    .limit(10)) {
+                System.out.println(doc.toJson());
+            }
+        }
+    }
+}"
+`;
+
+exports[`exportCode > find → node 1`] = `
+"import { MongoClient } from 'mongodb';
+
+const client = new MongoClient('mongodb://localhost:27017');
+const coll = client.db('shop').collection('orders');
+
+const filter = { status: 'paid', total: { $gt: 100 } };
+const options = {
+  projection: { _id: 0, customer: 1 },
+  sort: { createdAt: -1 },
+  skip: 20,
+  limit: 10
+};
+
+const cursor = coll.find(filter, options);
+for await (const doc of cursor) {
+  console.log(doc);
+}
+await client.close();"
+`;
+
+exports[`exportCode > find → python 1`] = `
+"from pymongo import MongoClient
+
+client = MongoClient('mongodb://localhost:27017')
+coll = client['shop']['orders']
+
+filter = {'status': 'paid', 'total': {'$gt': 100}}
+projection = {'_id': 0, 'customer': 1}
+sort = [('createdAt', -1)]
+
+cursor = coll.find(filter, projection=projection, sort=sort, skip=20, limit=10)
+for doc in cursor:
+    print(doc)"
+`;
+
+exports[`exportCode > find → shell 1`] = `
+"db.getSiblingDB('shop').getCollection('orders').find({ status: "paid", total: { $gt: 100 } }, { _id: 0, customer: 1 })
+  .sort({ createdAt: -1 })
+  .skip(20)
+  .limit(10);"
+`;

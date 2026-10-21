@@ -35,7 +35,15 @@ public static class SessionEndpoints
         {
             if (string.IsNullOrWhiteSpace(req?.Database)) throw EngineException.Validation("database is required.", new { field = "database" });
             var h = Touch(http, sessions, sid);
-            await h.Session.ChangeDatabaseAsync(req.Database, ct);
+            try
+            {
+                await h.Session.ChangeDatabaseAsync(req.Database, ct);
+            }
+            catch (NotSupportedException) when (DialectInfo.HasDatabases(h.Dialect))
+            {
+                // PostgreSQL connections are bound to one database: reopen the session on the new one (same session id).
+                await sessions.ReopenWithDatabaseAsync(h, req.Database, ct);
+            }
             sessions.PublishChanged(h);
             return h.ToInfo();
         });

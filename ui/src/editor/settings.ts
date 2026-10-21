@@ -10,7 +10,7 @@ export function intelOptionsFromSettings(s: Settings['editor'] | undefined, dial
     identifierCase: s.identifierCase,
     qualifyObjects: s.qualifyObjects,
     qualifyColumns: s.qualifyColumns,
-    // SQLite scripts have no blank-line culture: statements end at ';' (PLAN 4.4)
-    blankLineSplitsStatements: dialect === 'sqlite' ? false : s.blankLineSplitsStatements,
+    // SQLite and PostgreSQL scripts have no blank-line culture: statements end at ';' (PLAN 4.4)
+    blankLineSplitsStatements: dialect === 'sqlite' || dialect === 'pgsql' ? false : s.blankLineSplitsStatements,
   };
 }

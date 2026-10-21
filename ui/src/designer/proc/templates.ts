@@ -50,7 +50,6 @@ export function defaultTiming(dialect: Dialect, onView: boolean): TriggerTiming 
   return onView ? 'INSTEAD OF' : dialect === 'plsql' ? 'BEFORE' : 'AFTER';
 }
 
-// pgsql: M2-0 placeholder values (PG-C owns the PostgreSQL templates, docs/PLAN-PG.md 4.2).
 export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
 export const DEFAULT_RETURN_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
 
@@ -202,6 +201,7 @@ export function routineSnippet(spec: WizardSpec): string {
       ].join('\n');
     }
   }
+  if (dialect === 'pgsql') return pgSnippet(spec, name, s);
   // SQLite: triggers only.
   const t = spec.trigger ?? { table: 'table_name', timing: 'AFTER', events: ['INSERT'], forEachRow: true };
   const n = spec.schema && spec.schema !== 'main' ? `${lit(quoteIdent(spec.schema, 'sqlite'))}.${s.stop(name)}` : s.stop(name);
@@ -213,6 +213,86 @@ export function routineSnippet(spec: WizardSpec): string {
     'BEGIN',
     `    \${0:SELECT 1; -- NEW / OLD hold the row values}`,
     'END;',
+    '',
+  ].join('\n');
+}
+
+function pgName(schema: string | null, name: string, s: Stops): string {
+  const n = s.stop(name);
+  return schema ? `${lit(quoteIdent(schema, 'pgsql'))}.${n}` : n;
+}
+
+/** `IN` is the default mode and left out; OUT / INOUT come before the name (`INOUT p_total numeric`). */
+function pgParams(params: WizardParam[], s: Stops): string {
+  return params
+    .map((p) => {
+      const mode = p.direction === 'in' ? '' : `${p.direction.toUpperCase()} `;
+      const def = p.default.trim() && p.direction !== 'out' ? ` DEFAULT ${lit(p.default.trim())}` : '';
+      return `${mode}${lit(oracleParamName(p.name))} ${s.stop(p.type)}${def}`;
+    })
+    .join(', ');
+}
+
+/**
+ * PostgreSQL templates (docs/PLAN-PG.md 4.2): PL/pgSQL bodies in `$$ … $$`; a trigger is a `RETURNS trigger` function
+ * plus `CREATE OR REPLACE TRIGGER … EXECUTE FUNCTION` (PostgreSQL 14+).
+ */
+function pgSnippet(spec: WizardSpec, name: string, s: Stops): string {
+  const dollars = lit('$$');
+  if (spec.kind === 'procedure') {
+    return [
+      `CREATE OR REPLACE PROCEDURE ${pgName(spec.schema, name, s)}(${pgParams(spec.params, s)})`,
+      'LANGUAGE plpgsql',
+      `AS ${dollars}`,
+      'BEGIN',
+      '    ${0:NULL;}',
+      'END',
+      `${dollars};`,
+      '',
+    ].join('\n');
+  }
+  if (spec.kind === 'function') {
+    const ret = spec.returns || DEFAULT_RETURN_TYPE.pgsql;
+    return [
+      `CREATE OR REPLACE FUNCTION ${pgName(spec.schema, name, s)}(${pgParams(spec.params, s)})`,
+      `RETURNS ${s.stop(ret)}`,
+      'LANGUAGE plpgsql',
+      `AS ${dollars}`,
+      'DECLARE',
+      `    v_result ${lit(ret)};`,
+      'BEGIN',
+      '    ${0:v_result := NULL;}',
+      '    RETURN v_result;',
+      'END',
+      `${dollars};`,
+      '',
+    ].join('\n');
+  }
+  // Trigger: a RETURNS trigger function plus the trigger that executes it.
+  const t = spec.trigger ?? { table: 'table_name', timing: 'BEFORE', events: ['INSERT'], forEachRow: true };
+  const fn = `${name}_fn`;
+  const q = (n: string) => lit(quoteIdent(n, 'pgsql'));
+  const fnName = spec.schema ? `${q(spec.schema)}.${q(fn)}` : q(fn);
+  const table = spec.schema ? `${q(spec.schema)}.${s.stop(t.table)}` : s.stop(t.table);
+  // Row triggers return the row to keep (NEW is NULL for DELETE, OLD for INSERT); statement triggers return NULL.
+  const events = t.events.length ? t.events : ['INSERT'];
+  const ret = !t.forEachRow ? 'RETURN NULL;'
+    : events.every((e) => e === 'DELETE') ? 'RETURN OLD;'
+      : events.includes('DELETE') ? 'RETURN COALESCE(NEW, OLD);' : 'RETURN NEW;';
+  return [
+    `CREATE OR REPLACE FUNCTION ${fnName}()`,
+    'RETURNS trigger',
+    'LANGUAGE plpgsql',
+    `AS ${dollars}`,
+    'BEGIN',
+    `    \${0:${ret}}`,
+    'END',
+    `${dollars};`,
+    '',
+    `CREATE OR REPLACE TRIGGER ${q(name)}`,
+    `${t.timing} ${events.join(' OR ')} ON ${table}`,
+    `FOR EACH ${t.forEachRow ? 'ROW' : 'STATEMENT'}`,
+    `EXECUTE FUNCTION ${fnName}();`,
     '',
   ].join('\n');
 }
@@ -257,7 +337,7 @@ function withSlash(ddl: string): string {
 export function defaultName(kind: RoutineKind, dialect: Dialect): string {
   const base = kind === 'procedure' ? 'NewProcedure' : kind === 'function' ? 'NewFunction' : kind === 'package' ? 'NewPackage' : 'NewTrigger';
   if (dialect === 'plsql') return base.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase();
-  if (dialect === 'sqlite') return base.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  if (dialect === 'sqlite' || dialect === 'pgsql') return base.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
   return base;
 }
 

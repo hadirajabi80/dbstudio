@@ -1,5 +1,5 @@
-# Logs
-logs
+# Logs (anchored: a bare `logs` also matched src/components/Logs on case-insensitive file systems)
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

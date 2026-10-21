@@ -12,7 +12,8 @@ namespace DbStudio.Core.Catalog;
 
 public sealed record CatalogDatabases(IReadOnlyList<string> Databases, string? Current);
 
-public sealed record CatalogSchemaItem(string Name, bool Loaded, int? ObjectCount);
+/// <param name="SearchPathIndex">PostgreSQL: 0-based position on the session search_path; null when not on it (or no search path).</param>
+public sealed record CatalogSchemaItem(string Name, bool Loaded, int? ObjectCount, int? SearchPathIndex = null);
 
 public sealed record CatalogSchemas(string? Database, string DefaultSchema, IReadOnlyList<CatalogSchemaItem> Schemas);
 
@@ -24,7 +25,7 @@ public sealed record CatalogSnapshotResult(byte[]? Json, string ETag, bool NotMo
 /// <see cref="ICatalogReader.LoadSchemaAsync"/> call over a short-lived catalog connection, serialized once to the
 /// compact wire format and ETag'd. DDL executed in sessions invalidates and reloads the affected schemas in the
 /// background, then pushes <c>catalog.changed</c>.
-/// <para>Cache keys: SQL Server uses the database name; Oracle and SQLite have no database level (key "").</para>
+/// <para>Cache keys: SQL Server and PostgreSQL use the database name (<see cref="DialectInfo.HasDatabases"/>); Oracle and SQLite have no database level (key "").</para>
 /// </summary>
 public sealed class CatalogService
 {
@@ -82,7 +83,7 @@ public sealed class CatalogService
     private static async Task<DbCatalog> DbAsync(ConnectionCatalog cc, Dialect dialect, string? database, ReaderLease lease)
     {
         string? name = null;
-        if (dialect == Dialect.TSql)
+        if (DialectInfo.HasDatabases(dialect))
         {
             name = string.IsNullOrWhiteSpace(database) ? null : database;
             if (name is null)
@@ -121,7 +122,7 @@ public sealed class CatalogService
             var reader = await lease.GetAsync().ConfigureAwait(false);
             cc.DatabaseList = await reader.ListDatabasesAsync(ct).ConfigureAwait(false);
             var current = await reader.GetCurrentDatabaseAsync(ct).ConfigureAwait(false);
-            if (provider.Dialect == Dialect.TSql) cc.CurrentDatabase = current;
+            if (DialectInfo.HasDatabases(provider.Dialect)) cc.CurrentDatabase = current;
             return new CatalogDatabases(cc.DatabaseList, current);
         }
         finally
@@ -143,8 +144,8 @@ public sealed class CatalogService
             db.SchemaList = await (await lease.GetAsync().ConfigureAwait(false)).ListSchemasAsync(db.Name, ct).ConfigureAwait(false);
             var items = db.SchemaList
                 .Select(s => db.Loaded.TryGetValue(s.Name, out var e)
-                    ? new CatalogSchemaItem(s.Name, true, e.ObjectCount)
-                    : new CatalogSchemaItem(s.Name, false, s.ObjectCount))
+                    ? new CatalogSchemaItem(s.Name, true, e.ObjectCount, s.SearchPathIndex)
+                    : new CatalogSchemaItem(s.Name, false, s.ObjectCount, s.SearchPathIndex))
                 .ToList();
             return new CatalogSchemas(db.Name, db.DefaultSchema!, items);
         }
@@ -181,8 +182,11 @@ public sealed class CatalogService
             if (ifNoneMatch is not null && ETagMatches(ifNoneMatch, etag))
                 return new CatalogSnapshotResult(null, etag, true, db.Version);
 
+            if (provider.Dialect == Dialect.PgSql && db.SchemaList is null)
+                db.SchemaList = await (await lease.GetAsync().ConfigureAwait(false)).ListSchemasAsync(db.Name, ct).ConfigureAwait(false);
+            var searchPath = db.SchemaList?.Where(s => s.SearchPathIndex is not null).OrderBy(s => s.SearchPathIndex).Select(s => s.Name).ToList();
             var json = CatalogWire.ComposeSnapshot(connectionId, provider.Dialect, db.Name, db.DefaultSchema!, db.Version,
-                cc.DatabaseList ?? [], entries.Select(e => e.Json));
+                cc.DatabaseList ?? [], entries.Select(e => e.Json), searchPath);
             return new CatalogSnapshotResult(json, etag, false, db.Version);
         }
         finally
@@ -329,7 +333,7 @@ public sealed class CatalogService
             foreach (var t in targets)
             {
                 if (t.Action is "ATTACH" or "DETACH") cc.DatabaseList = null;
-                var dbName = dialect == Dialect.TSql ? t.Database ?? sessionDatabase ?? cc.CurrentDatabase : null;
+                var dbName = DialectInfo.HasDatabases(dialect) ? t.Database ?? sessionDatabase ?? cc.CurrentDatabase : null;
                 var key = dbName ?? "";
                 if (!cc.Databases.TryGetValue(key, out var db)) continue; // nothing cached for that database
                 if (!work.TryGetValue(key, out var w)) w = (db, new HashSet<string>(StringComparer.OrdinalIgnoreCase), false);
@@ -343,7 +347,7 @@ public sealed class CatalogService
                     {
                         Dialect.PlSql => sessionDatabase ?? db.DefaultSchema,
                         Dialect.Sqlite => "main",
-                        _ => db.DefaultSchema ?? "dbo",
+                        _ => db.DefaultSchema ?? DialectInfo.DefaultSchemaFallback(dialect),
                     };
                     if (schema is not null) w.Schemas.Add(schema);
                 }

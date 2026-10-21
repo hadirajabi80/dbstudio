@@ -1,0 +1,1 @@
+create function orders_of(p_customer integer) returns table (id integer, order_date date, total numeric) language sql stable rows 10 as $$ select id, order_date, total from orders where customer_id = p_customer $$;

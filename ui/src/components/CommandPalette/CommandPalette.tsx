@@ -19,7 +19,7 @@ import { useRestoreFocus } from '../common/focus';
 import { useExplorer } from '../Explorer/explorerStore';
 import { Kbd } from '../Shortcuts/Kbd';
 import { commandIcon } from '../layout/commandMenu';
-import { collectEntries, parseObjectQuery, searchObjects, type IndexEntry, type SourceEntryType } from './objectIndex';
+import { collectEntries, DIAGRAM_PREFIX, parseObjectQuery, searchObjects, type IndexEntry, type SourceEntryType } from './objectIndex';
 
 const SOURCE_ENTRY_LABEL: Record<SourceEntryType, string> = { 'redis.key': 'Key', 'mongo.collection': 'Collection', 'kafka.topic': 'Topic' };
 import { paletteMatch, rankPalette, type PaletteMatch } from './paletteScore';
@@ -228,6 +228,8 @@ export function CommandPalette() {
       setTimeout(() => runCommand(it.id), 0);
     } else {
       const how = e?.altKey ? 'reveal' : e?.shiftKey ? 'insert' : e?.ctrlKey || e?.metaKey ? 'data' : 'open';
+      // er: (M2-ER) Enter opens the diagram of the table and its FK neighbours.
+      if (how === 'open' && parsed.prefix === DIAGRAM_PREFIX && !it.entry.source && hasCommand('er.openRelated') && runCommand('er.openRelated', targetOf(it.entry))) return;
       runObjectHit(it.entry, how);
     }
   };
@@ -243,7 +245,7 @@ export function CommandPalette() {
 
   const noCatalog = objectMode && loadedCount === 0 && unloaded.length === 0;
   const placeholder = objectMode
-    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · k: keys · coll: collections · > commands'
+    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · k: keys · coll: collections · er: ER diagram · > commands'
     : 'Type a command…  @ to go to an object';
 
   return (

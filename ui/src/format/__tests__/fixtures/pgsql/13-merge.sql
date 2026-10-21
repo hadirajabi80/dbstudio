@@ -1,0 +1,1 @@
+merge into stock s using deliveries d on s.item_id = d.item_id when matched and d.qty = 0 then delete when matched then update set qty = s.qty + d.qty when not matched then insert (item_id, qty) values (d.item_id, d.qty);

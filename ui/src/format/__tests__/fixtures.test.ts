@@ -36,7 +36,7 @@ export function fixtureFiles(dialect: Dialect): string[] {
   return Object.keys(RAW).filter((k) => k.startsWith(prefix) && !k.endsWith('.expected.sql')).map((k) => k.slice(prefix.length)).sort();
 }
 
-for (const dialect of ['tsql', 'plsql', 'sqlite'] as Dialect[]) {
+for (const dialect of ['tsql', 'plsql', 'sqlite', 'pgsql'] as Dialect[]) {
   describe(`formatter fixtures: ${dialect}`, () => {
     const spec = getSpec(dialect);
     const files = fixtureFiles(dialect);

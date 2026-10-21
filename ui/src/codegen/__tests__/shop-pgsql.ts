@@ -1,0 +1,161 @@
+// PostgreSQL "shop" catalog for the codegen snapshot tests (docs/PLAN-PG.md 4.1): lower-snake names, schemas
+// `public` + `sales`, identity / serial / generated columns, an enum and a domain, arrays, jsonb, cross-schema FKs,
+// overloaded functions, a set-returning function and a procedure with an INOUT parameter. Shaped like the engine's
+// PgCatalogReader output (flags: 1 = identity/serial, 2 = generated; enum labels as `enum label` columns).
+import type { CatalogSnapshot } from '../../api/types';
+
+export const PG_SHOP: CatalogSnapshot = {
+  connectionId: 'c_pg',
+  dialect: 'pgsql',
+  database: 'shop',
+  defaultSchema: 'public',
+  version: 1,
+  databases: ['postgres', 'shop', 'analytics'],
+  searchPath: ['public'],
+  schemas: [
+    {
+      name: 'public',
+      version: 1,
+      objects: [
+        {
+          t: 'table', n: 'countries', cm: 'ISO countries',
+          c: [
+            ['id', 'integer', 0, 1, 1, null],
+            ['name', 'text', 0, 0, 0, null],
+            ['iso_code', 'character(2)', 0, 0, 0, 'ISO 3166-1 alpha-2'],
+          ],
+          pk: ['id'],
+        },
+        {
+          t: 'table', n: 'customers', cm: 'People who buy things',
+          c: [
+            ['id', 'bigint', 0, 1, 1, null],
+            ['name', 'character varying(100)', 0, 0, 0, 'Display name'],
+            ['email', 'email_address', 1, 0, 0, null],
+            ['country_id', 'integer', 1, 0, 0, null],
+            ['is_active', 'boolean', 0, 0, 0, null],
+            ['created_at', 'timestamp with time zone', 0, 0, 0, null],
+            ['profile', 'jsonb', 1, 0, 0, 'Free-form preferences'],
+            ['tags', 'text[]', 1, 0, 0, null],
+          ],
+          pk: ['id'],
+          fk: [{ n: 'customers_country_id_fkey', cols: ['country_id'], rs: 'public', rt: 'countries', rcols: ['id'] }],
+        },
+        {
+          t: 'table', n: 'products',
+          c: [
+            ['id', 'integer', 0, 1, 1, null],
+            ['sku', 'uuid', 0, 0, 0, null],
+            ['name', 'text', 0, 0, 0, null],
+            ['price', 'numeric(10,2)', 0, 0, 0, null],
+            ['stock', 'integer', 0, 0, 0, null],
+            ['attributes', 'jsonb', 1, 0, 0, null],
+            ['thumbnail', 'bytea', 1, 0, 0, null],
+          ],
+          pk: ['id'],
+        },
+        {
+          t: 'table', n: 'orders',
+          c: [
+            ['id', 'bigint', 0, 1, 1, null],
+            ['customer_id', 'bigint', 0, 0, 0, null],
+            ['order_date', 'timestamp with time zone', 0, 0, 0, null],
+            ['status', 'order_status', 0, 0, 0, null],
+            ['total', 'numeric(12,2)', 0, 0, 0, null],
+            ['note', 'text', 1, 0, 0, null],
+          ],
+          pk: ['id'],
+          fk: [{ n: 'orders_customer_id_fkey', cols: ['customer_id'], rs: 'public', rt: 'customers', rcols: ['id'] }],
+        },
+        {
+          t: 'table', n: 'order_lines',
+          c: [
+            ['order_id', 'bigint', 0, 1, 0, null],
+            ['line_no', 'integer', 0, 1, 0, null],
+            ['product_id', 'integer', 0, 0, 0, null],
+            ['qty', 'integer', 0, 0, 0, null],
+            ['unit_price', 'numeric(10,2)', 0, 0, 0, null],
+            ['line_total', 'numeric(12,2)', 1, 0, 2, 'GENERATED ALWAYS AS (qty * unit_price) STORED'],
+          ],
+          pk: ['order_id', 'line_no'],
+          fk: [
+            { n: 'order_lines_order_id_fkey', cols: ['order_id'], rs: 'public', rt: 'orders', rcols: ['id'] },
+            { n: 'order_lines_product_id_fkey', cols: ['product_id'], rs: 'public', rt: 'products', rcols: ['id'] },
+          ],
+        },
+        {
+          t: 'table', n: 'type_zoo', cm: 'One column per PostgreSQL type family',
+          c: [
+            ['id', 'uuid', 0, 1, 0, null],
+            ['small', 'smallint', 1, 0, 0, null],
+            ['big', 'bigint', 1, 0, 0, null],
+            ['ratio', 'real', 1, 0, 0, null],
+            ['score', 'double precision', 1, 0, 0, null],
+            ['price', 'money', 1, 0, 0, null],
+            ['code', 'character varying(20)', 1, 0, 0, null],
+            ['day', 'date', 1, 0, 0, null],
+            ['at_local', 'timestamp(3) without time zone', 1, 0, 0, null],
+            ['opens', 'time without time zone', 1, 0, 0, null],
+            ['opens_tz', 'time with time zone', 1, 0, 0, null],
+            ['wait', 'interval', 1, 0, 0, null],
+            ['doc', 'json', 1, 0, 0, null],
+            ['spec', 'xml', 1, 0, 0, null],
+            ['ip', 'inet', 1, 0, 0, null],
+            ['mac', 'macaddr', 1, 0, 0, null],
+            ['location', 'point', 1, 0, 0, null],
+            ['search', 'tsvector', 1, 0, 0, null],
+            ['during', 'tstzrange', 1, 0, 0, null],
+            ['counts', 'integer[]', 1, 0, 0, null],
+            ['statuses', 'order_status[]', 1, 0, 0, null],
+            ['user', 'text', 1, 0, 0, 'Reserved word as a column name'],
+            ['CamelCase', 'text', 1, 0, 0, 'Mixed case needs quoting'],
+          ],
+          pk: ['id'],
+        },
+        {
+          t: 'view', n: 'customer_totals',
+          c: [
+            ['customer_id', 'bigint', 1, 0, 0, null],
+            ['name', 'character varying(100)', 1, 0, 0, null],
+            ['orders', 'bigint', 1, 0, 0, null],
+            ['revenue', 'numeric', 1, 0, 0, null],
+          ],
+        },
+        { t: 'type', n: 'order_status', cm: null, c: [['new', 'enum label', 0, 0, 0, null], ['paid', 'enum label', 0, 0, 0, null], ['shipped', 'enum label', 0, 0, 0, null], ['cancelled', 'enum label', 0, 0, 0, null]] },
+        { t: 'type', n: 'email_address', cm: 'domain over text', c: [] },
+        { t: 'func', n: 'fn_tax', p: [['amount', 'numeric', 'in', 0], ['', 'numeric', 'return', 0]] },
+        { t: 'func', n: 'fn_tax', p: [['amount', 'numeric', 'in', 0], ['rate', 'numeric', 'in', 0], ['', 'numeric', 'return', 0]] },
+        {
+          t: 'tablefunc', n: 'orders_of',
+          p: [['p_customer_id', 'bigint', 'in', 0], ['', 'TABLE(id bigint, order_date timestamp with time zone, total numeric)', 'return', 0]],
+          c: [['id', 'bigint', 1, 0, 0, null], ['order_date', 'timestamp with time zone', 1, 0, 0, null], ['total', 'numeric', 1, 0, 0, null]],
+        },
+        {
+          t: 'proc', n: 'add_order_line',
+          p: [['p_order_id', 'bigint', 'in', 0], ['p_product_id', 'integer', 'in', 0], ['p_qty', 'integer', 'in', 1], ['p_line_no', 'integer', 'inout', 1]],
+        },
+        { t: 'sequence', n: 'order_numbers' },
+        { t: 'trigger', n: 'trg_orders_check', cm: 'on orders' },
+      ],
+    },
+    {
+      name: 'sales',
+      version: 1,
+      objects: [
+        {
+          t: 'table', n: 'invoices', cm: 'Issued invoices',
+          c: [
+            ['invoice_id', 'bigint', 0, 1, 1, null],
+            ['customer_id', 'bigint', 0, 0, 0, null],
+            ['issued_at', 'timestamp with time zone', 0, 0, 0, null],
+            ['amount', 'numeric(12,2)', 0, 0, 0, null],
+            ['paid', 'boolean', 0, 0, 0, null],
+            ['pdf', 'bytea', 1, 0, 0, null],
+          ],
+          pk: ['invoice_id'],
+          fk: [{ n: 'invoices_customer_id_fkey', cols: ['customer_id'], rs: 'public', rt: 'customers', rcols: ['id'] }],
+        },
+      ],
+    },
+  ],
+};

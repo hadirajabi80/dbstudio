@@ -122,6 +122,8 @@ export function ConsoleView({ tab, theme, visible }: { tab: ConsoleTab; theme: E
     [connectionId, catDb],
   );
   const requestServerDiagnostics = useMemo(() => {
+    // Server diagnostics for every dialect but Oracle; PostgreSQL's ("pg-prepare") PREPAREs each statement inside a
+    // read-only transaction that is always rolled back, so nothing runs.
     if (!connectionId || dialect === 'plsql') return undefined;
     return (sql: string) =>
       api.diagnostics({ dialect, sql, connectionId }).then((r) => r.diagnostics).catch(() => [] as ServerDiagnostic[]);

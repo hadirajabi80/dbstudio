@@ -558,3 +558,10 @@
     transition: none !important;
   }
 }
+
+/* PostgreSQL index access method note (the index model has no method field yet). */
+.dz-note {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: help;
+}

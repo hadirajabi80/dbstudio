@@ -331,3 +331,68 @@ describe('large inputs', () => {
     expect(median).toBeLessThan(budget);
   });
 });
+
+describe('PostgreSQL (docs/PLAN-PG.md 3.6, P43)', () => {
+  const pg = (sql: string, o = {}) => formatSql(sql, 'pgsql', o);
+
+  it('keeps :: unspaced and upper-cases known types after it', () => {
+    expect(pg('select a::int, b :: text, c::order_status from t').text).toBe('SELECT\n    a::INT,\n    b::TEXT,\n    c::order_status\nFROM t');
+  });
+
+  it('lays out the function header and keeps the $$ body byte-identical', () => {
+    const body = '$$\nDECLARE x int;\n  BEGIN\n\tx := 1;   -- keep   me\n  RETURN x;\nEND\n$$';
+    const r = pg(`create or replace function f(a int, b text) returns int language plpgsql stable as ${body};`);
+    expect(r.warnings).toEqual([]);
+    expect(r.text).toBe(`CREATE OR REPLACE FUNCTION f(a INT, b TEXT)\nRETURNS INT\nLANGUAGE plpgsql\nSTABLE\nAS ${body};`);
+    expect(pg(r.text).text).toBe(r.text);
+  });
+
+  it('DO blocks and $$ bodies containing ; stay one statement each', () => {
+    const r = pg("do $$ begin raise notice 'a;b'; end $$; select 1;");
+    expect(r.text).toBe("DO $$ begin raise notice 'a;b'; end $$;\nSELECT 1;");
+  });
+
+  it('an unterminated $$ body stays verbatim with a warning; the statement before is formatted', () => {
+    const r = pg('select 1 from t;\ncreate function f() returns int as $$ select 1;');
+    expect(r.text.startsWith('SELECT 1\nFROM t;')).toBe(true);
+    expect(r.text).toContain('create function f() returns int as $$ select 1;');
+    expect(r.warnings).toHaveLength(1);
+  });
+
+  it('psql meta-command lines are kept verbatim', () => {
+    expect(pg('\\c shop\nselect 1;\n\\dt').text).toBe('\\c shop\nSELECT 1;\n\\dt');
+  });
+
+  it('JSON operators and array subscripts', () => {
+    expect(pg("select data->'a'->>'b', arr[1:2], arr[i] from t").text).toBe("SELECT\n    data -> 'a' ->> 'b',\n    arr[1:2],\n    arr[i]\nFROM t");
+  });
+
+  it('5,000-line PostgreSQL script formats in < 150 ms', () => {
+    const lines: string[] = [];
+    while (lines.length < 5000) {
+      lines.push(
+        '-- report ' + lines.length,
+        "select c.name, o.total::numeric(10,2), o.meta->>'k' as k from customers c join orders o on o.customer_id = c.id",
+        "where o.total > 10 and c.name ilike 'A%' order by o.total desc limit 10;",
+        "insert into t (a, b) values (1, 'x') on conflict (a) do update set b = excluded.b returning *;",
+        'do $$ begin perform 1; end $$;',
+      );
+    }
+    const src = lines.join('\n');
+    const r = pg(src);
+    expect(r.warnings).toEqual([]);
+    expect(sameTokens(src, r.text, 'pgsql')).toBe(true);
+    pg(src);
+    pg(src);
+    const times: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now();
+      pg(src);
+      times.push(performance.now() - t0);
+    }
+    const median = times.sort((a, b) => a - b)[2];
+    const onCi = !!(globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.CI;
+    const budget = typeof document === 'undefined' ? (onCi ? 600 : 150) : 1000;
+    expect(median).toBeLessThan(budget);
+  });
+});

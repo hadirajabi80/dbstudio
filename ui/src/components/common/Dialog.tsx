@@ -22,7 +22,24 @@ const FIRST_FIELD = ['input', 'select', 'textarea', '[role="combobox"]'].map((f)
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** Modal dialog: role=dialog + aria-modal, focus trapped, Esc closes, initial focus on the first input. */
+/** Monaco widgets that Escape closes (suggest list, find/replace, parameter hints, rename box, hover). */
+const MONACO_WIDGETS = ['.suggest-widget.visible', '.find-widget.visible', '.parameter-hints-widget.visible', '.rename-box', '.monaco-hover:not(.hidden)'].join(', ');
+
+/**
+ * True when an Escape keydown belongs to a Monaco editor inside the dialog rather than to the dialog: Monaco already
+ * handled it (it prevents the default of keys it binds, e.g. hideSuggestWidget / closeFindWidget), or one of its
+ * widgets is still open in that editor.
+ */
+export function escapeOwnedByEditor(e: { target: EventTarget | null; defaultPrevented: boolean }): boolean {
+  const editor = e.target instanceof Element ? e.target.closest('.monaco-editor') : null;
+  if (!editor) return false;
+  return e.defaultPrevented || !!editor.querySelector(MONACO_WIDGETS);
+}
+
+/**
+ * Modal dialog: role=dialog + aria-modal, focus trapped, Esc closes (unless a Monaco editor in the dialog uses it to
+ * close its suggest/find widget), initial focus on the first input.
+ */
 export function Dialog({ title, onClose, children, footer, width = 520, className, onSubmit, ariaLabel }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
   useRestoreFocus(true, ref);
@@ -41,6 +58,7 @@ export function Dialog({ title, onClose, children, footer, width = 520, classNam
         style={{ width }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
+            if (escapeOwnedByEditor({ target: e.target, defaultPrevented: e.nativeEvent.defaultPrevented })) return;
             e.stopPropagation();
             onClose();
           } else if (e.key === 'Tab') {

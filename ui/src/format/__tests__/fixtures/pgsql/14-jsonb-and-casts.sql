@@ -1,0 +1,1 @@
+select meta->'a' as a, meta->>'b' as b, meta #> '{c,d}' as cd, meta #>> '{e}' as e, meta @> '{"x": 1}'::jsonb as has_x, meta ? 'k' as k, meta ?| array['a', 'b'], meta - 'gone', total::numeric(10,2), '2024-01-01'::date + 1, cast(id as text) from extra_types where meta <@ '{}' and tags && array['t'];

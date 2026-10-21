@@ -30,6 +30,8 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
   const [table, setTable] = useState(req.table ?? '');
   const [timing, setTiming] = useState<TriggerTiming>(defaultTiming(req.dialect, false));
   const [events, setEvents] = useState<('INSERT' | 'UPDATE' | 'DELETE')[]>(['INSERT']);
+  /** PostgreSQL: row-level (default) or statement-level trigger. */
+  const [eachRow, setEachRow] = useState(true);
   const [pkgMember, setPkgMember] = useState(!!req.packageName);
   const [pkgName, setPkgName] = useState(req.packageName ?? '');
   const [busy, setBusy] = useState(false);
@@ -70,7 +72,7 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
     try {
       const spec: WizardSpec = {
         dialect: req.dialect, kind, schema: schema || null, name: name.trim() || defaultName(kind, req.dialect), params, returns,
-        trigger: kind === 'trigger' ? { table: table || 'table_name', timing, events: events.length ? events : ['INSERT'], forEachRow: req.dialect !== 'tsql' } : undefined,
+        trigger: kind === 'trigger' ? { table: table || 'table_name', timing, events: events.length ? events : ['INSERT'], forEachRow: req.dialect === 'pgsql' ? eachRow || onView : req.dialect !== 'tsql' } : undefined,
       };
       if (memberMode) {
         if (!pkgName) {
@@ -223,6 +225,12 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
                   {ev}
                 </label>
               ))}
+              {req.dialect === 'pgsql' && (
+                <label className="check" title={onView ? 'INSTEAD OF triggers are always row-level' : 'Off: FOR EACH STATEMENT'}>
+                  <input type="checkbox" checked={eachRow || onView} disabled={onView} onChange={(e) => setEachRow(e.target.checked)} />
+                  FOR EACH ROW
+                </label>
+              )}
             </div>
           </>
         )}

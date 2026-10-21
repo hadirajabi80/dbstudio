@@ -15,4 +15,8 @@
     <PackageReference Include="Npgsql" Version="9.0.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbStudio.Providers.PostgreSql.Tests" />
+  </ItemGroup>
+
 </Project>

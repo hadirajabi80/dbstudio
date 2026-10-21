@@ -1,0 +1,10 @@
+{
+  "totalLinesWritten": 5000,
+  "log": [
+    "{\"t\":{\"$date\":\"2026-10-18T13:02:11.213+00:00\"},\"s\":\"I\",  \"c\":\"NETWORK\",  \"id\":22943,   \"ctx\":\"listener\",\"msg\":\"Connection accepted\",\"attr\":{\"remote\":\"10.0.0.9:50122\",\"uuid\":{\"uuid\":{\"$uuid\":\"5e0f\"}},\"connectionId\":42,\"connectionCount\":14}}",
+    "{\"t\":{\"$date\":\"2026-10-18T13:02:12.000+00:00\"},\"s\":\"W\",  \"c\":\"COMMAND\",  \"id\":51803,   \"ctx\":\"conn42\",\"msg\":\"Slow query\",\"attr\":{\"type\":\"command\",\"ns\":\"shop.orders\",\"planSummary\":\"COLLSCAN\",\"durationMillis\":154}}",
+    "{\"t\":{\"$date\":\"2026-10-18T13:02:13.000+00:00\"},\"s\":\"D1\", \"c\":\"STORAGE\",  \"id\":22430,   \"ctx\":\"Checkpointer\",\"msg\":\"WiredTiger message\"}",
+    "2026-10-18T13:02:14.000+0000 E CONTROL  [main] Failed to refresh key cache: ReadConcernMajorityNotAvailableYet"
+  ],
+  "ok": 1
+}

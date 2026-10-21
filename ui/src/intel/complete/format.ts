@@ -5,10 +5,13 @@ import type { IntelOptions } from '../types';
 const TSQL_PLAIN = /^[\p{L}_#@][\p{L}\p{N}_$#@]*$/u;
 const SQLITE_PLAIN = /^[\p{L}_][\p{L}\p{N}_$]*$/u;
 const ORACLE_PLAIN = /^[A-Z][A-Z0-9_$#]*$/;
+/** PostgreSQL: unquoted names fold to lower case, so a name with upper-case letters must be quoted. */
+const PG_PLAIN = /^[\p{L}_][\p{L}\p{N}_$]*$/u;
 
 export function needsQuoting(name: string, spec: DialectSpec): boolean {
   if (!name) return true;
   if (spec.id === 'plsql') return !ORACLE_PLAIN.test(name) || spec.keywords.has(name);
+  if (spec.id === 'pgsql') return !PG_PLAIN.test(name) || name !== name.toLowerCase() || spec.keywords.has(name.toUpperCase());
   const re = spec.id === 'tsql' ? TSQL_PLAIN : SQLITE_PLAIN;
   if (!re.test(name)) return true;
   return spec.keywords.has(name.toUpperCase());
@@ -29,6 +32,8 @@ export interface FormatEnv {
 }
 
 function applyCase(name: string, env: FormatEnv): string {
+  // PostgreSQL: unquoted names are lower case already; upper-casing them would only obscure the catalog spelling
+  if (env.spec.id === 'pgsql' && (env.opts.identifierCase === 'upper' || env.opts.identifierCase === 'matchPrefix')) return name;
   switch (env.opts.identifierCase) {
     case 'lower': return name.toLowerCase();
     case 'upper': return name.toUpperCase();

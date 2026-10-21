@@ -1,0 +1,1 @@
+select id, total, sum(total) over (partition by customer_id order by order_date rows between unbounded preceding and current row) as running, rank() over w from orders window w as (partition by customer_id order by total desc);

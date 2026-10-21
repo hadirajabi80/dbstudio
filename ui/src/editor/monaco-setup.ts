@@ -1,4 +1,4 @@
-// One-time global Monaco setup: worker, the three DbStudio SQL languages, lexer-driven tokens, themes and the
+// One-time global Monaco setup: worker, the four DbStudio SQL languages, lexer-driven tokens, themes and the
 // language feature providers. Providers resolve per-model state through the registry (multi-editor safe).
 // Colours (themes, run flash) come from the design tokens in ui/src/theme, never from literals here.
 import * as monaco from './monaco';
@@ -18,15 +18,17 @@ export const LANGUAGE_IDS: Record<Dialect, string> = {
   tsql: 'dbstudio-tsql',
   plsql: 'dbstudio-plsql',
   sqlite: 'dbstudio-sqlite',
-  pgsql: 'dbstudio-sqlite', // M2-0 placeholder: PG-B registers 'dbstudio-pgsql'
+  pgsql: 'dbstudio-pgsql',
 };
+
+const LANGUAGE_ALIASES: Record<Dialect, string> = { tsql: 'T-SQL', plsql: 'PL/SQL', sqlite: 'SQLite', pgsql: 'PostgreSQL' };
 
 export const THEME_IDS = { light: 'dbstudio-light', dark: 'dbstudio-dark' } as const;
 
 export const TRIGGER_CHARACTERS = ['.', '(', ',', '@', ':', '#', '[', '"', ' '];
 
 /** A space only opens the popup after these keywords (DataGrip style: `FROM `, `JOIN `, `ON ` ...). */
-const SPACE_TRIGGER_AFTER = /(^|[\s(,])(FROM|JOIN|UPDATE|INTO|EXEC|EXECUTE|CALL|ON|USING|APPLY)\s$/i;
+const SPACE_TRIGGER_AFTER = /(^|[\s(,])(FROM|JOIN|UPDATE|INTO|EXEC|EXECUTE|CALL|ON|USING|APPLY|LATERAL|RETURNING|CONFLICT)\s$/i;
 
 // Kept on globalThis so Vite HMR re-evaluating this module does not register providers twice.
 const SETUP_KEY = '__dbstudioMonacoSetup';
@@ -82,7 +84,7 @@ function defineThemes(): void {
 function registerLanguage(dialect: Dialect): void {
   const id = LANGUAGE_IDS[dialect];
   const spec = getSpec(dialect);
-  monaco.languages.register({ id, extensions: [], aliases: [dialect === 'tsql' ? 'T-SQL' : dialect === 'plsql' ? 'PL/SQL' : 'SQLite'] });
+  monaco.languages.register({ id, extensions: [], aliases: [LANGUAGE_ALIASES[dialect]] });
   const brackets: monaco.languages.CharacterPair[] = [['(', ')']];
   const autoClosing: monaco.languages.IAutoClosingPairConditional[] = [
     { open: '(', close: ')' },
@@ -285,7 +287,7 @@ export function ensureMonacoSetup(): void {
   g.MonacoEnvironment = { getWorker: () => new EditorWorker() };
   installStyles();
   defineThemes();
-  (['tsql', 'plsql', 'sqlite'] as Dialect[]).forEach(registerLanguage);
+  (['tsql', 'plsql', 'sqlite', 'pgsql'] as Dialect[]).forEach(registerLanguage);
 
   monaco.editor.registerCommand(ACCEPT_COMMAND, (_accessor: unknown, uri: string, usageKey: string, follow: string) => {
     const b = bindingByUri(uri);

@@ -1,0 +1,49 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Aggregate",
+      "Strategy": "Sorted",
+      "Partial Mode": "Finalize",
+      "Parallel Aware": false,
+      "Startup Cost": 25000.00,
+      "Total Cost": 30000.00,
+      "Plan Rows": 100,
+      "Plan Width": 12,
+      "Actual Rows": 100, "Actual Loops": 1,
+      "Group Key": ["customer_id"],
+      "Plans": [
+        {
+          "Node Type": "Gather Merge",
+          "Parent Relationship": "Outer",
+          "Startup Cost": 25000.00, "Total Cost": 29000.00, "Plan Rows": 200, "Plan Width": 12,
+          "Actual Rows": 200, "Actual Loops": 1,
+          "Workers Planned": 2, "Workers Launched": 1,
+          "Plans": [
+            {
+              "Node Type": "Sort",
+              "Parent Relationship": "Outer",
+              "Startup Cost": 24000.00, "Total Cost": 24500.00, "Plan Rows": 100, "Plan Width": 12,
+              "Actual Rows": 100, "Actual Loops": 2,
+              "Sort Key": ["customer_id"], "Sort Method": "external merge", "Sort Space Used": 4096, "Sort Space Type": "Disk",
+              "Plans": [
+                {
+                  "Node Type": "Seq Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": true,
+                  "Relation Name": "big_orders", "Schema": "public", "Alias": "big_orders",
+                  "Startup Cost": 0.00, "Total Cost": 20000.00, "Plan Rows": 500000, "Plan Width": 12,
+                  "Actual Rows": 50, "Actual Loops": 2,
+                  "Filter": "(total > 100)", "Rows Removed by Filter": 499900
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "Planning Time": 0.5,
+    "JIT": { "Functions": 7, "Options": { "Inlining": false } },
+    "Triggers": [ { "Trigger Name": "trg_orders_check", "Relation": "orders", "Time": 0.02, "Calls": 1 } ],
+    "Execution Time": 120.5
+  }
+]

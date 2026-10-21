@@ -215,3 +215,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Loading placeholder of a lazy tab view (ViewTabHost TabViewSkeleton). */
+.tab-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+}
+.tab-skeleton-bar {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  animation: tab-skeleton-pulse 1.2s ease-in-out infinite;
+}
+.tab-skeleton-toolbar {
+  height: 24px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+@keyframes tab-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-skeleton-bar { animation: none; }
+}

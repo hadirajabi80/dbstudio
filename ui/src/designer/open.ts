@@ -107,8 +107,14 @@ export function designerKey(kind: 'table' | 'view', c: { connectionId: string; d
   return `${kind}|${c.connectionId}|${db ?? ''}|${c.schema ?? ''}|${name}`;
 }
 
+/** Tab titles qualify the name, except SQLite's main and PostgreSQL's public schema (the usual search_path). */
+function titleName(dialect: Dialect, schema: string | null, name: string): string {
+  if (dialect === 'pgsql') return qualifiedName({ schema, name }, dialect, { defaultSchema: 'public' });
+  return qualifiedName({ schema, name }, dialect, { always: dialect !== 'sqlite' });
+}
+
 export function tableTitle(dialect: Dialect, schema: string | null, name: string | null): string {
-  return name ? `Design: ${qualifiedName({ schema, name }, dialect, { always: dialect !== 'sqlite' })}` : 'New table';
+  return name ? `Design: ${titleName(dialect, schema, name)}` : 'New table';
 }
 
 export function openTableDesigner(ctx: DesignerContext, name: string | null): string {
@@ -124,7 +130,7 @@ export function openTableDesigner(ctx: DesignerContext, name: string | null): st
 }
 
 export function viewTitle(dialect: Dialect, schema: string | null, name: string | null): string {
-  return name ? `View: ${qualifiedName({ schema, name }, dialect, { always: dialect !== 'sqlite' })}` : 'New view';
+  return name ? `View: ${titleName(dialect, schema, name)}` : 'New view';
 }
 
 export function openViewDesigner(ctx: DesignerContext, name: string | null): string {

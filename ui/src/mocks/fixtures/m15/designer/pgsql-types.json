@@ -1,0 +1,188 @@
+{
+  "types": [
+    {
+      "name": "smallint",
+      "params": "none",
+      "default": "smallint",
+      "category": "number"
+    },
+    {
+      "name": "integer",
+      "params": "none",
+      "default": "integer",
+      "category": "number"
+    },
+    {
+      "name": "bigint",
+      "params": "none",
+      "default": "bigint",
+      "category": "number"
+    },
+    {
+      "name": "numeric",
+      "params": "precisionScale",
+      "default": "numeric(12,2)",
+      "category": "number"
+    },
+    {
+      "name": "real",
+      "params": "none",
+      "default": "real",
+      "category": "number"
+    },
+    {
+      "name": "double precision",
+      "params": "none",
+      "default": "double precision",
+      "category": "number"
+    },
+    {
+      "name": "money",
+      "params": "none",
+      "default": "money",
+      "category": "number"
+    },
+    {
+      "name": "boolean",
+      "params": "none",
+      "default": "boolean",
+      "category": "other"
+    },
+    {
+      "name": "text",
+      "params": "none",
+      "default": "text",
+      "category": "string"
+    },
+    {
+      "name": "varchar",
+      "params": "length",
+      "default": "varchar(100)",
+      "category": "string"
+    },
+    {
+      "name": "char",
+      "params": "length",
+      "default": "char(10)",
+      "category": "string"
+    },
+    {
+      "name": "uuid",
+      "params": "none",
+      "default": "uuid",
+      "category": "other"
+    },
+    {
+      "name": "date",
+      "params": "none",
+      "default": "date",
+      "category": "date"
+    },
+    {
+      "name": "timestamp",
+      "params": "precision",
+      "default": "timestamp(3)",
+      "category": "date"
+    },
+    {
+      "name": "timestamptz",
+      "params": "precision",
+      "default": "timestamptz(3)",
+      "category": "date"
+    },
+    {
+      "name": "time",
+      "params": "precision",
+      "default": "time",
+      "category": "date"
+    },
+    {
+      "name": "timetz",
+      "params": "none",
+      "default": "timetz",
+      "category": "date"
+    },
+    {
+      "name": "interval",
+      "params": "none",
+      "default": "interval",
+      "category": "date"
+    },
+    {
+      "name": "bytea",
+      "params": "none",
+      "default": "bytea",
+      "category": "binary"
+    },
+    {
+      "name": "json",
+      "params": "none",
+      "default": "json",
+      "category": "other"
+    },
+    {
+      "name": "jsonb",
+      "params": "none",
+      "default": "jsonb",
+      "category": "other"
+    },
+    {
+      "name": "xml",
+      "params": "none",
+      "default": "xml",
+      "category": "other"
+    },
+    {
+      "name": "inet",
+      "params": "none",
+      "default": "inet",
+      "category": "other"
+    },
+    {
+      "name": "cidr",
+      "params": "none",
+      "default": "cidr",
+      "category": "other"
+    },
+    {
+      "name": "macaddr",
+      "params": "none",
+      "default": "macaddr",
+      "category": "other"
+    },
+    {
+      "name": "bit",
+      "params": "length",
+      "default": "bit(8)",
+      "category": "binary"
+    },
+    {
+      "name": "serial",
+      "params": "none",
+      "default": "serial",
+      "category": "other"
+    },
+    {
+      "name": "bigserial",
+      "params": "none",
+      "default": "bigserial",
+      "category": "other"
+    }
+  ],
+  "features": {
+    "identity": true,
+    "computed": true,
+    "clusteredIndexes": false,
+    "includedColumns": true,
+    "filteredIndexes": true,
+    "onUpdateAction": true,
+    "comments": true,
+    "renameColumn": true,
+    "dropColumn": true,
+    "withoutRowid": false,
+    "strict": false,
+    "transactionalDdl": true,
+    "autoincrement": false,
+    "schemas": true
+  }
+}

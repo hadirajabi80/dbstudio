@@ -14,7 +14,7 @@ import { confirmItemList } from '../../components/common/ConfirmDialog';
 import { Select } from '../../components/common/Select';
 import { Kbd } from '../../components/Shortcuts/Kbd';
 import type { TabViewProps } from '../../components/layout/tabViews';
-import { useCatalog, useSnapshot } from '../../store/catalog';
+import { dbKey, useCatalog, useSnapshot } from '../../store/catalog';
 import { useConnection, useDialect } from '../../store/connections';
 import { useTabs } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
@@ -26,8 +26,8 @@ import { ColumnGrid } from './ColumnGrid';
 import { confirmItems, recreatedSummary } from './confirmSummary';
 import { ChecksPanel, ForeignKeysPanel, KeysPanel } from './ConstraintsPanel';
 import {
-  addColumn, duplicateColumn, hasErrors, moveColumn, newTableModel, removeColumn, sameModel, togglePrimaryKey, updateColumn,
-  validateTable, visibleIssues, withIds,
+  addColumn, catalogTypes, duplicateColumn, hasErrors, isArrayType, moveColumn, newTableModel, removeColumn, sameModel, togglePrimaryKey, updateColumn,
+  validateTable, visibleIssues, withArray, withIds,
 } from './model';
 
 type Section = 'columns' | 'keys' | 'fks' | 'checks';
@@ -52,13 +52,17 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
   tsql: ['int', 'bigint', 'smallint', 'tinyint', 'bit', 'decimal(18,2)', 'money', 'float', 'real', 'nvarchar(100)', 'varchar(100)', 'nchar(10)', 'nvarchar(max)', 'date', 'datetime2(3)', 'datetimeoffset(7)', 'time(7)', 'uniqueidentifier', 'varbinary(max)', 'xml'],
   plsql: ['NUMBER(10)', 'NUMBER(19)', 'NUMBER(12,2)', 'NUMBER', 'BINARY_DOUBLE', 'VARCHAR2(100)', 'NVARCHAR2(100)', 'CHAR(1)', 'CLOB', 'DATE', 'TIMESTAMP(6)', 'TIMESTAMP(6) WITH TIME ZONE', 'RAW(16)', 'BLOB', 'BOOLEAN'],
   sqlite: ['INTEGER', 'TEXT', 'REAL', 'NUMERIC', 'BLOB', 'BOOLEAN', 'DATETIME', 'DATE', 'JSON'],
-  // M2-0 placeholder (PG-C owns it).
-  pgsql: ['integer', 'bigint', 'smallint', 'numeric(12,2)', 'double precision', 'boolean', 'text', 'varchar(100)', 'date', 'timestamptz', 'uuid', 'jsonb', 'bytea'],
+  // The engine's PgDdlScripter.GetTypes list (docs/PLAN-PG.md 2.7), used while GET /designer/types is unavailable.
+  pgsql: [
+    'smallint', 'integer', 'bigint', 'numeric(12,2)', 'real', 'double precision', 'boolean', 'text', 'varchar(100)', 'char(10)', 'uuid', 'date',
+    'timestamp(3)', 'timestamptz(3)', 'time', 'timetz', 'interval', 'bytea', 'json', 'jsonb', 'xml', 'inet', 'cidr', 'macaddr', 'money',
+  ],
 };
 
 function fallbackTypes(dialect: Dialect): DesignerType[] {
   return FALLBACK_TYPES[dialect].map((t) => ({ name: t.replace(/\(.*$/, ''), default: t, params: /\(/.test(t) ? 'length' : 'none', category: 'other' }));
 }
+
 
 export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   const st = tab.state as TableDesignerState;
@@ -67,6 +71,8 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   const dialect = useDialect(cid);
   const catalogDb = catalogDatabase(cid, st.database);
   const snapshot = useSnapshot(cid, catalogDb);
+  /** Every schema of the database (GET /catalog/schemas), not only the loaded ones. */
+  const schemaNames = useCatalog((s) => s.dbs[dbKey(cid, catalogDb)]?.schemasResp?.schemas);
   const askConfirm = useUi((s) => s.askConfirm);
 
   const [original, setOriginal] = useState<TableModel | null>((st.original as TableModel | undefined) ?? null);
@@ -126,7 +132,11 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
     };
   }, [cid, st.database]);
 
-  const typeList = useMemo(() => (types?.types.length ? types.types : fallbackTypes(dialect)), [types, dialect]);
+  const typeList = useMemo(() => {
+    const base = types?.types.length ? types.types : fallbackTypes(dialect);
+    const user = catalogTypes(snapshot).filter((u) => !base.some((b) => b.name === u.name));
+    return user.length ? [...base, ...user] : base;
+  }, [types, dialect, snapshot]);
   const features = types?.features ?? null;
   const issues = useMemo(() => (desired ? validateTable(desired, dialect) : []), [desired, dialect]);
   const blocking = hasErrors(issues);
@@ -255,7 +265,7 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
   useEffect(() => registerDesignerActions(tab.id, { apply: () => void apply() }), [tab.id, apply]);
 
   if (!visible && !desired) return null;
-  const schemas = (snapshot?.schemas.map((s) => s.name) ?? []).concat(desired?.schema && !snapshot?.schemas.some((s) => s.name === desired.schema) ? [desired.schema] : []);
+  const schemas = [...new Set([...(snapshot?.schemas.map((s) => s.name) ?? []), ...(schemaNames?.map((s) => s.name) ?? []), ...(desired?.schema ? [desired.schema] : [])])].sort((a, b) => a.localeCompare(b));
   const col = desired?.columns[activeCol] ?? null;
   const errorRows = new Set(shownIssues.filter((i) => i.severity === 'error' && i.column !== undefined).map((i) => i.column!));
   const nameInvalid = shownIssues.some((i) => i.field === 'name');
@@ -281,7 +291,7 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
                 className="input mono"
                 style={{ width: 200 }}
                 value={desired.name}
-                placeholder={dialect === 'plsql' ? 'TABLE_NAME' : 'TableName'}
+                placeholder={dialect === 'plsql' ? 'TABLE_NAME' : dialect === 'pgsql' ? 'table_name' : 'TableName'}
                 disabled={locked}
                 autoFocus={!original}
                 aria-invalid={nameInvalid || undefined}
@@ -319,7 +329,7 @@ export function TableDesignerView({ tab, theme, visible }: TabViewProps) {
                 </label>
               </>
             )}
-            {dialect === 'plsql' && (
+            {(dialect === 'plsql' || dialect === 'pgsql') && (
               <label className="dz-field">
                 Tablespace
                 <input className="input mono" style={{ width: 120 }} value={desired.options.tablespace ?? ''} disabled={locked} onChange={(e) => edit((t) => ({ ...t, options: { ...t.options, tablespace: e.target.value || null } }))} />
@@ -495,8 +505,8 @@ function ColumnProps({ col, dialect, features, readOnly, onChange }: { col: Tabl
             Increment
             <input className="input xs" type="number" style={{ width: 64 }} value={col.identity.increment} disabled={readOnly} onChange={(e) => onChange({ identity: { ...col.identity!, increment: Number(e.target.value) || 1 } })} />
           </label>
-          {dialect === 'plsql' && (
-            <label className="check sm">
+          {(dialect === 'plsql' || dialect === 'pgsql') && (
+            <label className="check sm" title={col.identity.always ? 'GENERATED ALWAYS AS IDENTITY: inserts cannot supply a value' : 'GENERATED BY DEFAULT AS IDENTITY: inserts may supply a value'}>
               <input type="checkbox" checked={!!col.identity.always} disabled={readOnly} onChange={(e) => onChange({ identity: { ...col.identity!, always: e.target.checked } })} />
               ALWAYS
             </label>
@@ -513,14 +523,25 @@ function ColumnProps({ col, dialect, features, readOnly, onChange }: { col: Tabl
             title="An expression makes the column computed"
             value={col.computed?.expression ?? ''}
             disabled={readOnly}
-            onChange={(e) => onChange({ computed: e.target.value ? { expression: e.target.value, persisted: col.computed?.persisted ?? false } : null })}
+            onChange={(e) => onChange({ computed: e.target.value ? { expression: e.target.value, persisted: dialect === 'pgsql' || (col.computed?.persisted ?? false) } : null })}
           />
         </label>
       )}
       {col.computed && (
-        <label className="check sm">
-          <input type="checkbox" checked={col.computed.persisted} disabled={readOnly} onChange={(e) => onChange({ computed: { ...col.computed!, persisted: e.target.checked } })} />
-          {dialect === 'plsql' ? 'Stored' : 'Persisted'}
+        <label className="check sm" title={dialect === 'pgsql' ? 'PostgreSQL generated columns are STORED' : undefined}>
+          <input
+            type="checkbox"
+            checked={dialect === 'pgsql' || col.computed.persisted}
+            disabled={readOnly || dialect === 'pgsql'}
+            onChange={(e) => onChange({ computed: { ...col.computed!, persisted: e.target.checked } })}
+          />
+          {dialect === 'plsql' || dialect === 'pgsql' ? 'Stored' : 'Persisted'}
+        </label>
+      )}
+      {dialect === 'pgsql' && !col.computed && (
+        <label className="check sm" title="Array of the type (appends [] to the type text)">
+          <input type="checkbox" checked={isArrayType(col.type)} disabled={readOnly || !col.type.trim()} onChange={(e) => onChange({ type: withArray(col.type, e.target.checked) })} />
+          Array
         </label>
       )}
       {dialect !== 'plsql' && (

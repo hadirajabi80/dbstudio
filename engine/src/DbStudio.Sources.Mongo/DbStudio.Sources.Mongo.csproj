@@ -19,4 +19,8 @@
     <InternalsVisibleTo Include="DbStudio.Sources.Mongo.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" Version="3.12.0" />
+  </ItemGroup>
+
 </Project>

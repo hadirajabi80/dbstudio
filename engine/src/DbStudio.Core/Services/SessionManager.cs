@@ -391,6 +391,34 @@ public sealed class SessionManager : IAsyncDisposable
         return "The connection was lost and has been reopened.";
     }
 
+    /// <summary>
+    /// docs/PLAN-PG.md D-PG6: switches the database of a session whose connection is bound to one database (PostgreSQL)
+    /// by opening a new connection on <paramref name="database"/> and swapping it in under the same session id. 409 TX_OPEN
+    /// with an open transaction, 409 SESSION_BUSY while executing; a failed open leaves the current connection in place.
+    /// </summary>
+    public async Task ReopenWithDatabaseAsync(SessionHandle h, string database, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(h);
+        ArgumentException.ThrowIfNullOrWhiteSpace(database);
+        if (h.Session.TxOpen) throw new EngineException(409, ErrorCodes.TxOpen, "A transaction is open. Commit or roll back before switching the database.");
+        if (!h.TryReserve("reopen")) throw new EngineException(409, ErrorCodes.SessionBusy, "The session is already executing a statement.");
+        try
+        {
+            var old = h.Session;
+            var profile = _connections.Find(h.Profile.Id) ?? h.Profile;
+            var options = h.Options with { Database = database.Trim(), TxMode = old.TxMode };
+            var fresh = await h.Provider.OpenSessionAsync(profile, _connections.GetPassword(profile.Id), options, ct).ConfigureAwait(false);
+            h.Session = fresh;
+            h.Profile = profile;
+            h.Options = options;
+            try { await old.DisposeAsync().ConfigureAwait(false); } catch { /* the old connection is discarded either way */ }
+        }
+        finally
+        {
+            h.Release();
+        }
+    }
+
     private async Task PingIdleAsync()
     {
         if (Interlocked.Exchange(ref _pinging, 1) == 1) return;

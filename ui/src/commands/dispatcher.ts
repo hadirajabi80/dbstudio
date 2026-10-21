@@ -6,8 +6,8 @@
 //
 // Inside Monaco the editor keeps the keys it owns (run, find, undo, zoom, clipboard, ...), so a global command bound
 // to one of those keys does not fire while the editor has focus; the editor binds the matching action itself.
-import { commandsForKey, isChordPrefix, isEnabled, runCommand, type CommandScope } from './registry';
-import { eventStroke, isAltGraphCharacter, isModifierOnly } from './keys';
+import { commandsForKey, getCommand, isChordPrefix, isEnabled, runCommand, type CommandScope } from './registry';
+import { eventStroke, isAltGraphCharacter, isModifierOnly, normalizeShortcut } from './keys';
 
 /** Keys Monaco handles itself while it has focus (globally bound commands with these keys stay quiet there). */
 export const EDITOR_OWNED_KEYS = new Set([
@@ -70,6 +70,26 @@ export function resolveKey(key: string, scopes: readonly CommandScope[], opts: {
     }
   }
   return null;
+}
+
+/**
+ * The command a native-menu item should run. In the desktop build a menu accelerator can fire before the page sees
+ * the key (F4 on Windows), so the renderer's scope resolution never ran: when the item's shortcut is bound to a
+ * scoped command that is enabled where focus is (F4 on an ER card → er.design, in a Data tab → dataTab.design,
+ * Ctrl+S in the designer → designer.apply), that command runs instead, exactly as the key dispatcher would have
+ * chosen. Global-only keys, dialogs and an unfocused page keep the menu's own command.
+ */
+export function routeMenuCommand(id: string, focused: Element | null = typeof document === 'undefined' ? null : document.activeElement): string {
+  const c = getCommand(id);
+  if (!c?.shortcut || !focused || focused === document.body) return id;
+  if (focused.closest('[role=dialog][aria-modal=true], .palette')) return id;
+  const scopes = scopesFor(focused).filter((s) => s !== 'global');
+  if (!scopes.length) return id;
+  for (const key of [c.shortcut, ...(c.altShortcuts ?? [])].map(normalizeShortcut)) {
+    const routed = resolveKey(key, scopes);
+    if (routed) return routed;
+  }
+  return id;
 }
 
 export function onGlobalKeyDown(e: KeyboardEvent): void {

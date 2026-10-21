@@ -30,7 +30,7 @@ public static class ConnectionEndpoints
 
         // logic-21: 409 TX_OPEN (listing the sessions) while one of its sessions has an open transaction, unless force=true.
         g.MapDelete("/{id}", async (string id, bool? force, ConnectionStore store, CatalogService catalog, SessionManager sessions,
-            Core.Filters.FilterStore filters, SourceClientManager clients, StreamManager streams) =>
+            Core.Filters.FilterStore filters, Core.Diagrams.DiagramStore diagrams, SourceClientManager clients, StreamManager streams) =>
         {
             store.Get(id); // 404 when unknown
             sessions.EnsureNoOpenTransactions(id, force ?? false);
@@ -40,6 +40,7 @@ public static class ConnectionEndpoints
             store.Delete(id);
             catalog.Forget(id);
             filters.DeleteForConnection(id); // M1.5 saved filters of the connection
+            diagrams.DeleteForConnection(id); // M2-ER saved diagram layouts of the connection
             return Results.NoContent();
         });
 

@@ -17,12 +17,12 @@ import { JOIN_WORDS, NAME_PAREN_KEYWORDS, SET_OPERATORS, set, type FormatRules }
 import { tsqlRules, TSQL_NOT_BLOCK_BEGIN, TSQL_OBJECT_KINDS, TSQL_ROUTINES } from './rules/tsql';
 import { plsqlRules, PL_CREATE_MODIFIERS, PL_SUBPROGRAM_PREFIX, PL_TRIGGER_LINES, SQLPLUS, SQL_SET_TARGETS } from './rules/plsql';
 import { sqliteRules, SQLITE_TRIGGER_LINES } from './rules/sqlite';
+import { pgsqlRules, PG_ROUTINE_ATTRS, PG_ROUTINE_WORDS, PG_STATEMENT_WORDS, PG_TRIGGER_LINES } from './rules/pgsql';
 
 type Stop = (k: number) => boolean;
 const NEVER: Stop = () => false;
 
-// pgsql: M2-0 placeholder (PG-B adds rules/pgsql.ts).
-const RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: sqliteRules };
+const RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: pgsqlRules };
 
 const LIST_CLAUSES = set('select set groupBy orderBy values');
 const SELECT_MODIFIERS = set('DISTINCT ALL UNIQUE');
@@ -66,6 +66,8 @@ interface St {
   stop: Stop;
   /** Inside parentheses: no T-SQL statement boundaries. */
   inParen: boolean;
+  /** PostgreSQL CREATE INDEX that does not fit on one line: INCLUDE / WITH / WHERE start continuation lines. */
+  pgIndexBreak?: boolean;
 }
 
 interface TakeOpts {
@@ -278,7 +280,8 @@ export class Layout {
       if (c.breaksAfter) this.forceBreak = true;
     }
     const t = this.toks[this.lastAi];
-    if (t && t.kind !== 'comment' && t.text.indexOf('\n') >= 0) this.forceBreak = true;
+    if (t && t.kind !== 'comment' && t.text.indexOf('\n') >= 0 && !(this.d === 'pgsql' && t.kind === 'string')) this.forceBreak = true;
+    if (t && t.kind === 'meta') this.forceBreak = true;
   }
 
   private flushTail(): void {
@@ -318,7 +321,11 @@ export class Layout {
       if (bt === ':' && this.d !== 'plsql') return false;
     }
     if (at === '::' || bt === '::' || at === '..' || bt === '..') return false;
-    if (at === '->' || at === '->>' || bt === '->' || bt === '->>') return false;
+    if (this.d !== 'pgsql' && (at === '->' || at === '->>' || bt === '->' || bt === '->>')) return false;
+    if (this.d === 'pgsql') {
+      if (b.kind === 'op' && (bt === '[' || bt === ']')) return false;
+      if (a.kind === 'op' && (at === '[' || at === ':')) return false;
+    }
     if (this.d === 'plsql' && a.kind === 'op' && at === '<<') return false;
     if (this.d === 'plsql' && b.kind === 'op' && bt === '>>') return false;
     if (b.kind === 'punct' && bt === '(') return this.spaceBeforeParen(k);
@@ -329,6 +336,11 @@ export class Layout {
     const a = this.S(k - 1)!;
     // MERGE … USING (SELECT …) / JOIN t USING (id): a clause keyword, never a function call
     if (a.word && a.u === 'USING') return true;
+    if (this.d === 'pgsql') {
+      if (a.kind === 'punct' && a.text === '(') return false;
+      if (a.kind === 'op' && a.text === '[') return false;
+      if (a.kind === 'ident' && (this.pgContextualKw(k - 1, this.U(k - 2), '(') === true || ((a.u === 'ROLLUP' || a.u === 'CUBE') && (this.W(k - 2, 'BY') || this.P(k - 2, ','))))) return true;
+    }
     if (a.kind === 'ident' && (a.u === 'APPLY' || a.u === 'OVER' || a.u === 'FILTER' || a.u === 'COLUMNS' || a.u === 'ROW' || (a.u === 'INCLUDE' && this.verbCtx === 'CREATE'))) return true;
     if (a.kind === 'ident' && (a.u === 'RECORD' || a.u === 'OBJECT' || a.u === 'VARRAY') && (this.W(k - 2, 'IS') || this.W(k - 2, 'AS'))) return true;
     if (a.kind === 'ident' || a.kind === 'quotedIdent') {
@@ -337,6 +349,7 @@ export class Layout {
       const kw = this.S(j - 1);
       if (!kw || !kw.word || this.P(j - 1, '.')) return false;
       if (kw.u === 'ON') return this.verbCtx === 'CREATE' || this.verbCtx === 'ALTER';
+      if (this.d === 'pgsql' && (kw.u === 'COPY' || (kw.u === 'AS' && a.u === 'ENUM'))) return true;
       if (kw.u === 'TYPE' || kw.u === 'BODY') return this.headerCtx > 0 || this.verbCtx === 'CREATE';
       return NAME_PAREN_KEYWORDS.has(kw.u);
     }
@@ -352,6 +365,9 @@ export class Layout {
     if (!this.spec.dataTypeSet.has(t.u)) return false;
     const a = this.S(k - 1), b = this.S(k + 1);
     if (!a || a.text === '.' || (b && b.kind === 'punct' && b.text === '.')) return false;
+    if (this.d === 'pgsql' && a.kind === 'op' && a.text === '::') return true;
+    if (this.d === 'pgsql' && b && b.kind === 'string' && (a.kind !== 'ident' && a.kind !== 'quotedIdent')) return true;
+    if (this.d === 'pgsql' && a.word && a.u === 'AS' && this.W(k - 3, 'DOMAIN')) return true;
     if (a.kind === 'param') return this.d === 'tsql';
     if (a.word && a.u === 'AS') return !!b && b.kind === 'punct' && (b.text === ')' || b.text === '(') || (this.S(k - 2)?.kind === 'param');
     if (a.kind === 'punct' && a.text === '(' && this.S(k - 2) && CAST_FUNCS.has(this.S(k - 2)!.u)) return true;
@@ -461,6 +477,7 @@ export class Layout {
   private statement(indent: number, outer: Stop): void {
     if (this.d === 'tsql') this.tsqlStatement(indent, outer);
     else if (this.d === 'plsql') this.plStatement(indent, outer);
+    else if (this.d === 'pgsql') this.pgStatement(indent, outer);
     else this.sqliteStatement(indent, outer);
   }
 
@@ -957,6 +974,97 @@ export class Layout {
     this.endWith(indent, []);
   }
 
+  // ------------------------------------------------------------------ PostgreSQL
+
+  private pgStatement(indent: number, outer: Stop): void {
+    const k = this.p;
+    const t = this.S(k)!;
+    if (t.kind === 'meta') { this.take(); return; }
+    if (this.W(k, 'CREATE')) {
+      let j = k + 1;
+      if (this.W(j, 'OR') && this.W(j + 1, 'REPLACE')) j += 2;
+      if (this.W(j, 'FUNCTION') || this.W(j, 'PROCEDURE')) return this.pgRoutine(indent, j);
+      if (this.W(j, 'CONSTRAINT')) j++;
+      if (this.W(j, 'TRIGGER')) return this.pgTrigger(indent, j);
+    }
+    if (this.W(k, 'DO')) {
+      // DO [LANGUAGE x] $ … $;  — the body is a string token, emitted verbatim
+      this.takeKw();
+      while (!this.eof() && !this.P(this.p, ';') && !outer(this.p)) this.take({ kw: this.W(this.p, 'LANGUAGE') });
+      if (this.P(this.p, ';')) this.take({ space: false });
+      return;
+    }
+    this.sql(indent, { stop: outer });
+  }
+
+  /**
+   * CREATE [OR REPLACE] FUNCTION|PROCEDURE name(params) and one line per attribute (RETURNS, LANGUAGE, volatility,
+   * SECURITY, SET, AS body …), DataGrip style. Dollar-quoted bodies are strings: byte-identical.
+   */
+  private pgRoutine(indent: number, objAt: number): void {
+    this.verbCtx = 'CREATE';
+    this.headerCtx++;
+    while (this.p <= objAt) this.takeKw();
+    this.takeName();
+    if (this.P(this.p, '(')) this.paren('params', false);
+    const attrAt = (q: number): boolean => {
+      const t = this.S(q);
+      if (!t || !t.word || !PG_ROUTINE_ATTRS.has(t.u)) return this.W(q, 'NOT') && this.W(q + 1, 'LEAKPROOF');
+      if (t.u === 'SECURITY' && this.W(q - 1, 'EXTERNAL')) return false;
+      if (t.u === 'BEGIN') return this.W(q + 1, 'ATOMIC');
+      if (t.u === 'SET' && this.W(q - 1, 'UPDATE')) return false;
+      return true;
+    };
+    while (!this.eof() && !this.P(this.p, ';')) {
+      if (!attrAt(this.p)) { this.take({ kw: this.S(this.p)!.kind === 'keyword' }); continue; }
+      this.out.newline(indent);
+      const u = this.U(this.p);
+      if (u === 'BEGIN') {
+        this.takeKw(2);
+        this.statements(indent + 1, (q) => this.W(q, 'END'));
+        if (this.eof()) { this.problem ??= 'BEGIN ATOMIC without END'; break; }
+        this.out.newline(indent);
+        this.take({ kw: true, closer: true });
+        continue;
+      }
+      const isRet = u === 'RETURNS';
+      if (isRet) this.typeCtx++;
+      const afterSet = u === 'SET';
+      this.takeKw();
+      while (!this.eof() && !this.P(this.p, ';') && !attrAt(this.p)) {
+        if (this.P(this.p, '(')) { this.paren(this.parenKind(this.p, this.newSt(indent, 'CREATE', NEVER, true)), this.spaceBeforeParen(this.p)); continue; }
+        const t = this.S(this.p)!;
+        const kw = t.kind === 'keyword' || (!afterSet && t.kind === 'ident' && PG_ROUTINE_WORDS.has(t.u));
+        this.take({ kw });
+      }
+      if (isRet) this.typeCtx--;
+    }
+    this.headerCtx--;
+    if (this.P(this.p, ';')) this.take({ space: false });
+  }
+
+  /** CREATE [OR REPLACE] [CONSTRAINT] TRIGGER name, then BEFORE / ON / FOR EACH ROW / WHEN / EXECUTE lines. */
+  private pgTrigger(indent: number, trigAt: number): void {
+    this.verbCtx = 'CREATE';
+    while (this.p <= trigAt) this.takeKw();
+    this.takeName();
+    while (!this.eof() && !this.P(this.p, ';')) {
+      const t = this.S(this.p)!;
+      const u = t.u;
+      if (t.word && PG_TRIGGER_LINES.has(u) && !(u === 'ON' && this.W(this.p + 1, 'DELETE'))) {
+        this.out.newline(indent);
+        this.takeKw(u === 'INSTEAD' ? 2 : 1);
+        if (u === 'FOR') while (this.W(this.p, 'EACH') || this.W(this.p, 'ROW') || this.W(this.p, 'STATEMENT')) this.takeKw();
+        if (u === 'EXECUTE') while (this.W(this.p, 'FUNCTION') || this.W(this.p, 'PROCEDURE')) this.takeKw();
+        if (u === 'WHEN' && this.P(this.p, '(')) this.paren('expr', true);
+        continue;
+      }
+      if (this.P(this.p, '(')) this.paren('call', !(this.S(this.p - 1)?.kind === 'ident' || this.S(this.p - 1)?.kind === 'quotedIdent'));
+      else this.take({ kw: t.kind === 'keyword' || u === 'OF' || u === 'EACH' || u === 'ROW' || u === 'STATEMENT' || u === 'OLD' || u === 'NEW' || u === 'TABLE' });
+    }
+    if (this.P(this.p, ';')) this.take({ space: false });
+  }
+
   // ------------------------------------------------------------------ SQL statements
 
   private isCteAt(k: number): boolean {
@@ -1027,7 +1135,7 @@ export class Layout {
     const v = st.verbs;
     switch (u) {
       case 'SELECT': return this.P(k - 1, '(') ? null : ['select', 1];
-      case 'FROM': return ['from', 1];
+      case 'FROM': return this.W(k - 1, 'DISTINCT') ? null : ['from', 1];
       case 'WHERE': return ['where', 1];
       case 'HAVING': return ['having', 1];
       case 'GROUP': return this.W(k + 1, 'BY') ? ['groupBy', 2] : null;
@@ -1049,16 +1157,18 @@ export class Layout {
       case 'OPTION': return this.d === 'tsql' && this.P(k + 1, '(') ? ['option', 1] : null;
       case 'FOR': {
         const n = this.U(k + 1);
-        return v.has('SELECT') && (n === 'XML' || n === 'JSON' || n === 'BROWSE' || n === 'UPDATE' || n === 'READ') ? ['for', 1] : null;
+        return v.has('SELECT') && (n === 'XML' || n === 'JSON' || n === 'BROWSE' || n === 'UPDATE' || n === 'READ' || (this.d === 'pgsql' && (n === 'SHARE' || n === 'NO' || n === 'KEY'))) ? ['for', 1] : null;
       }
       case 'LIMIT': return this.d !== 'plsql' ? ['limit', 1] : null;
       case 'OFFSET': return ['offset', 1];
       case 'FETCH': return this.W(k + 1, 'FIRST') || this.W(k + 1, 'NEXT') ? ['fetch', 1] : null;
       case 'RETURNING': return v.has('INSERT') || v.has('UPDATE') || v.has('DELETE') ? ['returning', 1] : null;
-      case 'WINDOW': return this.d === 'sqlite' && this.W(k + 2, 'AS') ? ['window', 1] : null;
-      case 'USING': return v.has('MERGE') && st.clause === 'merge' ? ['using', 1] : null;
+      case 'WINDOW': return (this.d === 'sqlite' || this.d === 'pgsql') && this.W(k + 2, 'AS') ? ['window', 1] : null;
+      case 'USING':
+        if (this.d === 'pgsql' && v.has('DELETE') && !v.has('MERGE') && st.clause === 'from') return ['from', 1];
+        return v.has('MERGE') && st.clause === 'merge' ? ['using', 1] : null;
       case 'WHEN': return v.has('MERGE') ? ['when', 1] : null;
-      case 'ON': return this.d === 'sqlite' && this.W(k + 1, 'CONFLICT') && v.has('INSERT') ? ['conflict', 2] : null;
+      case 'ON': return (this.d === 'sqlite' || this.d === 'pgsql') && this.W(k + 1, 'CONFLICT') && v.has('INSERT') ? ['conflict', 2] : null;
       default: return null;
     }
   }
@@ -1173,7 +1283,8 @@ export class Layout {
         return;
       case 'EXPLAIN': {
         this.takeKw();
-        while (this.W(this.p, 'QUERY') || this.W(this.p, 'PLAN') || this.W(this.p, 'ANALYZE')) this.takeKw();
+        while (this.W(this.p, 'QUERY') || this.W(this.p, 'PLAN') || this.W(this.p, 'ANALYZE') || (this.d === 'pgsql' && (this.W(this.p, 'ANALYSE') || this.W(this.p, 'VERBOSE')))) this.takeKw();
+        if (this.d === 'pgsql' && this.P(this.p, '(')) { this.kwIdents++; this.paren('call', true); this.kwIdents--; }
         if (this.W(this.p, 'SET')) return;
         if (this.W(this.p, 'FOR')) this.takeKw();
         const v = this.U(this.p);
@@ -1198,7 +1309,23 @@ export class Layout {
       default:
         if (u === 'CREATE' || u === 'ALTER') this.typeCtx++;
         this.take({ kw: this.stmtWordKw(this.p) });
+        if (this.d === 'pgsql' && u === 'ALTER' && this.W(this.p, 'TABLE')) this.pgAlterTable(st);
+        if (this.d === 'pgsql' && u === 'CREATE' && (this.W(this.p, 'INDEX') || (this.W(this.p, 'UNIQUE') && this.W(this.p + 1, 'INDEX')))) {
+          const end = this.stmtExtent(this.p, st);
+          st.pgIndexBreak = !this.fits(this.p, end);
+        }
     }
+  }
+
+  /** PostgreSQL ALTER TABLE with several subcommands: each on its own line under the table name. */
+  private pgAlterTable(st: St): void {
+    const end = this.stmtExtent(this.p, st);
+    if (this.commas(this.p, end) === 0) return;
+    this.takeKw();
+    while (this.W(this.p, 'IF') || this.W(this.p, 'EXISTS') || this.W(this.p, 'ONLY')) this.takeKw();
+    this.takeName();
+    st.commaBreak = true;
+    this.out.newline(st.base + 1);
   }
 
   /** First word of a statement: a keyword unless it is used as a name (`count := 1`, `proc(1)`, `t.x`). */
@@ -1217,6 +1344,10 @@ export class Layout {
     if (t.kind !== 'ident') return false;
     const p = this.U(k - 1), n = this.U(k + 1);
     const pk = this.S(k - 1)?.kind;
+    if (this.d === 'pgsql') {
+      const r = this.pgContextualKw(k, p, n);
+      if (r !== null) return r;
+    }
     if (t.u === 'INCLUDE' && n === '(') return this.verbCtx === 'CREATE';
     if ((t.u === 'OVER' || t.u === 'FILTER' || t.u === 'COLUMNS') && n === '(') return true;
     if (p === 'PRAGMA') return this.d === 'plsql';
@@ -1234,6 +1365,7 @@ export class Layout {
     if (t.u === 'CONSTANT') return this.typeCtx > 0 && (pk === 'ident' || pk === 'quotedIdent');
     if (t.u === 'OUT' && this.d === 'plsql') return this.typeCtx > 0 && (p === 'IN' || pk === 'ident' || pk === 'quotedIdent');
     if (t.u === 'NOCOPY') return this.typeCtx > 0;
+    if (this.d === 'pgsql' && (t.u === 'INOUT' || t.u === 'OUT' || t.u === 'VARIADIC')) return this.typeCtx > 0 && (p === '(' || p === ',');
     if (PL_SUBPROGRAM_PREFIX.has(t.u) && (n === 'FUNCTION' || n === 'PROCEDURE' || PL_SUBPROGRAM_PREFIX.has(n))) return true;
     if (this.headerCtx > 0 && HEADER_WORDS.has(t.u)) return true;
     if ((p === 'CREATE' || p === 'REPLACE' || p === 'EDITIONABLE' || p === 'NONEDITIONABLE') && OBJECT_WORDS.has(t.u)) return true;
@@ -1250,6 +1382,8 @@ export class Layout {
     if (p === 'PRAGMA') return true;
     if (this.d === 'tsql' && p === 'WAITFOR' && (t.u === 'DELAY' || t.u === 'TIME')) return true;
     if (t.u === 'PERSISTED') return p === ')';
+    if (this.d === 'pgsql' && t.u === 'ENUM') return p === 'AS';
+    if (this.d === 'pgsql' && this.verbCtx === 'COPY' && (t.u === 'STDIN' || t.u === 'STDOUT' || t.u === 'CSV' || t.u === 'HEADER' || t.u === 'FORMAT' || t.u === 'DELIMITER')) return true;
     if (t.u === 'NO') return n === 'ACTION';
     if (t.u === 'ACTION') return p === 'NO';
     if (this.d === 'tsql' && p === 'SET' && (n === 'ON' || n === 'OFF')) return true;
@@ -1277,6 +1411,38 @@ export class Layout {
       case 'OFFSET': return this.d === 'tsql' && (this.S(k + 1)?.kind === 'number' || this.S(k + 1)?.kind === 'param');
       default: return false;
     }
+  }
+
+  /** PostgreSQL non-reserved words in keyword positions; null = no decision (generic rules apply). */
+  private pgContextualKw(k: number, p: string, n: string): boolean | null {
+    const u = this.S(k)!.u;
+    if (p === '.' || n === '.') return false;
+    switch (u) {
+      case 'ORDINALITY': return p === 'WITH';
+      case 'SKIP': return n === 'LOCKED';
+      case 'LOCKED': return p === 'SKIP';
+      case 'NOWAIT': return p === 'UPDATE' || p === 'SHARE' || p === 'MODE';
+      case 'KEY': if (p === 'NO' || n === 'SHARE' || n === 'UPDATE') return true; break;
+      case 'NO': if (n === 'KEY' || n === 'DATA' || n === 'ACTION') return true; break;
+      case 'SHARE': if (p === 'FOR' || p === 'KEY') return true; break;
+      case 'ROLLUP': case 'CUBE': if (n === '(' && (p === 'BY' || p === ',')) return true; break;
+      case 'GROUPING': if (n === 'SETS') return true; break;
+      case 'SETS': if (p === 'GROUPING') return true; break;
+      case 'ENUM': return p === 'AS';
+      case 'RANGE': case 'LIST': case 'HASH': if (p === 'BY' && this.W(k - 2, 'PARTITION')) return true; break;
+      case 'DATA': if (p === 'NO' && this.W(k - 2, 'WITH')) return true; break;
+    }
+    const v = this.verbCtx;
+    if (v === 'SELECT' || v === 'INSERT' || v === 'UPDATE' || v === 'DELETE' || v === 'MERGE' || v === 'WITH' || v === 'VALUES' || v === 'TABLE') return null;
+    if (n === '(' || !PG_STATEMENT_WORDS.has(u)) return null;
+    const pt = this.S(k - 1);
+    if (pt && pt.kind === 'punct' && pt.text === ',' && v === 'ALTER' && ['ADD', 'RENAME', 'VALIDATE', 'ATTACH', 'DETACH', 'OWNER', 'INHERIT', 'NO'].includes(u)) return true;
+    if (!pt || (pt.kind === 'punct' && (pt.text === '(' || pt.text === ','))) return v === 'VACUUM' || v === 'ANALYZE' || v === 'EXPLAIN' ? true : false;
+    // a name position: CREATE TABLE data, IN SCHEMA name, ALTER COLUMN type …
+    if (pt.word && (NAME_PAREN_KEYWORDS.has(pt.u) || ['SEQUENCE', 'SCHEMA', 'COLUMN', 'CONSTRAINT', 'VIEW', 'DOMAIN', 'EXTENSION', 'ROLE', 'POLICY', 'TABLESPACE', 'DATABASE', 'SERVER', 'TO', 'RENAME'].includes(pt.u)) && !(pt.u === 'ON' && v === 'GRANT') && !(pt.u === 'TO' && v === 'RENAME')) {
+      if (!(u === 'IF' || u === 'ONLY')) return false;
+    }
+    return true;
   }
 
   private stmtExtent(k: number, st: St): number {
@@ -1323,6 +1489,10 @@ export class Layout {
     st.andOr = this.o.andOrOnNewLine && (name === 'where' || name === 'having' || name === 'connect' || name === 'start' || name === 'on');
     if (name === 'select') {
       while (!this.eof() && SELECT_MODIFIERS.has(this.U(this.p))) this.takeKw();
+      if (this.d === 'pgsql' && this.W(this.p, 'ON') && this.P(this.p + 1, '(') && this.W(this.p - 1, 'DISTINCT')) {
+        this.takeKw();
+        this.paren('call', true);
+      }
       if (this.W(this.p, 'TOP')) {
         this.takeKw();
         if (this.P(this.p, '(')) this.paren('call');
@@ -1382,6 +1552,7 @@ export class Layout {
           continue;
         }
         if (u === 'CURSOR' && st.verb === 'DECLARE') { st.seenCursor = true; st.commaBreak = false; }
+        if (st.pgIndexBreak && (u === 'INCLUDE' || u === 'WHERE' || (u === 'WITH' && this.P(k + 1, '('))) && !this.out.atLineStart) this.out.newline(st.base + 1);
         if (!st.dml && u === 'FOR' && st.verb === 'OPEN' && (this.W(k + 1, 'SELECT') || this.isCteAt(k + 1))) {
           this.takeKw();
           this.out.newline(st.base + 1);
@@ -1440,6 +1611,7 @@ export class Layout {
         if (u === 'UPDATE' && this.W(k - 1, 'DO')) st.verbs.add('UPDATE');
         if (st.verb === 'INSERT' && (u === 'SELECT' || u === 'EXEC' || u === 'EXECUTE')) st.insertHasSource = true;
       }
+      if (this.d === 'pgsql' && t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
       if (t.kind === 'punct' && t.text === ',' && (st.list || st.commaBreak)) {
         this.comma(st.list ? st.listIndent : st.base + 1, true);
         continue;
@@ -1460,6 +1632,7 @@ export class Layout {
     const a = this.S(k - 1);
     if (!a) return 'expr';
     if (a.word && (a.u === 'OBJECT' || a.u === 'RECORD')) return 'columns';
+    if (this.d === 'pgsql' && a.word && a.u === 'ENUM' && this.W(k - 2, 'AS')) return 'columns';
     if (a.word && a.u === 'TABLE' && (this.S(k - 2)?.kind === 'param' || this.W(k - 2, 'AS') || this.W(k - 2, 'RETURNS'))) return 'columns';
     if (a.word && (a.u === 'ADD' || a.u === 'MODIFY') && st.verb === 'ALTER' && this.d === 'plsql') return 'columns';
     if ((a.kind === 'ident' || a.kind === 'quotedIdent') && (st.verb === 'CREATE')) {
@@ -1486,7 +1659,8 @@ export class Layout {
       this.take({ space: false });
       return;
     }
-    const subquery = this.W(k + 1, 'SELECT') || (this.W(k + 1, 'WITH') && this.isCteAt(k + 1)) || (this.d === 'sqlite' && this.W(k + 1, 'VALUES'));
+    const subquery = this.W(k + 1, 'SELECT') || (this.W(k + 1, 'WITH') && this.isCteAt(k + 1)) || (this.d === 'sqlite' && this.W(k + 1, 'VALUES')) ||
+      (this.d === 'pgsql' && (this.W(k - 1, 'AS') || this.W(k - 1, 'MATERIALIZED')) && ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'VALUES', 'TABLE'].includes(this.U(k + 1)));
     if (subquery) {
       this.take({ space: sp });
       const L = this.out.lineIndent;
@@ -1524,6 +1698,20 @@ export class Layout {
     if (kind === 'columns' || kind === 'params') this.typeCtx--;
   }
 
+  /** PostgreSQL array subscript / constructor `[…]`: inline, commas never break. */
+  private bracket(): void {
+    this.take();
+    while (!this.eof()) {
+      const t = this.S(this.p)!;
+      if (t.kind === 'op' && t.text === ']') { this.take(); return; }
+      if (t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
+      if (t.kind === 'punct' && (t.text === ';' || t.text === ')')) return;
+      if (t.kind === 'punct' && t.text === '(') { this.paren(this.parenKind(this.p, this.newSt(0, this.verbCtx, NEVER, true)), this.spaceBeforeParen(this.p)); continue; }
+      if (t.word && t.u === 'CASE') { this.caseExpr(); continue; }
+      this.take({ kw: t.kind === 'keyword' || this.contextualKw(this.p) });
+    }
+  }
+
   /** Emit whatever is left before index e (defensive: a nested construct stopped early). */
   private drainTo(e: number, indent: number): void {
     while (this.p < e && !this.eof()) {
@@ -1555,6 +1743,7 @@ export class Layout {
         this.paren(this.parenKind(k, this.newSt(0, this.verbCtx, NEVER, true)), this.spaceBeforeParen(k));
         continue;
       }
+      if (this.d === 'pgsql' && t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
       if (t.word) {
         if (t.u === 'CASE') { this.caseExpr(); continue; }
         if (t.u === 'BETWEEN') between++;

@@ -13,6 +13,7 @@ const DIALECTS: { id: Dialect; label: string }[] = [
   { id: 'tsql', label: 'SQL Server' },
   { id: 'plsql', label: 'Oracle' },
   { id: 'sqlite', label: 'SQLite' },
+  { id: 'pgsql', label: 'PostgreSQL' },
 ];
 
 type Selection = { kind: 'user'; id: string } | { kind: 'builtin'; id: string } | null;
@@ -23,7 +24,7 @@ export interface SnippetsSettingsProps {
 }
 
 function dialectText(d: Dialect[] | null): string {
-  if (!d || d.length === 0 || d.length === 3) return 'All dialects';
+  if (!d || d.length === 0 || d.length >= DIALECTS.length) return 'All dialects';
   return d.map((x) => DIALECTS.find((y) => y.id === x)?.label ?? x).join(', ');
 }
 

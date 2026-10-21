@@ -60,7 +60,7 @@ public sealed class DescribeService(SessionManager sessions, CatalogService cata
             try
             {
                 var details = await catalog.GetObjectDetailsAsync(h.Profile.Id,
-                    new ObjectRef(h.Dialect == Dialect.TSql ? h.Session.CurrentDatabase : null, table.Schema, table.Name, ObjectTypes.Table), ct).ConfigureAwait(false);
+                    new ObjectRef(DialectInfo.HasDatabases(h.Dialect) ? h.Session.CurrentDatabase : null, table.Schema, table.Name, ObjectTypes.Table), ct).ConfigureAwait(false);
                 var pk = details.Columns.Where(c => c.IsPk).Select(c => c.Name).ToList();
                 if (pk.Count > 0)
                 {

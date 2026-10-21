@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Redis source (docs/PLAN-M2.md, package M2-R). M2-0 skeleton: provider + module; M2-R adds the driver package. -->
+  <!-- Redis source (docs/PLAN-M2.md section 5, package M2-R). StackExchange.Redis 2.8 (D7); RedisJSON and stream
+       commands go through Execute. MONITOR uses a raw RESP connection (RawRedisConnection). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,6 +10,14 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Commands\redis-commands.json" LogicalName="DbStudio.Sources.Redis.redis-commands.json" />
   </ItemGroup>
 
   <ItemGroup>

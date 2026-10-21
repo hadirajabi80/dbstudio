@@ -1,4 +1,4 @@
-// Public API of the SQL formatter (PLAN-M1.5 1.2). One token-based formatter for T-SQL, PL/SQL and SQLite over
+// Public API of the SQL formatter (PLAN-M1.5 1.2). One token-based formatter for T-SQL, PL/SQL, SQLite and PostgreSQL over
 // the intel lexer. Pure TypeScript: no React, Monaco or DOM.
 //
 // Safety: the document is cut into top-level chunks (statements with their terminators, GO / `/` lines). Each chunk
@@ -19,6 +19,7 @@ import { applyCase, resolveFormatOptions, type FormatOptions } from './options';
 import type { FormatRules } from './rules/common';
 import { plsqlRules } from './rules/plsql';
 import { sqliteRules } from './rules/sqlite';
+import { pgsqlRules } from './rules/pgsql';
 import { tsqlRules } from './rules/tsql';
 
 export { DEFAULT_FORMAT_OPTIONS, resolveFormatOptions, applyCase } from './options';
@@ -109,8 +110,7 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
   return chunks;
 }
 
-// pgsql: M2-0 placeholder (PG-B adds rules/pgsql.ts).
-const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: sqliteRules };
+const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: pgsqlRules };
 
 /**
  * Tokens in the order the safety check compares them: `eof` dropped and every `;` moved before the comments right in

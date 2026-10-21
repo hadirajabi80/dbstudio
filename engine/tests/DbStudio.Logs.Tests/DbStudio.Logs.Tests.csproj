@@ -9,7 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers" Version="4.16.0" />
+    <PackageReference Include="Testcontainers.MsSql" Version="4.16.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
@@ -21,6 +25,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbStudio.Logs\DbStudio.Logs.csproj" />
+    <!-- Integration: real SQLite (always), SQL Server / PostgreSQL providers for the skippable Testcontainers smoke. -->
+    <ProjectReference Include="..\..\src\DbStudio.Providers.Sqlite\DbStudio.Providers.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\DbStudio.Providers.SqlServer\DbStudio.Providers.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\DbStudio.Providers.PostgreSql\DbStudio.Providers.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

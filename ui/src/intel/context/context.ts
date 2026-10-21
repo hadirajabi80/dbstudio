@@ -225,6 +225,15 @@ export function detectContext(model: StatementModel, offset: number, spec: Diale
     inFunctionCall = { parts, name: parts[parts.length - 1].text, argIndex: commas, argName: null, namedArgs: named, openParen: marker.pos, exec: true };
   }
 
+  // PostgreSQL type position: `expr::|`, `expr::schema.|`, `CAST(expr AS |`
+  if (spec.id === 'pgsql' && prevToken && !atStatementStart) {
+    const castCall = prevToken.kind === 'keyword' && prevToken.upper === 'AS' && inFunctionCall?.name.toUpperCase() === 'CAST' && inFunctionCall.parts.length === 1;
+    if ((prevToken.kind === 'op' && prevToken.text === '::') || castCall) {
+      clause = 'cast';
+      if (castCall) inFunctionCall = null;
+    }
+  }
+
   const firstOnLine = cur ? isFirstOnLine(text, cur.start) : isFirstOnLine(text, offset);
 
   return {

@@ -68,6 +68,7 @@ export function splitStatements(tokens: Token[], text: string, spec: DialectSpec
     case 'tsql': splitTsql(b, sig, opts); break;
     case 'plsql': splitOracle(b, sig, opts); break;
     case 'sqlite': splitSqlite(b, sig, opts); break;
+    case 'pgsql': splitPgsql(b, sig, opts); break;
   }
   return { statements: b.statements, batches: b.batches };
 }
@@ -404,6 +405,46 @@ function splitSqlite(b: Builder, sig: number[], opts: SplitOptions): void {
         else if (x.upper === 'END') depth = Math.max(0, depth - 1);
       } else if (isWordTok(x) && x.upper === 'CASE') depth++;
       else if (isWordTok(x) && x.upper === 'END' && depth > 0) depth--;
+      last = j;
+    }
+    b.add(sig[k], sig[last]);
+    k = endedAt >= 0 ? endedAt + 1 : Math.max(j, last + 1);
+  }
+}
+
+// ---------------------------------------------------------------- PostgreSQL
+
+/**
+ * Statements end at `;` outside parentheses. Dollar-quoted (`$$ … $$`) and single-quoted routine bodies are single
+ * string tokens, so `CREATE FUNCTION … AS $$ …; … $$;` and `DO $$ … $$;` are one statement each. SQL-standard bodies
+ * (`BEGIN ATOMIC … END`) and CASE … END keep their `;` inside. A psql meta-command line (`\dt`, `\c db`) is a
+ * statement of its own that is skipped on run.
+ */
+function splitPgsql(b: Builder, sig: number[], opts: SplitOptions): void {
+  const toks = b.tokens;
+  let k = 0;
+  while (k < sig.length) {
+    const t = toks[sig[k]];
+    if (t.kind === 'punct' && t.text === ';') { k++; continue; }
+    if (t.kind === 'meta') {
+      const st = b.add(sig[k], sig[k]);
+      if (st) { st.kind = 'psql'; st.skipOnRun = true; }
+      k++;
+      continue;
+    }
+    let parens = 0, depth = 0, last = k, j = k, endedAt = -1;
+    for (; j < sig.length; j++) {
+      const x = toks[sig[j]];
+      if (x.kind === 'meta') break;
+      if (j > k && parens === 0 && depth === 0 && opts.blankLineSplitsStatements && hasBlankLine(b.text, toks[sig[j - 1]].end, x.start)) break;
+      if (x.kind === 'punct') {
+        if (x.text === '(') parens++;
+        else if (x.text === ')') parens = Math.max(0, parens - 1);
+        else if (x.text === ';' && parens === 0 && depth === 0) { endedAt = j; break; }
+      } else if (isWordTok(x)) {
+        if (x.upper === 'CASE' || (x.upper === 'BEGIN' && toks[sig[j + 1]]?.upper === 'ATOMIC')) depth++;
+        else if (x.upper === 'END' && depth > 0) depth--;
+      }
       last = j;
     }
     b.add(sig[k], sig[last]);

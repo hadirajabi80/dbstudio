@@ -1,0 +1,99 @@
+{
+  "Country": {
+    "id": 1,
+    "name": "text",
+    "isoCode": "te"
+  },
+  "Customer": {
+    "id": 1,
+    "name": "text",
+    "email": "text",
+    "countryId": 1,
+    "isActive": true,
+    "createdAt": "2026-01-31T12:00:00+00:00",
+    "profile": {},
+    "tags": [
+      "text"
+    ]
+  },
+  "Product": {
+    "id": 1,
+    "sku": "00000000-0000-0000-0000-000000000000",
+    "name": "text",
+    "price": 1.5,
+    "stock": 1,
+    "attributes": {},
+    "thumbnail": "AAECAw=="
+  },
+  "Order": {
+    "id": 1,
+    "customerId": 1,
+    "orderDate": "2026-01-31T12:00:00+00:00",
+    "status": "new",
+    "total": 1.5,
+    "note": "text"
+  },
+  "OrderLine": {
+    "orderId": 1,
+    "lineNo": 1,
+    "productId": 1,
+    "qty": 1,
+    "unitPrice": 1.5,
+    "lineTotal": 1.5
+  },
+  "TypeZoo": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "small": 1,
+    "big": 1,
+    "ratio": 1.5,
+    "score": 1.5,
+    "price": 1,
+    "code": "text",
+    "day": "2026-01-31",
+    "atLocal": "2026-01-31T12:00:00",
+    "opens": "12:00:00",
+    "opensTz": "12:00:00",
+    "wait": "PT1H",
+    "doc": {},
+    "spec": "<root />",
+    "ip": "192.0.2.1",
+    "mac": "08:00:2b:01:02:03",
+    "location": null,
+    "search": null,
+    "during": null,
+    "counts": [
+      1
+    ],
+    "statuses": [
+      "new"
+    ],
+    "user": "text",
+    "camelCase": "text"
+  },
+  "CustomerTotal": {
+    "customerId": 1,
+    "name": "text",
+    "orders": 1,
+    "revenue": 1
+  },
+  "OrdersOfRow": {
+    "id": 1,
+    "orderDate": "2026-01-31T12:00:00+00:00",
+    "total": 1
+  },
+  "Invoice": {
+    "invoiceId": 1,
+    "customerId": 1,
+    "issuedAt": "2026-01-31T12:00:00+00:00",
+    "amount": 1.5,
+    "paid": true,
+    "pdf": "AAECAw=="
+  },
+  "CustomerOrdersRow": {
+    "id": 1,
+    "name": "text",
+    "total": 1.5,
+    "orderDate": "2026-01-31T12:00:00+00:00",
+    "status": "new"
+  }
+}

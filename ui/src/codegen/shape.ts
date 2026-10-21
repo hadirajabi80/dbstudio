@@ -48,7 +48,7 @@ export function membersOf(columns: CgColumn[], dialect: Dialect, o: CodegenOptio
     return {
       col,
       name: escapeIdent(lang, n),
-      type: resolveType(dialect, col.dbType, { kind: col.kind, numberOneAsBool: o.numberOneAsBool }),
+      type: resolveType(dialect, col.dbType, { kind: col.kind, numberOneAsBool: o.numberOneAsBool, enumLabels: col.enumLabels, domainBase: col.domainBase }),
       nullable: col.nullable,
     };
   });

@@ -4,12 +4,13 @@ import type { CompletionItem, CompletionResult, Dialect, IntelOptions } from '..
 import tsqlShop from './fixtures/shop-tsql.json';
 import plsqlShop from './fixtures/shop-plsql.json';
 import sqliteShop from './fixtures/shop-sqlite.json';
+import pgsqlShop from './fixtures/shop-pgsql.json';
 
 export const fixtures: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
-  pgsql: sqliteShop as unknown as CatalogSnapshot, // M2-0 placeholder: PG-B adds fixtures/shop-pgsql.json
+  pgsql: pgsqlShop as unknown as CatalogSnapshot,
 };
 
 const cache = new Map<string, Intel>();

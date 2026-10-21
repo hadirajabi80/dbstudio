@@ -135,20 +135,30 @@ services:
       - "17001:6379"
 
   # MongoDB 7 (M2-M, docs/PLAN-M2.md 6.5) as a single-node replica set so change streams work; the healthcheck
-  # initiates rs0 on first start. seed-mongo.js (owned by M2-M) runs from /docker-entrypoint-initdb.d.
+  # initiates rs0 on first start. The seed cannot run from /docker-entrypoint-initdb.d: the image runs init scripts
+  # on a temporary mongod started with --replSet before rs0 exists, so every write fails with "not primary".
+  # The one-shot mongo-seed service below waits for a writable primary and then runs seed-mongo.js (owned by M2-M).
   mongo:
     image: mongo:7
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "${MONGO_PORT:-27018}:27017"
-    volumes:
-      - ./seed-mongo.js:/docker-entrypoint-initdb.d/10-seed.js:ro
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"]
       interval: 5s
       timeout: 10s
       retries: 30
       start_period: 10s
+
+  # One-shot: seeds "shop" once mongo is a writable primary (idempotent: the seed drops the database first).
+  mongo-seed:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./seed-mongo.js:/seed/seed-mongo.js:ro
+    entrypoint: ["/bin/sh", "-c", "until mongosh --quiet 'mongodb://mongo:27017/?directConnection=true' --eval 'db.hello().isWritablePrimary' | grep -q true; do sleep 1; done; mongosh --quiet 'mongodb://mongo:27017/?directConnection=true' /seed/seed-mongo.js"]
 
   # Apache Kafka 3.8 in KRaft mode (profile "kafka", M2-K, docs/PLAN-M2.md 7.6). Host clients use localhost:19092.
   kafka:

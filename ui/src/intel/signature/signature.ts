@@ -3,9 +3,10 @@ import type { SignatureHelpInfo, SignatureInfo } from '../types';
 import type { DialectSpec } from '../dialect/spec';
 import type { CatalogIndex } from '../catalog/index';
 import type { FunctionCallContext } from '../context/context';
-import { routineParams } from '../complete/completer';
+import { pgParamText, routineParams } from '../complete/completer';
 
 function paramLabel(p: [string, string, string, number], spec: DialectSpec): string {
+  if (spec.id === 'pgsql') return pgParamText(p);
   const dir = p[2] === 'in' ? (spec.id === 'plsql' ? ' IN' : '') : p[2] === 'out' ? (spec.id === 'plsql' ? ' OUT' : ' OUTPUT') : p[2] === 'inout' ? ' IN OUT' : '';
   const base = spec.id === 'plsql' ? `${p[0]}${dir} ${p[1]}` : `${p[0]} ${p[1]}${dir}`;
   return (p[3] ? `[${base.trim()}]` : base.trim());

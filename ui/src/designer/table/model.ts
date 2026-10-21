@@ -1,16 +1,20 @@
 // Pure editing operations of the table designer over the wire TableModel (docs/PLAN-M1.5.md 1.3.1 / 3.9).
 // Every operation returns a new model; constraint/index column lists follow column renames and removals.
 import type {
-  CheckModel, Dialect, ForeignKeyModel, IndexModel, ReferentialAction, TableColumnModel, TableModel, UniqueModel,
+  CatalogSnapshot, CheckModel, DesignerType, Dialect, ForeignKeyModel, IndexModel, ReferentialAction, TableColumnModel, TableModel, UniqueModel,
 } from '../../api/types';
+import { qualifiedName } from '../../lib/sql';
 
-// pgsql: M2-0 placeholder values (PG-C owns the PostgreSQL designer, docs/PLAN-PG.md 4.2).
-export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = { tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'varchar(100)' };
-export const DEFAULT_KEY_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER', pgsql: 'integer' };
+export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = { tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'text' };
+export const DEFAULT_KEY_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER', pgsql: 'bigint' };
 
+/** PostgreSQL folds unquoted names to lower case, so new names are lower case (no quoting needed). */
 export function caseFor(dialect: Dialect, name: string): string {
-  return dialect === 'plsql' ? name.toUpperCase() : dialect === 'sqlite' ? name.toLowerCase() : name;
+  return dialect === 'plsql' ? name.toUpperCase() : dialect === 'sqlite' || dialect === 'pgsql' ? name.toLowerCase() : name;
 }
+
+/** PostgreSQL truncates identifiers to 63 bytes (NAMEDATALEN - 1). */
+export const PG_MAX_IDENTIFIER = 63;
 
 export function blankColumn(dialect: Dialect, name: string, type = DEFAULT_COLUMN_TYPE[dialect]): TableColumnModel {
   return {
@@ -26,6 +30,8 @@ export function blankColumn(dialect: Dialect, name: string, type = DEFAULT_COLUM
  * so a new key must match it or a plain new table shows a spurious warning.
  */
 export function defaultPkClustered(dialect: Dialect, t?: Pick<TableModel, 'indexes'>): boolean {
+  // PostgreSQL tables are heaps (CLUSTER is a one-off command, not a key option).
+  if (dialect === 'pgsql') return false;
   if (dialect !== 'tsql') return true;
   return !t?.indexes.some((i) => i.clustered);
 }
@@ -35,7 +41,8 @@ export function newTableModel(dialect: Dialect, schema: string | null, name = ''
   const id = {
     ...blankColumn(dialect, caseFor(dialect, 'Id'), DEFAULT_KEY_TYPE[dialect]),
     nullable: false,
-    identity: dialect === 'sqlite' ? null : { seed: 1, increment: 1 },
+    // PostgreSQL: GENERATED ALWAYS AS IDENTITY (the SQL-standard form; serial is legacy).
+    identity: dialect === 'sqlite' ? null : dialect === 'pgsql' ? { seed: 1, increment: 1, always: true } : { seed: 1, increment: 1 },
   };
   return {
     schema: dialect === 'sqlite' ? schema ?? 'main' : schema,
@@ -165,7 +172,9 @@ const cleanName = (s: string) => s.replace(/[^A-Za-z0-9_]+/g, '_');
 
 export function defaultConstraintName(t: TableModel, dialect: Dialect, prefix: 'PK' | 'UQ' | 'IX' | 'FK' | 'CK', parts: string[]): string {
   const raw = [prefix, cleanName(t.name || 'Table'), ...parts.map(cleanName)].filter(Boolean).join('_');
-  const n = dialect === 'plsql' ? raw.toUpperCase().slice(0, 128) : dialect === 'sqlite' ? raw.toLowerCase() : raw;
+  const n = dialect === 'plsql' ? raw.toUpperCase().slice(0, 128)
+    : dialect === 'pgsql' ? raw.toLowerCase().slice(0, PG_MAX_IDENTIFIER)
+      : dialect === 'sqlite' ? raw.toLowerCase() : raw;
   return n;
 }
 
@@ -254,6 +263,8 @@ export interface ValidationIssue {
 }
 
 const INTEGER_TYPES = /^(tinyint|smallint|int|integer|bigint|number|numeric|decimal)\b/i;
+/** PostgreSQL identity columns: smallint, integer or bigint (and their int2/int4/int8 spellings). */
+const PG_IDENTITY_TYPES = /^(smallint|integer|int|bigint|int2|int4|int8)$/i;
 
 export function validateTable(t: TableModel, dialect: Dialect): ValidationIssue[] {
   const out: ValidationIssue[] = [];
@@ -266,7 +277,14 @@ export function validateTable(t: TableModel, dialect: Dialect): ValidationIssue[
     if (k && seen.has(k)) out.push({ severity: 'error', message: `Duplicate column name “${c.name}”.`, column: i });
     seen.set(k, i);
     if (!c.type.trim() && !c.computed) out.push({ severity: 'error', message: `Column “${c.name || i + 1}” needs a type.`, column: i });
-    if (c.identity && !INTEGER_TYPES.test(c.type.trim())) out.push({ severity: 'error', message: `Identity column “${c.name}” must have an integer type.`, column: i });
+    if (c.identity && dialect === 'pgsql') {
+      if (!PG_IDENTITY_TYPES.test(c.type.trim())) out.push({ severity: 'error', message: `Identity column “${c.name}” must be smallint, integer or bigint.`, column: i });
+    } else if (c.identity && !INTEGER_TYPES.test(c.type.trim())) out.push({ severity: 'error', message: `Identity column “${c.name}” must have an integer type.`, column: i });
+    if (dialect === 'pgsql') {
+      if (c.identity && c.computed) out.push({ severity: 'error', message: `“${c.name}” cannot be both an identity and a generated column.`, column: i });
+      if (c.computed && !c.computed.persisted) out.push({ severity: 'error', message: `Generated column “${c.name}” must be STORED in PostgreSQL.`, column: i });
+      if (c.name.length > PG_MAX_IDENTIFIER) out.push({ severity: 'warning', message: `Column name “${c.name.slice(0, 24)}…” is longer than 63 characters; PostgreSQL truncates it.`, column: i });
+    }
     if (c.autoincrement && !/^integer$/i.test(c.type.trim())) out.push({ severity: 'error', message: `AUTOINCREMENT needs type INTEGER (“${c.name}”).`, column: i });
     if (c.computed && !c.computed.expression.trim()) out.push({ severity: 'error', message: `Computed column “${c.name}” needs an expression.`, column: i });
   });
@@ -308,6 +326,35 @@ function canonical(v: unknown): unknown {
 
 export function sameModel(a: TableModel | null, b: TableModel | null): boolean {
   return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+}
+
+/**
+ * PostgreSQL user types of the loaded schemas (enums, domains, composites) for the type combobox: bare on the
+ * search_path, schema-qualified elsewhere.
+ */
+export function catalogTypes(snapshot: CatalogSnapshot | null | undefined): DesignerType[] {
+  if (!snapshot || snapshot.dialect !== 'pgsql') return [];
+  const onPath = new Set(snapshot.searchPath?.length ? snapshot.searchPath : [snapshot.defaultSchema]);
+  const out: DesignerType[] = [];
+  for (const s of snapshot.schemas) {
+    for (const o of s.objects) {
+      if (o.t !== 'type') continue;
+      const name = qualifiedName({ schema: onPath.has(s.name) ? null : s.name, name: o.n }, 'pgsql');
+      out.push({ name, default: name, params: 'none', category: 'other' });
+    }
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** PostgreSQL array type text: `text[]`, `integer[][]`, `varchar(20)[]`. */
+export function isArrayType(type: string): boolean {
+  return /\[\s*\d*\s*\]\s*$/.test(type);
+}
+
+/** Append (`text` → `text[]`) or strip (`text[]` / `int[][]` → base) the array brackets. */
+export function withArray(type: string, on: boolean): string {
+  const base = type.trim().replace(/(\s*\[\s*\d*\s*\])+$/, '');
+  return on ? `${base}[]` : base;
 }
 
 /** Parse `nvarchar(100)` / `NUMBER(10,2)` / `varchar(max)`. */

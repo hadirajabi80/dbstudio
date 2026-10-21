@@ -36,6 +36,24 @@ public sealed class OracleIntegrationTests(OracleFixture fixture) : IClassFixtur
     }
 
     [SkippableFact]
+    public async Task Number_with_scale_is_an_exact_decimal_whatever_ODP_calls_it()
+    {
+        // ODP.NET names NUMBER(3,1) "Single" and NUMBER(12,2) "Double"; both are exact decimals. BINARY_* stay floats.
+        RequireAvailable();
+        await using var session = await fixture.OpenSessionAsync();
+        var (summary, sink) = await RunAsync(session, false, new SqlBatch(
+            "SELECT CAST(0.1 AS NUMBER(3,1)) s, CAST(1234567890.12 AS NUMBER(12,2)) d, CAST(12345678901234567.89 AS NUMBER(20,2)) w, " +
+            "CAST(1.5 AS BINARY_DOUBLE) bd, CAST(42 AS NUMBER(10)) i FROM dual", 1, 1));
+        Assert.Equal(ExecutionStatus.Ok, summary.Status);
+        var rs = Assert.Single(sink.ResultSets);
+        Assert.Equal([ColumnKinds.Decimal, ColumnKinds.Decimal, ColumnKinds.Decimal, ColumnKinds.Float, ColumnKinds.Int], rs.Columns.Select(c => c.Kind));
+        Assert.Equal(["NUMBER", "NUMBER", "NUMBER", "BINARY_DOUBLE", "NUMBER"], rs.Columns.Select(c => c.DbType));
+        Assert.Equal("0.1", rs.Rows[0][0]);
+        Assert.Equal("1234567890.12", rs.Rows[0][1]);
+        Assert.Equal("12345678901234567.89", rs.Rows[0][2]);
+    }
+
+    [SkippableFact]
     public async Task DbmsOutput_FromProcedure_ViaExecRewrite()
     {
         RequireAvailable();

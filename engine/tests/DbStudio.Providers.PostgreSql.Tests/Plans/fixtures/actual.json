@@ -1,0 +1,54 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Sort",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 1.09,
+      "Total Cost": 1.10,
+      "Plan Rows": 2,
+      "Plan Width": 4,
+      "Actual Startup Time": 0.031,
+      "Actual Total Time": 0.032,
+      "Actual Rows": 3,
+      "Actual Loops": 1,
+      "Output": ["id"],
+      "Sort Key": ["customers.id"],
+      "Sort Method": "quicksort",
+      "Sort Space Used": 25,
+      "Sort Space Type": "Memory",
+      "Shared Hit Blocks": 4,
+      "Shared Read Blocks": 0,
+      "Shared Dirtied Blocks": 0,
+      "Shared Written Blocks": 0,
+      "Plans": [
+        {
+          "Node Type": "Seq Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Relation Name": "customers",
+          "Schema": "public",
+          "Alias": "customers",
+          "Startup Cost": 0.00,
+          "Total Cost": 1.06,
+          "Plan Rows": 2,
+          "Plan Width": 4,
+          "Actual Startup Time": 0.010,
+          "Actual Total Time": 0.012,
+          "Actual Rows": 3,
+          "Actual Loops": 1,
+          "Output": ["id"],
+          "Filter": "(customers.id <= 3)",
+          "Rows Removed by Filter": 2,
+          "Shared Hit Blocks": 1,
+          "Shared Read Blocks": 0
+        }
+      ]
+    },
+    "Planning": { "Shared Hit Blocks": 12, "Shared Read Blocks": 0 },
+    "Planning Time": 0.088,
+    "Triggers": [],
+    "Execution Time": 0.054
+  }
+]

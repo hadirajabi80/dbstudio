@@ -4,16 +4,17 @@ import type { CatalogObject, CatalogSnapshot, Dialect } from '../../api/types';
 import plsqlShop from '../../intel/__tests__/fixtures/shop-plsql.json';
 import sqliteShop from '../../intel/__tests__/fixtures/shop-sqlite.json';
 import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
-import { fromCatalogObject, queryObject } from '../fromCatalog';
+import { attachUserTypes, fromCatalogObject, queryObject, userTypesOf } from '../fromCatalog';
 import type { CgColumn, CgInput, CgObject } from '../model';
+import { PG_SHOP } from './shop-pgsql';
 
-/** M2-0: the M1 dialects; PG-C adds pgsql (shop-pgsql.json) and widens these maps to Dialect. */
-export type ShopDialect = Exclude<Dialect, 'pgsql'>;
+export type ShopDialect = Dialect;
 
 const SNAPSHOTS: Record<ShopDialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
+  pgsql: PG_SHOP,
 };
 
 const EXTRA: Record<ShopDialect, { schema: string; objects: CatalogObject[] }> = {
@@ -92,6 +93,11 @@ const EXTRA: Record<ShopDialect, { schema: string; objects: CatalogObject[] }> =
     schema: 'main',
     objects: [],
   },
+  // The PostgreSQL shop (shop-pgsql.ts) already carries its wide-type, reserved-word and routine objects.
+  pgsql: {
+    schema: 'public',
+    objects: [],
+  },
 };
 
 const QUERY: Record<ShopDialect, { sql: string; columns: CgColumn[] }> = {
@@ -122,9 +128,26 @@ const QUERY: Record<ShopDialect, { sql: string; columns: CgColumn[] }> = {
       { name: 'order_date', dbType: 'TEXT', nullable: true, pk: false, identity: false, computed: false, kind: 'string' },
     ],
   },
+  pgsql: {
+    sql: 'SELECT c.id, c.name, o.total, o.order_date, o.status\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nWHERE c.id = $1 AND o.total > $2\nORDER BY o.order_date DESC;',
+    columns: [
+      { name: 'id', dbType: 'bigint', nullable: false, pk: false, identity: false, computed: false, kind: 'int' },
+      { name: 'name', dbType: 'character varying(100)', nullable: false, pk: false, identity: false, computed: false, kind: 'string' },
+      { name: 'total', dbType: 'numeric(12,2)', nullable: false, pk: false, identity: false, computed: false, kind: 'decimal' },
+      { name: 'order_date', dbType: 'timestamp with time zone', nullable: true, pk: false, identity: false, computed: false, kind: 'datetimeoffset' },
+      { name: 'status', dbType: 'order_status', nullable: false, pk: false, identity: false, computed: false, kind: 'string' },
+    ],
+  },
 };
 
 const PARAM_TYPES = { customerId: 'int', minTotal: 'decimal', customer_id: 'int', min_total: 'decimal', p1: 'int', p2: 'float' } as const;
+const PG_PARAM_TYPES = { p1: 'long', p2: 'decimal' } as const;
+const PG_DEFAULTS: Record<string, string[]> = {
+  'public.customers': ['is_active', 'created_at'],
+  'public.products': ['sku', 'stock'],
+  'public.orders': ['order_date', 'status'],
+  'sales.invoices': ['issued_at', 'paid'],
+};
 
 /** Every object of the shop fixture for one dialect (tables, views, routines, packages and one query). */
 export function shopInput(dialect: ShopDialect, opts: { query?: boolean } = {}): CgInput {
@@ -133,12 +156,18 @@ export function shopInput(dialect: ShopDialect, opts: { query?: boolean } = {}):
   for (const s of snap.schemas) {
     if (dialect === 'sqlite' && s.name !== 'main') continue;
     if (dialect === 'plsql' && s.name !== 'SHOP') continue;
+    if (dialect === 'pgsql' && s.name !== 'public' && s.name !== 'sales') continue;
     for (const o of s.objects) {
       // SQLite: INTEGER PRIMARY KEY is a rowid alias (auto-increment).
       const obj = dialect === 'sqlite' && o.t === 'table' && o.n === 'customers'
         ? { ...o, c: o.c!.map((c) => (c[0] === 'id' ? ([c[0], c[1], c[2], 1, 1, c[5]] as typeof c) : c)), pk: ['id'] }
         : o;
       const cg = fromCatalogObject(obj, s.name);
+      // PostgreSQL server defaults (now(), true, gen_random_uuid()): left out of generated INSERTs.
+      if (cg?.kind === 'table' && dialect === 'pgsql') {
+        const defaults = PG_DEFAULTS[`${s.name}.${cg.name}`] ?? [];
+        cg.columns = cg.columns.map((c) => (defaults.includes(c.name) ? { ...c, hasDefault: true } : c));
+      }
       if (cg) objects.push(cg);
     }
   }
@@ -152,9 +181,10 @@ export function shopInput(dialect: ShopDialect, opts: { query?: boolean } = {}):
   }
   if (opts.query !== false) {
     const q = QUERY[dialect];
-    objects.push(queryObject('CustomerOrders', q.sql, dialect, q.columns, PARAM_TYPES));
+    objects.push(queryObject('CustomerOrders', q.sql, dialect, q.columns, dialect === 'pgsql' ? PG_PARAM_TYPES : PARAM_TYPES));
   }
-  return { dialect, objects };
+  // PostgreSQL enum / domain columns get their labels / base type from the catalog's type objects.
+  return { dialect, objects: attachUserTypes(objects, userTypesOf(snap)) };
 }
 
-export const DIALECTS: ShopDialect[] = ['tsql', 'plsql', 'sqlite'];
+export const DIALECTS: ShopDialect[] = ['tsql', 'plsql', 'sqlite', 'pgsql'];

@@ -31,7 +31,7 @@ public static class ShopSchema
     {
         Dialect.TSql => logical,
         Dialect.PlSql => ToSnake(logical).ToUpperInvariant(),
-        Dialect.Sqlite => ToSnake(logical).ToLowerInvariant(),
+        Dialect.Sqlite or Dialect.PgSql => ToSnake(logical).ToLowerInvariant(),
         _ => logical,
     };
 
@@ -53,6 +53,7 @@ public static class ShopSchema
     {
         Dialect.TSql => "dbo",
         Dialect.PlSql => "SHOP",
+        Dialect.PgSql => "public",
         _ => "main",
     };
 

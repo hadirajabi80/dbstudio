@@ -246,7 +246,7 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
             value={name}
             disabled={locked}
             autoFocus={!originalName}
-            placeholder={dialect === 'plsql' ? 'V_NAME' : 'vName'}
+            placeholder={dialect === 'plsql' ? 'V_NAME' : dialect === 'pgsql' ? 'v_name' : 'vName'}
             aria-invalid={conflict ? true : undefined}
             aria-describedby={conflict ? `${tab.id}-name-conflict` : undefined}
             onChange={(e) => setName(e.target.value)}
@@ -271,7 +271,12 @@ export function ViewDesignerView({ tab, theme, visible }: TabViewProps) {
           </label>
         )}
         {dialect !== 'sqlite' && (
-          <label className="check sm" title="Rejects updates through the view that it would not show">
+          <label
+            className="check sm"
+            title={dialect === 'pgsql'
+              ? 'WITH CASCADED CHECK OPTION: rejects updates through the view (and the views it uses) that it would not show. For LOCAL, edit the script.'
+              : 'Rejects updates through the view that it would not show'}
+          >
             <input type="checkbox" checked={options.checkOption} disabled={locked} onChange={(e) => setOptions({ ...options, checkOption: e.target.checked })} />
             WITH CHECK OPTION
           </label>

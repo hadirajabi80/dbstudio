@@ -1,0 +1,79 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "shop.orders",
+    "indexFilterSet": false,
+    "parsedQuery": { "$and": [ { "status": { "$eq": "paid" } }, { "total": { "$gt": 100 } } ] },
+    "queryHash": "1B8BFB4E",
+    "planCacheKey": "A2E3E1F4",
+    "winningPlan": {
+      "stage": "LIMIT",
+      "limitAmount": 20,
+      "inputStage": {
+        "stage": "FETCH",
+        "filter": { "total": { "$gt": 100 } },
+        "inputStage": {
+          "stage": "IXSCAN",
+          "keyPattern": { "status": 1, "createdAt": -1 },
+          "indexName": "status_1_createdAt_-1",
+          "isMultiKey": false,
+          "multiKeyPaths": { "status": [], "createdAt": [] },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": { "status": [ "[\"paid\", \"paid\"]" ], "createdAt": [ "[MaxKey, MinKey]" ] }
+        }
+      }
+    },
+    "rejectedPlans": [
+      { "stage": "LIMIT", "limitAmount": 20, "inputStage": { "stage": "COLLSCAN", "filter": { "status": { "$eq": "paid" } }, "direction": "forward" } }
+    ]
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 20,
+    "executionTimeMillis": 2,
+    "totalKeysExamined": 31,
+    "totalDocsExamined": 31,
+    "executionStages": {
+      "stage": "LIMIT",
+      "nReturned": 20,
+      "executionTimeMillisEstimate": 0,
+      "works": 32,
+      "advanced": 20,
+      "limitAmount": 20,
+      "inputStage": {
+        "stage": "FETCH",
+        "filter": { "total": { "$gt": 100 } },
+        "nReturned": 20,
+        "executionTimeMillisEstimate": 0,
+        "works": 31,
+        "advanced": 20,
+        "docsExamined": 31,
+        "alreadyHasObj": 0,
+        "inputStage": {
+          "stage": "IXSCAN",
+          "nReturned": 31,
+          "executionTimeMillisEstimate": 0,
+          "works": 31,
+          "advanced": 31,
+          "keyPattern": { "status": 1, "createdAt": -1 },
+          "indexName": "status_1_createdAt_-1",
+          "isMultiKey": false,
+          "direction": "forward",
+          "indexBounds": { "status": [ "[\"paid\", \"paid\"]" ], "createdAt": [ "[MaxKey, MinKey]" ] },
+          "keysExamined": 31,
+          "seeks": 1,
+          "dupsTested": 0,
+          "dupsDropped": 0
+        }
+      }
+    },
+    "allPlansExecution": []
+  },
+  "command": { "find": "orders", "filter": { "status": "paid", "total": { "$gt": 100 } }, "limit": 20, "$db": "shop" },
+  "serverInfo": { "host": "mongo-0", "port": 27017, "version": "7.0.14", "gitVersion": "ce59cfc6a3c5e5c067dca0d30697edd68d4f5188" },
+  "ok": 1.0
+}

@@ -1,5 +1,5 @@
 // Bind parameters in SQL about to run (PLAN-M1.5 A2): `@x` (T-SQL, not DECLAREd in the batch), `:x` (Oracle,
-// SQLite), `?`/`?N`, `$x` (SQLite). Uses the intel lexer so strings and comments never produce false positives.
+// SQLite), `?`/`?N`, `$x` (SQLite); PostgreSQL `$n` (positional n), `:x`/`@x` (named), never `?` (a jsonb operator). Uses the intel lexer so strings and comments never produce false positives.
 import type { Dialect, SqlBatch } from '../../api/types';
 import { getSpec, tokenize, type Token } from '../../intel';
 
@@ -33,6 +33,7 @@ export function detectParams(batches: readonly SqlBatch[], dialect: Dialect): De
   for (const b of batches) {
     const toks = tokenize(b.sql, spec).filter(SIG);
     if (isDefinition(toks)) continue;
+    if (dialect === 'pgsql' && toks[0]?.upper === 'DO') continue; // DO $$ … $$: a PL/pgSQL block, no binds
     const declared = new Set<string>();
     if (dialect === 'tsql') {
       // DECLARE @a int, @b int = 1, @t TABLE (…)
@@ -60,6 +61,11 @@ export function detectParams(batches: readonly SqlBatch[], dialect: Dialect): De
           if (declared.has(t.upper)) continue;
           if (isExec && toks[i + 1]?.text === '=') continue; // EXEC p @Name = value: a parameter name of p
           add(text.slice(1), text);
+        } else if (dialect === 'pgsql') {
+          if (text.startsWith('?')) continue;
+          if (text.startsWith(':') && b.sql[t.start - 1] === ':') continue; // x::type cast
+          if (text.startsWith('$') && !/^\$\d+$/.test(text)) continue; // only $1, $2, … are binds
+          add(text.slice(1).replace(/^"|"$/g, ''), text);
         } else if (dialect === 'plsql') {
           if (!text.startsWith(':')) continue; // &substitution variables are SQL*Plus, not binds
           const name = text.slice(1).replace(/^"|"$/g, '');
@@ -70,7 +76,7 @@ export function detectParams(batches: readonly SqlBatch[], dialect: Dialect): De
             else add(String(++positional), '?', true, true);
           } else add(text.slice(1), text);
         }
-      } else if (t.text === '?' && dialect !== 'sqlite') {
+      } else if (t.text === '?' && dialect !== 'sqlite' && dialect !== 'pgsql') {
         add(String(++positional), '?', true, true);
       }
     }

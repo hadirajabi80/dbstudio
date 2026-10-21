@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Kafka source (docs/PLAN-M2.md, package M2-K). M2-0 skeleton: provider + module; M2-K adds the driver package. -->
+  <!-- Kafka source (docs/PLAN-M2.md section 7, package M2-K). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,6 +9,20 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- D7: Confluent.Kafka 2.6.x. librdkafka comes from librdkafka.redist (runtimes/<rid>/native); packaging per D8:
+       win-x64 self-extracts it from the single-file engine, macOS ships librdkafka.dylib next to the apphost. -->
+  <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+    <PackageReference Include="Confluent.SchemaRegistry" Version="2.6.1" />
+    <PackageReference Include="Confluent.SchemaRegistry.Serdes.Avro" Version="2.6.1" />
+    <PackageReference Include="Confluent.SchemaRegistry.Serdes.Protobuf" Version="2.6.1" />
+    <!-- Google.Protobuf and protobuf-net.Reflection both define Google.Protobuf.Reflection.*DescriptorProto; DbStudio uses
+         the protobuf-net parser types, so Google.Protobuf is only visible through an extern alias. -->
+    <PackageReference Include="Google.Protobuf" Version="3.26.1" Aliases="GoogleProtobufAssembly" />
+    <!-- PLAN-M2 10: Apache.Avro pulls Newtonsoft.Json; pin a patched version. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>

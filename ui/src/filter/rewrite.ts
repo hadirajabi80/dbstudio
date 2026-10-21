@@ -79,8 +79,9 @@ export function analyzeSelect(sql: string, dialect: Dialect): AnalysisResult {
 
   for (let i = mainStart; i < toks.length; i++) {
     if (depth[i] !== 0) continue;
-    if (kw(i, 'INTO') && dialect === 'tsql') return { ok: false, reason: 'SELECT … INTO cannot be filtered on the server' };
-    if (kw(i, 'FOR') && (kw(i + 1, 'XML', 'JSON', 'BROWSE') || kw(i + 1, 'UPDATE'))) {
+    if (kw(i, 'INTO') && (dialect === 'tsql' || dialect === 'pgsql')) return { ok: false, reason: 'SELECT … INTO cannot be filtered on the server' };
+    // FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE (PostgreSQL) lock rows: not wrappable.
+    if (kw(i, 'FOR') && (kw(i + 1, 'XML', 'JSON', 'BROWSE') || kw(i + 1, 'UPDATE') || (dialect === 'pgsql' && kw(i + 1, 'SHARE', 'NO', 'KEY')))) {
       return { ok: false, reason: `FOR ${toks[i + 1].upper} queries cannot be filtered on the server` };
     }
   }
@@ -91,7 +92,7 @@ export function analyzeSelect(sql: string, dialect: Dialect): AnalysisResult {
   for (let i = mainStart; i < toks.length; i++) {
     if (depth[i] !== 0) continue;
     if (kw(i, 'TOP') && dialect === 'tsql') limited = hasTop = true;
-    if (kw(i, 'LIMIT') && dialect === 'sqlite') limited = true;
+    if (kw(i, 'LIMIT') && (dialect === 'sqlite' || dialect === 'pgsql')) limited = true;
     if (kw(i, 'FETCH') && kw(i + 1, 'FIRST', 'NEXT')) limited = true;
     if (kw(i, 'OFFSET')) limited = true;
     if (kw(i, 'ROWNUM') && dialect === 'plsql') limited = true;

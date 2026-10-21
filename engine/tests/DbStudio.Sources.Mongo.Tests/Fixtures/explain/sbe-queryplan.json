@@ -1,0 +1,53 @@
+{
+  "explainVersion": "2",
+  "queryPlanner": {
+    "namespace": "shop.orders",
+    "indexFilterSet": false,
+    "parsedQuery": { "status": { "$eq": "shipped" } },
+    "queryHash": "5F5FC979",
+    "planCacheKey": "8C2A3E6B",
+    "optimizedPipeline": true,
+    "winningPlan": {
+      "queryPlan": {
+        "stage": "GROUP",
+        "planNodeId": 3,
+        "inputStage": {
+          "stage": "FETCH",
+          "planNodeId": 2,
+          "inputStage": {
+            "stage": "IXSCAN",
+            "planNodeId": 1,
+            "keyPattern": { "status": 1, "createdAt": -1 },
+            "indexName": "status_1_createdAt_-1",
+            "isMultiKey": false,
+            "direction": "forward",
+            "indexBounds": { "status": [ "[\"shipped\", \"shipped\"]" ], "createdAt": [ "[MaxKey, MinKey]" ] }
+          }
+        }
+      },
+      "slotBasedPlan": { "slots": "$$RESULT=s11 env: { }", "stages": "[3] project [s11 = newObj(\"_id\", s9)] [2] group [s9] [] [1] ixseek KS(...)" }
+    },
+    "rejectedPlans": [
+      { "queryPlan": { "stage": "GROUP", "inputStage": { "stage": "COLLSCAN", "filter": { "status": { "$eq": "shipped" } } } }, "slotBasedPlan": {} }
+    ]
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 4,
+    "executionTimeMillis": 5,
+    "totalKeysExamined": 500,
+    "totalDocsExamined": 500,
+    "executionStages": {
+      "stage": "project",
+      "planNodeId": 3,
+      "nReturned": 4,
+      "executionTimeMillisEstimate": 2,
+      "opens": 1,
+      "closes": 1,
+      "inputStage": { "stage": "group", "planNodeId": 3, "nReturned": 4 }
+    }
+  },
+  "command": { "aggregate": "orders", "pipeline": [ { "$match": { "status": "shipped" } }, { "$group": { "_id": "$customerId" } } ], "cursor": {}, "$db": "shop" },
+  "serverInfo": { "host": "mongo-0", "port": 27017, "version": "7.0.14" },
+  "ok": 1.0
+}

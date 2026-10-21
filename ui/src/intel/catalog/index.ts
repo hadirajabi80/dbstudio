@@ -3,6 +3,7 @@ import type {
   CatalogObject, CatalogObjectType, CatalogPackageMember, CatalogParamTuple, CatalogSchema, CatalogSnapshot,
 } from '../../api/types';
 import type { DialectSpec, PackageDef } from '../dialect/spec';
+import pgSystem from '../dialect/data/pgsql-system.json';
 import type { ColumnDef } from '../parse/statement-model';
 
 export interface FkEdge {
@@ -116,6 +117,13 @@ export class CatalogIndex {
   private readonly all = new Map<string, ObjectEntry[]>();
   private colIndex: Map<string, ObjectEntry[]> | null = null;
   private readonly builtins = new Map<string, ObjectEntry>();
+  /** Built-in schemas (PostgreSQL pg_catalog / information_schema views), consulted after the loaded schemas. */
+  private readonly builtinSchemas = new Map<string, SchemaEntry>();
+  /**
+   * PostgreSQL search_path (snapshot.searchPath, else [defaultSchema]): unqualified names resolve in this order and
+   * these schemas count as "default" (no qualification needed). Other dialects: [defaultSchema].
+   */
+  searchPath: string[] = [];
   /** Bumped on every change (consumers cache by it). */
   version = 0;
   /** Oracle PUBLIC synonyms resolved lazily. */
@@ -133,16 +141,20 @@ export class CatalogIndex {
       this.builtins.set('DUAL', new ObjectEntry('SYS', DUAL, (s) => s, true));
       for (const p of spec.packages) this.builtins.set(p.name.toUpperCase(), new ObjectEntry('SYS', packageToObject(p), (s) => s, true));
     }
+    if (spec.id === 'pgsql') {
+      for (const sc of (pgSystem as unknown as { schemas: CatalogSchema[] }).schemas) {
+        this.builtinSchemas.set(this.keyOfCatalog(sc.name), this.buildSchema({ ...sc, version: 0 }, true));
+      }
+    }
   }
 
   /** Lookup key of a catalog name (as stored). */
   keyOfCatalog(name: string): string {
-    return this.spec.caseFolding === 'upper' ? name : name.toUpperCase();
+    return this.spec.caseFolding === 'insensitive' ? name.toUpperCase() : name;
   }
-  /** Lookup key of a name written in SQL. */
+  /** Lookup key of a name written in SQL (unquoted names fold: upper for Oracle, lower for PostgreSQL). */
   keyOf(name: string, quoted: boolean): string {
-    if (this.spec.caseFolding === 'upper') return quoted ? name : name.toUpperCase();
-    return name.toUpperCase();
+    return this.spec.fold(name, quoted);
   }
   foldColumn = (name: string): string => this.keyOfCatalog(name);
 
@@ -161,6 +173,7 @@ export class CatalogIndex {
     const sameConn = this.snapshot && this.snapshot.connectionId === snap.connectionId && this.snapshot.database === snap.database;
     this.snapshot = snap;
     this.defaultSchema = snap.defaultSchema;
+    this.searchPath = this.spec.id === 'pgsql' && snap.searchPath?.length ? snap.searchPath.slice() : [snap.defaultSchema];
     this.database = snap.database;
     this.databases = snap.databases ?? [];
     const keep = new Set<string>();
@@ -185,11 +198,11 @@ export class CatalogIndex {
     this.rebuildGlobal();
   }
 
-  private buildSchema(sc: CatalogSchema): SchemaEntry {
+  private buildSchema(sc: CatalogSchema, builtin = false): SchemaEntry {
     const byName = new Map<string, ObjectEntry[]>();
     const objects: ObjectEntry[] = new Array(sc.objects.length);
     for (let i = 0; i < sc.objects.length; i++) {
-      const e = new ObjectEntry(sc.name, sc.objects[i], this.foldColumn);
+      const e = new ObjectEntry(sc.name, sc.objects[i], this.foldColumn, builtin);
       objects[i] = e;
       const k = this.keyOfCatalog(e.name);
       const arr = byName.get(k);
@@ -229,13 +242,55 @@ export class CatalogIndex {
   }
 
   schema(name: string, quoted = false): SchemaEntry | undefined {
-    return this.schemas.get(this.keyOf(name, quoted));
+    const k = this.keyOf(name, quoted);
+    return this.schemas.get(k) ?? this.builtinSchemas.get(k);
   }
   defaultSchemaEntry(): SchemaEntry | undefined {
     return this.schemas.get(this.keyOfCatalog(this.defaultSchema));
   }
+  /**
+   * Schemas whose objects need no qualification, in resolution order: the loaded search_path schemas (PostgreSQL),
+   * else the default schema.
+   */
+  defaultEntries(): SchemaEntry[] {
+    if (this.spec.id !== 'pgsql') {
+      const d = this.defaultSchemaEntry();
+      return d ? [d] : [];
+    }
+    const out: SchemaEntry[] = [];
+    for (const n of this.searchPath) {
+      const sc = this.schemas.get(this.keyOfCatalog(n));
+      if (sc && !out.includes(sc)) out.push(sc);
+    }
+    const d = this.defaultSchemaEntry();
+    if (d && !out.includes(d)) out.push(d);
+    return out;
+  }
+  /** Objects of the default schema(s) (PostgreSQL: every loaded search_path schema, first schema first). */
+  defaultObjects(): ObjectEntry[] {
+    const es = this.defaultEntries();
+    return es.length === 1 ? es[0].objects : es.flatMap((e) => e.objects);
+  }
   isDefaultSchema(name: string): boolean {
+    if (this.spec.id === 'pgsql' && this.searchPathIndex(name) > 0) return true;
     return this.keyOfCatalog(name) === this.keyOfCatalog(this.defaultSchema);
+  }
+  /** 1-based position on the PostgreSQL search_path, or 0. */
+  searchPathIndex(name: string): number {
+    if (this.spec.id !== 'pgsql') return 0;
+    return this.searchPath.findIndex((n) => this.keyOfCatalog(n) === this.keyOfCatalog(name)) + 1;
+  }
+  /** Search-path schemas that are not loaded yet (PostgreSQL; the built-in pg_catalog never counts). */
+  unloadedSearchPath(): string[] {
+    if (this.spec.id !== 'pgsql') return [];
+    return this.searchPath.filter((n) => !this.schemas.has(this.keyOfCatalog(n)) && !this.builtinSchemas.has(this.keyOfCatalog(n)));
+  }
+  /** Built-in schema by catalog name (PostgreSQL pg_catalog / information_schema). */
+  builtinSchema(name: string): SchemaEntry | undefined {
+    return this.builtinSchemas.get(this.keyOfCatalog(name));
+  }
+  builtinSchemaList(): SchemaEntry[] {
+    return [...this.builtinSchemas.values()];
   }
 
   /** Object by exact catalog key inside a schema. */
@@ -248,7 +303,7 @@ export class CatalogIndex {
   }
 
   lookupIn(schema: string, name: NameRef, schemaQuoted: boolean): ObjectEntry[] {
-    const sc = this.schemas.get(this.keyOf(schema, schemaQuoted));
+    const sc = this.schema(schema, schemaQuoted);
     return sc?.byName.get(this.keyOf(name.text, name.quoted)) ?? [];
   }
 
@@ -284,6 +339,22 @@ export class CatalogIndex {
   resolveRaw(parts: NameRef[], pred: (e: ObjectEntry) => boolean): ObjectEntry | null {
     if (parts.length === 0) return null;
     const pick = (arr: ObjectEntry[]) => arr.find(pred) ?? null;
+    if (parts.length === 1 && this.spec.id === 'pgsql') {
+      // search_path order, then pg_catalog, then any loaded schema (lenient: unqualified names of other schemas)
+      const key = this.keyOf(parts[0].text, parts[0].quoted);
+      for (const sc of this.defaultEntries()) {
+        const arr = sc.byName.get(key);
+        const a = arr ? pick(arr) : null;
+        if (a) return a;
+      }
+      const sys = this.builtinSchemas.get('pg_catalog')?.byName.get(key);
+      const b = sys ? pick(sys) : null;
+      if (b) return b;
+      const anywhere = this.lookupAll(parts[0]).filter(pred);
+      if (anywhere.length >= 1) return anywhere[0];
+      for (const n of this.unloadedSearchPath()) this.requestSchema(n);
+      return null;
+    }
     if (parts.length === 1) {
       const name = parts[0];
       const def = this.defaultSchemaEntry();
@@ -316,6 +387,10 @@ export class CatalogIndex {
     }
     if (parts.length === 3) {
       const [db, sch, name] = parts;
+      if (this.spec.id === 'pgsql') {
+        if (this.database && this.keyOf(db.text, db.quoted) !== this.keyOfCatalog(this.database)) return null;
+        return pick(this.lookupIn(sch.text, name, sch.quoted));
+      }
       if (this.spec.id === 'tsql') {
         if (this.database && this.keyOf(db.text, db.quoted) !== this.keyOfCatalog(this.database)) return null;
         const schemaName = sch.text === '' ? { text: this.defaultSchema, quoted: true } : sch;
@@ -399,6 +474,7 @@ export class CatalogIndex {
   }
 
   requestSchema(name: string): void {
+    if (this.builtinSchemas.has(this.keyOfCatalog(name))) return;
     const k = name.toUpperCase();
     if (this.requestedSchemas.has(k)) return;
     this.requestedSchemas.add(k);

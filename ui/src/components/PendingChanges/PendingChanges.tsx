@@ -118,7 +118,7 @@ export function PendingChangesDialog({ ctx, onClose, onSubmitted }: { ctx: EditC
                         <tbody>
                           {s.params.map((prm) => (
                             <tr key={prm.name}>
-                              <td className="mono">{ctx.dialect === 'plsql' ? ':' : '@'}{prm.name}</td>
+                              <td className="mono">{ctx.dialect === 'plsql' ? ':' : ctx.dialect === 'pgsql' && /^\d+$/.test(prm.name) ? '$' : '@'}{prm.name}</td>
                               <td className="muted">{prm.kind}{prm.direction === 'out' ? ' out' : ''}</td>
                               <td className="mono">{prm.direction === 'out' ? '(returned)' : JSON.stringify(prm.value)}</td>
                             </tr>

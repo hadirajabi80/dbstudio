@@ -107,12 +107,14 @@ export function toMarkdown(columns: ColumnInfo[], rows: CellValue[][], opts: Ser
 
 export function sqlLiteral(v: CellValue, col: ColumnInfo, dialect: Dialect): string {
   if (v === null || v === undefined) return 'NULL';
-  if (typeof v === 'boolean') return v ? '1' : '0'; // bit / NUMBER(1) / INTEGER in all three dialects
+  // bit / NUMBER(1) / INTEGER take 1/0; PostgreSQL boolean columns reject integers.
+  if (typeof v === 'boolean') return dialect === 'pgsql' ? (v ? 'TRUE' : 'FALSE') : v ? '1' : '0';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : `'${v}'`;
   if (isBinary(v)) {
     const hex = base64ToHex(v.$bin);
     if (dialect === 'tsql') return `0x${hex}`;
     if (dialect === 'plsql') return `HEXTORAW('${hex}')`;
+    if (dialect === 'pgsql') return `'\\x${hex}'::bytea`;
     return `X'${hex}'`;
   }
   if (isCursor(v)) return 'NULL';

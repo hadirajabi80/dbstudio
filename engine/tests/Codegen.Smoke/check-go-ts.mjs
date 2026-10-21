@@ -1,8 +1,8 @@
 // Compile checks of the Go and TypeScript codegen snapshots (the C# ones are compiled by Codegen.Smoke.csproj).
 //   node engine/tests/Codegen.Smoke/check-go-ts.mjs
-// Go: `go vet` of every Go snapshot (one package per file) with sqlx and go-mssqldb from the module proxy; godror needs
+// Go: `go vet` of every Go snapshot (one package per file) with sqlx, go-mssqldb and pgx/v5 from the module proxy; godror needs
 // cgo, so a stub with its real WrapRows/Querier signatures stands in. Skipped when `go` is not on PATH.
-// TypeScript: `tsc --noEmit --strict` against @types/mssql, @types/oracledb, @types/better-sqlite3 and zod, installed
+// TypeScript: `tsc --noEmit --strict` against @types/mssql, @types/oracledb, @types/better-sqlite3, @types/pg and zod, installed
 // with --ignore-scripts into a temp folder (needs network). Exit code 1 on any failure.
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
@@ -40,7 +40,8 @@ else {
     mkdirSync(dir);
     cpSync(join(snaps, 'go', f), join(dir, 'shop.go'));
   }
-  run('go', ['get', 'github.com/jmoiron/sqlx', 'github.com/microsoft/go-mssqldb', 'github.com/godror/godror'], g, { GOFLAGS: '-mod=mod' });
+  // PostgreSQL snapshots: pgx/v5 (pgtype, pgxpool, and stdlib for database/sql + sqlx).
+  run('go', ['get', 'github.com/jmoiron/sqlx', 'github.com/microsoft/go-mssqldb', 'github.com/godror/godror', 'github.com/jackc/pgx/v5', 'github.com/jackc/pgx/v5/pgxpool', 'github.com/jackc/pgx/v5/stdlib'], g, { GOFLAGS: '-mod=mod' });
   run('gofmt', ['-l', '.'], join(snaps, 'go'));
   run('go', ['vet', './...'], g, { CGO_ENABLED: '0' });
 }
@@ -53,12 +54,14 @@ writeFileSync(
   join(t, 'tsconfig.json'),
   JSON.stringify({ compilerOptions: { target: 'es2022', module: 'nodenext', moduleResolution: 'nodenext', strict: true, noEmit: true, esModuleInterop: true, skipLibCheck: true, noUnusedLocals: true, types: ['node'] }, include: ['src/**/*.ts'] }),
 );
-for (const f of readdirSync(join(snaps, 'typescript'))) {
+// The prisma flavor is a schema.prisma file, not TypeScript (`npx prisma validate` checks it).
+for (const f of readdirSync(join(snaps, 'typescript')).filter((f) => !f.startsWith('prisma.'))) {
   const dir = join(t, 'src', f.replace(/\.ts\.snap$/, '').replace(/\W+/g, '_'));
   mkdirSync(dir);
   cpSync(join(snaps, 'typescript', f), join(dir, 'index.ts'));
 }
-if (run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--silent', '@types/mssql@9', '@types/oracledb@6', '@types/better-sqlite3@7', 'zod@3', '@types/node@24'], t)) {
+// @types/pg: the node-postgres (pgsql) snapshots.
+if (run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--silent', '@types/mssql@9', '@types/oracledb@6', '@types/better-sqlite3@7', '@types/pg@8', 'zod@3', '@types/node@24'], t)) {
   run('node', [join(root, 'ui/node_modules/typescript/bin/tsc'), '-p', '.'], t);
 }
 

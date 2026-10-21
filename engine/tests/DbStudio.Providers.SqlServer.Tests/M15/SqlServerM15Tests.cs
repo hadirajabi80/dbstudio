@@ -348,6 +348,28 @@ public sealed class SqlServerPlanReaderTests
         Assert.Equal(["SET STATISTICS XML OFF"], act.CleanupSql);
         Assert.True(act.IsPlanResultSet([new ColumnInfo(SqlServerPlanReader.ShowplanColumn, 0, "xml", "xml", true)]));
     }
+
+    [Fact]
+    public void Estimated_with_parameters_declares_them_because_showplan_answers_an_rpc_with_no_plan()
+    {
+        var reader = new SqlServerPlanReader();
+        QueryParam[] ps =
+        [
+            new("id", ParamKinds.Int, JsonValue.Create(1)), new("big", ParamKinds.Int, JsonValue.Create(5_000_000_000L)),
+            new("name", ParamKinds.String, JsonValue.Create("x")), new("amount", ParamKinds.Decimal, JsonValue.Create("12.50")),
+        ];
+        var est = reader.CreateScript(new ExplainInput("x", "SELECT * FROM T WHERE Id = @id", ExplainModes.Estimated, ps, Line: 3));
+        Assert.Null(est.Params); // no RPC: the batch goes as plain text
+        Assert.Equal("DECLARE @id int, @big bigint, @name nvarchar(4000), @amount decimal(38, 2); SELECT * FROM T WHERE Id = @id", est.Batches[1].Sql);
+        Assert.Equal(3, est.Batches[1].Line); // same line: server error line numbers still map to the editor
+        // Output or positional parameters cannot be declared: the binds stay as they were.
+        var outParam = reader.CreateScript(new ExplainInput("x", "EXEC p @r OUTPUT", ExplainModes.Estimated, [new QueryParam("r", ParamKinds.Int, null, ParamDirections.Out)]));
+        Assert.NotNull(outParam.Params);
+        Assert.Equal("EXEC p @r OUTPUT", outParam.Batches[1].Sql);
+        // Actual mode executes through sp_executesql, which STATISTICS XML does report.
+        var act = reader.CreateScript(new ExplainInput("x", "SELECT * FROM T WHERE Id = @id", ExplainModes.Actual, ps));
+        Assert.Same(ps, act.Params);
+    }
 }
 
 public sealed class SqlServerParamBinderTests

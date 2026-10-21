@@ -105,7 +105,7 @@ class IntelImpl implements Intel {
   constructor(dialect: Dialect, opts?: Partial<IntelOptions>) {
     this.dialect = dialect;
     this.spec = getSpec(dialect);
-    this.opts = { ...DEFAULT_OPTIONS, blankLineSplitsStatements: dialect !== 'sqlite', ...opts };
+    this.opts = { ...DEFAULT_OPTIONS, blankLineSplitsStatements: dialect !== 'sqlite' && dialect !== 'pgsql', ...opts };
     this.index = new CatalogIndex(this.spec);
     this.index.onChange = () => {
       for (const d of this.docs.values()) d.diags = null;
@@ -266,7 +266,7 @@ class IntelImpl implements Intel {
     const toks = tokenize(sql, this.spec);
     const split = splitStatements(toks, sql, this.spec, { blankLineSplitsStatements: false });
     if (!split.statements.length) return 'empty';
-    const kinds = split.statements.map((s) => (s.kind === 'block' || s.kind === 'exec' || s.kind === 'sqlplus' ? s.kind : classifyTokens(toks.slice(s.tokStart, s.tokEnd), this.spec)));
+    const kinds = split.statements.map((s) => (s.kind === 'block' || s.kind === 'exec' || s.kind === 'sqlplus' || s.kind === 'psql' ? s.kind : classifyTokens(toks.slice(s.tokStart, s.tokEnd), this.spec)));
     return kinds.find(isDestructive) ?? kinds[0];
   }
 

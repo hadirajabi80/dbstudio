@@ -21,6 +21,12 @@ export const PH = {
   atP: ((_, i) => `@p${i}`) as Placeholder,
   /** `:1` — godror ordinal. */
   colonN: ((_, i) => `:${i}`) as Placeholder,
+  /** `$1` — PostgreSQL native (pgx, node-postgres, database/sql with pgx/stdlib). */
+  dollar: ((_, i) => `$${i}`) as Placeholder,
+  /** `%s` — psycopg positional. */
+  pct: (() => '%s') as Placeholder,
+  /** `%(name)s` — psycopg named. */
+  pctNamed: ((n) => `%(${n})s`) as Placeholder,
 };
 
 export function tableName(t: Pick<CgTable, 'schema' | 'name'>, dialect: Dialect): string {
@@ -108,6 +114,8 @@ export function quoteAlias(alias: string, dialect: Dialect): string {
   if (dialect === 'tsql') return quoteIdent(alias, dialect);
   // Oracle folds unquoted aliases to upper case; SQLite keeps case but quote reserved words.
   if (dialect === 'plsql') return /^[A-Z][A-Z0-9_$#]*$/.test(alias) ? alias : `"${alias.replace(/"/g, '""')}"`;
+  // PostgreSQL folds unquoted aliases to lower case: `AS "CustomerId"` keeps the property spelling.
+  if (dialect === 'pgsql') return quoteIdent(alias, dialect);
   return quoteIdent(alias, dialect);
 }
 
@@ -228,6 +236,16 @@ export function paramTokens(sql: string, dialect: Dialect): ParamToken[] {
       if (declared.has(text.slice(1).toLowerCase())) continue;
     }
     if (dialect === 'plsql' && text.startsWith('&')) continue; // SQL*Plus substitution variable
+    if (dialect === 'pgsql') {
+      // `?` is a jsonb operator, `x::type` a cast; `$1` is the positional bind 1.
+      if (text.startsWith('?')) continue;
+      if (text.startsWith(':') && sql[t.start - 1] === ':') continue;
+      if (text.startsWith('$')) {
+        if (!/^\$\d+$/.test(text)) continue;
+        out.push({ start: t.start, end: t.end, name: `p${text.slice(1)}`, positional: true });
+        continue;
+      }
+    }
     if (text === '?') {
       out.push({ start: t.start, end: t.end, name: `p${++q}`, positional: true });
     } else if (/^\?\d+$/.test(text)) {
@@ -252,7 +270,7 @@ export function detectQueryParams(sql: string, dialect: Dialect, types: Record<s
   return [...seen.values()];
 }
 
-export type ParamStyle = 'keep' | 'q' | 'atP' | 'colonN' | 'at' | 'colon';
+export type ParamStyle = 'keep' | 'q' | 'atP' | 'colonN' | 'at' | 'colon' | 'dollar' | 'pct' | 'pctNamed';
 
 /**
  * Rewrite the query's parameter tokens for a driver. Returns the SQL and the parameter name bound at each
@@ -270,11 +288,13 @@ export function rewriteQuery(sql: string, dialect: Dialect, style: ParamStyle): 
     let ph: string;
     switch (style) {
       case 'q':
-        ph = '?';
+      case 'pct':
+        ph = style === 'q' ? '?' : '%s';
         order.push(t.name);
         break;
       case 'atP':
-      case 'colonN': {
+      case 'colonN':
+      case 'dollar': {
         // Named-by-number styles can reuse the same index for repeated names.
         const key = t.name.toLowerCase();
         let n = firstIndex.get(key);
@@ -283,11 +303,15 @@ export function rewriteQuery(sql: string, dialect: Dialect, style: ParamStyle): 
           firstIndex.set(key, n);
           order.push(t.name);
         }
-        ph = style === 'atP' ? `@p${n}` : `:${n}`;
+        ph = style === 'atP' ? `@p${n}` : style === 'dollar' ? `$${n}` : `:${n}`;
         break;
       }
       case 'at':
         ph = `@${t.name}`;
+        if (!order.includes(t.name)) order.push(t.name);
+        break;
+      case 'pctNamed':
+        ph = `%(${t.name})s`;
         if (!order.includes(t.name)) order.push(t.name);
         break;
       default:

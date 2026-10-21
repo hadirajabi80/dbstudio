@@ -1,0 +1,8 @@
+2026-10-18 13:00:00.123 UTC [1] LOG:  database system is ready to accept connections
+2026-10-18 13:01:00.000 UTC [2] LOG:  checkpoint starting: time
+2026-10-18 13:02:11.213 UTC [4321] app@shop ERROR:  duplicate key value violates unique constraint "orders_pkey"
+2026-10-18 13:02:11.213 UTC [4321] app@shop DETAIL:  Key (id)=(1042) already exists.
+2026-10-18 13:02:11.213 UTC [4321] app@shop STATEMENT:  INSERT INTO orders (id, customer_id)
+	VALUES (1042, 7);
+2026-10-18 13:03:00.000 UTC [4400] app@shop FATAL:  password authentication failed for user "app"
+2026-10-18 15:05:00.000 +02 [4410] LOG:  connection received: host=10.0.0.9 port=5000

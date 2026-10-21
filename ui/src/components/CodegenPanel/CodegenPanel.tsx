@@ -9,8 +9,8 @@ import { api, errorMessage } from '../../api/client';
 import type { CellValue, ColumnInfo, Dialect, ObjectDetails, ObjectRef, QueryParam } from '../../api/types';
 import { catalogDatabase, copyText, effectiveDatabase } from '../../app/actions';
 import {
-  detectQueryParams, findCatalogObject, flavorsFor, fromCatalogObject, fromColumnInfos, generate, inferQueryParamTypes, LANGUAGES, languageInfo, normalizeOptions,
-  queryObject, withLanguage, type CgObject, type CgRoutine, type CodegenOptions, type QueryParamType,
+  attachUserTypes, detectQueryParams, findCatalogObject, flavorsFor, fromCatalogObject, fromColumnInfos, generate, inferQueryParamTypes, LANGUAGES, languageInfo,
+  normalizeOptions, queryObject, userTypesOf, withLanguage, type CgObject, type CgRoutine, type CodegenOptions, type QueryParamType,
 } from '../../codegen';
 import { routineSqlName } from '../../codegen/shape';
 import { objectTargetOf } from '../../commands/core';
@@ -125,12 +125,16 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
         objects.push(queryObject(t.name, t.sql, dialect, cols ? fromColumnInfos(cols) : [], { ...inferQueryParamTypes(t.sql, dialect, snapshot), ...(t.paramTypes ?? {}) }));
       }
     });
-    return { objects, missing, queryErrors };
+    // PostgreSQL enum / domain columns carry their labels / base type from the loaded catalog types.
+    return { objects: attachUserTypes(objects, userTypesOf(snapshot)), missing, queryErrors };
   }, [st.targets, st.inferred, snapshot, described, dialect, details]);
 
   const files = useMemo(() => {
+    // A remembered flavor the connection's dialect does not offer (pgx, prisma, merge…) falls back to the first one.
+    const offered = flavorsFor(opts.language, dialect);
+    const eff = offered.some((f) => f.id === opts.flavor) || !offered.length ? opts : { ...opts, flavor: offered[0].id };
     try {
-      return generate({ dialect, objects }, opts);
+      return generate({ dialect, objects }, eff);
     } catch (e) {
       console.error('[codegen] generator failed', e);
       return [{ path: 'error.txt', language: 'plaintext', content: `Code generation failed: ${errorMessage(e)}` }];

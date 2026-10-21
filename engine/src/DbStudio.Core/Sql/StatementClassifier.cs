@@ -120,7 +120,7 @@ public static class StatementClassifier
             var head = st[0];
             // REPLACE is a common function name; only a statement head (SQLite REPLACE INTO) writes.
             if (head.IsWord("REPLACE")) return true;
-            if (dialect == Dialect.TSql && HasSelectInto(st)) return true;
+            if (dialect is Dialect.TSql or Dialect.PgSql && HasSelectInto(st)) return true;
         }
         return false;
     }
@@ -140,12 +140,12 @@ public static class StatementClassifier
         switch (u)
         {
             case "SELECT":
-                if (dialect == Dialect.TSql && HasSelectInto(t))
+                if (dialect is Dialect.TSql or Dialect.PgSql && HasSelectInto(t))
                     return new(StatementCategory.Ddl, "SELECT INTO", hasWhere, SelectIntoTarget(t, dialect), start);
                 return new(StatementCategory.Query, "SELECT", hasWhere, null, start);
             case "VALUES":
             case "EXPLAIN":
-            case "TABLE" when dialect == Dialect.Sqlite:
+            case "TABLE" when dialect is Dialect.Sqlite or Dialect.PgSql:
                 return new(StatementCategory.Query, u, hasWhere, null, start);
             case "WITH":
                 {
@@ -185,7 +185,7 @@ public static class StatementClassifier
                 return new(StatementCategory.Ddl, u, false, new DdlTarget(u, "database", null, null, null, DdlScope.Database), start);
             case "BEGIN":
                 if (dialect == Dialect.PlSql) return new(StatementCategory.Block, "BEGIN", hasWhere, null, start);
-                if (dialect == Dialect.Sqlite) return new(StatementCategory.Transaction, "BEGIN", false, null, start);
+                if (dialect is Dialect.Sqlite or Dialect.PgSql) return new(StatementCategory.Transaction, "BEGIN", false, null, start);
                 // T-SQL: BEGIN TRAN[SACTION] / BEGIN DISTRIBUTED TRAN vs BEGIN ... END / BEGIN TRY
                 if (i + 1 < t.Count && t[i + 1].Kind == SqlTokenKind.Word && t[i + 1].Upper is "TRAN" or "TRANSACTION" or "DISTRIBUTED")
                     return new(StatementCategory.Transaction, "BEGIN TRANSACTION", false, null, start);
@@ -195,10 +195,21 @@ public static class StatementClassifier
             case "SAVEPOINT":
             case "RELEASE":
                 return new(StatementCategory.Transaction, u, false, null, start);
-            case "END" when dialect == Dialect.Sqlite:
+            case "END" when dialect is Dialect.Sqlite or Dialect.PgSql:
                 return new(StatementCategory.Transaction, "COMMIT", false, null, start);
             case "SAVE" when dialect == Dialect.TSql:
                 return new(StatementCategory.Transaction, "SAVE TRANSACTION", false, null, start);
+            // PostgreSQL (docs/PLAN-PG.md 1.1): function bodies are dollar-quoted strings, so these heads are reliable.
+            case "START" when dialect == Dialect.PgSql:
+                return new(StatementCategory.Transaction, "BEGIN", false, null, start);
+            case "ABORT" when dialect == Dialect.PgSql:
+                return new(StatementCategory.Transaction, "ROLLBACK", false, null, start);
+            case "DO" when dialect == Dialect.PgSql:
+                return new(StatementCategory.Block, "DO", hasWhere, null, start);
+            case "COPY" when dialect == Dialect.PgSql:
+                return new(StatementCategory.Dml, "COPY", false, null, start);
+            case "SHOW" or "RESET" or "DISCARD" when dialect == Dialect.PgSql:
+                return new(StatementCategory.Session, u, false, null, start);
             case "DECLARE":
                 return dialect == Dialect.PlSql
                     ? new(StatementCategory.Block, "DECLARE", hasWhere, null, start)
@@ -291,6 +302,7 @@ public static class StatementClassifier
                 objectType = ObjectTypes.Package;
                 if (j < t.Count && t[j].IsWord("BODY")) { j++; typeWord = "PACKAGE BODY"; }
                 break;
+            case "DOMAIN": objectType = ObjectTypes.Type; break;
             case "TYPE":
                 objectType = ObjectTypes.Type;
                 if (j < t.Count && t[j].IsWord("BODY")) { j++; typeWord = "TYPE BODY"; }
@@ -425,7 +437,7 @@ public static class StatementClassifier
         {
             1 => (null, null, parts[0]),
             2 => (null, NullIfEmpty(parts[0]), parts[1]),
-            3 when dialect == Dialect.TSql => (NullIfEmpty(parts[0]), NullIfEmpty(parts[1]), parts[2]),
+            3 when dialect is Dialect.TSql or Dialect.PgSql => (NullIfEmpty(parts[0]), NullIfEmpty(parts[1]), parts[2]),
             _ => (null, NullIfEmpty(parts[^2]), parts[^1]),
         };
     }

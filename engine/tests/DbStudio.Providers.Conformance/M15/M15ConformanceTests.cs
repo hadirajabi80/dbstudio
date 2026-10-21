@@ -31,7 +31,8 @@ public abstract class M15ConformanceTests<TFixture>(TFixture fixture) : IClassFi
     protected virtual string MoneyType => Dialect switch { Dialect.TSql => "decimal(12,2)", Dialect.PlSql => "NUMBER(12,2)", _ => "NUMERIC(12,2)" };
     protected virtual string DateType => Dialect switch { Dialect.TSql => "date", Dialect.PlSql => "DATE", _ => "DATE" };
     protected string Bind(string name) => Dialect == Dialect.TSql ? "@" + name : ":" + name;
-    protected string N(string name) => Dialect == Dialect.PlSql ? name.ToUpperInvariant() : name;
+    // Unquoted identifiers fold to upper case in Oracle and to lower case in PostgreSQL.
+    protected string N(string name) => Dialect switch { Dialect.PlSql => name.ToUpperInvariant(), Dialect.PgSql => name.ToLowerInvariant(), _ => name };
 
     protected void RequireAvailable() => Skip.IfNot(Fixture.IsAvailable, Fixture.SkipReason ?? "Provider not available.");
 

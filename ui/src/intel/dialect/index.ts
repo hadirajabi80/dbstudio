@@ -3,16 +3,17 @@ import type { DialectSpec } from './spec';
 import { tsqlSpec } from './tsql';
 import { plsqlSpec } from './plsql';
 import { sqliteSpec } from './sqlite';
+import { pgsqlSpec } from './pgsql';
 
-export type { DialectSpec, FunctionDef, PackageDef, PackageMemberDef, FunctionSignature, SnippetDef } from './spec';
+export type { DialectSpec, FunctionDef, PackageDef, PackageMemberDef, FunctionSignature, SnippetDef, CaseFolding } from './spec';
 
 export function getSpec(dialect: Dialect): DialectSpec {
   switch (dialect) {
     case 'tsql': return tsqlSpec;
     case 'plsql': return plsqlSpec;
     case 'sqlite': return sqliteSpec;
-    case 'pgsql': return sqliteSpec; // M2-0 placeholder: PG-B adds pgsqlSpec
+    case 'pgsql': return pgsqlSpec;
   }
 }
 
-export { tsqlSpec, plsqlSpec, sqliteSpec };
+export { tsqlSpec, plsqlSpec, sqliteSpec, pgsqlSpec };

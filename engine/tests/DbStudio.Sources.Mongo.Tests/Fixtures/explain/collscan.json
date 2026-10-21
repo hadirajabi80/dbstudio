@@ -1,0 +1,44 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "shop.customers",
+    "indexFilterSet": false,
+    "parsedQuery": { "tier": { "$eq": "gold" } },
+    "queryHash": "6E0D6672",
+    "planCacheKey": "6E0D6672",
+    "maxIndexedOrSolutionsReached": false,
+    "maxIndexedAndSolutionsReached": false,
+    "maxScansToExplodeReached": false,
+    "winningPlan": {
+      "stage": "COLLSCAN",
+      "filter": { "tier": { "$eq": "gold" } },
+      "direction": "forward"
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 12,
+    "executionTimeMillis": 3,
+    "totalKeysExamined": 0,
+    "totalDocsExamined": 200,
+    "executionStages": {
+      "stage": "COLLSCAN",
+      "filter": { "tier": { "$eq": "gold" } },
+      "nReturned": 12,
+      "executionTimeMillisEstimate": 1,
+      "works": 201,
+      "advanced": 12,
+      "needTime": 188,
+      "needYield": 0,
+      "saveState": 0,
+      "restoreState": 0,
+      "isEOF": 1,
+      "direction": "forward",
+      "docsExamined": 200
+    }
+  },
+  "command": { "find": "customers", "filter": { "tier": "gold" }, "$db": "shop" },
+  "serverInfo": { "host": "mongo-0", "port": 27017, "version": "7.0.14", "gitVersion": "ce59cfc6a3c5e5c067dca0d30697edd68d4f5188" },
+  "ok": 1.0
+}

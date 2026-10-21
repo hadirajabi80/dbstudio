@@ -1,0 +1,4 @@
+TRUNCATE TABLE orders, order_lines RESTART IDENTITY CASCADE;
+VACUUM (VERBOSE, ANALYZE) orders;
+ANALYZE customers;
+REINDEX TABLE orders;

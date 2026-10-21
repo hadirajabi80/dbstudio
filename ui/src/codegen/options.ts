@@ -114,23 +114,25 @@ export const LANGUAGES: LanguageInfo[] = [
     flavors: [
       { id: 'dapper', label: 'Dapper', description: 'POCO + Dapper repository, procedure wrappers with DynamicParameters' },
       { id: 'efcore', label: 'EF Core', description: 'Entity + IEntityTypeConfiguration (keys, lengths, FKs, table) + DbContext' },
-      { id: 'adonet', label: 'ADO.NET', description: 'Raw SqlClient / ODP.NET / Microsoft.Data.Sqlite with explicit mapping' },
+      { id: 'adonet', label: 'ADO.NET', description: 'Raw SqlClient / ODP.NET / Npgsql / Microsoft.Data.Sqlite with explicit mapping' },
       { id: 'model', label: 'Model only', description: 'Classes or records only' },
     ],
   },
   {
     id: 'go', label: 'Go', monaco: 'go', extension: 'go', naming: ['pascal', 'asIs'], namespacePlaceholder: 'store', namespaceLabel: 'Package',
     flavors: [
-      { id: 'database-sql', label: 'database/sql', description: 'Structs with db tags, CRUD with context.Context and explicit Scan' },
+      { id: 'database-sql', label: 'database/sql', description: 'Structs with db tags, CRUD with context.Context and explicit Scan (PostgreSQL: pgx/v5/stdlib)' },
       { id: 'sqlx', label: 'sqlx', description: 'Structs with db tags, sqlx Get/Select/NamedExec' },
+      { id: 'pgx', label: 'pgx', dialects: ['pgsql'], description: 'pgx/v5 native: pgxpool.Pool, pgx.Rows, pgtype for NULLs and numerics' },
     ],
   },
   {
     id: 'typescript', label: 'TypeScript', monaco: 'typescript', extension: 'ts', naming: ['camel', 'asIs', 'snake'], namespacePlaceholder: '', namespaceLabel: null,
     flavors: [
       { id: 'interface', label: 'Interfaces', description: 'DTO interfaces for React / Angular / Node' },
-      { id: 'driver', label: 'Node driver', description: 'Typed data access with node-mssql, node-oracledb or better-sqlite3 (by connection)' },
+      { id: 'driver', label: 'Node driver', description: 'Typed data access with node-mssql, node-oracledb, node-postgres or better-sqlite3 (by connection)' },
       { id: 'zod', label: 'Zod schema', description: 'Zod schemas with inferred types for API validation' },
+      { id: 'prisma', label: 'Prisma schema', dialects: ['pgsql'], description: 'schema.prisma models (ids, lengths, relations, enums)' },
     ],
   },
   {
@@ -143,7 +145,7 @@ export const LANGUAGES: LanguageInfo[] = [
   {
     id: 'python', label: 'Python', monaco: 'python', extension: 'py', naming: ['snake', 'asIs'], namespacePlaceholder: '', namespaceLabel: null,
     flavors: [
-      { id: 'dataclass', label: 'dataclass + driver', description: 'Dataclasses with typed functions for pyodbc / oracledb / sqlite3 (by connection)' },
+      { id: 'dataclass', label: 'dataclass + driver', description: 'Dataclasses with typed functions for pyodbc / oracledb / psycopg / sqlite3 (by connection)' },
       { id: 'sqlalchemy', label: 'SQLAlchemy 2.0', description: 'Declarative models with Mapped[] annotations' },
       { id: 'pydantic', label: 'Pydantic', description: 'Pydantic v2 models' },
     ],
@@ -156,8 +158,8 @@ export const LANGUAGES: LanguageInfo[] = [
       { id: 'insert', label: 'INSERT', description: 'INSERT with all writable columns' },
       { id: 'update', label: 'UPDATE', description: 'UPDATE by primary key' },
       { id: 'delete', label: 'DELETE', description: 'DELETE by primary key' },
-      { id: 'merge', label: 'MERGE', dialects: ['tsql', 'plsql'], description: 'Upsert by primary key' },
-      { id: 'exec', label: 'EXEC / call', dialects: ['tsql', 'plsql'], description: 'Procedure call with named parameters' },
+      { id: 'merge', label: 'MERGE / upsert', dialects: ['tsql', 'plsql', 'pgsql'], description: 'Upsert by primary key (PostgreSQL: INSERT … ON CONFLICT)' },
+      { id: 'exec', label: 'EXEC / call', dialects: ['tsql', 'plsql', 'pgsql'], description: 'Procedure call with named parameters (PostgreSQL: CALL)' },
     ],
   },
   {
@@ -181,6 +183,12 @@ export function flavorsFor(id: CgLanguage, dialect: Dialect): FlavorInfo[] {
 export function memberNaming(o: CodegenOptions): NamingStyle {
   const info = languageInfo(o.language);
   return o.naming && info.naming.includes(o.naming) ? o.naming : info.naming[0];
+}
+
+/** Monaco language of a flavor's output (Prisma has no Monaco language: plain text). */
+export function monacoLanguageOf(language: CgLanguage, flavor: string): string {
+  if (language === 'typescript' && flavor === 'prisma') return 'plaintext';
+  return languageInfo(language).monaco;
 }
 
 /** Merge persisted (possibly partial or stale) options over the defaults. */

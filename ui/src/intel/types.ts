@@ -5,7 +5,9 @@ export type { Dialect, ObjectRef, SqlBatch };
 
 export type TokenKind =
   | 'ident' | 'quotedIdent' | 'keyword' | 'string' | 'number' | 'param'
-  | 'op' | 'punct' | 'comment' | 'batchSep' | 'ws' | 'eof';
+  | 'op' | 'punct' | 'comment' | 'batchSep' | 'ws' | 'eof'
+  /** Client meta-command line (psql `\dt`, `\c db`): the whole line, never SQL. */
+  | 'meta';
 
 export interface Token {
   kind: TokenKind;
@@ -25,7 +27,7 @@ export interface Token {
 /** Base kinds; destructive statements get the `:destructive` suffix (DELETE/UPDATE without WHERE, DROP, TRUNCATE). */
 export type StatementBaseKind =
   | 'select' | 'insert' | 'update' | 'delete' | 'merge' | 'truncate' | 'drop' | 'create' | 'alter'
-  | 'exec' | 'block' | 'declare' | 'set' | 'use' | 'tx' | 'grant' | 'sqlplus' | 'pragma' | 'explain' | 'other' | 'empty';
+  | 'exec' | 'block' | 'declare' | 'set' | 'use' | 'tx' | 'grant' | 'sqlplus' | 'psql' | 'pragma' | 'explain' | 'other' | 'empty';
 export type StatementKind = StatementBaseKind | `${StatementBaseKind}:destructive`;
 
 export interface StatementInfo {
@@ -45,7 +47,7 @@ export interface StatementInfo {
   batchIndex: number;
   /** Oracle SQL*Plus EXEC rewritten as an anonymous block; what gets sent instead of `text`. */
   execText?: string;
-  /** SQL*Plus command that is skipped on run (Oracle). */
+  /** Client command that is skipped on run (Oracle SQL*Plus, PostgreSQL psql `\…` lines). */
   skipOnRun?: boolean;
   /** Oracle block terminated by `END;` without a following `/` line. */
   missingSlash?: boolean;

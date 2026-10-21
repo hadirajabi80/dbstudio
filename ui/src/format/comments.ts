@@ -47,7 +47,7 @@ export function prepareTokens(tokens: Token[], text: string, from: number, to: n
       ai: out.length,
       nl: i === from ? 0 : countNewlines(text, prevEnd, t.start),
       word,
-      breaksAfter: (t.kind === 'comment' && t.text.startsWith('--')) || multiLine,
+      breaksAfter: (t.kind === 'comment' && t.text.startsWith('--')) || multiLine || t.kind === 'meta',
     });
     prevEnd = t.end;
   }

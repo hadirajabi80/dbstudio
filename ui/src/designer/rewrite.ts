@@ -2,6 +2,7 @@
 //   T-SQL  CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER → CREATE OR ALTER (ALTER on servers older than 2016 SP1)
 //   Oracle CREATE [EDITIONABLE] PROCEDURE/FUNCTION/PACKAGE [BODY]/TRIGGER/VIEW/TYPE → CREATE OR REPLACE, `/` after blocks
 //   SQLite views/triggers → DROP … IF EXISTS; prepended (SQLite has no CREATE OR REPLACE)
+//   PostgreSQL FUNCTION/PROCEDURE/VIEW/TRIGGER → CREATE OR REPLACE (triggers before 14: DROP TRIGGER IF EXISTS), mviews DROP first
 // Pure: no React, Monaco or DOM.
 import type { CatalogObjectType, Dialect } from '../api/types';
 import { getSpec } from '../intel/dialect';
@@ -59,9 +60,83 @@ function createHeaders(text: string, dialect: Dialect): { tok: number; toks: Tok
   return out;
 }
 
+/** Major version of a PostgreSQL `productVersion` ("17.2", "13.15"); null when unknown. */
+function pgMajor(productVersion: string | null | undefined): number | null {
+  const m = productVersion ? /^(\d+)/.exec(productVersion) : null;
+  return m ? Number(m[1]) : null;
+}
+
+const PG_KINDS = new Set(['FUNCTION', 'PROCEDURE', 'VIEW', 'TRIGGER', 'AGGREGATE', 'RULE']);
+
+/**
+ * PostgreSQL: CREATE FUNCTION/PROCEDURE/VIEW/TRIGGER/AGGREGATE/RULE → CREATE OR REPLACE. Triggers need PostgreSQL 14
+ * for OR REPLACE; on older servers `DROP TRIGGER IF EXISTS name ON table;` is prepended instead. A materialized view
+ * has no OR REPLACE: `DROP MATERIALIZED VIEW IF EXISTS` is prepended. Types open as they are.
+ */
+function rewritePg(text: string, o: RewriteOptions): RewriteResult {
+  if (o.type === 'type') return { text, changed: false, note: 'ALTER TYPE … ADD VALUE to extend an enum (CREATE TYPE cannot be replaced)' };
+  const qualified = o.schema ? `${quotePg(o.schema)}.${quotePg(o.name)}` : quotePg(o.name);
+  if (o.type === 'mview') {
+    if (/^\s*DROP\s+MATERIALIZED\s+VIEW\b/i.test(text)) return { text, changed: false, note: null };
+    const body = /;\s*$/.test(text) ? text.trimEnd() : `${text.trimEnd()};`;
+    return { text: `DROP MATERIALIZED VIEW IF EXISTS ${qualified};\n${body}\n`, changed: true, note: 'DROP MATERIALIZED VIEW IF EXISTS prepended (no CREATE OR REPLACE)' };
+  }
+  const major = pgMajor(o.productVersion);
+  const oldServer = major !== null && major < 14;
+  const heads = createHeaders(text, o.dialect);
+  const edits: { start: number; end: number; text: string }[] = [];
+  const drops: string[] = [];
+  const notes = new Set<string>();
+  for (const { tok, toks } of heads) {
+    const create = toks[tok];
+    const next = toks[tok + 1];
+    if (!next || next.upper === 'OR') continue;
+    // CREATE [TEMP | TEMPORARY | RECURSIVE] VIEW; CREATE CONSTRAINT TRIGGER cannot be replaced.
+    let k = tok + 1;
+    while (toks[k] && /^(TEMP|TEMPORARY|RECURSIVE)$/.test(toks[k].upper)) k++;
+    const kind = toks[k]?.upper;
+    if (!kind || !PG_KINDS.has(kind)) continue;
+    if (kind === 'TRIGGER' && oldServer) {
+      // CREATE TRIGGER name … ON table
+      const name = toks[k + 1]?.text;
+      let on = k + 2;
+      while (toks[on] && toks[on].upper !== 'ON' && toks[on].text !== ';') on++;
+      const table = toks[on]?.upper === 'ON' ? tableRef(toks, on + 1) : null;
+      if (name && table) drops.push(`DROP TRIGGER IF EXISTS ${name} ON ${table};`);
+      notes.add('DROP TRIGGER IF EXISTS prepended (CREATE OR REPLACE TRIGGER needs PostgreSQL 14)');
+      continue;
+    }
+    const upper = create.text === create.text.toUpperCase();
+    edits.push({ start: create.start, end: create.end, text: `${create.text} ${upper ? 'OR REPLACE' : 'or replace'}` });
+    notes.add('CREATE → CREATE OR REPLACE');
+  }
+  if (!edits.length && !drops.length) return { text, changed: false, note: null };
+  let out = text;
+  for (const e of [...edits].sort((a, b) => b.start - a.start)) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  if (drops.length) out = `${drops.join('\n')}\n${out}`;
+  return { text: out, changed: true, note: [...notes].join('; ') };
+}
+
+/** `schema.table` / `"Mixed".t` starting at token i (as written). */
+function tableRef(toks: Token[], i: number): string | null {
+  const parts: string[] = [];
+  let j = i;
+  while (toks[j] && (toks[j].kind === 'ident' || toks[j].kind === 'quotedIdent' || toks[j].kind === 'keyword')) {
+    parts.push(toks[j].text);
+    if (toks[j + 1]?.text !== '.') break;
+    j += 2;
+  }
+  return parts.length ? parts.join('.') : null;
+}
+
+function quotePg(name: string): string {
+  return /^[a-z_][a-z0-9_$]*$/.test(name) ? name : `"${name.replace(/"/g, '""')}"`;
+}
+
 export function rewriteForEdit(ddl: string, o: RewriteOptions): RewriteResult {
   const text = ddl.replace(/\r\n/g, '\n');
   if (o.dialect === 'sqlite') return rewriteSqlite(text, o);
+  if (o.dialect === 'pgsql') return rewritePg(text, o);
   const heads = createHeaders(text, o.dialect);
   if (!heads.length) return { text, changed: false, note: null };
   const edits: { start: number; end: number; text: string }[] = [];
@@ -131,6 +206,6 @@ function quote(name: string): string {
 /** Object types F4 opens as an editable script (tables and views have designers). */
 export function isScriptEditable(type: CatalogObjectType, dialect: Dialect): boolean {
   if (type === 'proc' || type === 'func' || type === 'tablefunc' || type === 'package' || type === 'trigger' || type === 'type') return true;
-  if (type === 'view' || type === 'mview') return dialect === 'plsql' || dialect === 'tsql' || dialect === 'sqlite';
+  if (type === 'view' || type === 'mview') return dialect === 'plsql' || dialect === 'tsql' || dialect === 'sqlite' || dialect === 'pgsql';
   return false;
 }

@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
@@ -21,6 +22,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DbStudio.Providers.PostgreSql\DbStudio.Providers.PostgreSql.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.Conformance\DbStudio.Providers.Conformance.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../docker/seed-postgres.sql" Link="docker/seed-postgres.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Plans/fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

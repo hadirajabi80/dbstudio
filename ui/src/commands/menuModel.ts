@@ -184,7 +184,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('designer.newTable', true), n('designer.newView'), n('designer.newTrigger'), 'separator',
     c('connections.edit'), c('connections.duplicate'), 'separator',
     c('connections.refreshCatalog'), c('connections.disconnect'), c('explorer.copyName'), 'separator',
-    // M2 (optional until M2-ER / M2-L land)
+    // M2: ER diagram (M2-ER) and logs & activity (M2-L)
     c('er.open', true), c('view.logs', true), 'separator',
     c('connections.delete'),
   ],
@@ -192,18 +192,20 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('connections.openConsole'), 'separator',
     n('designer.newTable'), n('designer.newView'), n('designer.newProcedure'), n('designer.newFunction'), n('designer.newPackage'),
     n('designer.newTrigger'), 'separator',
-    c('connections.refreshCatalog'), c('explorer.copyName'),
+    c('connections.refreshCatalog'), c('er.open', true), c('explorer.copyName'),
   ],
   'explorer.table': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
-    c('designer.edit', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), n('designer.newTrigger'), 'separator',
+    c('designer.edit', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
+    c('er.openRelated', true), n('er.openSelected'), n('designer.newTrigger'), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newTable', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.truncate'), h('explorer.drop'),
   ],
   'explorer.view': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
-    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true), 'separator',
+    c('designer.edit', true), c('designer.editAsScript', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
+    c('er.openRelated', true), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newView', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.drop'),

@@ -110,14 +110,20 @@ public sealed class OracleSession : AdoSessionBase
     }
 
     /// <summary>ODP.NET type names (GetDataTypeName) → Oracle display type and wire kind.</summary>
+    /// <summary>
+    /// ODP.NET data type names → display type and wire kind. ODP.NET (23.x) names a NUMBER column after the CLR type it
+    /// would convert to: NUMBER(p,s) with s &gt; 0 is "Single" when p ≤ 7 and "Double" when p ≤ 15 (else "Decimal"),
+    /// NUMBER(p,0) is "Int16/32/64". Those are still exact decimals on the server, so Single/Double map to the decimal
+    /// kind and are read as OracleDecimal (BINARY_FLOAT / BINARY_DOUBLE have their own names and stay floats).
+    /// </summary>
     private static readonly Dictionary<string, (string Display, string Kind)> OdpTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Decimal"] = ("NUMBER", ColumnKinds.Decimal),
         ["Int16"] = ("NUMBER", ColumnKinds.Int),
         ["Int32"] = ("NUMBER", ColumnKinds.Int),
         ["Int64"] = ("NUMBER", ColumnKinds.Int),
-        ["Single"] = ("NUMBER", ColumnKinds.Float),
-        ["Double"] = ("NUMBER", ColumnKinds.Float),
+        ["Single"] = ("NUMBER", ColumnKinds.Decimal),
+        ["Double"] = ("NUMBER", ColumnKinds.Decimal),
         ["BinaryFloat"] = ("BINARY_FLOAT", ColumnKinds.Float),
         ["BinaryDouble"] = ("BINARY_DOUBLE", ColumnKinds.Float),
         ["Varchar2"] = ("VARCHAR2", ColumnKinds.String),
@@ -173,6 +179,8 @@ public sealed class OracleSession : AdoSessionBase
             {
                 case "DECIMAL":
                 case "NUMBER":
+                case "SINGLE": // NUMBER(p ≤ 7, s > 0), see OdpTypes
+                case "DOUBLE": // NUMBER(p ≤ 15, s > 0)
                     return r.GetOracleDecimal(ordinal).ToString();
                 case "TIMESTAMPTZ":
                 {

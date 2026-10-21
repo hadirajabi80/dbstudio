@@ -1,0 +1,3 @@
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_user;
+REVOKE DELETE ON orders FROM app_user;
+GRANT USAGE ON SCHEMA sales TO reporting;

@@ -25,6 +25,10 @@ import planSqliteActual from '../fixtures/m15/plans/sqlite-actual.json';
 import planSqliteEstimated from '../fixtures/m15/plans/sqlite-estimated.json';
 import planSqlServerActual from '../fixtures/m15/plans/sqlserver-actual.json';
 import planSqlServerEstimated from '../fixtures/m15/plans/sqlserver-estimated.json';
+import pgDesignerTypes from '../fixtures/m15/designer/pgsql-types.json';
+import planPgActual from '../fixtures/m15/plans/pgsql-actual.json';
+import planPgEstimated from '../fixtures/m15/plans/pgsql-estimated.json';
+import { pgTableModel, scriptPgTable, scriptPgView } from './pgDesigner';
 
 const P = '*/api/v1';
 
@@ -36,6 +40,7 @@ const PLANS: Record<string, Record<string, unknown>> = {
   'sqlite:estimated': planSqliteEstimated, 'sqlite:actual': planSqliteActual,
   'sqlserver:estimated': planSqlServerEstimated, 'sqlserver:actual': planSqlServerActual,
   'oracle:estimated': planOracleEstimated, 'oracle:actual': planOracleEstimated,
+  'postgresql:estimated': planPgEstimated, 'postgresql:actual': planPgActual,
 };
 
 const TABLES: Record<string, unknown> = { customers: tableCustomers, orders: tableOrders, orderlines: tableOrderLines };
@@ -46,6 +51,7 @@ const WRITES = /^\s*(with\b[\s\S]*?\)\s*)?(insert|update|delete|merge|create|dro
 let seq = 0;
 
 export function createM15Handlers(engine: MockEngine) {
+  const isPg = (cid: string) => engine.conn(cid)?.providerId === 'postgresql';
   const emitLater = (events: Omit<WsEvent, 'ts'>[]) => {
     setTimeout(() => {
       for (const ev of events) engine.emit(ev as WsEvent);
@@ -81,15 +87,24 @@ export function createM15Handlers(engine: MockEngine) {
 
     // 3.9 designer
     http.get(`${P}/connections/:id/designer/types`, ({ params }) =>
-      engine.conn(String(params.id)) ? HttpResponse.json(designerTypes) : err(404, 'NOT_FOUND', 'Connection not found')),
+      engine.conn(String(params.id)) ? HttpResponse.json(isPg(String(params.id)) ? pgDesignerTypes : designerTypes) : err(404, 'NOT_FOUND', 'Connection not found')),
     http.get(`${P}/connections/:id/designer/table`, ({ params, request }) => {
-      if (!engine.conn(String(params.id))) return err(404, 'NOT_FOUND', 'Connection not found');
+      const cid = String(params.id);
+      if (!engine.conn(cid)) return err(404, 'NOT_FOUND', 'Connection not found');
       const name = new URL(request.url).searchParams.get('name') ?? '';
+      if (isPg(cid)) {
+        const schema = new URL(request.url).searchParams.get('schema') || 'public';
+        const d = engine.details(cid, { database: null, schema, name, type: 'table' });
+        if (!d.columns.length) return err(404, 'NOT_FOUND', `relation "${schema}.${name}" does not exist`);
+        const fks = d.foreignKeys.map((f) => ({ name: f.name, columns: f.columns, refSchema: f.refSchema, refTable: f.refTable, refColumns: f.refColumns, onDelete: 'NO ACTION' as const, onUpdate: 'NO ACTION' as const }));
+        return HttpResponse.json(pgTableModel(schema, name, d.columns.map((c) => ({ name: c.name, type: c.type, nullable: c.nullable, pk: c.isPk, identity: c.isIdentity, comment: c.comment, default: c.default })), fks, null));
+      }
       const t = TABLES[name.toLowerCase()];
       return t ? HttpResponse.json(t) : HttpResponse.json({ ...tableCustomers, name });
     }),
-    http.post(`${P}/connections/:id/designer/table/script`, async ({ request }) => {
+    http.post(`${P}/connections/:id/designer/table/script`, async ({ params, request }) => {
       const body = (await request.json()) as TableScriptRequest;
+      if (isPg(String(params.id))) return HttpResponse.json(scriptPgTable(body));
       if (!body.original) return HttpResponse.json(scriptCreate.response);
       const more = (body.desired?.columns?.length ?? 0) > (body.original.columns?.length ?? 0);
       return HttpResponse.json((more ? scriptAddColumn : scriptRebuild).response);
@@ -97,10 +112,17 @@ export function createM15Handlers(engine: MockEngine) {
     http.get(`${P}/connections/:id/designer/view`, ({ params, request }) => {
       if (!engine.conn(String(params.id))) return err(404, 'NOT_FOUND', 'Connection not found');
       const name = new URL(request.url).searchParams.get('name') ?? viewModel.name;
+      if (isPg(String(params.id))) {
+        const schema = new URL(request.url).searchParams.get('schema') || 'public';
+        const ddl = engine.ddl(String(params.id), { database: null, schema, name, type: 'view' }).ddl;
+        const body = ddl.replace(/^CREATE (OR REPLACE )?VIEW [^\n]+\n/i, '').replace(/;\s*$/, '');
+        return HttpResponse.json({ schema, name, body, options: { schemaBinding: false, checkOption: false, force: false }, ddl });
+      }
       return HttpResponse.json({ ...viewModel, name });
     }),
-    http.post(`${P}/connections/:id/designer/view/script`, async ({ request }) => {
+    http.post(`${P}/connections/:id/designer/view/script`, async ({ params, request }) => {
       const body = (await request.json()) as ViewScriptRequest;
+      if (isPg(String(params.id))) return HttpResponse.json(scriptPgView(body));
       const r = viewScript.response;
       return HttpResponse.json(body.name === viewScript.request.name ? r : { ...r, statements: r.statements.map((st) => ({ ...st, sql: st.sql.split(viewScript.request.name).join(body.name) })) });
     }),

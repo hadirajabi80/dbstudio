@@ -33,7 +33,7 @@ export function tokenizeLine(line: string, spec: DialectSpec, state: LexState): 
       case 'param': scopes = PARAM_GLOBAL.test(t.text) ? 'predefined' : 'variable'; break;
       case 'op': scopes = 'operator'; break;
       case 'punct': scopes = t.text === '(' || t.text === ')' ? 'delimiter.parenthesis' : 'delimiter'; break;
-      case 'batchSep': scopes = 'keyword.batch'; break;
+      case 'batchSep': case 'meta': scopes = 'keyword.batch'; break;
       default: scopes = '';
     }
     out.push({ startIndex: t.start, scopes });

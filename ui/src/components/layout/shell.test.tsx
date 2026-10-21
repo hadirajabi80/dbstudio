@@ -3,7 +3,7 @@
 // the overflow toolbar fit (styles-03), the explorer chip scope (logic-10) and the tab strip (features-r1-05).
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setPlatformForTests } from '../../commands/keys';
 import type { ConnectionProfile } from '../../api/types';
@@ -47,6 +47,27 @@ describe('ViewTabHost (features-05)', () => {
     );
     expect(screen.getByTestId('view-va')).not.toBeVisible();
     expect(screen.getByTestId('view-vb')).toBeVisible();
+    off();
+  });
+
+  it('a lazy view shows the loading skeleton until its chunk arrives (no Suspense of its own)', async () => {
+    let resolve!: (m: { default: (p: TabViewProps) => JSX.Element }) => void;
+    const Lazy = lazy(() => new Promise<{ default: (p: TabViewProps) => JSX.Element }>((r) => { resolve = r; }));
+    const off = registerTabView('lazy-test', { component: Lazy, icon: 'File' });
+    const t = { id: 'vl', kind: 'view', view: 'lazy-test', title: 'L', state: null } as unknown as ViewTab;
+    const hidden = { ...t, id: 'vh' } as ViewTab;
+    render(
+      <>
+        <ViewTabHost tab={t} theme="light" visible />
+        <ViewTabHost tab={hidden} theme="light" visible={false} />
+      </>,
+    );
+    // One skeleton: the hidden tab renders nothing while loading.
+    expect(screen.getByRole('status', { name: 'Loading lazy-test' })).toBeVisible();
+    expect(screen.getAllByTestId('tab-view-skeleton')).toHaveLength(1);
+    await act(async () => resolve({ default: ({ tab }: TabViewProps) => <div data-testid={`loaded-${tab.id}`}>loaded</div> }));
+    expect(await screen.findByTestId('loaded-vl')).toBeVisible();
+    expect(screen.queryByTestId('tab-view-skeleton')).toBeNull();
     off();
   });
 });

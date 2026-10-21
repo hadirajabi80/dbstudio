@@ -27,6 +27,8 @@ export interface DbCatalog {
   dialect: Dialect | null;
   defaultSchema: string | null;
   databasesList: string[];
+  /** PostgreSQL search_path (snapshot `searchPath`, else the schemas' searchPathIndex); null elsewhere. */
+  searchPath?: string[] | null;
   /** Merged snapshot of every loaded schema (stable identity until a schema changes). */
   snapshot: CatalogSnapshot | null;
 }
@@ -36,7 +38,7 @@ export const dbKey = (connectionId: string, database: string | null | undefined)
 function emptyDb(connectionId: string, database: string | null): DbCatalog {
   return {
     connectionId, database, schemasResp: null, schemasStatus: 'idle', schemasError: null, loaded: {}, schemaStatus: {},
-    schemaError: {}, etags: {}, dialect: null, defaultSchema: null, databasesList: [], snapshot: null,
+    schemaError: {}, etags: {}, dialect: null, defaultSchema: null, databasesList: [], searchPath: null, snapshot: null,
   };
 }
 
@@ -52,7 +54,15 @@ function buildSnapshot(d: DbCatalog): CatalogSnapshot | null {
     version: schemas.reduce((m, s) => Math.max(m, s.version), 0),
     databases: d.databasesList,
     schemas,
+    ...(d.searchPath?.length ? { searchPath: d.searchPath } : {}),
   };
+}
+
+/** search_path from a schema list (PostgreSQL `searchPathIndex`), in order; null when no schema has one. */
+export function searchPathOf(r: SchemasResponse | null | undefined): string[] | null {
+  const on = (r?.schemas ?? []).filter((s) => typeof s.searchPathIndex === 'number');
+  if (!on.length) return null;
+  return on.sort((a, b) => (a.searchPathIndex ?? 0) - (b.searchPathIndex ?? 0)).map((s) => s.name);
 }
 
 interface CatalogState {
@@ -106,6 +116,7 @@ export const useCatalog = create<CatalogState>((set, get) => {
       const next: DbCatalog = {
         ...d, loaded, schemaStatus, etags, schemaError,
         dialect: snap.dialect, defaultSchema: snap.defaultSchema ?? d.defaultSchema, databasesList: snap.databases ?? d.databasesList,
+        searchPath: snap.searchPath?.length ? snap.searchPath : d.searchPath ?? searchPathOf(d.schemasResp),
       };
       return { ...next, snapshot: buildSnapshot(next) };
     });
@@ -138,7 +149,11 @@ export const useCatalog = create<CatalogState>((set, get) => {
         patchDb(cid, db, () => ({ schemasStatus: 'loading', schemasError: null }));
         try {
           const r = await api.schemas(cid, db);
-          patchDb(cid, db, (d) => ({ schemasResp: r, schemasStatus: 'ready', defaultSchema: r.defaultSchema ?? d.defaultSchema }));
+          patchDb(cid, db, (d) => {
+            const next: DbCatalog = { ...d, schemasResp: r, schemasStatus: 'ready', defaultSchema: r.defaultSchema ?? d.defaultSchema, searchPath: d.searchPath ?? searchPathOf(r) };
+            // A search_path learned from the schema list reaches an already built snapshot too.
+            return (next.searchPath ?? null) !== (d.searchPath ?? null) && d.snapshot ? { ...next, snapshot: buildSnapshot(next) } : next;
+          });
           return r;
         } catch (e) {
           patchDb(cid, db, () => ({ schemasStatus: 'error', schemasError: errorMessage(e) }));

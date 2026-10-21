@@ -30,6 +30,16 @@ describe('tokens-core', () => {
     expect(a.endState).toBe('c1');
     expect(scopes('b */ SELECT', 'tsql', a.endState)).toEqual(['comment', 'keyword']);
   });
+  it('PostgreSQL: $n params, :: casts to types, psql lines, $$ bodies across lines', () => {
+    const pg = (line: string, st = '') => tokenizeLine(line, getSpec('pgsql'), st);
+    expect(pg('SELECT $1::int').tokens.map((t) => t.scopes)).toEqual(['keyword', 'variable', 'operator', 'type']);
+    expect(pg('\\dt public.*').tokens.map((t) => t.scopes)).toEqual(['keyword.batch']);
+    const a = pg('AS $$');
+    expect(a.endState).toBe('d');
+    const b = pg("  SELECT 'not code';", a.endState);
+    expect(b.tokens.map((t) => t.scopes)).toEqual(['string']);
+    expect(pg('$$ LANGUAGE sql;', b.endState).tokens.map((t) => t.scopes)).toEqual(['string', 'keyword.contextual', 'identifier', 'delimiter']);
+  });
 });
 
 describe('object-uri', () => {

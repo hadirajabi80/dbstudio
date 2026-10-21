@@ -1,0 +1,11 @@
+<event name="error_reported" package="sqlserver" timestamp="2026-10-18T12:01:02.345Z">
+  <data name="error_number"><type name="int32" package="package0" /><value>1205</value></data>
+  <data name="severity"><type name="int32" package="package0" /><value>13</value></data>
+  <data name="state"><type name="int32" package="package0" /><value>51</value></data>
+  <data name="user_defined"><type name="boolean" package="package0" /><value>false</value></data>
+  <data name="category"><type name="error_category" package="sqlserver" /><value>2</value><text>SERVER</text></data>
+  <data name="message"><type name="unicode_string" package="package0" /><value>Transaction (Process ID 73) was deadlocked on lock resources.</value></data>
+  <action name="session_id" package="sqlserver"><type name="uint16" package="package0" /><value>73</value></action>
+  <action name="database_id" package="sqlserver"><type name="uint16" package="package0" /><value>7</value></action>
+  <action name="sql_text" package="sqlserver"><type name="unicode_string" package="package0" /><value>UPDATE dbo.Orders SET Status = 2</value></action>
+</event>

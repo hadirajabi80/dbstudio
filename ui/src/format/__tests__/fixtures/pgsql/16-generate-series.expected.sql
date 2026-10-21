@@ -1,0 +1,7 @@
+SELECT
+    g::DATE AS day,
+    COUNT(o.id)
+FROM GENERATE_SERIES(DATE '2024-01-01', DATE '2024-01-31', INTERVAL '1 day') AS g
+LEFT JOIN orders o ON o.order_date = g::DATE
+GROUP BY g
+ORDER BY g;

@@ -44,7 +44,7 @@ profiles: `docker compose -f engine/tests/docker/compose.yml --profile kafka --p
 | `redis` | `redis/redis-stack:7.4.0-v1` | `localhost:16379` (RedisInsight `:18001`) | none | `seed-redis.sh` via one-shot `redis-seed` (M2-R) | `DBSTUDIO_REDIS_HOST`, `DBSTUDIO_REDIS_PORT`, `DBSTUDIO_REDIS_PASSWORD` |
 | `redis-cluster` (+ `-2`, `-3`), profile `cluster` | `bitnami/redis-cluster:7.4` | `localhost:17001-17003`, 3 masters | none | — (M2-R) | `DBSTUDIO_REDIS_CLUSTER` (`host:port,…`) |
 | `mongo` | `mongo:7` (replica set `rs0`) | `mongodb://localhost:27018/?directConnection=true` | none | `seed-mongo.js` (M2-M) | `DBSTUDIO_MONGO_URI` |
-| `kafka`, profile `kafka` | `apache/kafka:3.8.0` (KRaft) | `localhost:19092` (PLAINTEXT) | none | — (M2-K) | `DBSTUDIO_KAFKA_BOOTSTRAP` |
+| `kafka`, profile `kafka` | `apache/kafka:3.8.0` (KRaft) | `localhost:19092` (PLAINTEXT) | none | `seed-kafka.sh` (M2-K) | `DBSTUDIO_KAFKA_BOOTSTRAP` |
 | `schema-registry`, profile `kafka` | `confluentinc/cp-schema-registry:7.7.1` | `http://localhost:18081` | none | — (M2-K) | `DBSTUDIO_SCHEMA_REGISTRY_URL` |
 
 The M2 Testcontainers suites follow the `SqlServerBackend` pattern: `DBSTUDIO_IT=0` skips them, the env vars above point
@@ -111,3 +111,41 @@ curl -s $h -X POST http://127.0.0.1:5121/api/v1/connections/$CID/designer/apply 
 curl -s $h -X POST http://127.0.0.1:5121/api/v1/filters -d '{"connectionId":"'$CID'","signature":"Id:int","name":"Small ids","model":{"root":{"id":"g","logic":"and","items":[]}}}'
 curl -s $h "http://127.0.0.1:5121/api/v1/history?connectionId=$CID&status=ok,error&from=2026-01-01T00:00:00Z&pinned=true"
 ```
+
+## PostgreSQL (PG-A)
+
+`seed-postgres.sql` builds the shop in `public` plus `sales.invoices` (cross-schema FK), the enum `order_status`, the
+domain `email_address`, the sequence `order_numbers`, identity/serial/generated/array/jsonb columns, INCLUDE and partial
+indexes, the view `customer_orders`, the materialized view `customer_totals`, the overloads `fn_tax(numeric)` /
+`fn_tax(numeric, numeric)`, the table function `orders_of`, the procedures `add_order_line` (INOUT) and
+`get_customer_report` (RAISE NOTICE/WARNING) and the trigger `trg_orders_check`. It is idempotent: the test fixture
+(`PgBackend`) re-runs it statement by statement on every test run.
+
+```powershell
+docker compose -f engine/tests/docker/compose.yml up -d postgres
+$env:DBSTUDIO_PG_HOST = "localhost"; $env:DBSTUDIO_PG_PORT = "15432"; $env:DBSTUDIO_PG_PASSWORD = "shop"
+dotnet test engine/tests/DbStudio.Providers.PostgreSql.Tests
+# without the env vars the suite starts its own postgres:17 container; DBSTUDIO_IT=0 skips it
+```
+
+```bash
+# connection test (wrong password → message "password authentication failed", detail "SQLSTATE 28P01")
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/connections/test -d '{"profile":{"providerId":"postgresql","props":{"host":"localhost","port":15432,"database":"shop","user":"shop","sslMode":"disable"}},"password":"shop"}'
+# :name, @name and $n all bind; ? is the jsonb operator, never a placeholder
+curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/execute -d '{"batches":[{"sql":"SELECT * FROM extra_types WHERE meta ? '"'"'tier'"'"' AND id = :id","line":1,"col":1}],"maxRows":100,"params":[{"name":"id","kind":"int","value":1}]}'
+
+## Kafka (M2-K)
+
+`docker compose -f engine/tests/docker/compose.yml --profile kafka up -d`, then `bash engine/tests/docker/seed-kafka.sh`
+(topics `orders` (3 partitions, 120 JSON messages with keys and headers), `payments-avro`, `events-proto`,
+`compacted-users`; Schema Registry subjects `payments-avro-value` (Avro) and `events-proto-value` (Protobuf); groups
+`billing` (lag) and `shipping`). DbStudio connection: bootstrap `localhost:19092`, PLAINTEXT, Schema Registry
+`http://localhost:18081`.
+
+```powershell
+$env:DBSTUDIO_KAFKA_BOOTSTRAP = "localhost:19092"   # else Testcontainers starts apache/kafka:3.8.0
+dotnet test engine/tests/DbStudio.Sources.Kafka.Tests
+```
+
+Without Docker the suite runs against `KafkaFake` (in-memory broker model) and `FakeSchemaRegistry` (HttpMessageHandler);
+the `KafkaIntegrationTests` are skipped.

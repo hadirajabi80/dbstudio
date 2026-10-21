@@ -1,6 +1,7 @@
 import { API_PREFIX, configureClient, errorMessage, getClientConfig } from '../api/client';
 import type { SessionInfo } from '../api/types';
 import { engineSocket } from '../api/ws';
+import { hasCommand, runCommand } from '../commands/registry';
 import { pluralize } from '../components/common/text';
 import { getPlatform } from '../platform';
 import { useCatalog } from '../store/catalog';
@@ -124,8 +125,14 @@ export function wireSocket(): void {
   });
   engineSocket.on('source.client', (ev) => useSourceClients.getState().apply(ev.connectionId, ev.state));
   engineSocket.on('engine.log', (ev) => {
-    if (ev.level === 'error') toast('error', ev.message);
+    if (ev.level === 'error') toast('error', ev.message, undefined, openEngineLogAction());
   });
+}
+
+/** "Open engine log" on engine error toasts (M2-L: the Logs tab of the engine, cid `engine`). */
+export function openEngineLogAction(): { label: string; run: () => void } | undefined {
+  if (!hasCommand('logs.openEngineLog')) return undefined;
+  return { label: 'Open engine log', run: () => void runCommand('logs.openEngineLog') };
 }
 
 /** aria-live announcement for the active tab's run ("12 rows, 15 ms" / "Query failed"). */
@@ -178,7 +185,8 @@ export async function boot(): Promise<void> {
     useSourceClients.getState().reset();
     const streams = engineSocket.endAllStreams('engine-restarted');
     toast('warning', 'The engine was restarted',
-      `Open transactions were lost; sessions are recreated on the next run.${streams ? ` ${pluralize(streams, 'live view')} stopped.` : ''}`);
+      `Open transactions were lost; sessions are recreated on the next run.${streams ? ` ${pluralize(streams, 'live view')} stopped.` : ''}`,
+      openEngineLogAction());
   });
 
   await Promise.all([useSettings.getState().load(), useConnections.getState().load()]);

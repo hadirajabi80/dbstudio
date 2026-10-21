@@ -34,8 +34,17 @@ export function lexicalDiagnostics(tokens: Token[], statements: SplitStatement[]
 
 function schemaLoaded(index: CatalogIndex, ref: TableRef): boolean {
   if (!index.snapshot) return false;
+  if (ref.parts.length === 1 && index.spec.id === 'pgsql') {
+    // every search_path schema must be loaded before an unqualified name can be called unknown
+    const missing = index.unloadedSearchPath();
+    for (const m of missing) index.requestSchema(m);
+    return missing.length === 0 && index.defaultEntries().length > 0;
+  }
   if (ref.parts.length === 1) return !!index.defaultSchemaEntry();
   if (ref.parts.length === 2) return !!index.schema(ref.parts[0].text, ref.parts[0].quoted);
+  if (ref.parts.length === 3 && index.spec.id === 'pgsql') {
+    return !!index.database && index.keyOf(ref.parts[0].text, ref.parts[0].quoted) === index.keyOfCatalog(index.database) && !!index.schema(ref.parts[1].text, ref.parts[1].quoted);
+  }
   if (ref.parts.length === 3 && index.spec.id === 'tsql') {
     return !!index.database && ref.parts[0].text.toUpperCase() === index.database.toUpperCase() && (ref.parts[1].text === '' ? !!index.defaultSchemaEntry() : !!index.schema(ref.parts[1].text, ref.parts[1].quoted));
   }
@@ -47,7 +56,8 @@ export function statementDiagnostics(st: SplitStatement, model: StatementModel, 
   const first = model.tokens[0];
   if (!first) return out;
   if (st.skipOnRun) {
-    out.push({ start: st.start, end: st.end, severity: 'warning', code: 'sqlplus', message: 'SQL*Plus command not supported; it is skipped on run' });
+    if (st.kind === 'psql') out.push({ start: st.start, end: st.end, severity: 'warning', code: 'psql', message: 'psql meta-command (\\d, \\c …) is not SQL; it is skipped on run' });
+    else out.push({ start: st.start, end: st.end, severity: 'warning', code: 'sqlplus', message: 'SQL*Plus command not supported; it is skipped on run' });
     return out;
   }
   if (st.isPlsqlBlock && st.missingSlash) {
@@ -117,10 +127,12 @@ export function statementDiagnostics(st: SplitStatement, model: StatementModel, 
       if (!cols.length) continue;
       if (q.length !== ch.parts.length - 1) continue;
       const k = index.keyOf(name.text, name.quoted);
-      if (cols.some((c) => index.keyOfCatalog(c.name) === k || (spec.caseFolding !== 'upper' && c.name.toUpperCase() === name.text.toUpperCase()))) continue;
+      if (cols.some((c) => index.keyOfCatalog(c.name) === k || (spec.caseFolding === 'insensitive' && c.name.toUpperCase() === name.text.toUpperCase()))) continue;
       // Oracle pseudo columns on any table
       if (spec.id === 'plsql' && ['ROWID', 'ROWNUM', 'ORA_ROWSCN', 'NEXTVAL', 'CURRVAL', 'LEVEL'].includes(name.text.toUpperCase())) continue;
       if (spec.id === 'sqlite' && ['ROWID', 'OID', '_ROWID_'].includes(name.text.toUpperCase())) continue;
+      // PostgreSQL system columns on every table
+      if (spec.id === 'pgsql' && !name.quoted && PG_SYSTEM_COLUMNS.has(name.text.toLowerCase())) continue;
       const owner = t.kind === 'source' ? (t.src.entry ? t.src.entry.qualifiedName : t.src.display) : t.kind === 'record' ? t.name : t.entry.qualifiedName;
       out.push({ start: name.range[0], end: name.range[1], severity: 'warning', code: 'unknown-column', message: `Column '${name.text}' not found in ${owner}` });
     }
@@ -139,6 +151,37 @@ export function statementDiagnostics(st: SplitStatement, model: StatementModel, 
         out.push({ start: nm.range[0], end: nm.range[1], severity: 'info', code: 'ambiguous-column', message: `Column '${nm.text}' is ambiguous (${owners.map((o) => o.label).join(', ')})` });
       }
     }
+  }
+  if (spec.id === 'pgsql' && catalogReady) out.push(...castDiagnostics(model, index, spec));
+  return out;
+}
+
+const PG_SYSTEM_COLUMNS = new Set(['ctid', 'xmin', 'xmax', 'cmin', 'cmax', 'tableoid', 'oid']);
+/** Valid PostgreSQL type names that the completion list leaves out (pseudo-types, internal and reg* types). */
+const PG_EXTRA_TYPES = new Set(`
+  name line path regnamespace regrole regprocedure regoper regoperator regconfig regdictionary xid xid8 cid tid pg_lsn
+  aclitem int2vector oidvector unknown cstring any anynonarray anyenum anyrange anymultirange anycompatible
+  anycompatiblearray anycompatiblenonarray anycompatiblerange event_trigger language_handler internal
+  fdw_handler table_am_handler index_am_handler tsm_handler pg_node_tree pg_snapshot txid_snapshot geometry
+  geography ltree cube vector halfvec sparsevec`.split(/\s+/).filter(Boolean));
+
+/** Info: `expr::name` where name is neither a known data type nor a type of the catalog. */
+function castDiagnostics(model: StatementModel, index: CatalogIndex, spec: DialectSpec): RawDiagnostic[] {
+  const out: RawDiagnostic[] = [];
+  const toks = model.tokens;
+  for (let i = 0; i + 1 < toks.length; i++) {
+    const t = toks[i];
+    if (t.kind !== 'op' || t.text !== '::') continue;
+    const n = toks[i + 1];
+    if (n.kind !== 'ident' && n.kind !== 'keyword') continue;
+    const nx = toks[i + 2];
+    if (nx && nx.kind === 'punct' && nx.text === '.') continue; // schema-qualified: resolved by the server
+    const lower = n.text.toLowerCase();
+    if (spec.dataTypeSet.has(n.upper) || PG_EXTRA_TYPES.has(lower)) continue;
+    if (/^(character|double|timestamp|time|bit|interval)$/.test(lower)) continue;
+    if (index.resolve([{ text: n.text, quoted: false }], (e) => e.type === 'type' || e.type === 'table' || e.type === 'view')) continue;
+    if (index.unloadedSearchPath().length) continue;
+    out.push({ start: n.start, end: n.end, severity: 'info', code: 'unknown-type', message: `'::' cast to unknown type '${n.text}'` });
   }
   return out;
 }

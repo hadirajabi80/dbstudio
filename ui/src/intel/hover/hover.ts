@@ -5,7 +5,7 @@ import type { CatalogIndex, ObjectEntry } from '../catalog/index';
 import { objectTypeLabel } from '../catalog/binder';
 import type { ColumnDef } from '../parse/statement-model';
 import type { SymbolInfo } from './symbol';
-import { functionDoc, paramsText, varDoc } from '../complete/completer';
+import { functionDoc, paramsText, typeDetail, varDoc } from '../complete/completer';
 
 const MAX_COLS = 25;
 
@@ -33,6 +33,14 @@ function columnTable(cols: ColumnDef[], entry: ObjectEntry | null): string {
 }
 
 export function objectMarkdown(entry: ObjectEntry, spec: DialectSpec, synonym: ObjectEntry | null): string {
+  if (spec.id === 'pgsql' && entry.type === 'type') {
+    // enum labels / domain base type / composite attributes
+    const d = typeDetail(entry);
+    const parts = [`type \`${entry.qualifiedName}\` ${d.startsWith('enum: ') ? `(enum): ${d.slice(6)}` : `(${d})`}`];
+    if (entry.obj.cm && !/^domain over /i.test(entry.obj.cm)) parts.push(entry.obj.cm);
+    if (d === 'composite type') parts.push(columnTable(entry.columns(), entry));
+    return parts.join('\n\n');
+  }
   const head = synonym
     ? `**synonym** \`${synonym.qualifiedName}\` → \`${entry.qualifiedName}\` (${objectTypeLabel(entry.type)})`
     : `\`${entry.qualifiedName}\` (${objectTypeLabel(entry.type)})`;
@@ -52,7 +60,6 @@ export function objectMarkdown(entry: ObjectEntry, spec: DialectSpec, synonym: O
 }
 
 export function hoverFor(sym: SymbolInfo, spec: DialectSpec, index: CatalogIndex): HoverInfo | null {
-  void index;
   switch (sym.kind) {
     case 'alias': {
       const src = sym.src;
@@ -86,7 +93,10 @@ export function hoverFor(sym: SymbolInfo, spec: DialectSpec, index: CatalogIndex
       });
       return { range: sym.range, markdown: '```sql\n' + lines.join('\n') + '\n```' };
     }
-    case 'schema': return { range: sym.range, markdown: `schema \`${sym.name}\` (${sym.count} objects)` };
+    case 'schema': {
+      const sp = index.searchPathIndex(sym.name);
+      return { range: sym.range, markdown: `schema \`${sym.name}\` (${sym.count} objects)${sp ? `, on search_path (#${sp})` : ''}` };
+    }
     case 'operator': return { range: sym.range, markdown: `\`${sym.op.op}\` — ${sym.op.doc}` };
     case 'sequenceOp': return { range: sym.range, markdown: `\`${sym.seq.qualifiedName}.${sym.op}\` — ${sym.op === 'NEXTVAL' ? 'increments the sequence and returns the new value' : 'returns the current value of the sequence in this session'}` };
   }

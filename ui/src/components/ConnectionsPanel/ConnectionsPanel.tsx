@@ -1,7 +1,7 @@
 import { Activity, AppWindow, Cable, CircleStop, Lock, LoaderCircle, RefreshCw, SquareTerminal, TriangleAlert, Unplug, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { SessionInfo } from '../../api/types';
-import { runCommand } from '../../commands/registry';
+import { hasCommand, runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { formatDuration } from '../../lib/format';
 import { useCatalog } from '../../store/catalog';
@@ -17,6 +17,21 @@ import { ProviderIcon } from '../common/icons';
 import { pluralize } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
+
+/** M2-L: "Activity" opens the Logs & activity tab of the connection on its Activity view (SQLite has no activity). */
+function ActivityButton({ connectionId, name, providerId }: { connectionId: string; name: string; providerId: string }) {
+  if (providerId === 'sqlite' || !hasCommand('view.logs')) return null;
+  return (
+    <button
+      className="icon-btn xs"
+      title="Activity"
+      aria-label={`Activity of ${name}`}
+      onClick={() => runCommand('view.logs', { connectionId, sub: 'activity' })}
+    >
+      <Activity size={13} />
+    </button>
+  );
+}
 
 /** Active connections (1.5): open sessions grouped by connection, state, elapsed time, Cancel / Disconnect. */
 export function ConnectionsPanel() {
@@ -140,6 +155,7 @@ export function ConnectionsPanel() {
               <span className="muted session-db" title={info.server?.version ?? undefined}>{info.server?.version ?? ''}</span>
               <div className="flex-1" />
               <span className={`state-badge state-${info.state}`}>{info.state}</span>
+              {conn && <ActivityButton connectionId={info.connectionId} name={conn.name} providerId={conn.providerId} />}
               <button
                 className="icon-btn xs"
                 title="Disconnect"
@@ -170,6 +186,7 @@ export function ConnectionsPanel() {
                 {conn!.readOnly && <Lock size={12} aria-label="Read-only" />}
                 <span className="muted">{list.length ? pluralize(list.length, 'session') : 'catalog loaded'}</span>
                 <div className="flex-1" />
+                <ActivityButton connectionId={cid} name={conn!.name} providerId={conn!.providerId} />
                 <button className="icon-btn xs" title="Disconnect" aria-label={`Disconnect ${conn!.name}`} onClick={() => runCommand('connections.disconnect', { kind: 'connection', connectionId: cid })}>
                   <Unplug size={13} />
                 </button>

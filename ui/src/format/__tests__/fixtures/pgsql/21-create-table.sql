@@ -1,0 +1,3 @@
+create table if not exists public.orders (id bigint generated always as identity primary key, customer_id integer not null references customers (id) on delete cascade, total numeric(12,2) not null default 0 check (total >= 0), status order_status not null default 'new', tags text[] default '{}', meta jsonb, line_total numeric generated always as (total * 2) stored, created_at timestamptz not null default now(), unique (customer_id, created_at)) partition by range (created_at);
+create table orders_2024 partition of orders for values from ('2024-01-01') to ('2025-01-01');
+create unlogged table scratch (id int) with (fillfactor = 70);

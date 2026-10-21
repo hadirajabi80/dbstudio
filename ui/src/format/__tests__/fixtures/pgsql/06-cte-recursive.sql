@@ -1,0 +1,1 @@
+with recursive tree as (select id, parent_id, name, 1 as depth from categories where parent_id is null union all select c.id, c.parent_id, c.name, t.depth + 1 from categories c join tree t on t.id = c.parent_id) select * from tree order by depth;

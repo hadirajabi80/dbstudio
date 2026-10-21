@@ -1,5 +1,5 @@
 // Hosts of the workspace tabs and the "focus the opened tab" logic (design-03 / design-15).
-import { useEffect, useSyncExternalStore } from 'react';
+import { Suspense, useEffect, useSyncExternalStore } from 'react';
 import { getEditor } from '../../app/editors';
 import { useTabs, type Tab, type ViewTab } from '../../store/tabs';
 import type { EffectiveTheme } from '../../theme/useTheme';
@@ -7,9 +7,26 @@ import { focusFirst, focusIsLost, restoredRecently, setFocusFallback } from '../
 import { getTabView, PRIMARY_FOCUS_SELECTORS, subscribeTabViews } from './tabViews';
 
 /**
+ * Placeholder of a view tab whose code is still loading (views are lazy() chunks, docs/PLAN-M2.md D10): a toolbar and
+ * a few content rows, so the tab does not flash blank. Hidden tabs render nothing.
+ */
+export function TabViewSkeleton({ view, visible }: { view: string; visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div className="tab-skeleton" role="status" aria-busy="true" aria-label={`Loading ${view}`} data-testid="tab-view-skeleton">
+      <div className="tab-skeleton-bar tab-skeleton-toolbar" />
+      {[72, 56, 64, 40, 60].map((w, i) => (
+        <div key={i} className="tab-skeleton-bar" style={{ width: `${w}%` }} />
+      ))}
+    </div>
+  );
+}
+
+/**
  * A registered view tab. Every view is wrapped in a container that is `display: none` while the tab is hidden, so a
  * view that ignores its `visible` prop can never paint over the active tab. Visible, the wrapper is
- * `display: contents` and does not change the view's layout.
+ * `display: contents` and does not change the view's layout. The view renders inside a Suspense boundary, so a
+ * lazy view (or a lazy part of one) shows the skeleton while its chunk loads instead of suspending the shell.
  */
 export function ViewTabHost({ tab, theme, visible }: { tab: ViewTab; theme: EffectiveTheme; visible: boolean }) {
   useSyncExternalStore(subscribeTabViews, () => getTabView(tab.view), () => getTabView(tab.view));
@@ -17,7 +34,9 @@ export function ViewTabHost({ tab, theme, visible }: { tab: ViewTab; theme: Effe
   return (
     <div className="view-tab-host" data-tab-host={tab.id} data-view={tab.view} style={{ display: visible ? 'contents' : 'none' }} aria-hidden={visible ? undefined : true}>
       {def ? (
-        <def.component tab={tab} theme={theme} visible={visible} />
+        <Suspense fallback={<TabViewSkeleton view={tab.view} visible={visible} />}>
+          <def.component tab={tab} theme={theme} visible={visible} />
+        </Suspense>
       ) : visible ? (
         <div className="workspace-missing">
           <p>This tab ({tab.view}) is not available in this build.</p>

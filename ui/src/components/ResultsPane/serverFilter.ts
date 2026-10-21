@@ -56,7 +56,8 @@ function paramsProblem(exec: ExecutionState, orig: SqlBatch, dialect: Dialect): 
   if (detected.length === 0) return null;
   const stored = originalParams(exec);
   if (stored.length === 0) return 'The statement has bind parameters whose values were not kept; run it again to filter on the server';
-  if (detected.some((d) => d.positional) || stored.some((p) => /^\d+$/.test(p.name))) {
+  // PostgreSQL `$n` binds keep their numbers next to the filter's named @fp binds (the engine numbers those after).
+  if (dialect !== 'pgsql' && (detected.some((d) => d.positional) || stored.some((p) => /^\d+$/.test(p.name)))) {
     return 'Positional (?) parameters cannot be combined with the filter; use named parameters to filter on the server';
   }
   if (stored.some((p) => /^fp\d+$/i.test(p.name.replace(/^[@:$]/, '')))) return 'A parameter named fp1, fp2, … clashes with the filter parameters';

@@ -28,6 +28,10 @@ describe('snippet sets', () => {
       tsql: ['sel', 'selw', 'selc', 'ins', 'upd', 'del', 'cte', 'join', 'case', 'ifx', 'tryc', 'proc', 'fn', 'trg', 'tbl', 'idx', 'tx', 'cur'],
       plsql: ['sel', 'selw', 'selc', 'ins', 'upd', 'del', 'cte', 'join', 'case', 'blk', 'proc', 'fn', 'pkg', 'trg', 'cur', 'exc', 'tbl', 'idx', 'tx'],
       sqlite: ['sel', 'selw', 'selc', 'ins', 'upd', 'del', 'cte', 'join', 'case', 'trg', 'tbl', 'idx', 'tx'],
+      pgsql: [
+        'sel', 'selw', 'selc', 'ins', 'upd', 'del', 'cte', 'join', 'case', 'idx', 'tbl', 'upsert', 'do', 'fn', 'fnsql', 'proc',
+        'trg', 'tx', 'sp', 'exc', 'raise', 'ret', 'gs', 'unnest', 'jsonb', 'jsonbagg', 'enum', 'mview', 'idxc', 'lock', 'cpy', 'explain',
+      ],
     };
     for (const [d, prefixes] of Object.entries(want)) {
       const have = new Set(snippetsFor(d as 'tsql', []).map((s) => s.prefix));
@@ -36,11 +40,29 @@ describe('snippet sets', () => {
   });
 
   it('prefixes are unique per dialect and built-in bodies are valid', () => {
-    for (const d of ['tsql', 'plsql', 'sqlite'] as const) {
+    for (const d of ['tsql', 'plsql', 'sqlite', 'pgsql'] as const) {
       const list = snippetsFor(d, []);
       expect(new Set(list.map((s) => s.prefix)).size).toBe(list.length);
     }
     for (const s of BUILTIN_SNIPPETS) expect(validateSnippet(s), s.id).toEqual([]);
+  });
+
+  it('PostgreSQL bodies escape $ (dollar quotes are literal text, not snippet variables)', () => {
+    const pg = snippetsFor('pgsql', []);
+    const fn = pg.find((s) => s.prefix === 'fn')!;
+    expect(snippetPreview(fn.body)).toBe('CREATE OR REPLACE FUNCTION name(p_id integer)\nRETURNS integer\nLANGUAGE plpgsql\nAS $$\nDECLARE\n\tv_result integer;\nBEGIN\n\t\n\tRETURN v_result;\nEND\n$$;');
+    expect(snippetPreview(pg.find((s) => s.prefix === 'do')!.body)).toBe('DO $$\nBEGIN\n\t\nEND\n$$;');
+    // every `$` is a tab stop / placeholder or escaped
+    for (const s of pg.filter((x) => x.dialects?.includes('pgsql'))) expect(/(^|[^\\])\$(?![0-9{])/.test(s.body), s.id).toBe(false);
+    expect(snippetsFor('pgsql', []).find((s) => s.prefix === 'upsert')!.body).toContain('EXCLUDED.');
+  });
+
+  it('PostgreSQL statement-start snippets from the dialect spec', () => {
+    const intel = createIntel('pgsql');
+    intel.setDocument('u', 'do');
+    const r = intel.complete('u', 2);
+    const d = r.items.find((i) => i.kind === 'snippet' && i.label === 'do')!;
+    expect(d.documentation).toContain('DO $$');
   });
 
   it('user snippets override built-ins with the same prefix and respect their dialect filter', () => {

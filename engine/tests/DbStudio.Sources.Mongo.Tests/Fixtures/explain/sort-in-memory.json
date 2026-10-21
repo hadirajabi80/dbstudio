@@ -1,0 +1,55 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "shop.orders",
+    "indexFilterSet": false,
+    "parsedQuery": { "total": { "$gte": 50 } },
+    "winningPlan": {
+      "stage": "SORT",
+      "sortPattern": { "total": -1 },
+      "memLimit": 104857600,
+      "limitAmount": 10,
+      "type": "simple",
+      "inputStage": {
+        "stage": "COLLSCAN",
+        "filter": { "total": { "$gte": 50 } },
+        "direction": "forward"
+      }
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 10,
+    "executionTimeMillis": 9,
+    "totalKeysExamined": 0,
+    "totalDocsExamined": 2000,
+    "executionStages": {
+      "stage": "SORT",
+      "nReturned": 10,
+      "executionTimeMillisEstimate": 4,
+      "works": 2012,
+      "advanced": 10,
+      "sortPattern": { "total": -1 },
+      "memLimit": 104857600,
+      "limitAmount": 10,
+      "type": "simple",
+      "totalDataSizeSorted": 401234,
+      "usedDisk": false,
+      "spills": 0,
+      "inputStage": {
+        "stage": "COLLSCAN",
+        "filter": { "total": { "$gte": 50 } },
+        "nReturned": 1640,
+        "executionTimeMillisEstimate": 2,
+        "works": 2001,
+        "advanced": 1640,
+        "direction": "forward",
+        "docsExamined": 2000
+      }
+    }
+  },
+  "command": { "find": "orders", "filter": { "total": { "$gte": 50 } }, "sort": { "total": -1 }, "limit": 10, "$db": "shop" },
+  "serverInfo": { "host": "mongo-0", "port": 27017, "version": "7.0.14" },
+  "ok": 1.0
+}

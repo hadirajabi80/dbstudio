@@ -1,6 +1,7 @@
 // Filter tree → parameterized SQL predicate per dialect (PLAN-M1.5 1.1.1 "Push filter to server").
 // Values are always bind parameters, never inlined; identifiers go through quoteIdent.
 import type { ColumnInfo, Dialect } from '../api/types';
+import { base64ToHex } from '../lib/format';
 import { quoteIdent } from '../lib/sql';
 import { kindClass, resolveColumn, type FilterCondition, type FilterGroup, type FilterNode, type FilterValue } from './model';
 import { OPERATOR_INFO } from './operators';
@@ -10,28 +11,42 @@ import {
 } from './values';
 import type { ExecParam, ParamKind } from './wire';
 
-/** Allocates bind parameters and renders their placeholder for the dialect. */
+/**
+ * Allocates bind parameters and renders their placeholder for the dialect. `positional` (PostgreSQL only) renders
+ * `$1`, `$2`, … bound by the numeric names "1", "2", … — for statements that carry no user parameters (grid edits).
+ */
 export class ParamBuilder {
   readonly params: ExecParam[] = [];
   private readonly dialect: Dialect;
   private readonly prefix: string;
+  private readonly positional: boolean;
   private seq: number;
 
-  constructor(dialect: Dialect, prefix = 'p', start = 1) {
+  constructor(dialect: Dialect, prefix = 'p', start = 1, opts: { positional?: boolean } = {}) {
     this.dialect = dialect;
     this.prefix = prefix;
+    this.positional = !!opts.positional && dialect === 'pgsql';
     this.seq = start - 1;
   }
 
   add(kind: ParamKind, value: FilterValue): string {
-    const name = `${this.prefix}${++this.seq}`;
+    const n = ++this.seq;
+    const name = this.positional ? String(n) : `${this.prefix}${n}`;
     this.params.push({ name, kind, value });
-    return placeholder(name, this.dialect);
+    return this.positional ? `$${n}` : placeholder(name, this.dialect);
   }
 }
 
+/** Named placeholder for a bind (PostgreSQL: `@name`, which the engine binder rewrites to `$n`). */
 export function placeholder(name: string, dialect: Dialect): string {
   return dialect === 'plsql' ? `:${name}` : `@${name}`;
+}
+
+/** Text-like PostgreSQL types that support LIKE / lower() directly; anything else is compared as `::text`. */
+const PG_TEXT_TYPE = /^(text|citext|name|bpchar|char|character|varchar|character varying)\b/i;
+
+function isPgText(c: ColumnInfo): boolean {
+  return PG_TEXT_TYPE.test(c.dbType.trim()) && !c.dbType.trim().endsWith(']');
 }
 
 export interface PredicateOptions {
@@ -130,29 +145,34 @@ function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
   const cls = kindClass(col.kind);
   let c = colRef(ctx, col);
   if (d === 'tsql' && (col.kind === 'xml' || col.kind === 'json') && cls === 'string') c = `CAST(${c} AS NVARCHAR(MAX))`;
+  // PostgreSQL: json and xml have no equality operator; compare their text.
+  if (d === 'pgsql' && (col.kind === 'xml' || col.kind === 'json') && cls === 'string') c = `${c}::text`;
   const cs = !!cond.caseSensitive;
   const v = cond.values;
   ctx.count++;
 
   const strParam = (s: string) => ctx.pb.add('string', s);
+  // PostgreSQL: LIKE / lower() need text (uuid, enum, array and inet columns are cast).
+  const pgText = d === 'pgsql' && !c.endsWith('::text') && !isPgText(col) ? `${c}::text` : c;
   // Column expression and operand wrapper for case handling in = / IN.
   const ciEq = (): { left: string; wrap: (p: string) => string; suffix: string } => {
     if (d === 'tsql') return { left: cs ? `${c} COLLATE Latin1_General_CS_AS` : c, wrap: (p) => p, suffix: '' };
     if (d === 'plsql') return cs ? { left: c, wrap: (p) => p, suffix: '' } : { left: `UPPER(${c})`, wrap: (p) => `UPPER(${p})`, suffix: '' };
+    if (d === 'pgsql') return cs ? { left: c, wrap: (p) => p, suffix: '' } : { left: `lower(${pgText})`, wrap: (p) => `lower(${p})`, suffix: '' };
     return { left: c, wrap: (p) => p, suffix: cs ? '' : ' COLLATE NOCASE' };
   };
 
   switch (cond.op) {
     case 'isNull': return `${c} IS NULL`;
     case 'isNotNull': return `${c} IS NOT NULL`;
-    case 'isTrue': return `${c} = 1`;
-    case 'isFalse': return `${c} = 0`;
+    case 'isTrue': return d === 'pgsql' ? `${c} = TRUE` : `${c} = 1`;
+    case 'isFalse': return d === 'pgsql' ? `${c} = FALSE` : `${c} = 0`;
     case 'isEmpty':
       if (d === 'plsql') {
         ctx.warnings.push('Oracle stores empty strings as NULL: “is empty” matches NULL');
         return `${c} IS NULL`;
       }
-      return `${c} = ''`;
+      return `${pgText} = ''`;
     case 'regex':
       return null; // client-only (never reached: filtered out before)
     case 'contains': case 'notContains': case 'startsWith': case 'endsWith': {
@@ -165,6 +185,10 @@ function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
         expr = cond.op === 'startsWith' ? `substr(${c}, 1, length(${p})) = ${p}`
           : cond.op === 'endsWith' ? `substr(${c}, -length(${p})) = ${p}`
             : `instr(${c}, ${p}) > 0`;
+      } else if (d === 'pgsql') {
+        const p = strParam(escapeLike(raw, d));
+        const pattern = concat(d, [...(pre ? ["'%'"] : []), p, ...(post ? ["'%'"] : [])]);
+        expr = `${pgText} ${cs ? 'LIKE' : 'ILIKE'} ${pattern} ${LIKE_ESCAPE}`;
       } else {
         const p = strParam(escapeLike(raw, d));
         const operand = d === 'plsql' && !cs ? `UPPER(${p})` : p;
@@ -193,8 +217,9 @@ function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
   if (cls === 'date') return dateSql(ctx, cond, c);
   if (cls === 'time') {
     const t = (i: number) => parseTimeOperand(v[i])!;
-    const left = d === 'sqlite' ? `time(${c})` : d === 'plsql' ? `TO_CHAR(${c}, 'HH24:MI:SS')` : c;
-    const p = (i: number) => ctx.pb.add(d === 'tsql' ? 'time' : 'string', t(i).slice(0, 8));
+    // PostgreSQL: `::time` also strips the zone of a timetz column.
+    const left = d === 'sqlite' ? `time(${c})` : d === 'plsql' ? `TO_CHAR(${c}, 'HH24:MI:SS')` : d === 'pgsql' ? `${c}::time` : c;
+    const p = (i: number) => ctx.pb.add(d === 'tsql' || d === 'pgsql' ? 'time' : 'string', t(i).slice(0, 8));
     if (cond.op === 'before') return `${left} < ${p(0)}`;
     if (cond.op === 'after') return `${left} > ${p(0)}`;
     if (cond.op === 'between') return `${left} BETWEEN ${p(0)} AND ${p(1)}`;
@@ -311,6 +336,7 @@ function quickSql(ctx: Ctx, quick: string): Piece | null {
   const parts = cols.map((c) => {
     let ref = colRef(ctx, c);
     if (d === 'tsql' && (c.kind === 'xml' || c.kind === 'json')) ref = `CAST(${ref} AS NVARCHAR(MAX))`;
+    if (d === 'pgsql') return `${isPgText(c) ? ref : `${ref}::text`} ILIKE ${pattern} ${LIKE_ESCAPE}`;
     return `${d === 'plsql' ? `UPPER(${ref})` : ref} LIKE ${pattern} ${LIKE_ESCAPE}`;
   });
   return atom(parts.length === 1 ? parts[0] : `(${parts.join(' OR ')})`);
@@ -339,8 +365,10 @@ export function buildPredicate(
 /** Human-readable SQL with parameters substituted (preview/tooltips only; never executed). */
 export function inlineParams(sql: string, params: readonly ExecParam[], dialect: Dialect): string {
   const byName = new Map(params.map((p) => [p.name, p]));
-  const re = dialect === 'plsql' ? /:([A-Za-z_][\w$#]*)/g : /@([A-Za-z_][\w$#]*)/g;
-  return sql.replace(re, (m, name: string) => {
+  // PostgreSQL: `$1` binds by the numeric name "1", `@name` by name.
+  const re = dialect === 'plsql' ? /:([A-Za-z_][\w$#]*)/g : dialect === 'pgsql' ? /(?<![\w$])\$(\d+)\b|@([A-Za-z_][\w$#]*)/g : /@([A-Za-z_][\w$#]*)/g;
+  return sql.replace(re, (m, a: string, b?: string) => {
+    const name = typeof b === 'string' ? b : a;
     const p = byName.get(name);
     if (!p) return m;
     return literal(p.value, p.kind, dialect);
@@ -349,9 +377,10 @@ export function inlineParams(sql: string, params: readonly ExecParam[], dialect:
 
 export function literal(v: FilterValue, kind: ParamKind, dialect: Dialect): string {
   if (v === null || v === undefined) return 'NULL';
-  if (typeof v === 'boolean') return v ? '1' : '0';
+  if (typeof v === 'boolean') return dialect === 'pgsql' ? (v ? 'TRUE' : 'FALSE') : v ? '1' : '0';
   if (typeof v === 'number') return String(v);
   if (kind === 'int' || kind === 'float' || kind === 'decimal') return v;
+  if (dialect === 'pgsql' && kind === 'binary') return `'\\x${base64ToHex(v)}'::bytea`;
   const s = `'${v.replace(/'/g, "''")}'`;
   if (dialect === 'tsql' && kind === 'string') return `N${s}`;
   if (dialect === 'plsql' && (kind === 'datetime' || kind === 'date')) return `TIMESTAMP '${v.replace('T', ' ')}'`;

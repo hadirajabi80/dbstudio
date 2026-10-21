@@ -19,3 +19,6 @@ engine/tests/fixtures/*.sqlite
 Thumbs.db
 .dev-data/
 .qa/
+
+# Log-format test fixtures are source, not logs
+!engine/tests/**/Fixtures/*.log

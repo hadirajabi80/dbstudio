@@ -41,13 +41,44 @@ function tokenize(sql: string, baseLine: number, dialect: Dialect): Tok[] {
       i += 2;
       while (i < n && nest > 0) {
         if (sql[i] === '\n') line++;
-        if (dialect === 'tsql' && sql[i] === '/' && sql[i + 1] === '*') { nest++; i += 2; continue; }
+        if ((dialect === 'tsql' || dialect === 'pgsql') && sql[i] === '/' && sql[i + 1] === '*') { nest++; i += 2; continue; }
         if (sql[i] === '*' && sql[i + 1] === '/') { nest--; i += 2; continue; }
         i++;
       }
       continue;
     }
-    if (c === "'" || c === '"' || c === '`' || (c === '[' && dialect !== 'plsql')) {
+    if (dialect === 'pgsql') {
+      // Dollar-quoted strings ($$ … $$, $tag$ … $tag$) and E'…' strings with backslash escapes.
+      const dollar = c === '$' ? /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i, i + 66)) : null;
+      if (dollar) {
+        const close = sql.indexOf(dollar[0], i + dollar[0].length);
+        const end = close < 0 ? n : close + dollar[0].length;
+        const raw = sql.slice(i, end);
+        out.push({ w: "'STR'", depth, line, raw });
+        line += raw.split('\n').length - 1;
+        i = end;
+        continue;
+      }
+      if ((c === 'E' || c === 'e') && sql[i + 1] === "'" && !/[A-Za-z0-9_$]/.test(sql[i - 1] ?? '')) {
+        const start = i;
+        const startLine = line;
+        i += 2;
+        while (i < n) {
+          if (sql[i] === '\n') line++;
+          if (sql[i] === '\\') { i += 2; continue; }
+          if (sql[i] === "'") {
+            if (sql[i + 1] === "'") { i += 2; continue; }
+            i++;
+            break;
+          }
+          i++;
+        }
+        out.push({ w: "'STR'", depth, line: startLine, raw: sql.slice(start, i) });
+        continue;
+      }
+    }
+    // `[` is an array subscript in PostgreSQL, a quoted identifier in T-SQL/SQLite.
+    if (c === "'" || c === '"' || c === '`' || (c === '[' && dialect !== 'plsql' && dialect !== 'pgsql')) {
       const close = c === '[' ? ']' : c;
       const start = i;
       i++;

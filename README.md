@@ -1,7 +1,8 @@
 # DbStudio
 
-DbStudio is a fast, keyboard-first desktop SQL client for **Microsoft SQL Server**, **Oracle** and **SQLite**,
-for **Windows** and **macOS** (Apple Silicon and Intel).
+DbStudio is a fast, keyboard-first desktop database client for **Microsoft SQL Server**, **Oracle**, **PostgreSQL**
+and **SQLite**, with workspaces for **Redis**, **MongoDB** and **Kafka**, for **Windows** and **macOS** (Apple
+Silicon and Intel).
 It pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas grid that stays
 smooth at hundreds of thousands of rows, and keeps every database driver out of the UI: a .NET 10 engine
 runs as a local sidecar process and the React UI talks to it over authenticated HTTP and WebSocket.
@@ -44,6 +45,41 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 - **Design system**: tokens for light and dark themes (following the OS live), lucide icons, empty states,
   visible focus rings, screen-reader announcements of run results, Settings (Ctrl+,).
 
+## Features (M2)
+
+- **PostgreSQL** as a fourth SQL provider (Npgsql): explorer with schemas, tables, views, materialized views,
+  functions, procedures, sequences, types and extensions; `search_path`-aware IntelliSense with lower-case folding,
+  `$$ … $$` bodies and PL/pgSQL keywords; server diagnostics through `PREPARE` in a read-only, rolled-back transaction
+  (never executes); manual transactions with a savepoint per statement, so one failed statement never aborts the
+  transaction; `$1`, `:name` and `@name` parameters; NOTICE/RAISE messages with CONTEXT; `EXPLAIN (FORMAT JSON)`
+  in the plan viewer (estimated and ANALYZE); table designer, formatter, snippets and code generation for `pgsql`.
+- **ER diagram** (Ctrl+Alt+E, or "Diagram of related tables" on a table, or `er:` in Ctrl+P): per schema, per
+  selection or a table and its foreign-key neighbours, for SQL Server, Oracle, PostgreSQL and SQLite. Auto layout
+  (layered or grid, in a worker), drag to arrange (saved per connection and scope), minimap, search, level of detail
+  for 500+ tables, crow's-foot edges, keyboard-only navigation (Tab, Enter opens data, F4 designs), drag a column
+  onto another table to create a foreign key, PNG and SVG export.
+- **Redis** (standalone, cluster, sentinel; TLS): key browser over SCAN with a folder tree, TTL countdown and an
+  editor per type (string with JSON/hex views, hash, list, set, sorted set, stream with consumer groups, ReJSON),
+  delete-by-pattern as a cancellable job, workbench with command completion and docs, CLI, Pub/Sub, slowlog, info
+  dashboard and memory analysis.
+- **MongoDB** (URI and SRV, replica sets, Atlas): documents as list, JSON or table with Extended JSON round trips
+  (ObjectId, Date, Decimal128, Binary, Long), filter/projection/sort with field and operator completion, aggregation
+  builder with per-stage previews and code export (five languages), schema analysis, indexes with build progress,
+  validation rules, explain tree with COLLSCAN warnings, import (JSON, JSONL, CSV) and export, change-stream badge.
+- **Kafka** (PLAINTEXT, SASL, SSL; Schema Registry): cluster overview, topics with configs, partitions, purge and
+  typed-confirmation deletes, message browser by offset, timestamp or latest/oldest across partitions with string,
+  JSON, hex, integer, Avro and Protobuf decoders, live tail, produce with headers and schemas, consumer groups with
+  lag and offset reset (dry run first, refused while the group is active).
+- **Logs & activity** (Ctrl+Alt+Shift+L, the explorer's "Logs & activity", or *Activity* in the Connections panel):
+  server logs per provider (SQL Server error and agent logs and system_health, Oracle alert log, PostgreSQL server log,
+  Redis slowlog/latency/MONITOR, MongoDB getLog/profiler/change stream, Kafka client log) with level, time and search
+  filters, live tail and export; an Activity grid of sessions, operations, locks and blocking chains with Kill
+  (typed confirmation), Kafka jobs and consumer groups; missing privileges show the exact GRANT to ask for. The
+  engine's own log is always available (also from engine error toasts: *Open engine log*).
+- Redis, MongoDB and Kafka keep one shared client per connection (listed under *Clients* in the Connections panel),
+  enforce read-only connections in the engine and stream live data (tails, Pub/Sub, change streams) over the same
+  WebSocket as query results. Ctrl+P finds Redis keys (`k:`), Mongo collections (`coll:`) and Kafka topics (`t:`).
+
 ## Architecture
 
 ```
@@ -64,13 +100,15 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 |    runs in renderer over cached   |  WS    |  SessionManager  -> one DbConnection per tab    |
 |    CatalogSnapshot)               |<------>|  CatalogService  -> per-connection cache        |
 |  glide-data-grid results          | events |  ExecutionService-> streams rows over WS        |
-|  platform/ adapter:               |        |  Providers: Sqlite | SqlServer | Oracle         |
-|    electron | browser             |        |  TSql diagnostics (ScriptDom)                   |
+|  platform/ adapter:               |        |  Providers: Sqlite | SqlServer | Oracle | PgSql |
+|    electron | browser             |        |  Sources: Redis | MongoDB | Kafka (+ streams)  |
+|                                   |        |  TSql diagnostics (ScriptDom), Logs, Diagrams   |
 +-----------------------------------+        |  SecretStore (DPAPI/Keychain), History, Settings|
                                              +----------------+--------------------------------+
-                                                              | ADO.NET drivers
+                                                              | ADO.NET drivers, StackExchange.Redis,
+                                                              | MongoDB.Driver, Confluent.Kafka
                                                               v
-                                              SQL Server      Oracle          SQLite file
+                       SQL Server   Oracle   PostgreSQL   SQLite file   Redis   MongoDB   Kafka
 ```
 
 - The UI is identical in Electron and in a plain browser; only `ui/src/platform` differs.
@@ -85,7 +123,7 @@ The full design is in [docs/PLAN.md](docs/PLAN.md).
 
 | Folder | What |
 |---|---|
-| `engine/` | .NET 10 solution (`DbStudio.slnx`): Core, Host (HTTP/WS API), providers, tests |
+| `engine/` | .NET 10 solution (`DbStudio.slnx`): Core, Host (HTTP/WS API), SQL providers, `Sources.{Redis,Mongo,Kafka}`, `Logs`, tests |
 | `ui/` | React 18 + TypeScript + Vite renderer, IntelliSense in `src/intel`, editor in `src/editor` |
 | `desktop/` | Electron shell: main process, preload, packaging (`electron-builder.yml`) |
 | `scripts/` | `dev.ps1`, `build.ps1` (Windows installer), `build.sh` (macOS DMG), `stamp-version.ps1` |
@@ -95,7 +133,7 @@ The full design is in [docs/PLAN.md](docs/PLAN.md).
 - Windows 10/11 x64, or macOS 12+ (arm64 or x64) for development and macOS builds
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` >= 10.0)
 - [Node.js 24](https://nodejs.org/) with npm
-- Optional: Docker Desktop for the SQL Server and Oracle test databases
+- Optional: Docker Desktop for the sample and test databases (SQL Server, Oracle, PostgreSQL, Redis, MongoDB, Kafka)
 
 ## Development
 
@@ -235,20 +273,33 @@ builds the NSIS installer and uploads it. **macOS** (`macos-latest`) runs the en
 Keychain round trip) and the desktop tests, then `scripts/build.sh` and uploads the arm64 and x64 DMGs and ZIPs.
 Download them from the run's **Artifacts** section.
 
-## Test databases (Docker)
+## Sample and test databases (Docker)
 
-SQLite needs nothing. For SQL Server and Oracle, the engine tests ship a compose file with the "shop" fixture
-schema (see `engine/tests/docker/README.md`):
+SQLite needs nothing (File > Open the sample database). For everything else, `engine/tests/docker/compose.yml`
+(compose project `dbstudio-it`) starts seeded sample servers with the "shop" data, which are also what the
+integration tests run against (details and seeds in `engine/tests/docker/README.md`):
 
 ```powershell
-docker compose -f engine/tests/docker/compose.yml up -d
-# SQL Server 2022: localhost,1433  user sa       (password from the compose file)
-# Oracle 23 Free:  localhost:1521  service FREEPDB1, user shop
-$env:DBSTUDIO_IT='1'; dotnet test engine/DbStudio.slnx
+docker compose -f engine/tests/docker/compose.yml up -d                     # SQL Server, Oracle, PostgreSQL, Redis, MongoDB
+docker compose -f engine/tests/docker/compose.yml --profile kafka up -d     # + Kafka and Schema Registry
 ```
 
-Images: `mcr.microsoft.com/mssql/server:2022-latest` and `gvenzl/oracle-free:23-slim`. Without Docker the
-integration tests are skipped and the rest of the suite still runs.
+| Server | Connect DbStudio to | Credentials |
+|---|---|---|
+| SQL Server 2022 | `localhost,14333`, database `shop` | `sa` / `DbStudio_Dev_2026!` |
+| Oracle 23 Free | `localhost:15211`, service `FREEPDB1` | `shop` / `shop` |
+| PostgreSQL 17 | `localhost:15432`, database `shop` | `shop` / `shop` |
+| Redis Stack 7.4 | `localhost:16379` (RedisInsight on `:18001`) | none |
+| MongoDB 7 (replica set) | `mongodb://localhost:27018/?directConnection=true` | none |
+| Kafka 3.8 (KRaft) | `localhost:19092`, Schema Registry `http://localhost:18081` | none |
+
+```powershell
+$env:DBSTUDIO_IT='1'; dotnet test engine/DbStudio.slnx    # Docker suites: Testcontainers, or the servers above via env vars
+```
+
+Images: `mcr.microsoft.com/mssql/server:2022-latest`, `gvenzl/oracle-free:23-slim`, `postgres:17`,
+`redis/redis-stack:7.4.0-v1`, `mongo:7`, `apache/kafka:3.8.0`, `confluentinc/cp-schema-registry:7.7.1`. Without
+Docker (or with `DBSTUDIO_IT=0`) the integration tests are skipped and the rest of the suite still runs.
 
 ## Keyboard shortcuts
 
@@ -276,6 +327,8 @@ integration tests are skipped and the rest of the suite still runs.
 | Reopen closed tab / switch tabs | Ctrl+Shift+T / Ctrl+Tab, Ctrl+1…9 |
 | Maximize results | Ctrl+Shift+R |
 | Settings | Ctrl+, |
+| ER diagram | Ctrl+Alt+E |
+| Logs & activity | Ctrl+Alt+Shift+L |
 
 On macOS every Ctrl shortcut above uses ⌘ (Cmd). The shortcut sheet (F1) always shows the complete, current list.
 
@@ -290,6 +343,7 @@ The data folder is `%APPDATA%\DbStudio` on Windows, `~/Library/Application Suppo
 | What | Where (inside the data folder) |
 |---|---|
 | Saved connections, settings, query history | `connections.json`, `settings.json`, `history.db` |
+| Saved data filters, ER diagram layouts | `filters.json`, `diagrams.json` |
 | Saved passwords | Windows: `secrets.dat`, encrypted with DPAPI for the current Windows user (they do not roam to other machines or accounts). macOS: the login keychain, one "DbStudio" item per connection (Keychain Access shows them; they never touch the data folder). Linux: `secrets.aes.json`, AES-GCM with a key in `secrets.key` (mode 0600); this only keeps passwords out of plain files, it does not protect them from software running as you |
 | Open tabs and unsaved editor text | `workspace.json` |
 | Logs (engine output, startup errors) | `logs/` (Help > Open Logs Folder) |

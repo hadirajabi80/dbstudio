@@ -11,7 +11,7 @@ import (
 	"github.com/godror/godror"
 )
 
-// Customer is a row of SHOP.CUSTOMERS: Registered customer.
+// Customer is a row of SHOP.CUSTOMERS: Registered customers.
 type Customer struct {
 	ID        float64  `db:"ID" json:"id"`
 	Name      string   `db:"NAME" json:"name"`
@@ -482,7 +482,7 @@ func (s *VOrderTotalStore) List(ctx context.Context) ([]VOrderTotal, error) {
 	return items, rows.Err()
 }
 
-// Invoice is a row of SHOP.INVOICES: Issued invoice.
+// Invoice is a row of SHOP.INVOICES: Issued invoices.
 type Invoice struct {
 	InvoiceID  int64          `db:"INVOICE_ID" json:"invoiceId"`
 	CustomerID int32          `db:"CUSTOMER_ID" json:"customerId"`

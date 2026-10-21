@@ -1,5 +1,6 @@
 // Database type → language type resolution over the per-dialect tables in this folder.
 import type { ColumnKind, Dialect } from '../../api/types';
+import pgsql from './pgsql.json';
 import plsql from './plsql.json';
 import sqlite from './sqlite.json';
 import tsql from './tsql.json';
@@ -25,8 +26,7 @@ function table(json: Record<string, unknown>): Table {
   return out;
 }
 
-// pgsql: M2-0 placeholder (empty table = wire-kind fallback); PG-C adds the PostgreSQL type table.
-export const TYPE_TABLES: Record<Dialect, Table> = { tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite), pgsql: table({}) };
+export const TYPE_TABLES: Record<Dialect, Table> = { tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite), pgsql: table(pgsql) };
 
 export interface ResolvedType extends TypeRow {
   /** Normalized base type used for the lookup (`nvarchar`, `number#decimal`). */
@@ -39,11 +39,21 @@ export interface ResolvedType extends TypeRow {
   scale: number | null;
   /** Original database type text. */
   dbType: string;
+  /** PostgreSQL array (`text[]`, `integer[][]`): the language types are the element's wrapped in the language's list type. */
+  array?: boolean;
+  /** Element type of an array. */
+  element?: ResolvedType;
+  /** Labels of a user enum type (from the catalog), in declaration order. */
+  enumLabels?: string[];
 }
 
 export interface TypeOptions {
   /** Oracle NUMBER(1) → bool. */
   numberOneAsBool?: boolean;
+  /** PostgreSQL: labels of the column's enum type (catalog `type` object), when it is one. */
+  enumLabels?: string[] | null;
+  /** PostgreSQL: base type text of the column's domain type, when it is one. */
+  domainBase?: string | null;
 }
 
 const UNKNOWN: TypeRow = { logical: 'object', cs: 'object', go: 'any', ts: 'unknown', java: 'Object', py: 'Any' };
@@ -112,9 +122,38 @@ function sqliteAffinity(base: string): string {
   return 'numeric';
 }
 
+/** Wrap an element type in each language's list type (PostgreSQL arrays). */
+/** Java element types of arrays are boxed: pgjdbc's `Array.getArray()` returns `Integer[]`, never `int[]`. */
+const JAVA_BOXED: Record<string, string> = {
+  boolean: 'Boolean', byte: 'Byte', short: 'Short', int: 'Integer', long: 'Long', float: 'Float', double: 'Double', char: 'Character',
+};
+
+function arrayRow(e: TypeRow): TypeRow {
+  const java = JAVA_BOXED[e.java] ?? e.java;
+  return { logical: 'object', cs: `${e.cs}[]`, go: `[]${e.go}`, ts: /^[A-Za-z_.]+$/.test(e.ts) ? `${e.ts}[]` : `(${e.ts})[]`, java: `${java}[]`, py: `list[${e.py}]` };
+}
+
+/** PostgreSQL spellings normalised to the table keys: `timestamp(3) with time zone`, `character varying(20)`, `_int4`. */
+function pgBase(base: string): string {
+  const b = base.replace(/^pg_catalog\./, '').replace(/^"(.*)"$/, '$1');
+  if (b === 'character varying') return 'varchar';
+  if (b === 'bit varying') return 'varbit';
+  return b;
+}
+
 /** Resolve a database type text to language types. */
 export function resolveType(dialect: Dialect, typeText: string, opts: TypeOptions & { kind?: ColumnKind } = {}): ResolvedType {
-  const { base: rawBase, args } = parseTypeText(typeText);
+  if (dialect === 'pgsql') {
+    const t = typeText.trim();
+    // `integer[]`, `varchar(20)[]`, `text ARRAY`; the catalog's internal `_int4` spelling too.
+    const arr = /^(.*?)(\s*\[\s*\d*\s*\])+$/.exec(t) ?? /^(.*?)\s+array$/i.exec(t) ?? (/^_[a-z]/i.test(t) && TYPE_TABLES.pgsql[t.slice(1)] ? [t, t.slice(1)] : null);
+    if (arr) {
+      const element = resolveType(dialect, arr[1], { ...opts, kind: undefined });
+      return { ...arrayRow(element), base: `${element.base}[]`, known: element.known, length: null, precision: null, scale: null, dbType: typeText, array: true, element };
+    }
+  }
+  const { base: rawBase0, args } = parseTypeText(typeText);
+  const rawBase = dialect === 'pgsql' ? pgBase(rawBase0) : rawBase0;
   const tbl = TYPE_TABLES[dialect];
   let base = rawBase;
   let length: number | null = null;
@@ -149,6 +188,15 @@ export function resolveType(dialect: Dialect, typeText: string, opts: TypeOption
   if (!row && dialect === 'sqlite') {
     row = tbl[sqliteAffinity(rawBase)];
     known = true;
+  }
+  // PostgreSQL domain / user enum (unknown base, info from the catalog): before the wire-kind fallback, which would
+  // turn a query's enum column into a plain string and drop its labels.
+  if (!row && dialect === 'pgsql' && opts.domainBase) {
+    const b = resolveType(dialect, opts.domainBase, { ...opts, domainBase: null });
+    return { ...b, dbType: typeText };
+  }
+  if (!row && dialect === 'pgsql' && opts.enumLabels?.length) {
+    return { ...LOGICAL_DEFAULTS.string, base, known: true, length: null, precision: null, scale: null, dbType: typeText, enumLabels: [...opts.enumLabels] };
   }
   if (!row && opts.kind) {
     row = LOGICAL_DEFAULTS[KIND_FALLBACK[opts.kind]];

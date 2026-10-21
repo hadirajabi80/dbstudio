@@ -1,0 +1,14 @@
+BEGIN;
+UPDATE orders
+SET status = 'paid'
+WHERE id = 1;
+
+SAVEPOINT before_delete;
+DELETE FROM order_lines
+WHERE order_id = 1;
+
+ROLLBACK TO SAVEPOINT before_delete;
+RELEASE SAVEPOINT before_delete;
+COMMIT;
+START TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+END;

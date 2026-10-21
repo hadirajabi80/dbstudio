@@ -2,6 +2,7 @@ import { RefreshCw } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { boot } from './app/boot';
 import { handleMenuCommand } from './app/commands';
+import { windowTitle } from './app/windowTitle';
 import { installKeyDispatcher } from './commands/dispatcher';
 import { CommandPalette } from './components/CommandPalette/CommandPalette';
 import { ConnectionDialogHost } from './components/ConnectionDialog/ConnectionDialog';
@@ -123,8 +124,7 @@ function useWindowTitle() {
   const tab = useActiveTab();
   const conn = useConnections((s) => s.connections.find((c) => c.id === tab?.connectionId));
   useEffect(() => {
-    const parts = [tab?.title, conn?.name, 'DbStudio'].filter(Boolean);
-    getPlatform().setTitle(parts.join(' — '));
+    getPlatform().setTitle(windowTitle(tab?.title, conn?.name));
   }, [tab?.title, conn?.name]);
 }
 

@@ -11,7 +11,7 @@ import { normalizeOptions, type CodegenOptions } from './options';
 
 export * from './model';
 export * from './options';
-export { fromCatalogObject, fromColumnInfos, findCatalogObject, queryObject } from './fromCatalog';
+export { attachUserTypes, fromCatalogObject, fromColumnInfos, findCatalogObject, queryObject, userTypesOf, type UserTypes } from './fromCatalog';
 export { detectQueryParams, rewriteQuery } from './sqlgen';
 export { inferQueryParamTypes, paramTypeOfColumn } from './paramTypes';
 export { resolveType, TYPE_TABLES } from './types';

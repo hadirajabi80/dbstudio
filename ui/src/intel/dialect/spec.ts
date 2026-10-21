@@ -11,6 +11,11 @@ export interface FunctionDef {
   doc: string;
   since?: string;
   deprecated?: boolean;
+  /**
+   * Set-returning functions (`kind: 'table'`): output column names. Absent: one column named after the function
+   * (PostgreSQL names a scalar SRF's column after its table alias when one is given).
+   */
+  columns?: string[];
 }
 export interface PackageMemberDef { name: string; kind: 'proc' | 'func'; signatures: FunctionSignature[]; doc?: string }
 export interface PackageDef { name: string; doc: string; members: PackageMemberDef[] }
@@ -18,6 +23,15 @@ export interface OperatorDef { op: string; doc: string }
 export interface FunctionCatalogJson { functions: FunctionDef[]; packages?: PackageDef[]; operators?: OperatorDef[] }
 
 export interface SnippetDef { prefix: string; label: string; body: string; doc: string }
+
+export type CaseFolding = 'upper' | 'lower' | 'insensitive';
+
+/** Lookup form of a name under a folding rule ('insensitive' compares upper-cased; quoted names are exact otherwise). */
+export function foldName(name: string, quoted: boolean, folding: CaseFolding): string {
+  if (folding === 'insensitive') return name.toUpperCase();
+  if (quoted) return name;
+  return folding === 'upper' ? name.toUpperCase() : name.toLowerCase();
+}
 
 export interface DialectSpec {
   id: Dialect;
@@ -38,8 +52,13 @@ export interface DialectSpec {
   operators: OperatorDef[];
   /** Preferred quote for generated identifiers. */
   quote: [string, string];
-  /** 'upper': unquoted identifiers fold to upper case and quoted ones are exact (Oracle); 'insensitive': all case-insensitive. */
-  caseFolding: 'upper' | 'insensitive';
+  /**
+   * 'upper': unquoted identifiers fold to upper case and quoted ones are exact (Oracle); 'lower': unquoted ones fold to
+   * lower case and quoted ones are exact (PostgreSQL); 'insensitive': all case-insensitive.
+   */
+  caseFolding: CaseFolding;
+  /** Lookup form of a name written in SQL under `caseFolding`. */
+  fold(name: string, quoted: boolean): string;
   batchSeparator: 'go' | 'slash' | null;
   /** Characters that are valid inside an unquoted identifier besides letters, digits and `_`. */
   identExtra: string;
@@ -81,7 +100,7 @@ export function buildSpec(init: {
   dataTypes: string;
   catalog: FunctionCatalogJson;
   quote: [string, string];
-  caseFolding: 'upper' | 'insensitive';
+  caseFolding: CaseFolding;
   batchSeparator: 'go' | 'slash' | null;
   identExtra: string;
   snippets: SnippetDef[];
@@ -116,6 +135,7 @@ export function buildSpec(init: {
     operators: init.catalog.operators ?? [],
     quote: init.quote,
     caseFolding: init.caseFolding,
+    fold: (name: string, quoted: boolean) => foldName(name, quoted, init.caseFolding),
     batchSeparator: init.batchSeparator,
     identExtra: init.identExtra,
     snippets: init.snippets,

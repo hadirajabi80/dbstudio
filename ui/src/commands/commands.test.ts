@@ -5,7 +5,7 @@ import { registerEditor } from '../app/editors';
 import type { SqlEditorHandle } from '../editor/SqlEditor.types';
 import { initCommands, loadedCommandModules } from '.';
 import { LEGACY_IDS } from './core';
-import { installKeyDispatcher, resolveKey, scopesFor } from './dispatcher';
+import { installKeyDispatcher, resolveKey, routeMenuCommand, scopesFor } from './dispatcher';
 import { displayShortcut, eventStroke, FORMAT_ALT_SHORTCUT, isAltGraphCharacter, normalizeShortcut, setPlatformForTests, shortcutKeys, toAccelerator, tooltipWithShortcut } from './keys';
 import { CONSOLE_TOOLBAR, CONTEXT_MENUS, MENUS, TOPBAR, menuCommandIds, type ContextEntry } from './menuModel';
 import { DATATAB_TOOLBAR, GRID_CELL_EDIT_MENU, GRID_CELL_PENDING_MENU, GRID_COPY_AS_MENU, GRID_EXPORT_MENU, GRID_SAVE_MENU, RESULTS_TOOLBAR } from '../components/ResultsPane/toolbarModel';
@@ -149,6 +149,7 @@ describe('shortcuts', () => {
       'dataTab.reload|f5': 'run.script',
       // F4 in a Data tab designs its table: the same action as the global Design / edit object.
       'dataTab.design|f4': 'designer.edit',
+      'er.design|f4': 'designer.edit', // M2-ER: F4 on an ER card designs that table
       // Ctrl+S saves what has focus: pending grid edits, the open designer (the console's file otherwise).
       'grid.submitChanges|ctrl+s': 'file.save',
       'grid.submitFromEditor|ctrl+s': 'file.save',
@@ -248,6 +249,30 @@ describe('shortcuts', () => {
     expect(resolveKey('ctrl+enter', ['editor', 'global'], { editor: true })).toBeNull();
     expect(resolveKey('ctrl+shift+p', ['editor', 'global'], { editor: true })).toBe('view.commandPalette');
     div.remove();
+  });
+
+  it("a native-menu accelerator runs the focused view's command for the same key (F4 in Electron)", () => {
+    const run = vi.fn();
+    const dispose = registerCommand({ id: 'test.scopedF4', title: 'Scoped F4', category: 'Test', shortcut: 'F4', scope: 'test-f4', run });
+    const host = document.createElement('div');
+    host.setAttribute('data-command-scope', 'test-f4');
+    const btn = document.createElement('button');
+    host.appendChild(btn);
+    document.body.appendChild(host);
+    try {
+      expect(routeMenuCommand('designer.edit', btn)).toBe('test.scopedF4');
+      // outside the scope, on the body, or with a command without a key, the menu's own command runs
+      expect(routeMenuCommand('designer.edit', document.body)).toBe('designer.edit');
+      expect(routeMenuCommand('designer.edit', null)).toBe('designer.edit');
+      expect(routeMenuCommand('connections.refreshCatalog', btn)).toBe('connections.refreshCatalog');
+      // a modal dialog keeps the menu command
+      host.setAttribute('role', 'dialog');
+      host.setAttribute('aria-modal', 'true');
+      expect(routeMenuCommand('designer.edit', btn)).toBe('designer.edit');
+    } finally {
+      host.remove();
+      dispose();
+    }
   });
 });
 

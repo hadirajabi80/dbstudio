@@ -1,0 +1,6271 @@
+{
+ "functions": [
+  {
+   "name": "length",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    },
+    {
+     "params": [
+      "bytes bytea"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of characters in the string (bytes for bytea)."
+  },
+  {
+   "name": "char_length",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of characters in the string."
+  },
+  {
+   "name": "character_length",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of characters in the string (SQL standard spelling of char_length)."
+  },
+  {
+   "name": "octet_length",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of bytes in the string (its encoded length)."
+  },
+  {
+   "name": "bit_length",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of bits in the string (8 × octet_length)."
+  },
+  {
+   "name": "lower",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "text",
+   "doc": "Lower-cases a string; for a range, its lower bound."
+  },
+  {
+   "name": "upper",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "text",
+   "doc": "Upper-cases a string; for a range, its upper bound."
+  },
+  {
+   "name": "initcap",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Upper-cases the first letter of each word and lower-cases the rest."
+  },
+  {
+   "name": "concat",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "val1 \"any\"",
+      "[val2 ... \"any\"]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Concatenates the text forms of all arguments; NULL arguments are ignored."
+  },
+  {
+   "name": "concat_ws",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "sep text",
+      "val1 \"any\"",
+      "[val2 ... \"any\"]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Concatenates all but the first argument with separators; NULLs are skipped."
+  },
+  {
+   "name": "format",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "formatstr text",
+      "[formatarg ... \"any\"]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Formats arguments like sprintf: %s plain, %I quoted identifier, %L quoted literal."
+  },
+  {
+   "name": "left",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "n integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "First n characters; with a negative n, all but the last |n| characters."
+  },
+  {
+   "name": "right",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "n integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Last n characters; with a negative n, all but the first |n| characters."
+  },
+  {
+   "name": "lpad",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "length integer",
+      "[fill text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Pads on the left to the given length with fill (default a space); truncates on the right if longer."
+  },
+  {
+   "name": "rpad",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "length integer",
+      "[fill text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Pads on the right to the given length with fill (default a space); truncates if longer."
+  },
+  {
+   "name": "ltrim",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "[characters text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Removes the longest leading run of the given characters (default spaces)."
+  },
+  {
+   "name": "rtrim",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "[characters text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Removes the longest trailing run of the given characters (default spaces)."
+  },
+  {
+   "name": "btrim",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "[characters text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Removes the given characters (default spaces) from both ends."
+  },
+  {
+   "name": "trim",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[LEADING/TRAILING/BOTH] [characters text] FROM str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "SQL standard trim: removes characters from the start, end or both ends."
+  },
+  {
+   "name": "substring",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text FROM start integer [FOR count integer]"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "str text",
+      "start integer",
+      "[count integer]"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "str text FROM pattern text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Extracts a substring by position, or the part matching a POSIX regular expression."
+  },
+  {
+   "name": "substr",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "start integer",
+      "[count integer]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Extracts the substring starting at position start (1-based), optionally count characters long."
+  },
+  {
+   "name": "position",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "substring text IN str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Position (1-based) of the first occurrence of substring, 0 when not found."
+  },
+  {
+   "name": "strpos",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "substring text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Position (1-based) of the first occurrence of substring, 0 when not found."
+  },
+  {
+   "name": "overlay",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text PLACING newsubstring text FROM start integer [FOR count integer]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Replaces count characters starting at start with newsubstring."
+  },
+  {
+   "name": "replace",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "from text",
+      "to text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Replaces every occurrence of from with to."
+  },
+  {
+   "name": "translate",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "from text",
+      "to text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Replaces each character of from by the matching character of to; extra characters of from are deleted."
+  },
+  {
+   "name": "repeat",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "n integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "The string repeated n times."
+  },
+  {
+   "name": "reverse",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "The characters in reverse order."
+  },
+  {
+   "name": "split_part",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "delimiter text",
+      "n integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "The n-th field when splitting at delimiter (negative n counts from the end)."
+  },
+  {
+   "name": "string_to_array",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "delimiter text",
+      "[null_string text]"
+     ],
+     "returns": "text[]"
+    }
+   ],
+   "returns": "text[]",
+   "doc": "Splits the string at delimiter into an array; fields equal to null_string become NULL."
+  },
+  {
+   "name": "string_to_table",
+   "category": "string",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "delimiter text",
+      "[null_string text]"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "Splits the string at delimiter and returns one row per field."
+  },
+  {
+   "name": "regexp_replace",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "source text",
+      "pattern text",
+      "replacement text",
+      "[flags text]"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "source text",
+      "pattern text",
+      "replacement text",
+      "start integer",
+      "[n integer]",
+      "[flags text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Replaces the first (or with flag g every) POSIX regex match; \\1..\\9 refer to groups."
+  },
+  {
+   "name": "regexp_match",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[flags text]"
+     ],
+     "returns": "text[]"
+    }
+   ],
+   "returns": "text[]",
+   "doc": "Captured groups of the first POSIX regex match (the whole match without groups), NULL when none."
+  },
+  {
+   "name": "regexp_matches",
+   "category": "string",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[flags text]"
+     ],
+     "returns": "setof text[]"
+    }
+   ],
+   "returns": "setof text[]",
+   "doc": "One row of captured groups per match (all matches with flag g)."
+  },
+  {
+   "name": "regexp_split_to_array",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[flags text]"
+     ],
+     "returns": "text[]"
+    }
+   ],
+   "returns": "text[]",
+   "doc": "Splits the string at POSIX regex matches into an array."
+  },
+  {
+   "name": "regexp_split_to_table",
+   "category": "string",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[flags text]"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "Splits the string at POSIX regex matches, one row per piece."
+  },
+  {
+   "name": "regexp_like",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[flags text]"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the POSIX regex matches (PostgreSQL 15+)."
+  },
+  {
+   "name": "regexp_count",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[start integer]",
+      "[flags text]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of POSIX regex matches (PostgreSQL 15+)."
+  },
+  {
+   "name": "regexp_substr",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[start integer]",
+      "[n integer]",
+      "[flags text]",
+      "[subexpr integer]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "The n-th POSIX regex match or one of its groups (PostgreSQL 15+)."
+  },
+  {
+   "name": "regexp_instr",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "pattern text",
+      "[start integer]",
+      "[n integer]",
+      "[endoption integer]",
+      "[flags text]",
+      "[subexpr integer]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Position of the n-th POSIX regex match (PostgreSQL 15+)."
+  },
+  {
+   "name": "starts_with",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "prefix text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the string starts with prefix."
+  },
+  {
+   "name": "md5",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "MD5 hash as 32 hexadecimal digits."
+  },
+  {
+   "name": "sha256",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "data bytea"
+     ],
+     "returns": "bytea"
+    }
+   ],
+   "returns": "bytea",
+   "doc": "SHA-256 digest (also sha224, sha384, sha512)."
+  },
+  {
+   "name": "sha512",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "data bytea"
+     ],
+     "returns": "bytea"
+    }
+   ],
+   "returns": "bytea",
+   "doc": "SHA-512 digest."
+  },
+  {
+   "name": "encode",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "data bytea",
+      "format text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Encodes binary data as base64, escape or hex text."
+  },
+  {
+   "name": "decode",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "format text"
+     ],
+     "returns": "bytea"
+    }
+   ],
+   "returns": "bytea",
+   "doc": "Decodes base64, escape or hex text into binary data."
+  },
+  {
+   "name": "quote_ident",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Quotes the string as an identifier when needed (doubling embedded quotes)."
+  },
+  {
+   "name": "quote_literal",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Quotes the string as a literal; NULL yields NULL."
+  },
+  {
+   "name": "quote_nullable",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Quotes the string as a literal; NULL yields the text NULL."
+  },
+  {
+   "name": "to_hex",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "n bigint"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Hexadecimal representation of the number."
+  },
+  {
+   "name": "ascii",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Code point of the first character."
+  },
+  {
+   "name": "chr",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "code integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Character with the given code point."
+  },
+  {
+   "name": "unistr",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Evaluates Unicode escapes (\\XXXX, \\+XXXXXX) in the string (PostgreSQL 14+)."
+  },
+  {
+   "name": "normalize",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "[form NFC/NFD/NFKC/NFKD]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Unicode normalization of the string (PostgreSQL 13+)."
+  },
+  {
+   "name": "to_ascii",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "[encoding name]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Converts the string from another encoding to ASCII (drops accents)."
+  },
+  {
+   "name": "convert_from",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "bytes bytea",
+      "src_encoding name"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Decodes binary data in the given encoding into text."
+  },
+  {
+   "name": "convert_to",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "dest_encoding name"
+     ],
+     "returns": "bytea"
+    }
+   ],
+   "returns": "bytea",
+   "doc": "Encodes text into binary data in the given encoding."
+  },
+  {
+   "name": "string_agg",
+   "category": "string",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "value text",
+      "delimiter text [ORDER BY ...]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Concatenates non-NULL values separated by delimiter."
+  },
+  {
+   "name": "casefold",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Case folding for case-insensitive comparison (PostgreSQL 18+)."
+  },
+  {
+   "name": "abs",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Absolute value."
+  },
+  {
+   "name": "ceil",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Nearest integer greater than or equal to x."
+  },
+  {
+   "name": "ceiling",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Nearest integer greater than or equal to x."
+  },
+  {
+   "name": "floor",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Nearest integer less than or equal to x."
+  },
+  {
+   "name": "round",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric",
+      "[s integer]"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Rounds to s decimal places (default 0); halves round away from zero for numeric."
+  },
+  {
+   "name": "trunc",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric",
+      "[s integer]"
+     ],
+     "returns": "numeric"
+    },
+    {
+     "params": [
+      "mac macaddr"
+     ],
+     "returns": "macaddr"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Truncates toward zero to s decimal places."
+  },
+  {
+   "name": "sign",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "-1, 0 or +1 by the sign of x."
+  },
+  {
+   "name": "sqrt",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Square root."
+  },
+  {
+   "name": "cbrt",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Cube root."
+  },
+  {
+   "name": "power",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "a numeric",
+      "b numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "a raised to the power b."
+  },
+  {
+   "name": "exp",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "e raised to the power x."
+  },
+  {
+   "name": "ln",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Natural logarithm."
+  },
+  {
+   "name": "log",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    },
+    {
+     "params": [
+      "b numeric",
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Base 10 logarithm, or logarithm of x to base b."
+  },
+  {
+   "name": "log10",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Base 10 logarithm."
+  },
+  {
+   "name": "mod",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "y numeric",
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Remainder of y / x."
+  },
+  {
+   "name": "div",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "y numeric",
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Integer quotient of y / x, truncated toward zero."
+  },
+  {
+   "name": "gcd",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "a integer",
+      "b integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Greatest common divisor (PostgreSQL 13+)."
+  },
+  {
+   "name": "lcm",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "a integer",
+      "b integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Least common multiple (PostgreSQL 13+)."
+  },
+  {
+   "name": "factorial",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "n bigint"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "n! (PostgreSQL 14+)."
+  },
+  {
+   "name": "pi",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "The constant π."
+  },
+  {
+   "name": "random",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "double precision"
+    },
+    {
+     "params": [
+      "min integer",
+      "max integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Random value in [0, 1), or an integer in [min, max] (PostgreSQL 17+)."
+  },
+  {
+   "name": "random_normal",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[mean double precision]",
+      "[stddev double precision]"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Normally distributed random value (PostgreSQL 16+)."
+  },
+  {
+   "name": "setseed",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "seed double precision"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Seed for subsequent random() calls (between -1 and 1)."
+  },
+  {
+   "name": "width_bucket",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "operand numeric",
+      "low numeric",
+      "high numeric",
+      "count integer"
+     ],
+     "returns": "integer"
+    },
+    {
+     "params": [
+      "operand anycompatible",
+      "thresholds anycompatiblearray"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bucket number of operand in an equi-width histogram."
+  },
+  {
+   "name": "degrees",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "radians double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Converts radians to degrees."
+  },
+  {
+   "name": "radians",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "degrees double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Converts degrees to radians."
+  },
+  {
+   "name": "sin",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Sine (argument in radians)."
+  },
+  {
+   "name": "cos",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Cosine (argument in radians)."
+  },
+  {
+   "name": "tan",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Tangent (argument in radians)."
+  },
+  {
+   "name": "asin",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Inverse sine, in radians."
+  },
+  {
+   "name": "acos",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Inverse cosine, in radians."
+  },
+  {
+   "name": "atan",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Inverse tangent, in radians."
+  },
+  {
+   "name": "atan2",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Inverse tangent of y/x, in radians."
+  },
+  {
+   "name": "greatest",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "[value ... anyelement]"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Largest of the arguments; NULLs are ignored."
+  },
+  {
+   "name": "least",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "[value ... anyelement]"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Smallest of the arguments; NULLs are ignored."
+  },
+  {
+   "name": "scale",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of decimal digits in the fractional part."
+  },
+  {
+   "name": "trim_scale",
+   "category": "math",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "x numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Removes trailing fractional zeros (PostgreSQL 13+)."
+  },
+  {
+   "name": "count",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "*"
+     ],
+     "returns": "bigint"
+    },
+    {
+     "params": [
+      "expression \"any\""
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Number of input rows, or of rows where the expression is not NULL."
+  },
+  {
+   "name": "sum",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Sum of the non-NULL input values."
+  },
+  {
+   "name": "avg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Average of the non-NULL input values."
+  },
+  {
+   "name": "min",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Minimum of the non-NULL input values."
+  },
+  {
+   "name": "max",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Maximum of the non-NULL input values."
+  },
+  {
+   "name": "array_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement [ORDER BY ...]"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "Collects the input values (NULLs included) into an array."
+  },
+  {
+   "name": "json_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement [ORDER BY ...]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Collects the input values into a JSON array."
+  },
+  {
+   "name": "jsonb_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement [ORDER BY ...]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Collects the input values into a jsonb array."
+  },
+  {
+   "name": "json_object_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "key \"any\"",
+      "value \"any\""
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Collects key/value pairs into a JSON object."
+  },
+  {
+   "name": "jsonb_object_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "key \"any\"",
+      "value \"any\""
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Collects key/value pairs into a jsonb object."
+  },
+  {
+   "name": "bool_and",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression boolean"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when every non-NULL input is true."
+  },
+  {
+   "name": "bool_or",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression boolean"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when at least one non-NULL input is true."
+  },
+  {
+   "name": "every",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression boolean"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "SQL standard spelling of bool_and."
+  },
+  {
+   "name": "bit_and",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bitwise AND of the non-NULL inputs."
+  },
+  {
+   "name": "bit_or",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bitwise OR of the non-NULL inputs."
+  },
+  {
+   "name": "bit_xor",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bitwise XOR of the non-NULL inputs (PostgreSQL 14+)."
+  },
+  {
+   "name": "any_value",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "An arbitrary non-NULL input value (PostgreSQL 16+)."
+  },
+  {
+   "name": "stddev",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Sample standard deviation (alias of stddev_samp)."
+  },
+  {
+   "name": "stddev_pop",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Population standard deviation."
+  },
+  {
+   "name": "stddev_samp",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Sample standard deviation."
+  },
+  {
+   "name": "variance",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Sample variance (alias of var_samp)."
+  },
+  {
+   "name": "var_pop",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Population variance."
+  },
+  {
+   "name": "var_samp",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression numeric"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Sample variance."
+  },
+  {
+   "name": "corr",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Correlation coefficient."
+  },
+  {
+   "name": "covar_pop",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Population covariance."
+  },
+  {
+   "name": "covar_samp",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Sample covariance."
+  },
+  {
+   "name": "regr_slope",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Slope of the least-squares line."
+  },
+  {
+   "name": "regr_intercept",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "y-intercept of the least-squares line."
+  },
+  {
+   "name": "regr_r2",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Square of the correlation coefficient."
+  },
+  {
+   "name": "regr_count",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "y double precision",
+      "x double precision"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Number of rows where both inputs are not NULL."
+  },
+  {
+   "name": "percentile_cont",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "fraction double precision"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Continuous percentile: use WITHIN GROUP (ORDER BY value); interpolates between rows."
+  },
+  {
+   "name": "percentile_disc",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "fraction double precision"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Discrete percentile: use WITHIN GROUP (ORDER BY value); the first value at or above the fraction."
+  },
+  {
+   "name": "mode",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Most frequent value: use WITHIN GROUP (ORDER BY value)."
+  },
+  {
+   "name": "xmlagg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "expression xml [ORDER BY ...]"
+     ],
+     "returns": "xml"
+    }
+   ],
+   "returns": "xml",
+   "doc": "Concatenates XML values."
+  },
+  {
+   "name": "range_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "value anyrange"
+     ],
+     "returns": "anymultirange"
+    }
+   ],
+   "returns": "anymultirange",
+   "doc": "Union of the input ranges as a multirange (PostgreSQL 14+)."
+  },
+  {
+   "name": "range_intersect_agg",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "value anyrange"
+     ],
+     "returns": "anyrange"
+    }
+   ],
+   "returns": "anyrange",
+   "doc": "Intersection of the input ranges."
+  },
+  {
+   "name": "row_number",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Number of the current row within its partition, counting from 1."
+  },
+  {
+   "name": "rank",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Rank of the current row with gaps (peers share a rank)."
+  },
+  {
+   "name": "dense_rank",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Rank of the current row without gaps."
+  },
+  {
+   "name": "percent_rank",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Relative rank: (rank - 1) / (rows - 1)."
+  },
+  {
+   "name": "cume_dist",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "Cumulative distribution: rows preceding or peer with the current row / total rows."
+  },
+  {
+   "name": "ntile",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "num_buckets integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bucket number from 1 to num_buckets, dividing the partition as equally as possible."
+  },
+  {
+   "name": "lag",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "[offset integer]",
+      "[default anyelement]"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Value from the row offset rows before the current row in the partition."
+  },
+  {
+   "name": "lead",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "[offset integer]",
+      "[default anyelement]"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Value from the row offset rows after the current row in the partition."
+  },
+  {
+   "name": "first_value",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Value at the first row of the window frame."
+  },
+  {
+   "name": "last_value",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Value at the last row of the window frame."
+  },
+  {
+   "name": "nth_value",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "n integer"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Value at the n-th row of the window frame (1-based)."
+  },
+  {
+   "name": "now",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Start time of the current transaction."
+  },
+  {
+   "name": "clock_timestamp",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Current wall-clock time (changes during a statement)."
+  },
+  {
+   "name": "statement_timestamp",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Start time of the current statement."
+  },
+  {
+   "name": "transaction_timestamp",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Start time of the current transaction (same as now())."
+  },
+  {
+   "name": "timeofday",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Current wall-clock time as text."
+  },
+  {
+   "name": "current_date",
+   "category": "datetime",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "date"
+    }
+   ],
+   "returns": "date",
+   "doc": "Current date (start of the transaction)."
+  },
+  {
+   "name": "current_time",
+   "category": "datetime",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [
+      "[precision integer]"
+     ],
+     "returns": "time with time zone"
+    }
+   ],
+   "returns": "time with time zone",
+   "doc": "Current time of day with time zone (start of the transaction)."
+  },
+  {
+   "name": "current_timestamp",
+   "category": "datetime",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [
+      "[precision integer]"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Current date and time (start of the transaction)."
+  },
+  {
+   "name": "localtime",
+   "category": "datetime",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [
+      "[precision integer]"
+     ],
+     "returns": "time"
+    }
+   ],
+   "returns": "time",
+   "doc": "Current time of day without time zone."
+  },
+  {
+   "name": "localtimestamp",
+   "category": "datetime",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [
+      "[precision integer]"
+     ],
+     "returns": "timestamp"
+    }
+   ],
+   "returns": "timestamp",
+   "doc": "Current date and time without time zone."
+  },
+  {
+   "name": "age",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ts1 timestamp",
+      "ts2 timestamp"
+     ],
+     "returns": "interval"
+    },
+    {
+     "params": [
+      "ts timestamp"
+     ],
+     "returns": "interval"
+    }
+   ],
+   "returns": "interval",
+   "doc": "Symbolic interval between two timestamps (or from the timestamp to midnight today)."
+  },
+  {
+   "name": "date_part",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "field text",
+      "source timestamp"
+     ],
+     "returns": "double precision"
+    }
+   ],
+   "returns": "double precision",
+   "doc": "A field (year, month, dow, epoch …) of a date/time or interval value."
+  },
+  {
+   "name": "date_trunc",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "field text",
+      "source timestamp",
+      "[time_zone text]"
+     ],
+     "returns": "timestamp"
+    }
+   ],
+   "returns": "timestamp",
+   "doc": "Truncates to the given precision (microseconds … millennium)."
+  },
+  {
+   "name": "date_bin",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "stride interval",
+      "source timestamp",
+      "origin timestamp"
+     ],
+     "returns": "timestamp"
+    }
+   ],
+   "returns": "timestamp",
+   "doc": "Bins the timestamp into intervals of length stride aligned with origin (PostgreSQL 14+)."
+  },
+  {
+   "name": "date_add",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "base timestamp with time zone",
+      "increment interval",
+      "[time_zone text]"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Adds an interval in the given time zone (PostgreSQL 16+)."
+  },
+  {
+   "name": "date_subtract",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "base timestamp with time zone",
+      "decrement interval",
+      "[time_zone text]"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Subtracts an interval in the given time zone (PostgreSQL 16+)."
+  },
+  {
+   "name": "extract",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "field FROM source timestamp"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "SQL standard field extraction (year, month, day, hour, epoch, dow, isodow, quarter, week …)."
+  },
+  {
+   "name": "make_date",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "year integer",
+      "month integer",
+      "day integer"
+     ],
+     "returns": "date"
+    }
+   ],
+   "returns": "date",
+   "doc": "Builds a date from its fields."
+  },
+  {
+   "name": "make_time",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "hour integer",
+      "min integer",
+      "sec double precision"
+     ],
+     "returns": "time"
+    }
+   ],
+   "returns": "time",
+   "doc": "Builds a time from its fields."
+  },
+  {
+   "name": "make_timestamp",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "year integer",
+      "month integer",
+      "day integer",
+      "hour integer",
+      "min integer",
+      "sec double precision"
+     ],
+     "returns": "timestamp"
+    }
+   ],
+   "returns": "timestamp",
+   "doc": "Builds a timestamp from its fields."
+  },
+  {
+   "name": "make_timestamptz",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "year integer",
+      "month integer",
+      "day integer",
+      "hour integer",
+      "min integer",
+      "sec double precision",
+      "[timezone text]"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Builds a timestamp with time zone from its fields."
+  },
+  {
+   "name": "make_interval",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[years integer]",
+      "[months integer]",
+      "[weeks integer]",
+      "[days integer]",
+      "[hours integer]",
+      "[mins integer]",
+      "[secs double precision]"
+     ],
+     "returns": "interval"
+    }
+   ],
+   "returns": "interval",
+   "doc": "Builds an interval from named fields (use name => value)."
+  },
+  {
+   "name": "to_char",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value timestamp",
+      "format text"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "value numeric",
+      "format text"
+     ],
+     "returns": "text"
+    },
+    {
+     "params": [
+      "value interval",
+      "format text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Formats a date/time or number as text using a template (YYYY-MM-DD, HH24:MI, FM9990.00 …)."
+  },
+  {
+   "name": "to_date",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "format text"
+     ],
+     "returns": "date"
+    }
+   ],
+   "returns": "date",
+   "doc": "Parses text into a date using a template."
+  },
+  {
+   "name": "to_timestamp",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "format text"
+     ],
+     "returns": "timestamp with time zone"
+    },
+    {
+     "params": [
+      "epoch double precision"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Parses text using a template, or converts Unix epoch seconds."
+  },
+  {
+   "name": "to_number",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "format text"
+     ],
+     "returns": "numeric"
+    }
+   ],
+   "returns": "numeric",
+   "doc": "Parses text into a number using a template."
+  },
+  {
+   "name": "isfinite",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value timestamp"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "False for infinity / -infinity dates, timestamps and intervals."
+  },
+  {
+   "name": "justify_days",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "span interval"
+     ],
+     "returns": "interval"
+    }
+   ],
+   "returns": "interval",
+   "doc": "Turns 30-day periods into months."
+  },
+  {
+   "name": "justify_hours",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "span interval"
+     ],
+     "returns": "interval"
+    }
+   ],
+   "returns": "interval",
+   "doc": "Turns 24-hour periods into days."
+  },
+  {
+   "name": "justify_interval",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "span interval"
+     ],
+     "returns": "interval"
+    }
+   ],
+   "returns": "interval",
+   "doc": "Applies justify_days and justify_hours with sign adjustments."
+  },
+  {
+   "name": "timezone",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "zone text",
+      "ts timestamp"
+     ],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Converts between time zones (same as ts AT TIME ZONE zone)."
+  },
+  {
+   "name": "pg_sleep",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "seconds double precision"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Sleeps the given number of seconds."
+  },
+  {
+   "name": "pg_sleep_for",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "duration interval"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Sleeps for the given interval."
+  },
+  {
+   "name": "pg_sleep_until",
+   "category": "datetime",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ts timestamp with time zone"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Sleeps until the given time."
+  },
+  {
+   "name": "to_json",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Converts any SQL value to json."
+  },
+  {
+   "name": "to_jsonb",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Converts any SQL value to jsonb."
+  },
+  {
+   "name": "json_build_object",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key \"any\"",
+      "value \"any\"",
+      "[... \"any\"]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Builds a JSON object from alternating keys and values."
+  },
+  {
+   "name": "jsonb_build_object",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key \"any\"",
+      "value \"any\"",
+      "[... \"any\"]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Builds a jsonb object from alternating keys and values."
+  },
+  {
+   "name": "json_build_array",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[value ... \"any\"]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Builds a JSON array from the arguments."
+  },
+  {
+   "name": "jsonb_build_array",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[value ... \"any\"]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Builds a jsonb array from the arguments."
+  },
+  {
+   "name": "json_object",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "keys_values text[]"
+     ],
+     "returns": "json"
+    },
+    {
+     "params": [
+      "keys text[]",
+      "values text[]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Builds a JSON object from a text array of pairs or two parallel arrays."
+  },
+  {
+   "name": "jsonb_object",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "keys_values text[]"
+     ],
+     "returns": "jsonb"
+    },
+    {
+     "params": [
+      "keys text[]",
+      "values text[]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Builds a jsonb object from a text array of pairs or two parallel arrays."
+  },
+  {
+   "name": "array_to_json",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "[pretty boolean]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Converts an SQL array to a JSON array."
+  },
+  {
+   "name": "row_to_json",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "rec record",
+      "[pretty boolean]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Converts a row to a JSON object."
+  },
+  {
+   "name": "json_array_length",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr json"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of elements of the top-level JSON array."
+  },
+  {
+   "name": "jsonb_array_length",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr jsonb"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of elements of the top-level jsonb array."
+  },
+  {
+   "name": "json_each",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj json"
+     ],
+     "returns": "setof record(key text, value json)"
+    }
+   ],
+   "returns": "setof record(key text, value json)",
+   "doc": "Expands the top-level JSON object into key/value rows.",
+   "columns": [
+    "key",
+    "value"
+   ]
+  },
+  {
+   "name": "jsonb_each",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj jsonb"
+     ],
+     "returns": "setof record(key text, value jsonb)"
+    }
+   ],
+   "returns": "setof record(key text, value jsonb)",
+   "doc": "Expands the top-level jsonb object into key/value rows.",
+   "columns": [
+    "key",
+    "value"
+   ]
+  },
+  {
+   "name": "json_each_text",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj json"
+     ],
+     "returns": "setof record(key text, value text)"
+    }
+   ],
+   "returns": "setof record(key text, value text)",
+   "doc": "Expands the top-level JSON object into key/value rows with text values.",
+   "columns": [
+    "key",
+    "value"
+   ]
+  },
+  {
+   "name": "jsonb_each_text",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj jsonb"
+     ],
+     "returns": "setof record(key text, value text)"
+    }
+   ],
+   "returns": "setof record(key text, value text)",
+   "doc": "Expands the top-level jsonb object into key/value rows with text values.",
+   "columns": [
+    "key",
+    "value"
+   ]
+  },
+  {
+   "name": "json_object_keys",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj json"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "The keys of the top-level JSON object, one row each.",
+   "columns": [
+    "json_object_keys"
+   ]
+  },
+  {
+   "name": "jsonb_object_keys",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "obj jsonb"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "The keys of the top-level jsonb object, one row each.",
+   "columns": [
+    "jsonb_object_keys"
+   ]
+  },
+  {
+   "name": "json_array_elements",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr json"
+     ],
+     "returns": "setof json"
+    }
+   ],
+   "returns": "setof json",
+   "doc": "The elements of the top-level JSON array, one row each.",
+   "columns": [
+    "value"
+   ]
+  },
+  {
+   "name": "jsonb_array_elements",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr jsonb"
+     ],
+     "returns": "setof jsonb"
+    }
+   ],
+   "returns": "setof jsonb",
+   "doc": "The elements of the top-level jsonb array, one row each.",
+   "columns": [
+    "value"
+   ]
+  },
+  {
+   "name": "json_array_elements_text",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr json"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "The elements of the top-level JSON array as text, one row each.",
+   "columns": [
+    "value"
+   ]
+  },
+  {
+   "name": "jsonb_array_elements_text",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr jsonb"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "The elements of the top-level jsonb array as text, one row each.",
+   "columns": [
+    "value"
+   ]
+  },
+  {
+   "name": "json_extract_path",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json json",
+      "[path ... text]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Value at the given key path (like #>)."
+  },
+  {
+   "name": "jsonb_extract_path",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb",
+      "[path ... text]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Value at the given key path (like #>)."
+  },
+  {
+   "name": "json_extract_path_text",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json json",
+      "[path ... text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Value at the given key path as text (like #>>)."
+  },
+  {
+   "name": "jsonb_extract_path_text",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb",
+      "[path ... text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Value at the given key path as text (like #>>)."
+  },
+  {
+   "name": "json_populate_record",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "base anyelement",
+      "from_json json"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Fills a row of the type of base from a JSON object."
+  },
+  {
+   "name": "jsonb_populate_record",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "base anyelement",
+      "from_json jsonb"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "Fills a row of the type of base from a jsonb object."
+  },
+  {
+   "name": "json_populate_recordset",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "base anyelement",
+      "from_json json"
+     ],
+     "returns": "setof anyelement"
+    }
+   ],
+   "returns": "setof anyelement",
+   "doc": "One row of the type of base per object of the JSON array."
+  },
+  {
+   "name": "jsonb_populate_recordset",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "base anyelement",
+      "from_json jsonb"
+     ],
+     "returns": "setof anyelement"
+    }
+   ],
+   "returns": "setof anyelement",
+   "doc": "One row of the type of base per object of the jsonb array."
+  },
+  {
+   "name": "json_to_record",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json json"
+     ],
+     "returns": "record"
+    }
+   ],
+   "returns": "record",
+   "doc": "A row from a JSON object; declare the columns with AS x(a int, b text)."
+  },
+  {
+   "name": "jsonb_to_record",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb"
+     ],
+     "returns": "record"
+    }
+   ],
+   "returns": "record",
+   "doc": "A row from a jsonb object; declare the columns with AS x(a int, b text)."
+  },
+  {
+   "name": "json_to_recordset",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "from_json json"
+     ],
+     "returns": "setof record"
+    }
+   ],
+   "returns": "setof record",
+   "doc": "Rows from a JSON array of objects; declare the columns with AS x(a int, b text)."
+  },
+  {
+   "name": "jsonb_to_recordset",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb"
+     ],
+     "returns": "setof record"
+    }
+   ],
+   "returns": "setof record",
+   "doc": "Rows from a jsonb array of objects; declare the columns with AS x(a int, b text)."
+  },
+  {
+   "name": "jsonb_set",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path text[]",
+      "new_value jsonb",
+      "[create_if_missing boolean]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Replaces (or adds) the item at path."
+  },
+  {
+   "name": "jsonb_set_lax",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path text[]",
+      "new_value jsonb",
+      "[create_if_missing boolean]",
+      "[null_value_treatment text]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "jsonb_set that handles a NULL new_value by raise/use_json_null/delete_key/return_target (PostgreSQL 13+)."
+  },
+  {
+   "name": "jsonb_insert",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path text[]",
+      "new_value jsonb",
+      "[insert_after boolean]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Inserts new_value at path (before or after an array element)."
+  },
+  {
+   "name": "json_strip_nulls",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json json"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "Removes object fields with null values, recursively."
+  },
+  {
+   "name": "jsonb_strip_nulls",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "Removes object fields with null values, recursively."
+  },
+  {
+   "name": "jsonb_pretty",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "from_json jsonb"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Indented text form of the jsonb value."
+  },
+  {
+   "name": "json_typeof",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value json"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Type of the top-level value: object, array, string, number, boolean or null."
+  },
+  {
+   "name": "jsonb_typeof",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value jsonb"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Type of the top-level value: object, array, string, number, boolean or null."
+  },
+  {
+   "name": "jsonb_path_exists",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path jsonpath",
+      "[vars jsonb]",
+      "[silent boolean]"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the SQL/JSON path returns any item."
+  },
+  {
+   "name": "jsonb_path_match",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path jsonpath",
+      "[vars jsonb]",
+      "[silent boolean]"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Result of an SQL/JSON path predicate."
+  },
+  {
+   "name": "jsonb_path_query",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path jsonpath",
+      "[vars jsonb]",
+      "[silent boolean]"
+     ],
+     "returns": "setof jsonb"
+    }
+   ],
+   "returns": "setof jsonb",
+   "doc": "All items returned by the SQL/JSON path, one row each.",
+   "columns": [
+    "jsonb_path_query"
+   ]
+  },
+  {
+   "name": "jsonb_path_query_array",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path jsonpath",
+      "[vars jsonb]",
+      "[silent boolean]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "All items returned by the SQL/JSON path as a jsonb array."
+  },
+  {
+   "name": "jsonb_path_query_first",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "target jsonb",
+      "path jsonpath",
+      "[vars jsonb]",
+      "[silent boolean]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "First item returned by the SQL/JSON path."
+  },
+  {
+   "name": "json_scalar",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value \"any\""
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "JSON scalar from an SQL value (PostgreSQL 16+)."
+  },
+  {
+   "name": "json_serialize",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value json [RETURNING type]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Text or bytea form of a JSON value (PostgreSQL 16+)."
+  },
+  {
+   "name": "json_array",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[value ... \"any\"] [RETURNING type]"
+     ],
+     "returns": "json"
+    }
+   ],
+   "returns": "json",
+   "doc": "SQL/JSON array constructor (PostgreSQL 16+)."
+  },
+  {
+   "name": "json_query",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "context jsonb",
+      "path jsonpath [RETURNING type]"
+     ],
+     "returns": "jsonb"
+    }
+   ],
+   "returns": "jsonb",
+   "doc": "SQL/JSON query: the item(s) at path (PostgreSQL 17+)."
+  },
+  {
+   "name": "json_value",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "context jsonb",
+      "path jsonpath [RETURNING type]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "SQL/JSON scalar value at path (PostgreSQL 17+)."
+  },
+  {
+   "name": "json_exists",
+   "category": "json",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "context jsonb",
+      "path jsonpath"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the SQL/JSON path returns any item (PostgreSQL 17+)."
+  },
+  {
+   "name": "json_table",
+   "category": "json",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "context jsonb",
+      "path jsonpath COLUMNS (...)"
+     ],
+     "returns": "setof record"
+    }
+   ],
+   "returns": "setof record",
+   "doc": "Turns JSON into a relational table; columns from the COLUMNS clause (PostgreSQL 17+)."
+  },
+  {
+   "name": "array_append",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anycompatiblearray",
+      "elem anycompatible"
+     ],
+     "returns": "anycompatiblearray"
+    }
+   ],
+   "returns": "anycompatiblearray",
+   "doc": "Appends an element to the end of the array."
+  },
+  {
+   "name": "array_prepend",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "elem anycompatible",
+      "arr anycompatiblearray"
+     ],
+     "returns": "anycompatiblearray"
+    }
+   ],
+   "returns": "anycompatiblearray",
+   "doc": "Prepends an element to the start of the array."
+  },
+  {
+   "name": "array_cat",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr1 anycompatiblearray",
+      "arr2 anycompatiblearray"
+     ],
+     "returns": "anycompatiblearray"
+    }
+   ],
+   "returns": "anycompatiblearray",
+   "doc": "Concatenates two arrays."
+  },
+  {
+   "name": "array_length",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "dim integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Length of the given dimension (NULL for an empty array)."
+  },
+  {
+   "name": "array_lower",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "dim integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Lower bound of the given dimension."
+  },
+  {
+   "name": "array_upper",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "dim integer"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Upper bound of the given dimension."
+  },
+  {
+   "name": "array_ndims",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of dimensions."
+  },
+  {
+   "name": "array_dims",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Text representation of the dimensions, e.g. [1:3]."
+  },
+  {
+   "name": "array_position",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anycompatiblearray",
+      "elem anycompatible",
+      "[start integer]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Subscript of the first occurrence of elem (IS NOT DISTINCT FROM), NULL when absent."
+  },
+  {
+   "name": "array_positions",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anycompatiblearray",
+      "elem anycompatible"
+     ],
+     "returns": "integer[]"
+    }
+   ],
+   "returns": "integer[]",
+   "doc": "Subscripts of every occurrence of elem."
+  },
+  {
+   "name": "array_remove",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anycompatiblearray",
+      "elem anycompatible"
+     ],
+     "returns": "anycompatiblearray"
+    }
+   ],
+   "returns": "anycompatiblearray",
+   "doc": "Removes every element equal to elem."
+  },
+  {
+   "name": "array_replace",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anycompatiblearray",
+      "from anycompatible",
+      "to anycompatible"
+     ],
+     "returns": "anycompatiblearray"
+    }
+   ],
+   "returns": "anycompatiblearray",
+   "doc": "Replaces every element equal to from with to."
+  },
+  {
+   "name": "array_fill",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "dims integer[]",
+      "[lower_bounds integer[]]"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "Array of the given dimensions filled with value."
+  },
+  {
+   "name": "array_to_string",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "delimiter text",
+      "[null_string text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Joins the elements with delimiter; NULLs are skipped unless null_string is given."
+  },
+  {
+   "name": "array_sample",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "n integer"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "n randomly chosen elements (PostgreSQL 16+)."
+  },
+  {
+   "name": "array_shuffle",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "The elements in random order (PostgreSQL 16+)."
+  },
+  {
+   "name": "array_reverse",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "The elements of the first dimension in reverse order (PostgreSQL 18+)."
+  },
+  {
+   "name": "array_sort",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "[descending boolean]",
+      "[nulls_first boolean]"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "The elements of the first dimension sorted (PostgreSQL 18+)."
+  },
+  {
+   "name": "trim_array",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "n integer"
+     ],
+     "returns": "anyarray"
+    }
+   ],
+   "returns": "anyarray",
+   "doc": "Removes the last n elements (PostgreSQL 14+)."
+  },
+  {
+   "name": "cardinality",
+   "category": "array",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Total number of elements (0 for an empty array)."
+  },
+  {
+   "name": "unnest",
+   "category": "array",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray"
+     ],
+     "returns": "setof anyelement"
+    },
+    {
+     "params": [
+      "arr1 anyarray",
+      "arr2 anyarray",
+      "[... anyarray]"
+     ],
+     "returns": "setof record"
+    }
+   ],
+   "returns": "setof anyelement",
+   "doc": "Expands arrays into rows (several arrays side by side in FROM)."
+  },
+  {
+   "name": "generate_series",
+   "category": "array",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "start integer",
+      "stop integer",
+      "[step integer]"
+     ],
+     "returns": "setof integer"
+    },
+    {
+     "params": [
+      "start numeric",
+      "stop numeric",
+      "[step numeric]"
+     ],
+     "returns": "setof numeric"
+    },
+    {
+     "params": [
+      "start timestamp",
+      "stop timestamp",
+      "step interval"
+     ],
+     "returns": "setof timestamp"
+    }
+   ],
+   "returns": "setof integer",
+   "doc": "Series of values from start to stop by step."
+  },
+  {
+   "name": "generate_subscripts",
+   "category": "array",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "arr anyarray",
+      "dim integer",
+      "[reverse boolean]"
+     ],
+     "returns": "setof integer"
+    }
+   ],
+   "returns": "setof integer",
+   "doc": "The valid subscripts of the given array dimension."
+  },
+  {
+   "name": "cast",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "expression AS type"
+     ],
+     "returns": "type"
+    }
+   ],
+   "returns": "type",
+   "doc": "Converts a value to another type (same as expression::type)."
+  },
+  {
+   "name": "coalesce",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value anyelement",
+      "[value ... anyelement]"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "First argument that is not NULL."
+  },
+  {
+   "name": "nullif",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value1 anyelement",
+      "value2 anyelement"
+     ],
+     "returns": "anyelement"
+    }
+   ],
+   "returns": "anyelement",
+   "doc": "NULL when the arguments are equal, else value1."
+  },
+  {
+   "name": "num_nonnulls",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[args ... \"any\"]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of non-NULL arguments."
+  },
+  {
+   "name": "num_nulls",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[args ... \"any\"]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of NULL arguments."
+  },
+  {
+   "name": "pg_typeof",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value \"any\""
+     ],
+     "returns": "regtype"
+    }
+   ],
+   "returns": "regtype",
+   "doc": "Data type of the value."
+  },
+  {
+   "name": "to_regclass",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "name text"
+     ],
+     "returns": "regclass"
+    }
+   ],
+   "returns": "regclass",
+   "doc": "OID of the named relation, NULL when it does not exist."
+  },
+  {
+   "name": "to_regtype",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "name text"
+     ],
+     "returns": "regtype"
+    }
+   ],
+   "returns": "regtype",
+   "doc": "OID of the named type, NULL when it does not exist."
+  },
+  {
+   "name": "to_regproc",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "name text"
+     ],
+     "returns": "regproc"
+    }
+   ],
+   "returns": "regproc",
+   "doc": "OID of the named function, NULL when it does not exist or is ambiguous."
+  },
+  {
+   "name": "format_type",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "type oid",
+      "typemod integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "SQL name of a data type with its modifier."
+  },
+  {
+   "name": "pg_input_is_valid",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "str text",
+      "type text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the text is valid input for the type (PostgreSQL 16+)."
+  },
+  {
+   "name": "gen_random_uuid",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "uuid"
+    }
+   ],
+   "returns": "uuid",
+   "doc": "Random version 4 UUID (PostgreSQL 13+, no extension needed)."
+  },
+  {
+   "name": "uuidv4",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "uuid"
+    }
+   ],
+   "returns": "uuid",
+   "doc": "Random version 4 UUID (PostgreSQL 18+)."
+  },
+  {
+   "name": "uuidv7",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[shift interval]"
+     ],
+     "returns": "uuid"
+    }
+   ],
+   "returns": "uuid",
+   "doc": "Time-ordered version 7 UUID (PostgreSQL 18+)."
+  },
+  {
+   "name": "uuid_generate_v4",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "uuid"
+    }
+   ],
+   "returns": "uuid",
+   "doc": "Random UUID (extension uuid-ossp)."
+  },
+  {
+   "name": "uuid_generate_v1",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "uuid"
+    }
+   ],
+   "returns": "uuid",
+   "doc": "Time and MAC based UUID (extension uuid-ossp)."
+  },
+  {
+   "name": "crypt",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "password text",
+      "salt text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Password hash (extension pgcrypto)."
+  },
+  {
+   "name": "gen_salt",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "type text",
+      "[iter_count integer]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Random salt for crypt (extension pgcrypto)."
+  },
+  {
+   "name": "digest",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "data text",
+      "type text"
+     ],
+     "returns": "bytea"
+    }
+   ],
+   "returns": "bytea",
+   "doc": "Hash of the data with md5/sha1/sha256… (extension pgcrypto)."
+  },
+  {
+   "name": "current_user",
+   "category": "system",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "User name of the current execution context."
+  },
+  {
+   "name": "session_user",
+   "category": "system",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "Session user name."
+  },
+  {
+   "name": "current_role",
+   "category": "system",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "Same as current_user."
+  },
+  {
+   "name": "current_catalog",
+   "category": "system",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "Name of the current database (SQL standard spelling)."
+  },
+  {
+   "name": "user",
+   "category": "system",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "Same as current_user."
+  },
+  {
+   "name": "current_schema",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "First existing schema on the search path."
+  },
+  {
+   "name": "current_schemas",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "include_implicit boolean"
+     ],
+     "returns": "name[]"
+    }
+   ],
+   "returns": "name[]",
+   "doc": "Schemas on the effective search path (with pg_catalog when include_implicit)."
+  },
+  {
+   "name": "current_database",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "name"
+    }
+   ],
+   "returns": "name",
+   "doc": "Name of the current database."
+  },
+  {
+   "name": "current_setting",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "setting_name text",
+      "[missing_ok boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Current value of a configuration parameter."
+  },
+  {
+   "name": "set_config",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "setting_name text",
+      "new_value text",
+      "is_local boolean"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Sets a configuration parameter (for the transaction when is_local)."
+  },
+  {
+   "name": "version",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Server version string."
+  },
+  {
+   "name": "pg_backend_pid",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Process ID of the server process serving this session."
+  },
+  {
+   "name": "pg_cancel_backend",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "pid integer"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Cancels the current query of the given backend."
+  },
+  {
+   "name": "pg_terminate_backend",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "pid integer",
+      "[timeout bigint]"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Terminates the given backend."
+  },
+  {
+   "name": "pg_notify",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "channel text",
+      "payload text"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Sends a notification (like NOTIFY)."
+  },
+  {
+   "name": "pg_advisory_lock",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key bigint"
+     ],
+     "returns": "void"
+    },
+    {
+     "params": [
+      "key1 integer",
+      "key2 integer"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Takes a session-level advisory lock, waiting if needed."
+  },
+  {
+   "name": "pg_try_advisory_lock",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key bigint"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Takes a session-level advisory lock if available."
+  },
+  {
+   "name": "pg_advisory_unlock",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key bigint"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Releases a session-level advisory lock."
+  },
+  {
+   "name": "pg_advisory_xact_lock",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "key bigint"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Takes a transaction-level advisory lock."
+  },
+  {
+   "name": "pg_size_pretty",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "size bigint"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Human readable size (kB, MB, GB …)."
+  },
+  {
+   "name": "pg_total_relation_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "relation regclass"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Disk space of a table including indexes and TOAST."
+  },
+  {
+   "name": "pg_relation_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "relation regclass",
+      "[fork text]"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Disk space of one fork of a relation (main by default)."
+  },
+  {
+   "name": "pg_table_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "relation regclass"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Disk space of a table without indexes."
+  },
+  {
+   "name": "pg_indexes_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "relation regclass"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Disk space of all indexes of a table."
+  },
+  {
+   "name": "pg_database_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "name name"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Disk space of a database."
+  },
+  {
+   "name": "pg_column_size",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value \"any\""
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bytes used to store a value."
+  },
+  {
+   "name": "pg_get_viewdef",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "view regclass",
+      "[pretty boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "SELECT text of a view or materialized view."
+  },
+  {
+   "name": "pg_get_functiondef",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "func oid"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "CREATE OR REPLACE FUNCTION text of a function."
+  },
+  {
+   "name": "pg_get_function_arguments",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "func oid"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Argument list of a function."
+  },
+  {
+   "name": "pg_get_function_result",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "func oid"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "RETURNS clause of a function."
+  },
+  {
+   "name": "pg_get_indexdef",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "index oid",
+      "[column integer]",
+      "[pretty boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "CREATE INDEX text of an index."
+  },
+  {
+   "name": "pg_get_triggerdef",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "trigger oid",
+      "[pretty boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "CREATE TRIGGER text of a trigger."
+  },
+  {
+   "name": "pg_get_constraintdef",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "constraint oid",
+      "[pretty boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Definition of a constraint."
+  },
+  {
+   "name": "pg_get_expr",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "expr pg_node_tree",
+      "relation oid",
+      "[pretty boolean]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Decompiles a stored expression (defaults, check constraints)."
+  },
+  {
+   "name": "pg_get_serial_sequence",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "table text",
+      "column text"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Name of the sequence behind a serial or identity column."
+  },
+  {
+   "name": "obj_description",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "object oid",
+      "catalog name"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Comment of a database object."
+  },
+  {
+   "name": "col_description",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "table oid",
+      "column integer"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Comment of a table column."
+  },
+  {
+   "name": "shobj_description",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "object oid",
+      "catalog name"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Comment of a shared object (database, role, tablespace)."
+  },
+  {
+   "name": "has_table_privilege",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[user name]",
+      "table text",
+      "privilege text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the user has the privilege on the table."
+  },
+  {
+   "name": "has_schema_privilege",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[user name]",
+      "schema text",
+      "privilege text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the user has the privilege on the schema."
+  },
+  {
+   "name": "has_function_privilege",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[user name]",
+      "function text",
+      "privilege text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the user has the privilege on the function."
+  },
+  {
+   "name": "pg_has_role",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[user name]",
+      "role text",
+      "privilege text"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the user is a member of, or has the privilege of, the role."
+  },
+  {
+   "name": "txid_current",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Current transaction ID (legacy; prefer pg_current_xact_id)."
+  },
+  {
+   "name": "pg_current_xact_id",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "xid8"
+    }
+   ],
+   "returns": "xid8",
+   "doc": "Current transaction ID, assigning one if needed (PostgreSQL 13+)."
+  },
+  {
+   "name": "pg_is_in_recovery",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True while the server is in recovery (a standby)."
+  },
+  {
+   "name": "pg_postmaster_start_time",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Time the server started."
+  },
+  {
+   "name": "pg_conf_load_time",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Time the configuration files were last loaded."
+  },
+  {
+   "name": "pg_reload_conf",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "Signals the server to reload its configuration."
+  },
+  {
+   "name": "inet_client_addr",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Address of the remote connection."
+  },
+  {
+   "name": "inet_server_addr",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Address of the local connection."
+  },
+  {
+   "name": "pg_current_wal_lsn",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "pg_lsn"
+    }
+   ],
+   "returns": "pg_lsn",
+   "doc": "Current write-ahead log write location."
+  },
+  {
+   "name": "pg_last_xact_replay_timestamp",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "timestamp with time zone"
+    }
+   ],
+   "returns": "timestamp with time zone",
+   "doc": "Time of the last transaction replayed during recovery."
+  },
+  {
+   "name": "pg_stat_reset",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Resets the statistics counters of the current database."
+  },
+  {
+   "name": "pg_stat_statements_reset",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[userid oid]",
+      "[dbid oid]",
+      "[queryid bigint]"
+     ],
+     "returns": "void"
+    }
+   ],
+   "returns": "void",
+   "doc": "Discards pg_stat_statements statistics (extension)."
+  },
+  {
+   "name": "pg_blocking_pids",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "pid integer"
+     ],
+     "returns": "integer[]"
+    }
+   ],
+   "returns": "integer[]",
+   "doc": "Process IDs blocking the given backend's lock requests."
+  },
+  {
+   "name": "pg_ls_dir",
+   "category": "system",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "dirname text"
+     ],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "Names of the files in a directory (superuser).",
+   "columns": [
+    "pg_ls_dir"
+   ]
+  },
+  {
+   "name": "pg_read_file",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "filename text",
+      "[offset bigint]",
+      "[length bigint]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Contents of a text file on the server (superuser)."
+  },
+  {
+   "name": "pg_listening_channels",
+   "category": "system",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "setof text"
+    }
+   ],
+   "returns": "setof text",
+   "doc": "Channels the session is listening on.",
+   "columns": [
+    "pg_listening_channels"
+   ]
+  },
+  {
+   "name": "pg_partition_tree",
+   "category": "system",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "rel regclass"
+     ],
+     "returns": "setof record(relid regclass, parentrelid regclass, isleaf boolean, level integer)"
+    }
+   ],
+   "returns": "setof record(relid regclass, parentrelid regclass, isleaf boolean, level integer)",
+   "doc": "Partitions of a partitioned table or index.",
+   "columns": [
+    "relid",
+    "parentrelid",
+    "isleaf",
+    "level"
+   ]
+  },
+  {
+   "name": "pg_options_to_table",
+   "category": "system",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "options text[]"
+     ],
+     "returns": "setof record(option_name text, option_value text)"
+    }
+   ],
+   "returns": "setof record(option_name text, option_value text)",
+   "doc": "Splits reloptions into name/value rows.",
+   "columns": [
+    "option_name",
+    "option_value"
+   ]
+  },
+  {
+   "name": "nextval",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "sequence regclass"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Advances the sequence and returns the new value."
+  },
+  {
+   "name": "currval",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "sequence regclass"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Value most recently returned by nextval for the sequence in this session."
+  },
+  {
+   "name": "lastval",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Value most recently returned by nextval for any sequence in this session."
+  },
+  {
+   "name": "setval",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "sequence regclass",
+      "value bigint",
+      "[is_called boolean]"
+     ],
+     "returns": "bigint"
+    }
+   ],
+   "returns": "bigint",
+   "doc": "Sets the current value of the sequence."
+  },
+  {
+   "name": "isempty",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the range is empty."
+  },
+  {
+   "name": "lower_inc",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the lower bound is inclusive."
+  },
+  {
+   "name": "upper_inc",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the upper bound is inclusive."
+  },
+  {
+   "name": "lower_inf",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the lower bound is infinite."
+  },
+  {
+   "name": "upper_inf",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the upper bound is infinite."
+  },
+  {
+   "name": "range_merge",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r1 anyrange",
+      "r2 anyrange"
+     ],
+     "returns": "anyrange"
+    }
+   ],
+   "returns": "anyrange",
+   "doc": "Smallest range containing both ranges."
+  },
+  {
+   "name": "multirange",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "r anyrange"
+     ],
+     "returns": "anymultirange"
+    }
+   ],
+   "returns": "anymultirange",
+   "doc": "Multirange containing just the given range (PostgreSQL 14+)."
+  },
+  {
+   "name": "int4range",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower integer",
+      "upper integer",
+      "[bounds text]"
+     ],
+     "returns": "int4range"
+    }
+   ],
+   "returns": "int4range",
+   "doc": "Builds an integer range ('[)' bounds by default)."
+  },
+  {
+   "name": "int8range",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower bigint",
+      "upper bigint",
+      "[bounds text]"
+     ],
+     "returns": "int8range"
+    }
+   ],
+   "returns": "int8range",
+   "doc": "Builds a bigint range."
+  },
+  {
+   "name": "numrange",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower numeric",
+      "upper numeric",
+      "[bounds text]"
+     ],
+     "returns": "numrange"
+    }
+   ],
+   "returns": "numrange",
+   "doc": "Builds a numeric range."
+  },
+  {
+   "name": "tsrange",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower timestamp",
+      "upper timestamp",
+      "[bounds text]"
+     ],
+     "returns": "tsrange"
+    }
+   ],
+   "returns": "tsrange",
+   "doc": "Builds a timestamp range."
+  },
+  {
+   "name": "tstzrange",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower timestamp with time zone",
+      "upper timestamp with time zone",
+      "[bounds text]"
+     ],
+     "returns": "tstzrange"
+    }
+   ],
+   "returns": "tstzrange",
+   "doc": "Builds a timestamptz range."
+  },
+  {
+   "name": "daterange",
+   "category": "range",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "lower date",
+      "upper date",
+      "[bounds text]"
+     ],
+     "returns": "daterange"
+    }
+   ],
+   "returns": "daterange",
+   "doc": "Builds a date range."
+  },
+  {
+   "name": "host",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "IP address as text, without the netmask."
+  },
+  {
+   "name": "hostmask",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Host mask of the network."
+  },
+  {
+   "name": "masklen",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Netmask length in bits."
+  },
+  {
+   "name": "netmask",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Netmask of the network."
+  },
+  {
+   "name": "network",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "cidr"
+    }
+   ],
+   "returns": "cidr",
+   "doc": "Network part of the address."
+  },
+  {
+   "name": "broadcast",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Broadcast address of the network."
+  },
+  {
+   "name": "set_masklen",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet",
+      "len integer"
+     ],
+     "returns": "inet"
+    }
+   ],
+   "returns": "inet",
+   "doc": "Sets the netmask length."
+  },
+  {
+   "name": "inet_merge",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "a inet",
+      "b inet"
+     ],
+     "returns": "cidr"
+    }
+   ],
+   "returns": "cidr",
+   "doc": "Smallest network containing both addresses."
+  },
+  {
+   "name": "family",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "4 for IPv4, 6 for IPv6."
+  },
+  {
+   "name": "abbrev",
+   "category": "network",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ip inet"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Abbreviated display form of the address."
+  },
+  {
+   "name": "to_tsvector",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "document text"
+     ],
+     "returns": "tsvector"
+    }
+   ],
+   "returns": "tsvector",
+   "doc": "Reduces the document to a tsvector of normalized lexemes."
+  },
+  {
+   "name": "to_tsquery",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "query text"
+     ],
+     "returns": "tsquery"
+    }
+   ],
+   "returns": "tsquery",
+   "doc": "Parses a query with the &, |, ! and <-> operators into a tsquery."
+  },
+  {
+   "name": "plainto_tsquery",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "query text"
+     ],
+     "returns": "tsquery"
+    }
+   ],
+   "returns": "tsquery",
+   "doc": "Plain text into a tsquery of ANDed lexemes."
+  },
+  {
+   "name": "phraseto_tsquery",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "query text"
+     ],
+     "returns": "tsquery"
+    }
+   ],
+   "returns": "tsquery",
+   "doc": "Plain text into a phrase tsquery (<-> between lexemes)."
+  },
+  {
+   "name": "websearch_to_tsquery",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "query text"
+     ],
+     "returns": "tsquery"
+    }
+   ],
+   "returns": "tsquery",
+   "doc": "Web-search style query (\"quoted phrases\", or, -negation) into a tsquery."
+  },
+  {
+   "name": "ts_rank",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[weights real[]]",
+      "vector tsvector",
+      "query tsquery",
+      "[normalization integer]"
+     ],
+     "returns": "real"
+    }
+   ],
+   "returns": "real",
+   "doc": "Relevance of the document for the query."
+  },
+  {
+   "name": "ts_rank_cd",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[weights real[]]",
+      "vector tsvector",
+      "query tsquery",
+      "[normalization integer]"
+     ],
+     "returns": "real"
+    }
+   ],
+   "returns": "real",
+   "doc": "Cover-density relevance of the document for the query."
+  },
+  {
+   "name": "ts_headline",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "document text",
+      "query tsquery",
+      "[options text]"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "The document with query matches highlighted."
+  },
+  {
+   "name": "setweight",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "vector tsvector",
+      "weight \"char\""
+     ],
+     "returns": "tsvector"
+    }
+   ],
+   "returns": "tsvector",
+   "doc": "Assigns a weight (A–D) to every lexeme."
+  },
+  {
+   "name": "strip",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "vector tsvector"
+     ],
+     "returns": "tsvector"
+    }
+   ],
+   "returns": "tsvector",
+   "doc": "Removes positions and weights."
+  },
+  {
+   "name": "numnode",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "query tsquery"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Number of lexemes plus operators in the query."
+  },
+  {
+   "name": "querytree",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "query tsquery"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Indexable part of the query."
+  },
+  {
+   "name": "ts_debug",
+   "category": "textsearch",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "[config regconfig]",
+      "document text"
+     ],
+     "returns": "setof record(alias text, description text, token text, dictionaries regdictionary[], dictionary regdictionary, lexemes text[])"
+    }
+   ],
+   "returns": "setof record(alias text, description text, token text, dictionaries regdictionary[], dictionary regdictionary, lexemes text[])",
+   "doc": "How the parser and dictionaries treat each token of the document.",
+   "columns": [
+    "alias",
+    "description",
+    "token",
+    "dictionaries",
+    "dictionary",
+    "lexemes"
+   ]
+  },
+  {
+   "name": "similarity",
+   "category": "textsearch",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "a text",
+      "b text"
+     ],
+     "returns": "real"
+    }
+   ],
+   "returns": "real",
+   "doc": "Trigram similarity between 0 and 1 (extension pg_trgm)."
+  },
+  {
+   "name": "xmlelement",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "NAME name",
+      "[XMLATTRIBUTES (...)]",
+      "[content ... xml]"
+     ],
+     "returns": "xml"
+    }
+   ],
+   "returns": "xml",
+   "doc": "Builds an XML element."
+  },
+  {
+   "name": "xmlforest",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "content [AS name]",
+      "[... ]"
+     ],
+     "returns": "xml"
+    }
+   ],
+   "returns": "xml",
+   "doc": "XML elements from a list of values named after the columns."
+  },
+  {
+   "name": "xmlconcat",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "xml1 xml",
+      "[xml2 ... xml]"
+     ],
+     "returns": "xml"
+    }
+   ],
+   "returns": "xml",
+   "doc": "Concatenates XML values."
+  },
+  {
+   "name": "xpath",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "xpath text",
+      "xml xml",
+      "[nsarray text[]]"
+     ],
+     "returns": "xml[]"
+    }
+   ],
+   "returns": "xml[]",
+   "doc": "Results of an XPath 1.0 expression."
+  },
+  {
+   "name": "xpath_exists",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "xpath text",
+      "xml xml",
+      "[nsarray text[]]"
+     ],
+     "returns": "boolean"
+    }
+   ],
+   "returns": "boolean",
+   "doc": "True when the XPath expression returns any node."
+  },
+  {
+   "name": "xmlparse",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "DOCUMENT/CONTENT value text"
+     ],
+     "returns": "xml"
+    }
+   ],
+   "returns": "xml",
+   "doc": "Parses text into XML."
+  },
+  {
+   "name": "xmlserialize",
+   "category": "xml",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "DOCUMENT/CONTENT value xml AS type"
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Text form of an XML value."
+  },
+  {
+   "name": "grouping",
+   "category": "misc",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "group_by_expression \"any\"",
+      "[... \"any\"]"
+     ],
+     "returns": "integer"
+    }
+   ],
+   "returns": "integer",
+   "doc": "Bit mask of the GROUPING SETS expressions not included in the current grouping set."
+  },
+  {
+   "name": "pg_column_compression",
+   "category": "misc",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "value \"any\""
+     ],
+     "returns": "text"
+    }
+   ],
+   "returns": "text",
+   "doc": "Compression method used for a stored value (PostgreSQL 14+)."
+  }
+ ],
+ "operators": [
+  {
+   "op": "->",
+   "doc": "json/jsonb: element of an array (integer) or field of an object (text), as json/jsonb."
+  },
+  {
+   "op": "->>",
+   "doc": "json/jsonb: element or field as text."
+  },
+  {
+   "op": "#>",
+   "doc": "json/jsonb: value at a key path (text[]), e.g. data #> '{a,b}'."
+  },
+  {
+   "op": "#>>",
+   "doc": "json/jsonb: value at a key path as text."
+  },
+  {
+   "op": "@>",
+   "doc": "Contains: jsonb, arrays and ranges (left contains right)."
+  },
+  {
+   "op": "<@",
+   "doc": "Is contained by: jsonb, arrays and ranges (left is contained in right)."
+  },
+  {
+   "op": "?",
+   "doc": "jsonb: does the text exist as a top-level key or array element?"
+  },
+  {
+   "op": "?|",
+   "doc": "jsonb: does any of the strings of the text[] exist as a top-level key?"
+  },
+  {
+   "op": "?&",
+   "doc": "jsonb: do all of the strings of the text[] exist as top-level keys?"
+  },
+  {
+   "op": "||",
+   "doc": "Concatenation: text, arrays, jsonb (merges objects / concatenates arrays), tsvector."
+  },
+  {
+   "op": "-",
+   "doc": "Subtraction; jsonb: delete a key (text), keys (text[]) or array element (integer)."
+  },
+  {
+   "op": "#-",
+   "doc": "jsonb: delete the field or element at a key path (text[])."
+  },
+  {
+   "op": "@?",
+   "doc": "jsonb: does the SQL/JSON path return any item?"
+  },
+  {
+   "op": "@@",
+   "doc": "Text search match (tsvector @@ tsquery); jsonb: result of an SQL/JSON path predicate."
+  },
+  {
+   "op": "::",
+   "doc": "PostgreSQL cast: expression::type (same as CAST(expression AS type))."
+  },
+  {
+   "op": "~",
+   "doc": "POSIX regular expression match, case sensitive (also bitwise NOT as a prefix operator)."
+  },
+  {
+   "op": "~*",
+   "doc": "POSIX regular expression match, case insensitive."
+  },
+  {
+   "op": "!~",
+   "doc": "Does not match the POSIX regular expression, case sensitive."
+  },
+  {
+   "op": "!~*",
+   "doc": "Does not match the POSIX regular expression, case insensitive."
+  },
+  {
+   "op": "&&",
+   "doc": "Overlaps: arrays (have elements in common), ranges, geometric types, inet."
+  },
+  {
+   "op": "<<",
+   "doc": "Bitwise shift left; ranges/inet: strictly left of / is contained by."
+  },
+  {
+   "op": ">>",
+   "doc": "Bitwise shift right; ranges/inet: strictly right of / contains."
+  },
+  {
+   "op": "|/",
+   "doc": "Square root (prefix operator): |/ 25.0."
+  },
+  {
+   "op": "||/",
+   "doc": "Cube root (prefix operator): ||/ 27.0."
+  },
+  {
+   "op": "^",
+   "doc": "Exponentiation (left associative): 2 ^ 3."
+  },
+  {
+   "op": "%",
+   "doc": "Modulo (remainder); pg_trgm: similarity above the threshold."
+  },
+  {
+   "op": "!=",
+   "doc": "Not equal (same as <>)."
+  },
+  {
+   "op": "IS DISTINCT FROM",
+   "doc": "Not equal, treating NULL like an ordinary value (never NULL)."
+  },
+  {
+   "op": "ILIKE",
+   "doc": "Case-insensitive LIKE (PostgreSQL extension)."
+  },
+  {
+   "op": "SIMILAR TO",
+   "doc": "SQL regular expression match (LIKE wildcards plus | * + ? {m,n} ( ) [...])."
+  }
+ ]
+}

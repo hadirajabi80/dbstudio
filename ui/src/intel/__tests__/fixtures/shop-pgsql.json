@@ -1,0 +1,648 @@
+{
+ "connectionId": "c_pg",
+ "dialect": "pgsql",
+ "database": "shop",
+ "defaultSchema": "public",
+ "version": 1,
+ "databases": [
+  "shop",
+  "analytics"
+ ],
+ "searchPath": [
+  "public"
+ ],
+ "schemas": [
+  {
+   "name": "public",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "countries",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "name",
+       "text",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "code",
+       "character(2)",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customers",
+     "cm": "Customers of the shop.",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "name",
+       "text",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "email",
+       "text",
+       1,
+       0,
+       0,
+       "Login e-mail"
+      ],
+      [
+       "country_id",
+       "integer",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "customers_country_id_fkey",
+       "cols": [
+        "country_id"
+       ],
+       "rs": "public",
+       "rt": "countries",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "orders",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "customer_id",
+       "integer",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_date",
+       "date",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "numeric(12,2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "status",
+       "order_status",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "orders_customer_id_fkey",
+       "cols": [
+        "customer_id"
+       ],
+       "rs": "public",
+       "rt": "customers",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "products",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "name",
+       "text",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "price",
+       "numeric(12,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "order_lines",
+     "c": [
+      [
+       "order_id",
+       "integer",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "product_id",
+       "integer",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "qty",
+       "integer",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "line_total",
+       "numeric(12,2)",
+       1,
+       0,
+       2,
+       null
+      ]
+     ],
+     "pk": [
+      "order_id",
+      "product_id"
+     ],
+     "fk": [
+      {
+       "n": "order_lines_order_id_fkey",
+       "cols": [
+        "order_id"
+       ],
+       "rs": "public",
+       "rt": "orders",
+       "rcols": [
+        "id"
+       ]
+      },
+      {
+       "n": "order_lines_product_id_fkey",
+       "cols": [
+        "product_id"
+       ],
+       "rs": "public",
+       "rt": "products",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "extra_types",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "tags",
+       "text[]",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "meta",
+       "jsonb",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "ext_id",
+       "uuid",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "period",
+       "tstzrange",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "flags",
+       "bit(8)",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "MixedCase",
+     "c": [
+      [
+       "Value",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "view",
+     "n": "customer_orders",
+     "c": [
+      [
+       "customer_id",
+       "integer",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_count",
+       "bigint",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "mview",
+     "n": "customer_totals",
+     "c": [
+      [
+       "customer_id",
+       "integer",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "numeric",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "func",
+     "n": "fn_tax",
+     "cm": "Tax at the default rate.",
+     "p": [
+      [
+       "amount",
+       "numeric",
+       "in",
+       0
+      ],
+      [
+       "",
+       "numeric",
+       "return",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "func",
+     "n": "fn_tax",
+     "cm": "Tax at the given rate.",
+     "p": [
+      [
+       "amount",
+       "numeric",
+       "in",
+       0
+      ],
+      [
+       "rate",
+       "numeric",
+       "in",
+       0
+      ],
+      [
+       "",
+       "numeric",
+       "return",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "tablefunc",
+     "n": "orders_of",
+     "p": [
+      [
+       "p_customer",
+       "integer",
+       "in",
+       0
+      ],
+      [
+       "",
+       "TABLE(id integer, order_date date, total numeric)",
+       "return",
+       0
+      ]
+     ],
+     "c": [
+      [
+       "id",
+       "integer",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_date",
+       "date",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "numeric",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "add_order_line",
+     "p": [
+      [
+       "p_order",
+       "integer",
+       "in",
+       0
+      ],
+      [
+       "p_product",
+       "integer",
+       "in",
+       0
+      ],
+      [
+       "p_qty",
+       "integer",
+       "in",
+       0
+      ],
+      [
+       "inserted",
+       "integer",
+       "inout",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "get_customer_report",
+     "p": [
+      [
+       "p_customer",
+       "integer",
+       "in",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "type",
+     "n": "order_status",
+     "c": [
+      [
+       "new",
+       "enum label",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "paid",
+       "enum label",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "shipped",
+       "enum label",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "cancelled",
+       "enum label",
+       0,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "type",
+     "n": "email_address",
+     "cm": "domain over text"
+    },
+    {
+     "t": "sequence",
+     "n": "order_numbers",
+     "cm": "owned by orders.id"
+    },
+    {
+     "t": "trigger",
+     "n": "trg_orders_check",
+     "cm": "on orders"
+    }
+   ]
+  },
+  {
+   "name": "sales",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "invoices",
+     "c": [
+      [
+       "id",
+       "integer",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "order_id",
+       "integer",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "amount",
+       "numeric(12,2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "issued_at",
+       "timestamp with time zone",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "invoices_order_id_fkey",
+       "cols": [
+        "order_id"
+       ],
+       "rs": "public",
+       "rt": "orders",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

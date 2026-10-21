@@ -4,8 +4,9 @@ import type { Dialect, Token } from '../intel/types';
 
 /**
  * Bind parameters of tokens [a, b): T-SQL `@x` not declared in the batch (no `@@globals`, no routine bodies),
- * Oracle `:x` (not `:new`/`:old`, not `&substitution`), SQLite `?`, `?1`, `:x`, `@x`, `$x`. Names are unique
- * except anonymous `?`, which counts once per occurrence.
+ * Oracle `:x` (not `:new`/`:old`, not `&substitution`), SQLite `?`, `?1`, `:x`, `@x`, `$x`, PostgreSQL `$1`, `:x`, `@x`
+ * (`?` is the jsonb operator there; routine definitions and DO blocks have none). Names are unique except anonymous
+ * `?`, which counts once per occurrence.
  */
 export function statementParams(tokens: readonly Token[], a: number, b: number, dialect: Dialect, batch?: readonly Token[]): string[] {
   const out: string[] = [];
@@ -31,6 +32,18 @@ export function statementParams(tokens: readonly Token[], a: number, b: number, 
           if (u.kind === 'keyword' && depth === 0 && j > i + 1 && u.line !== scope[i].line && scope[j - 1].text !== ',') break;
         }
       }
+    }
+  }
+  if (dialect === 'pgsql') {
+    // routine definitions and DO blocks: `$1` / `:x` inside bodies are the routine's own parameters
+    let j = a;
+    while (j < b && tokens[j].kind === 'comment') j++;
+    const w = (k: number) => (tokens[k] && (tokens[k].kind === 'keyword' || tokens[k].kind === 'ident') ? tokens[k].upper : '');
+    if (w(j) === 'DO') return [];
+    if (w(j) === 'CREATE') {
+      let k = j + 1;
+      if (w(k) === 'OR' && w(k + 1) === 'REPLACE') k += 2;
+      if (w(k) === 'FUNCTION' || w(k) === 'PROCEDURE' || w(k) === 'TRIGGER' || w(k) === 'RULE') return [];
     }
   }
   for (let i = a; i < b; i++) {

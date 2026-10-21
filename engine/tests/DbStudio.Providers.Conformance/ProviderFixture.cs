@@ -41,10 +41,17 @@ public abstract class ProviderFixture : IAsyncLifetime
     protected virtual bool SeedOnInitialize => true;
 
     /// <summary>A query that runs for at least ~30 s unless cancelled.</summary>
+    /// <remarks>
+    /// Oracle: a CPU-bound query (a 10^10-row cartesian count), not <c>DBMS_SESSION.SLEEP</c>. ODP.NET cancels with a
+    /// TNS break; when the network drops out-of-band (urgent) data, as Docker Desktop's port forwarding does, the break
+    /// arrives in-band and a sleeping session only reads it when the sleep ends (cancel then takes the full 60 s),
+    /// while a running SQL statement checks for breaks and stops in milliseconds. The provider's cancel is the same
+    /// in both cases; only the statement differed.
+    /// </remarks>
     public virtual string LongRunningQuery => Dialect switch
     {
         Dialect.TSql => "WAITFOR DELAY '00:01:00'",
-        Dialect.PlSql => "BEGIN DBMS_SESSION.SLEEP(60); END;",
+        Dialect.PlSql => "SELECT COUNT(*) FROM (SELECT 1 FROM dual CONNECT BY LEVEL <= 100000) a, (SELECT 1 FROM dual CONNECT BY LEVEL <= 100000) b",
         _ => "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 5000000000) SELECT count(*) FROM c",
     };
 

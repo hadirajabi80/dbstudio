@@ -13,7 +13,7 @@ import type {
   RedisHashEditRequest, RedisInfoResponse, RedisJsonSetRequest, RedisKeyValue, RedisListEditRequest,
   RedisMemoryRequest, RedisMemoryResponse, RedisPublishRequest, RedisPublishResponse, RedisRenameRequest,
   RedisScanRequest, RedisScanResponse, RedisServerInfo, RedisSetEditRequest, RedisSetStringRequest,
-  RedisSlowlogEntry, RedisStreamEditRequest, RedisTtlRequest, RedisZsetEditRequest,
+  RedisSlowlogEntry, RedisStreamEditRequest, RedisTtlRequest, RedisZsetEditRequest, RedisStreamGroupDetail, RedisPubSubChannels,
   // Mongo
   MongoAggregateRequest, MongoAggregateResponse, MongoCollectionInfo, MongoCollectionStats,
   MongoCreateCollectionRequest, MongoCreateIndexRequest, MongoCreateIndexResponse, MongoDatabaseInfo,
@@ -22,6 +22,8 @@ import type {
   MongoImportPreview, MongoImportRequest, MongoIndexInfo, MongoInsertRequest, MongoInsertResponse,
   MongoRenameCollectionRequest, MongoReplaceRequest, MongoReplaceResponse, MongoSchemaRequest, MongoServerInfo,
   MongoValidation,
+  MongoProfiling,
+  MongoProfilingRequest,
   // Kafka
   KafkaAddPartitionsRequest, KafkaAlterConfigsRequest, KafkaCluster, KafkaConfigEntry, KafkaCreateTopicRequest,
   KafkaFetchRequest, KafkaFetchStarted, KafkaGroupDetail, KafkaGroupSummary, KafkaMessage, KafkaMessageQuery,
@@ -111,6 +113,11 @@ export function createM2Namespaces(http: M2Http) {
       killClient: (cid: string, body: RedisClientKillRequest) => json<void>('POST', `/redis/${enc(cid)}/clients/kill`, { body }),
       /** 202 { jobId }; `job.done.result`: RedisAnalysisResult. */
       analysis: (cid: string, body: RedisAnalysisRequest) => json<JobStarted>('POST', `/redis/${enc(cid)}/analysis`, { body }),
+      /** M2-R: consumers and pending entries of one stream consumer group. */
+      streamGroup: (cid: string, db: number, key: string, group: string) =>
+        json<RedisStreamGroupDetail>('GET', `/redis/${enc(cid)}/keys/${enc(key)}/stream/groups/${enc(group)}`, { query: { db } }),
+      /** M2-R: `PUBSUB CHANNELS` with subscriber counts (Pub/Sub side list). */
+      pubsubChannels: (cid: string, pattern?: string) => json<RedisPubSubChannels>('GET', `/redis/${enc(cid)}/pubsub/channels`, { query: { pattern } }),
     },
 
     // ---------- MongoDB (PLAN-M2 §6; owner M2-M). Writes are READ_ONLY-guarded. ----------
@@ -150,6 +157,11 @@ export function createM2Namespaces(http: M2Http) {
       validation: (cid: string, db: string, coll: string) => json<MongoValidation>('GET', `/mongo/${enc(cid)}/db/${enc(db)}/coll/${enc(coll)}/validation`),
       setValidation: (cid: string, db: string, coll: string, body: MongoValidation) =>
         json<MongoValidation>('PUT', `/mongo/${enc(cid)}/db/${enc(db)}/coll/${enc(coll)}/validation`, { body }),
+      /** M2-L: the database profiler level (`{ profile: -1 }`). */
+      profiling: (cid: string, db: string) => json<MongoProfiling>('GET', `/mongo/${enc(cid)}/db/${enc(db)}/profiling`),
+      /** M2-L: `db.setProfilingLevel(level, { slowms, sampleRate })`; 403 READ_ONLY on read-only profiles. */
+      setProfiling: (cid: string, db: string, body: MongoProfilingRequest) =>
+        json<MongoProfiling>('PUT', `/mongo/${enc(cid)}/db/${enc(db)}/profiling`, { body }),
       /** 202 { jobId } (`job.done.result`: MongoExportResult) or, with `path: null`, the file. */
       exportDocs: (cid: string, db: string, coll: string, body: MongoExportRequest) =>
         jobOrFile(`/mongo/${enc(cid)}/db/${enc(db)}/coll/${enc(coll)}/export`, body),
@@ -207,7 +219,8 @@ export function createM2Namespaces(http: M2Http) {
 
     // ---------- Logs & activity (PLAN-M2 §8; owner M2-L). `cid` may be ENGINE_LOG_CID. ----------
     logs: {
-      sources: (cid: string) => json<LogSourceInfo[]>('GET', `/logs/${enc(cid)}/sources`),
+      /** Cached five minutes per connection by the engine; `refresh` probes again (after changing a setting). */
+      sources: (cid: string, refresh = false) => json<LogSourceInfo[]>('GET', `/logs/${enc(cid)}/sources`, { query: { refresh: refresh ? 'true' : undefined } }),
       /** 403 PRIVILEGE (`detail.needs`) when the server denies the source. */
       query: (cid: string, body: LogQuery, signal?: AbortSignal) =>
         json<LogQueryResponse>('POST', `/logs/${enc(cid)}/query`, { body, signal }),

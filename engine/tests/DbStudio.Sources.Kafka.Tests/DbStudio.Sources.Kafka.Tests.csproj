@@ -13,6 +13,10 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
+    <!-- Endpoint tests over the in-memory KafkaFake (no Docker). -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+    <!-- Docker suite (docs/PLAN-M2.md 7.6): apache/kafka:3.8.0 KRaft; skipped without Docker / DBSTUDIO_IT. -->
+    <PackageReference Include="Testcontainers.Kafka" Version="4.16.0" />
   </ItemGroup>
 
   <ItemGroup>

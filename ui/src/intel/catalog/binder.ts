@@ -119,6 +119,7 @@ export class Binder {
     }
     const pred = ref.kind === 'function' ? (e: ObjectEntry) => e.type === 'tablefunc' || e.isTabular : TABULAR;
     const raw = this.index.resolveRaw(parts, (e) => e.type === 'synonym' || pred(e));
+    const pgFn = ref.kind === 'function' && this.index.spec.id === 'pgsql';
     if (raw) {
       const syn = raw.type === 'synonym' ? raw : null;
       const target = syn ? this.index.followSynonym(syn) : raw;
@@ -126,7 +127,7 @@ export class Binder {
       if (e) {
         return this.mk(ref, {
           display: syn ? `${syn.qualifiedName} → ${e.qualifiedName}` : e.qualifiedName, shortName: e.name, entry: e, synonym: syn,
-          columns: () => e.columns(),
+          columns: () => (pgFn ? functionColumns(e.columns(), ref) : e.columns()),
         });
       }
       return this.mk(ref, { display: raw.qualifiedName, shortName: raw.name, synonym: syn, unresolved: true, columns: () => [] });
@@ -135,6 +136,14 @@ export class Binder {
       const pub = this.index.requestPublicSynonym(last.quoted ? last.text : last.text.toUpperCase());
       if (pub) {
         return this.mk(ref, { display: `PUBLIC.${pub.name}`, shortName: pub.name, entry: pub, columns: () => pub.columns() });
+      }
+    }
+    if (pgFn && parts.length <= 2) {
+      // built-in set-returning function: generate_series(…) AS g(n), jsonb_each(…), unnest(…) WITH ORDINALITY
+      const f = this.index.spec.functionMap.get(last.text.toUpperCase());
+      if (f) {
+        const base = (f.columns ?? [ref.alias ?? f.name]).map((n, i): ColumnDef => ({ name: n, type: '', ordinal: i + 1 }));
+        return this.mk(ref, { display: `${f.name}()`, shortName: f.name, columns: () => functionColumns(base, ref) });
       }
     }
     // tables created earlier in the script (CREATE TABLE x) but not in the catalog yet
@@ -236,7 +245,7 @@ export class Binder {
       if (!name) continue;
       // Oracle: unquoted output names fold to upper case
       const quoted = p.alias ? !!p.aliasQuoted : !!p.colRef?.name.quoted;
-      if (this.index.spec.caseFolding === 'upper' && !quoted) name = name.toUpperCase();
+      if (this.index.spec.caseFolding !== 'insensitive' && !quoted) name = this.index.spec.fold(name, false);
       let base: ColumnDef | undefined;
       if (p.colRef) base = this.lookupColumnRef(p.colRef.qualifier, p.colRef.name, scope, own);
       out.push({
@@ -317,6 +326,11 @@ export class Binder {
         const cols = this.recordColumns(v, scope);
         if (cols) return { kind: 'record', name: v.name, columns: cols, variable: v };
       }
+      if (idx.spec.id === 'pgsql' && !q.quoted && q.text.toUpperCase() === 'EXCLUDED') {
+        const ins = this.insertScope(scope);
+        const tgt = ins ? this.target(ins) : null;
+        if (tgt) return { kind: 'record', name: 'EXCLUDED', columns: tgt.columns(), variable: { name: 'EXCLUDED', kind: 'record', type: 'excluded row', range: tgt.ref.nameRange } };
+      }
       // trigger :NEW / :OLD (param token text includes the colon)
       const cte = this.findCte(q, scope);
       if (cte) return { kind: 'record', name: cte.name, columns: this.cteColumns(cte), variable: { name: cte.name, kind: 'record', type: 'CTE', range: cte.nameRange } };
@@ -354,7 +368,7 @@ export class Binder {
       }
       return null;
     }
-    if (parts.length === 3 && idx.spec.id === 'tsql') {
+    if (parts.length === 3 && (idx.spec.id === 'tsql' || idx.spec.id === 'pgsql')) {
       const obj = idx.resolve(parts, TABULAR);
       if (obj) return { kind: 'object', entry: obj };
     }
@@ -362,6 +376,12 @@ export class Binder {
       const obj = idx.resolve(parts.slice(0, 2), (e) => e.type === 'package');
       if (obj) return { kind: 'package', entry: obj };
     }
+    return null;
+  }
+
+  /** Innermost INSERT scope around `scope` (the ON CONFLICT DO UPDATE clause lives in it). */
+  insertScope(scope: Scope): Scope | null {
+    for (let s: Scope | null = scope; s; s = s.parent) if (s.kind === 'insert') return s;
     return null;
   }
 
@@ -375,6 +395,16 @@ export class Binder {
       default: return null;
     }
   }
+}
+
+/** Function source columns: the alias column list renames them, WITH ORDINALITY appends `ordinality`. */
+function functionColumns(base: ColumnDef[], ref: TableRef): ColumnDef[] {
+  let cols = base;
+  if (ref.withOrdinality && !(ref.columnAliases && ref.columnAliases.length > base.length)) cols = [...cols, { name: 'ordinality', type: 'bigint', ordinal: cols.length + 1 }];
+  if (ref.columnAliases && ref.columnAliases.length) {
+    return ref.columnAliases.map((n, i) => ({ ...(cols[i] ?? { type: '', ordinal: i + 1 }), name: n, ordinal: i + 1 }));
+  }
+  return cols;
 }
 
 function renameColumns(cols: ColumnDef[], names: string[] | undefined, keepExtra = false): ColumnDef[] {

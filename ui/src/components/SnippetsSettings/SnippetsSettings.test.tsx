@@ -34,7 +34,7 @@ describe('SnippetsSettings', () => {
     render(<Host initial={[{ id: 's_1', name: 'x', prefix: 'x', dialects: null, body: 'SELECT 1' }]} />);
     fireEvent.click(screen.getByLabelText('Oracle'));
     fireEvent.click(screen.getByRole('button', { name: /Save/ }));
-    expect(saved[0].dialects).toEqual(['tsql', 'sqlite']);
+    expect(saved[0].dialects).toEqual(['tsql', 'sqlite', 'pgsql']);
   });
 
   it('customizing a built-in creates an overriding user snippet; delete removes it', () => {

@@ -2,7 +2,7 @@
 // (styles-r1-04); deliberate icon stroke widths opt out of the global 1.5 rule (styles-r1-02).
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Dialog } from './Dialog';
 import { ColumnIcon, ProviderIcon } from './icons';
 import { Select } from './Select';
@@ -18,6 +18,48 @@ function SettingsLike() {
     </Dialog>
   );
 }
+
+describe('Dialog Escape with a Monaco editor inside', () => {
+  function editorDialog(onClose: () => void, widget = '') {
+    return render(
+      <Dialog title="Edit" onClose={onClose}>
+        <div className="monaco-editor">
+          <textarea aria-label="editor input" />
+          {widget && <div className={widget} />}
+        </div>
+        <input aria-label="plain" />
+      </Dialog>,
+    );
+  }
+
+  it('an open suggest or find widget keeps the dialog open', () => {
+    for (const widget of ['suggest-widget visible', 'editor-widget find-widget visible']) {
+      const onClose = vi.fn();
+      const { unmount } = editorDialog(onClose, widget);
+      fireEvent.keyDown(screen.getByLabelText('editor input'), { key: 'Escape' });
+      expect(onClose, widget).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it('an Escape Monaco already handled (prevented) keeps the dialog open', () => {
+    const onClose = vi.fn();
+    editorDialog(onClose);
+    const input = screen.getByLabelText('editor input');
+    input.addEventListener('keydown', (ev) => ev.preventDefault());
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes on Escape when no widget is open, and from outside the editor', () => {
+    const onClose = vi.fn();
+    editorDialog(onClose, 'suggest-widget');
+    fireEvent.keyDown(screen.getByLabelText('editor input'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByLabelText('plain'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('Dialog initial focus (styles-r1-04)', () => {
   it('focuses the first field even when it is a custom Select (button[role=combobox])', () => {

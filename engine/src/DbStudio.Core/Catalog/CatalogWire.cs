@@ -37,7 +37,7 @@ public static class CatalogWire
 
     /// <summary>Composes a snapshot from pre-serialized schema payloads (no re-serialization of the objects).</summary>
     public static byte[] ComposeSnapshot(string connectionId, Dialect dialect, string? database, string defaultSchema, int version,
-        IReadOnlyList<string> databases, IEnumerable<byte[]> schemas)
+        IReadOnlyList<string> databases, IEnumerable<byte[]> schemas, IReadOnlyList<string>? searchPath = null)
     {
         var buffer = new ArrayBufferWriter<byte>(16 * 1024);
         using (var w = new Utf8JsonWriter(buffer, WriterOptions))
@@ -51,6 +51,13 @@ public static class CatalogWire
             w.WriteStartArray("databases");
             foreach (var d in databases) w.WriteStringValue(d);
             w.WriteEndArray();
+            if (searchPath is { Count: > 0 })
+            {
+                // PostgreSQL (docs/PLAN-PG.md D-PG7): unqualified names resolve in this order.
+                w.WriteStartArray("searchPath");
+                foreach (var s in searchPath) w.WriteStringValue(s);
+                w.WriteEndArray();
+            }
             w.WriteStartArray("schemas");
             foreach (var s in schemas) w.WriteRawValue(s, skipInputValidation: true);
             w.WriteEndArray();

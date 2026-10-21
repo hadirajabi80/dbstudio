@@ -23,7 +23,7 @@ export function clientEndpoints(src: string): [string, string][] {
  * M2: feature namespaces of api/client.m2.ts whose mock module (mocks/m2/*.ts) is not written yet. Each feature package
  * removes its prefix when its mock routes land, so from then on every api.<ns>.* call needs a route.
  */
-const PENDING_M2_PREFIXES = ['/redis/', '/mongo/', '/kafka/', '/logs/', '/connections/x1/er/'];
+const PENDING_M2_PREFIXES: string[] = [];
 const pending = (path: string) => PENDING_M2_PREFIXES.some((p) => path.startsWith(p));
 
 describe('mock engine routes', () => {

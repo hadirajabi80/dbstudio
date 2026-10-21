@@ -198,7 +198,8 @@ const RESERVED: Record<TargetLang, Set<string>> = {
     'break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with let static yield await implements interface package private protected public'.split(' '),
   ),
   java: new Set(
-    'abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null var record yield'.split(' '),
+    // Key words, plus the java.lang.Object methods a record component / accessor cannot be named after (wait, hashCode…).
+    'abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null var record yield wait notify notifyAll getClass hashCode toString clone finalize'.split(' '),
   ),
   python: new Set(
     'False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case type'.split(' '),

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Xml.Linq;
 using DbStudio.Core.Models;
+using DbStudio.Core.Params;
 using DbStudio.Core.Plans;
 using DbStudio.Core.Services;
 
@@ -32,14 +33,50 @@ public sealed class SqlServerPlanReader : IPlanReader
                 CleanupSql = ["SET STATISTICS XML OFF"],
             };
         }
+        // Estimated: a parameterized statement goes to the server as an RPC (sp_executesql), and under SHOWPLAN_XML the
+        // server answers an RPC with no plan at all. The parameters become local variables of the batch instead, declared
+        // on the statement's first line (line numbers of server errors stay the editor's). Nothing executes either way.
+        var declare = input.Params is { Count: > 0 } ps ? DeclareParams(ps) : null;
         return new ExplainScript
         {
-            Batches = [new ExplainBatch("SET SHOWPLAN_XML ON", false, false), new ExplainBatch(sql, false, true, input.Line, input.Col)],
-            Params = input.Params,
+            Batches = [new ExplainBatch("SET SHOWPLAN_XML ON", false, false), new ExplainBatch(declare is null ? sql : declare + sql, false, true, input.Line, input.Col)],
+            Params = declare is null ? input.Params : null,
             IsPlanResultSet = IsShowplan,
             CleanupSql = ["SET SHOWPLAN_XML OFF"],
         };
     }
+
+    /// <summary>
+    /// <c>DECLARE @a int, @b nvarchar(4000); </c> for the named input parameters (the types SqlServerParamBinder binds),
+    /// or null when a parameter cannot be declared (positional, output, REF CURSOR): the request then keeps its binds.
+    /// </summary>
+    public static string? DeclareParams(IReadOnlyList<QueryParam> ps)
+    {
+        var parts = new List<string>();
+        foreach (var p in ps)
+        {
+            if (p.IsPositional || p.IsOutput || p.Kind == ParamKinds.RefCursor || !IsIdentifier(p.BareName)) return null;
+            var type = p.Kind switch
+            {
+                ParamKinds.Int => ParamValues.ToClr(p) is long l && l is >= int.MinValue and <= int.MaxValue ? "int" : "bigint",
+                ParamKinds.Decimal => $"decimal(38, {(ParamValues.ToClr(p) is decimal m ? Math.Min((int)m.Scale, 38) : 0)})",
+                ParamKinds.Float => "float",
+                ParamKinds.Bool => "bit",
+                ParamKinds.Date => "date",
+                ParamKinds.DateTime => "datetime2(7)",
+                ParamKinds.DateTimeOffset => "datetimeoffset(7)",
+                ParamKinds.Time => "time(7)",
+                ParamKinds.Guid => "uniqueidentifier",
+                ParamKinds.Binary => ParamValues.ToClr(p) is byte[] { Length: > 8000 } ? "varbinary(max)" : "varbinary(8000)",
+                _ => ParamValues.ToClr(p) is string { Length: > 4000 } ? "nvarchar(max)" : "nvarchar(4000)",
+            };
+            parts.Add($"@{p.BareName} {type}");
+        }
+        return parts.Count == 0 ? null : $"DECLARE {string.Join(", ", parts)}; ";
+    }
+
+    private static bool IsIdentifier(string name) =>
+        name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_') && name.All(c => char.IsLetterOrDigit(c) || c is '_' or '@' or '#' or '$');
 
     public static bool IsShowplan(ColumnInfo[] columns) =>
         columns.Length == 1 && columns[0].Name.Equals(ShowplanColumn, StringComparison.OrdinalIgnoreCase);

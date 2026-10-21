@@ -1,5 +1,5 @@
 // SQL generation for the data grid (PLAN-M1.5 A1): UPDATE / INSERT / DELETE per change, paging, COUNT and
-// refetch-by-key, for T-SQL, Oracle and SQLite. Every value is a bind parameter; identifiers go through quoteIdent.
+// refetch-by-key, for T-SQL, Oracle, SQLite and PostgreSQL. Every value is a bind parameter; identifiers go through quoteIdent.
 import type { CellValue, ColumnInfo, ColumnKind, Dialect } from '../api/types';
 import { ParamBuilder, inlineParams } from '../filter/sql';
 import type { ExecParam, ParamKind } from '../filter/wire';
@@ -85,16 +85,18 @@ export const NO_KEY_ORDER_MAX_COLUMNS = 8;
  */
 export const NO_KEY_ORDER_MAX_ROWS = 500_000;
 
-const isOrderable = (c: ColumnInfo) => {
+const isOrderable = (c: ColumnInfo, dialect?: Dialect) => {
   if (!c.name || c.kind === 'binary' || c.kind === 'xml' || c.kind === 'cursor' || c.kind === 'other') return false;
-  return !/^(n?text|image|xml|geography|geometry|hierarchyid|sql_variant|clob|nclob|blob|long( raw)?|bfile)$/i.test(c.dbType.trim());
+  // PostgreSQL text is an ordinary ordered type (T-SQL text/ntext are not); json / point / … have no ordering operator.
+  if (dialect === 'pgsql' && /^text$/i.test(c.dbType.trim())) return true;
+  return !/^(n?text|image|xml|json|point|line|lseg|box|path|polygon|circle|geography|geometry|hierarchyid|sql_variant|clob|nclob|blob|long( raw)?|bfile)$/i.test(c.dbType.trim());
 };
 
 /** Pseudo-columns / columns that make paging deterministic for a table or view without a key. */
 export function noKeyOrder(dialect: Dialect, columns: readonly ColumnInfo[], isView: boolean): string[] {
   if (!isView && dialect === 'sqlite') return ['rowid'];
   if (!isView && dialect === 'plsql') return ['ROWID'];
-  return columns.filter(isOrderable).slice(0, NO_KEY_ORDER_MAX_COLUMNS).map((c) => c.name);
+  return columns.filter((c) => isOrderable(c, dialect)).slice(0, NO_KEY_ORDER_MAX_COLUMNS).map((c) => c.name);
 }
 
 /**
@@ -139,22 +141,29 @@ export function tableSql(t: TableTarget, dialect: Dialect): string {
 /** Wire parameter kind for a column value. */
 export function paramKindFor(kind: ColumnKind, value: CellValue, dialect: Dialect): ParamKind {
   if (value === null) return kind === 'binary' ? 'binary' : kindToParam(kind, dialect);
-  if (typeof value === 'boolean') return dialect === 'tsql' ? 'bool' : 'int';
+  if (typeof value === 'boolean') return hasBool(dialect) ? 'bool' : 'int';
   return kindToParam(kind, dialect);
 }
 
+/** Dialects with a native boolean bind (T-SQL bit, PostgreSQL boolean); the others take 1/0. */
+const hasBool = (d: Dialect) => d === 'tsql' || d === 'pgsql';
+
+/**
+ * PostgreSQL keeps native kinds (bool, guid, time, decimal, dates); json / xml / enum / array / other columns bind as
+ * 'string', which the engine sends untyped so the server casts the text like a quoted literal.
+ */
 function kindToParam(kind: ColumnKind, dialect: Dialect): ParamKind {
   switch (kind) {
     case 'int': return 'int';
     case 'float': return 'float';
     case 'decimal': return dialect === 'sqlite' ? 'float' : 'decimal';
-    case 'bool': return dialect === 'tsql' ? 'bool' : 'int';
+    case 'bool': return hasBool(dialect) ? 'bool' : 'int';
     // SQLite has no date type: keep the text exactly as typed.
     case 'date': return dialect === 'sqlite' ? 'string' : 'date';
     case 'datetime': return dialect === 'sqlite' ? 'string' : 'datetime';
     case 'datetimeoffset': return dialect === 'sqlite' ? 'string' : 'datetimeoffset';
     case 'time': return dialect === 'sqlite' || dialect === 'plsql' ? 'string' : 'time';
-    case 'guid': return dialect === 'tsql' ? 'guid' : 'string';
+    case 'guid': return dialect === 'tsql' || dialect === 'pgsql' ? 'guid' : 'string';
     case 'binary': return 'binary';
     default: return 'string';
   }
@@ -163,13 +172,16 @@ function kindToParam(kind: ColumnKind, dialect: Dialect): ParamKind {
 /** Grid cell → bind value (booleans become 1/0 where the dialect has no boolean). */
 export function bindValue(kind: ColumnKind, value: CellValue, dialect: Dialect): string | number | boolean | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === 'boolean') return dialect === 'tsql' ? value : value ? 1 : 0;
+  if (typeof value === 'boolean') return hasBool(dialect) ? value : value ? 1 : 0;
   if (typeof value === 'object') {
     if ('$bin' in value) return value.$bin;
     if ('$trunc' in value) return value.$trunc;
     return null;
   }
-  if (kind === 'bool' && dialect !== 'tsql' && typeof value === 'string') return /^(1|true|y|yes)$/i.test(value) ? 1 : 0;
+  if (kind === 'bool' && typeof value === 'string') {
+    if (dialect === 'pgsql') return /^(1|true|t|y|yes|on)$/i.test(value.trim());
+    if (dialect !== 'tsql') return /^(1|true|y|yes)$/i.test(value) ? 1 : 0;
+  }
   return value;
 }
 
@@ -191,7 +203,8 @@ function keyWhere(pb: ParamBuilder, key: ColumnValue[], dialect: Dialect): strin
 }
 
 export function generateChange(change: RowChange, t: TableTarget, dialect: Dialect, opts: GenOptions = {}): GenStatement {
-  const pb = new ParamBuilder(dialect, 'p');
+  // PostgreSQL statements carry only our own binds, so they use native $1, $2, … placeholders.
+  const pb = new ParamBuilder(dialect, 'p', 1, { positional: true });
   const table = tableSql(t, dialect);
   const q = (n: string) => quoteIdent(n, dialect);
   const bind = (cv: ColumnValue) => pb.add(paramKindFor(cv.column.kind, cv.value, dialect), bindValue(cv.column.kind, cv.value, dialect));
@@ -261,6 +274,9 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
       });
       sql = `${head} RETURNING ${ret.map(q).join(', ')} INTO ${outs.join(', ')}`;
     } else sql = head;
+  } else if (dialect === 'pgsql') {
+    const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} DEFAULT VALUES`;
+    sql = ret.length ? `${head} RETURNING ${ret.map(q).join(', ')}` : head;
   } else {
     const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} DEFAULT VALUES`;
     if (ret.length && versionAtLeast(opts.sqliteVersion, [3, 35])) sql = `${head} RETURNING ${ret.map(q).join(', ')}`;
@@ -295,9 +311,9 @@ export function rollbackToSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT):
   return dialect === 'tsql' ? `ROLLBACK TRANSACTION ${name}` : `ROLLBACK TO SAVEPOINT ${name}`;
 }
 
-/** SQLite only: drop the savepoint after a successful submit (Oracle/T-SQL have no RELEASE). */
+/** SQLite / PostgreSQL: drop the savepoint after a successful submit (Oracle/T-SQL have no RELEASE). */
 export function releaseSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT): string | null {
-  return dialect === 'sqlite' ? `RELEASE SAVEPOINT ${name}` : null;
+  return dialect === 'sqlite' || dialect === 'pgsql' ? `RELEASE SAVEPOINT ${name}` : null;
 }
 
 /** Readable script for the preview / "Copy SQL" (parameters shown as literals). */
@@ -393,7 +409,7 @@ export function describeSql(t: TableTarget, dialect: Dialect): string {
 
 /** `SELECT * FROM t WHERE (k1 = @p1 AND k2 = @p2) OR (…)` to show identities/defaults/trigger effects after submit. */
 export function refetchSql(t: TableTarget, dialect: Dialect, keys: ColumnValue[][]): { sql: string; params: ExecParam[] } {
-  const pb = new ParamBuilder(dialect, 'k');
+  const pb = new ParamBuilder(dialect, 'k', 1, { positional: true });
   const parts = keys.map((k) => keyWhere(pb, k, dialect));
   const where = parts.length === 1 ? parts[0] : parts.map((p) => (k1(p) ? p : `(${p})`)).join(' OR ');
   return { sql: `SELECT *\nFROM ${tableSql(t, dialect)}\nWHERE ${where}`, params: pb.params };

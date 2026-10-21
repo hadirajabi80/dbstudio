@@ -33,6 +33,15 @@ describe('object index', () => {
   it('parses type prefixes', () => {
     expect(parseObjectQuery('t:ord')).toEqual({ prefix: 't', pattern: 'ord' });
     expect(parseObjectQuery('  ord ')).toEqual({ prefix: null, pattern: 'ord' });
+    expect(parseObjectQuery('er: ord')).toEqual({ prefix: 'er', pattern: 'ord' });
+    expect(parseObjectQuery('ER:ord')).toEqual({ prefix: 'er', pattern: 'ord' });
+  });
+
+  it('er: lists tables and views (the ER diagram of their related tables)', () => {
+    const hits = searchObjects(collectEntries(dbs, false), 'er:ord', 200);
+    expect(hits.length).toBe(200);
+    expect(hits.every((h) => h.entry.type === 'table' || h.entry.type === 'view')).toBe(true);
+    expect(hits.some((h) => h.entry.type === 'view')).toBe(true);
   });
 
   it('finds objects across connections, best match first, filtered by prefix', () => {

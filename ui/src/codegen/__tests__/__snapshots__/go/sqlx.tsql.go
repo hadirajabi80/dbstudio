@@ -11,7 +11,7 @@ import (
 	mssql "github.com/microsoft/go-mssqldb"
 )
 
-// Customer is a row of dbo.Customers: Registered customer.
+// Customer is a row of dbo.Customers: Registered customers.
 type Customer struct {
 	ID        int32   `db:"Id" json:"id"`
 	Name      string  `db:"Name" json:"name"` // Display name
@@ -346,7 +346,7 @@ func (s *CountryStore) Delete(ctx context.Context, id int32) error {
 	return execAffectedOne(s.db.ExecContext(ctx, s.db.Rebind(countryDeleteSQL), id))
 }
 
-// VActiveCustomer is a row of dbo.vActiveCustomers: Customers with at least one orde.
+// VActiveCustomer is a row of dbo.vActiveCustomers: Customers with at least one order.
 type VActiveCustomer struct {
 	ID         int32  `db:"Id" json:"id"`
 	Name       string `db:"Name" json:"name"`
@@ -442,7 +442,7 @@ func (s *InvoiceStore) Delete(ctx context.Context, id int32) error {
 	return execAffectedOne(s.db.ExecContext(ctx, s.db.Rebind(invoiceDeleteSQL), id))
 }
 
-// Event is a row of dbo.Events: Audit trail of things that happene.
+// Event is a row of dbo.Events: Audit trail of things that happened.
 type Event struct {
 	EventID    string     `db:"EventId" json:"eventId"`
 	OccurredAt time.Time  `db:"OccurredAt" json:"occurredAt"` // When it happened (with offset)

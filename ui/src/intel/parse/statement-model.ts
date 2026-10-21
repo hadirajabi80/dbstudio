@@ -5,6 +5,8 @@ export type ClauseKind =
   | 'select' | 'from' | 'join' | 'on' | 'where' | 'groupBy' | 'having' | 'orderBy' | 'into' | 'insertColumns'
   | 'values' | 'set' | 'update' | 'delete' | 'with' | 'cteColumns' | 'using' | 'returning' | 'limit' | 'exec'
   | 'execArgs' | 'declare' | 'ddl' | 'unknown'
+  /** PostgreSQL `expr::|` / `CAST(expr AS |`: a data type. */
+  | 'cast'
   /** Procedural expression (PL/SQL statement, T-SQL SET/PRINT/IF condition): variables, functions, packages. */
   | 'expr';
 
@@ -32,6 +34,8 @@ export interface MarkerData {
   proc?: NamePart[];
   /** Statement start inside a block. */
   statementStart?: boolean;
+  /** INSERT … ON CONFLICT: conflict target (`ON CONFLICT |`, `(cols)`) or action (`DO NOTHING` / `DO UPDATE SET`). */
+  conflict?: 'target' | 'columns' | 'action' | 'do';
 }
 
 export interface Marker { pos: number; clause: ClauseKind; data?: MarkerData }
@@ -72,6 +76,8 @@ export interface TableRef {
   isTarget?: boolean;
   /** Function call arguments range (table-valued functions). */
   argsRange?: [number, number];
+  /** PostgreSQL `fn(...) WITH ORDINALITY`: an extra trailing `ordinality` column. */
+  withOrdinality?: boolean;
 }
 
 export interface CteDef {

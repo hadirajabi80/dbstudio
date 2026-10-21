@@ -1,0 +1,88 @@
+{
+  "type": "exec.plan",
+  "ts": "2026-10-14T10:00:00.000Z",
+  "executionId": "x_fixture",
+  "dialect": "pgsql",
+  "mode": "estimated",
+  "root": {
+    "id": 1,
+    "op": "Hash Join",
+    "logicalOp": "Inner",
+    "object": null,
+    "estRows": 1,
+    "actualRows": null,
+    "cost": 2.25,
+    "costPct": 4,
+    "predicate": "(o.customer_id = c.id)",
+    "warnings": [],
+    "props": {
+      "Startup Cost": "1.11",
+      "Plan Width": "254",
+      "Output": "c.name, o.total"
+    },
+    "children": [
+      {
+        "id": 2,
+        "op": "Seq Scan",
+        "logicalOp": null,
+        "object": "public.orders (o)",
+        "estRows": 6,
+        "actualRows": null,
+        "cost": 1.06,
+        "costPct": 47.1,
+        "predicate": null,
+        "warnings": [],
+        "props": {
+          "Startup Cost": "0.00",
+          "Plan Width": "20",
+          "Parent Relationship": "Outer",
+          "Output": "o.id, o.customer_id, o.order_date, o.total, o.status"
+        },
+        "children": []
+      },
+      {
+        "id": 3,
+        "op": "Hash",
+        "logicalOp": null,
+        "object": null,
+        "estRows": 1,
+        "actualRows": null,
+        "cost": 1.1,
+        "costPct": 0,
+        "predicate": null,
+        "warnings": [],
+        "props": {
+          "Startup Cost": "1.10",
+          "Plan Width": "222",
+          "Parent Relationship": "Inner",
+          "Output": "c.name, c.id"
+        },
+        "children": [
+          {
+            "id": 4,
+            "op": "Index Scan",
+            "logicalOp": null,
+            "object": "public.customers.pk_customers (c)",
+            "estRows": 1,
+            "actualRows": null,
+            "cost": 1.1,
+            "costPct": 48.9,
+            "predicate": "(c.id = $1)",
+            "warnings": [],
+            "props": {
+              "Startup Cost": "0.13",
+              "Plan Width": "222",
+              "Parent Relationship": "Outer",
+              "Index Name": "pk_customers",
+              "Output": "c.name, c.id"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "raw": "[\n  {\n    \u0022Plan\u0022: {\n      \u0022Node Type\u0022: \u0022Hash Join\u0022,\n      \u0022Parallel Aware\u0022: false,\n      \u0022Async Capable\u0022: false,\n      \u0022Join Type\u0022: \u0022Inner\u0022,\n      \u0022Startup Cost\u0022: 1.11,\n      \u0022Total Cost\u0022: 2.25,\n      \u0022Plan Rows\u0022: 1,\n      \u0022Plan Width\u0022: 254,\n      \u0022Output\u0022: [\n        \u0022c.name\u0022,\n        \u0022o.total\u0022\n      ],\n      \u0022Inner Unique\u0022: false,\n      \u0022Hash Cond\u0022: \u0022(o.customer_id = c.id)\u0022,\n      \u0022Plans\u0022: [\n        {\n          \u0022Node Type\u0022: \u0022Seq Scan\u0022,\n          \u0022Parent Relationship\u0022: \u0022Outer\u0022,\n          \u0022Parallel Aware\u0022: false,\n          \u0022Async Capable\u0022: false,\n          \u0022Relation Name\u0022: \u0022orders\u0022,\n          \u0022Schema\u0022: \u0022public\u0022,\n          \u0022Alias\u0022: \u0022o\u0022,\n          \u0022Startup Cost\u0022: 0.00,\n          \u0022Total Cost\u0022: 1.06,\n          \u0022Plan Rows\u0022: 6,\n          \u0022Plan Width\u0022: 20,\n          \u0022Output\u0022: [\n            \u0022o.id\u0022,\n            \u0022o.customer_id\u0022,\n            \u0022o.order_date\u0022,\n            \u0022o.total\u0022,\n            \u0022o.status\u0022\n          ]\n        },\n        {\n          \u0022Node Type\u0022: \u0022Hash\u0022,\n          \u0022Parent Relationship\u0022: \u0022Inner\u0022,\n          \u0022Parallel Aware\u0022: false,\n          \u0022Async Capable\u0022: false,\n          \u0022Startup Cost\u0022: 1.10,\n          \u0022Total Cost\u0022: 1.10,\n          \u0022Plan Rows\u0022: 1,\n          \u0022Plan Width\u0022: 222,\n          \u0022Output\u0022: [\n            \u0022c.name\u0022,\n            \u0022c.id\u0022\n          ],\n          \u0022Plans\u0022: [\n            {\n              \u0022Node Type\u0022: \u0022Index Scan\u0022,\n              \u0022Parent Relationship\u0022: \u0022Outer\u0022,\n              \u0022Parallel Aware\u0022: false,\n              \u0022Async Capable\u0022: false,\n              \u0022Scan Direction\u0022: \u0022Forward\u0022,\n              \u0022Index Name\u0022: \u0022pk_customers\u0022,\n              \u0022Relation Name\u0022: \u0022customers\u0022,\n              \u0022Schema\u0022: \u0022public\u0022,\n              \u0022Alias\u0022: \u0022c\u0022,\n              \u0022Startup Cost\u0022: 0.13,\n              \u0022Total Cost\u0022: 1.10,\n              \u0022Plan Rows\u0022: 1,\n              \u0022Plan Width\u0022: 222,\n              \u0022Output\u0022: [\n                \u0022c.name\u0022,\n                \u0022c.id\u0022\n              ],\n              \u0022Index Cond\u0022: \u0022(c.id = $1)\u0022\n            }\n          ]\n        }\n      ]\n    }\n  }\n]",
+  "rawFormat": "json",
+  "warnings": []
+}
