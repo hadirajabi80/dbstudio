@@ -47,6 +47,22 @@ export interface ErEdge {
   self: boolean;
   /** One end is a ghost card. */
   ghost: boolean;
+  /** SQL Server: the key is disabled (NOCHECK CONSTRAINT), drawn dotted. */
+  disabled?: boolean;
+  /** SQL Server: existing rows were not checked (WITH NOCHECK). */
+  notTrusted?: boolean;
+}
+
+/** Why relationships of the diagram's tables are not all drawn (the toolbar / status line explain it). */
+export interface RelationshipStats {
+  /** Drawn edges whose key is disabled. */
+  disabled: number;
+  /** Keys the catalog left out: their referenced table is not visible to the login (`fkHidden`, or an empty target). */
+  notVisible: number;
+  /** Drawn edges to a table whose schema is not loaded (a name-only ghost card). */
+  unresolved: number;
+  /** Keys to or from tables removed from the diagram (or filtered out: views, unrelated). */
+  filtered: number;
 }
 
 export interface DiagramModel {
@@ -56,7 +72,22 @@ export interface DiagramModel {
   /** Diagram members (not ghosts), in model order. */
   memberCount: number;
   mainSchema: string | null;
+  stats: RelationshipStats;
 }
+
+/**
+ * Optional schema-level catalog fields (engine CatalogWire): `refBy` names the other schemas with foreign keys into
+ * this schema, `fkHidden` counts keys left out because the login cannot see their referenced table.
+ */
+export interface ErSchemaExtras {
+  refBy?: string[];
+  fkHidden?: number;
+}
+
+const extrasOf = (s: CatalogSchema) => s as CatalogSchema & ErSchemaExtras;
+
+/** A catalog FK that names its target (older engines sent `rt: ""` for a target the login cannot see). */
+const usableFk = (fk: CatalogForeignKey) => !!fk.rt && fk.cols.length > 0;
 
 export type ColumnMode = NonNullable<DiagramViewOptions['columns']>;
 
@@ -117,13 +148,14 @@ function resolveRef(u: Universe, fromSchema: string, fk: CatalogForeignKey): { k
 }
 
 function nodeOf(key: string, schema: string, o: CatalogObject, mainSchema: string | null, ghost: boolean): ErNode {
-  const fkCols = new Set((o.fk ?? []).flatMap((f) => f.cols));
+  const fks = (o.fk ?? []).filter(usableFk);
+  const fkCols = new Set(fks.flatMap((f) => f.cols));
   const pk = o.pk ?? (o.c ?? []).filter((c) => c[3] === 1).map((c) => c[0]);
   const pkSet = new Set(pk);
   return {
     key, schema, name: o.n, type: o.t as ErObjectType, label: schema === mainSchema ? o.n : `${schema}.${o.n}`,
     columns: (o.c ?? []).filter((c) => !(c[4] & 4)).map((c) => ({ name: c[0], type: c[1], nullable: c[2] === 1, pk: pkSet.has(c[0]) || c[3] === 1, fk: fkCols.has(c[0]) })),
-    pk, fks: o.fk ?? [], comment: o.cm ?? null, ghost,
+    pk, fks, comment: o.cm ?? null, ghost,
   };
 }
 
@@ -133,6 +165,31 @@ export function schemasOfScope(scope: DiagramScope, added: readonly string[] = [
   if (scope.schema) out.add(scope.schema);
   for (const t of [...(scope.tables ?? []), ...added]) out.add(splitKey(t).schema);
   return [...out].filter(Boolean);
+}
+
+/**
+ * The schemas one FK hop away from the loaded `needed` schemas that are not needed themselves: schemas their tables
+ * reference (`fk.rs`) and schemas that reference them (`refBy`, from the engine). Loading these turns name-only ghost
+ * cards into real ones and brings in incoming keys from other schemas (old databases often split tables over several
+ * owner schemas). Capped so a database with hundreds of schemas does not load them all.
+ */
+export function oneHopSchemas(schemas: readonly CatalogSchema[], needed: readonly string[], max = 24): string[] {
+  const want = new Set(needed.map((s) => s.toLowerCase()));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (s: string | null | undefined) => {
+    if (!s) return;
+    const k = s.toLowerCase();
+    if (want.has(k) || seen.has(k) || out.length >= max) return;
+    seen.add(k);
+    out.push(s);
+  };
+  for (const s of schemas) {
+    if (!want.has(s.name.toLowerCase())) continue;
+    for (const r of extrasOf(s).refBy ?? []) add(r);
+    for (const o of s.objects) if (TABULAR.has(o.t)) for (const fk of o.fk ?? []) if (usableFk(fk)) add(fk.rs);
+  }
+  return out;
 }
 
 /**
@@ -187,15 +244,26 @@ export function buildModel(input: ModelInput): DiagramModel {
     edgeIds.add(id);
     const colInfo = new Map(fromCols.map((c) => [c.name, c]));
     const optional = fk.cols.length > 0 && fk.cols.every((c) => colInfo.get(c)?.nullable ?? false);
-    edges.push({ id, from: fromKey, to: toKey, name: fk.n, cols: fk.cols, rcols: fk.rcols, optional, self: fromKey === toKey, ghost: ghostEdge });
+    edges.push({
+      id, from: fromKey, to: toKey, name: fk.n, cols: fk.cols, rcols: fk.rcols, optional, self: fromKey === toKey, ghost: ghostEdge,
+      ...(fk.dis ? { disabled: true } : {}), ...(fk.nt ? { notTrusted: true } : {}),
+    });
   };
+  let filtered = 0;
+  let notVisible = 0;
+  const memberSchemas = new Set<string>();
 
   // outgoing FKs of members
   for (const k of memberKeys) {
     const n = byKey.get(k)!;
+    memberSchemas.add(n.schema);
+    notVisible += (u.objects.get(k)!.o.fk ?? []).length - n.fks.length;
     for (const fk of n.fks) {
       const ref = resolveRef(u, n.schema, fk);
-      if (hidden.has(ref.key)) continue;
+      if (hidden.has(ref.key)) {
+        filtered++;
+        continue;
+      }
       if (members.has(ref.key)) pushEdge(k, ref.key, fk, n.columns, false);
       else {
         ghost(ref.key, ref.known, { schema: fk.rs ?? n.schema, name: fk.rt });
@@ -205,15 +273,21 @@ export function buildModel(input: ModelInput): DiagramModel {
   }
   // incoming FKs from loaded non-members (other schemas, the next hop)
   for (const [k, { schema, o }] of u.objects) {
-    if (members.has(k) || hidden.has(k) || !o.fk?.length) continue;
+    if (members.has(k) || !o.fk?.length) continue;
     for (const fk of o.fk) {
+      if (!usableFk(fk)) continue;
       const ref = resolveRef(u, schema, fk);
       if (!members.has(ref.key)) continue;
+      if (hidden.has(k)) {
+        filtered++;
+        continue;
+      }
       ghost(k, true);
       const g = ghosts.get(k)!;
       pushEdge(k, ref.key, fk, g.columns, true);
     }
   }
+  for (const s of input.schemas) if (memberSchemas.has(s.name)) notVisible += extrasOf(s).fkHidden ?? 0;
 
   let nodes = [...byKey.values()];
   if (input.onlyConnected) {
@@ -224,13 +298,39 @@ export function buildModel(input: ModelInput): DiagramModel {
   const ghostList = [...ghosts.values()].filter((g) => edges.some((e) => (e.from === g.key && kept.has(e.to)) || (e.to === g.key && kept.has(e.from))));
   const all = [...nodes, ...ghostList];
   const finalKeys = new Set(all.map((n) => n.key));
+  const byKeyAll = new Map(all.map((n) => [n.key, n]));
+  const shown = edges.filter((e) => finalKeys.has(e.from) && finalKeys.has(e.to));
   return {
     nodes: all,
-    byKey: new Map(all.map((n) => [n.key, n])),
-    edges: edges.filter((e) => finalKeys.has(e.from) && finalKeys.has(e.to)),
+    byKey: byKeyAll,
+    edges: shown,
     memberCount: nodes.length,
     mainSchema,
+    stats: {
+      disabled: shown.filter((e) => e.disabled).length,
+      notVisible,
+      unresolved: shown.filter((e) => byKeyAll.get(e.to)?.unresolved || byKeyAll.get(e.from)?.unresolved).length,
+      filtered: filtered + (edges.length - shown.length),
+    },
   };
+}
+
+/** Status-line text: "12 tables · 15 relationships · 2 disabled · 3 hidden". */
+export function relationshipSummary(m: Pick<DiagramModel, 'memberCount' | 'edges' | 'stats'>): { text: string; title: string | null; warn: boolean } {
+  const n = m.edges.length;
+  const parts = [`${m.memberCount} table${m.memberCount === 1 ? '' : 's'}`, `${n} relationship${n === 1 ? '' : 's'}`];
+  const why: string[] = [];
+  const { disabled, notVisible, unresolved, filtered } = m.stats;
+  if (disabled) {
+    parts.push(`${disabled} disabled`);
+    why.push(`${disabled} disabled (NOCHECK) key${disabled === 1 ? ' is' : 's are'} drawn dotted.`);
+  }
+  const hiddenCount = notVisible + filtered;
+  if (hiddenCount) parts.push(`${hiddenCount} hidden`);
+  if (notVisible) why.push(`${notVisible} key${notVisible === 1 ? '' : 's'} not shown: the referenced table is not visible to this login (it needs VIEW DEFINITION or SELECT on it).`);
+  if (filtered) why.push(`${filtered} key${filtered === 1 ? '' : 's'} to tables removed from or filtered out of this diagram.`);
+  if (unresolved) why.push(`${unresolved} relationship${unresolved === 1 ? '' : 's'} to tables of schemas that could not be loaded (names only).`);
+  return { text: parts.join(' · '), title: why.length ? why.join('\n') : null, warn: notVisible > 0 };
 }
 
 /** Tables one FK hop away from `key` (both directions) in the loaded schemas, `key` first. */
@@ -239,9 +339,9 @@ export function relatedTables(schemas: readonly CatalogSchema[], key: string, ex
   const root = u.objects.has(key) ? key : u.lower.get(key.toLowerCase()) ?? key;
   const out = new Set<string>([root]);
   const self = u.objects.get(root);
-  for (const fk of self?.o.fk ?? []) out.add(resolveRef(u, self!.schema, fk).key);
+  for (const fk of self?.o.fk ?? []) if (usableFk(fk)) out.add(resolveRef(u, self!.schema, fk).key);
   for (const [k, { schema, o }] of u.objects) {
-    for (const fk of o.fk ?? []) if (resolveRef(u, schema, fk).key === root) out.add(k);
+    for (const fk of o.fk ?? []) if (usableFk(fk) && resolveRef(u, schema, fk).key === root) out.add(k);
   }
   for (const k of extraIncoming) out.add(k);
   return [...out];

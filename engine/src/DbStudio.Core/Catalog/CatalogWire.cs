@@ -7,7 +7,7 @@ namespace DbStudio.Core.Catalog;
 
 /// <summary>
 /// Compact catalog JSON (docs/PLAN.md 3.3, D-10; ui/src/api/types.ts CatalogSnapshot/CatalogObject):
-/// <c>{"t","n","cm"?,"c"?:[[name,type,nullable,isPk,flags,comment]],"pk"?,"fk"?,"p"?:[[name,type,dir,hasDefault]],
+/// <c>{"t","n","cm"?,"c"?:[[name,type,nullable,isPk,flags,comment]],"pk"?,"fk"?:[{"n","cols","rs","rt","rcols","dis"?,"nt"?}],"p"?:[[name,type,dir,hasDefault]],
 /// "target"?:{"d","s","n","t"},"members"?:[{"n","k","ov","p"}],"st"?}</c>. Empty/null optional members are omitted.
 /// </summary>
 public static class CatalogWire
@@ -18,7 +18,11 @@ public static class CatalogWire
         SkipValidation = false,
     };
 
-    /// <summary>Serializes one schema as <c>{"name","version","objects":[...]}</c>.</summary>
+    /// <summary>
+    /// Serializes one schema as <c>{"name","version","objects":[...],"refBy"?:[schema],"fkHidden"?:n}</c>: <c>refBy</c> names
+    /// the other schemas with foreign keys into this one, <c>fkHidden</c> counts foreign keys left out because their
+    /// target is not visible to the login (both optional, read by the ER diagram).
+    /// </summary>
     public static byte[] SerializeSchema(SchemaCatalog schema, int version)
     {
         var buffer = new ArrayBufferWriter<byte>(4096);
@@ -30,6 +34,8 @@ public static class CatalogWire
             w.WriteStartArray("objects");
             foreach (var o in schema.Objects) WriteObject(w, o);
             w.WriteEndArray();
+            if (schema.ReferencingSchemas.Count > 0) WriteStrings(w, "refBy", schema.ReferencingSchemas);
+            if (schema.HiddenForeignKeys > 0) w.WriteNumber("fkHidden", schema.HiddenForeignKeys);
             w.WriteEndObject();
         }
         return buffer.WrittenSpan.ToArray();
@@ -103,6 +109,8 @@ public static class CatalogWire
                 if (fk.RefSchema is null) w.WriteNull("rs"); else w.WriteString("rs", fk.RefSchema);
                 w.WriteString("rt", fk.RefTable);
                 WriteStrings(w, "rcols", fk.RefColumns);
+                if (fk.IsDisabled) w.WriteBoolean("dis", true);
+                if (fk.IsNotTrusted) w.WriteBoolean("nt", true);
                 w.WriteEndObject();
             }
             w.WriteEndArray();

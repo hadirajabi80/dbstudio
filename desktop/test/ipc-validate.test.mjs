@@ -66,6 +66,15 @@ describe('misc validation', () => {
     assert.throws(() => v.serializeWorkspace(cyclic));
     assert.throws(() => v.validateFileContent(5));
   });
+  it('file content is text or bytes (binary exports such as .xlsx)', () => {
+    assert.equal(v.validateFileContent('select 1'), 'select 1');
+    const bytes = v.validateFileContent(new Uint8Array([0x50, 0x4b, 3, 4]));
+    assert.ok(bytes instanceof Uint8Array);
+    assert.deepEqual([...bytes], [0x50, 0x4b, 3, 4]);
+    const view = v.validateFileContent(Buffer.from([1, 2, 3]).subarray(1));
+    assert.deepEqual([...view], [2, 3]);
+    for (const bad of [5, null, undefined, {}, [1, 2], new DataView(new ArrayBuffer(2))]) assert.throws(() => v.validateFileContent(bad), v.ValidationError);
+  });
 });
 
 describe('update and window-chrome IPC', () => {

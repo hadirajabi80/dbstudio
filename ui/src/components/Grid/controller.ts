@@ -32,9 +32,9 @@ export interface GridController {
   /** Copy the selection (or every visible row when nothing / `all` is selected) in a format. */
   copyAs?(format: import('../../lib/serialize').CopyFormat, all?: boolean): void;
   /** Export the whole result (engine-side when possible). */
-  exportAs?(format: 'csv' | 'json' | 'sql-insert'): void;
+  exportAs?(format: import('./clientExport').FileFormat): void;
   /** Client-side export of the visible rows (filter, sort and committed edits applied; full values fetched). */
-  exportVisible?(format: 'csv' | 'json' | 'sql-insert', o: { baseName: string; note?: string | null }): Promise<void>;
+  exportVisible?(format: import('./clientExport').FileFormat, o: { baseName: string; note?: string | null }): Promise<void>;
   toggleValueViewer?(): void;
   clearSort?(): void;
   hasSort?(): boolean;

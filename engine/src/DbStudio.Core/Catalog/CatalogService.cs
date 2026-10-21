@@ -195,10 +195,18 @@ public sealed class CatalogService
         }
     }
 
-    private static async Task<SchemaEntry> LoadSchemaAsync(DbCatalog db, string name, int version, ReaderLease lease, CancellationToken ct)
+    private async Task<SchemaEntry> LoadSchemaAsync(DbCatalog db, string name, int version, ReaderLease lease, CancellationToken ct)
     {
-        var canonical = db.SchemaList?.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Name ?? name;
+        // exact name first: a case-sensitive database may have both "Sales" and "sales"
+        var canonical = (db.SchemaList?.FirstOrDefault(s => s.Name.Equals(name, StringComparison.Ordinal))
+                         ?? db.SchemaList?.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))?.Name ?? name;
         var model = await (await lease.GetAsync().ConfigureAwait(false)).LoadSchemaAsync(db.Name, canonical, ct).ConfigureAwait(false);
+        var fkCount = model.Objects.Sum(o => o.ForeignKeys.Count);
+        _log.LogDebug("Catalog {Database}.{Schema}: {Objects} objects, {ForeignKeys} foreign keys, referenced from [{ReferencingSchemas}]",
+            db.Name, model.Name, model.Objects.Count, fkCount, string.Join(", ", model.ReferencingSchemas));
+        if (model.HiddenForeignKeys > 0)
+            _log.LogWarning("Catalog {Database}.{Schema}: {Hidden} foreign key(s) left out: the referenced table or columns are not visible to this login (VIEW DEFINITION)",
+                db.Name, model.Name, model.HiddenForeignKeys);
         var entry = new SchemaEntry(model.Name, version, CatalogWire.SerializeSchema(model, version), model.Objects.Count);
         db.Loaded[model.Name] = entry;
         return entry;
@@ -278,7 +286,7 @@ public sealed class CatalogService
         }
     }
 
-    private static async Task<List<string>> ReloadAsync(DbCatalog db, List<string> names, ReaderLease lease, CancellationToken ct)
+    private async Task<List<string>> ReloadAsync(DbCatalog db, List<string> names, ReaderLease lease, CancellationToken ct)
     {
         db.Version++;
         var reloaded = new List<string>();

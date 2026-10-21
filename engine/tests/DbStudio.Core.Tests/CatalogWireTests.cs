@@ -85,6 +85,32 @@ public class CatalogWireTests
     }
 
     [Fact]
+    public void ForeignKeyFlags_AndSchemaDiagnostics_AreWrittenOnlyWhenSet()
+    {
+        var schema = new SchemaCatalog("Shop", "dbo",
+        [
+            new CatalogObject
+            {
+                Type = ObjectTypes.Table, Name = "Orders",
+                ForeignKeys =
+                [
+                    new("FK_A", ["CustomerId"], "dbo", "Customers", ["Id"], IsDisabled: true, IsNotTrusted: true),
+                    new("FK_B", ["ProductId"], "dbo", "Products", ["Id"], IsNotTrusted: true),
+                    new("FK_C", ["ShopId"], "dbo", "Shops", ["Id"]),
+                ],
+            },
+        ]) { ReferencingSchemas = ["Sales", "hr"], HiddenForeignKeys = 2 };
+        var json = Encoding.UTF8.GetString(CatalogWire.SerializeSchema(schema, 1));
+        Assert.Contains("""{"n":"FK_A","cols":["CustomerId"],"rs":"dbo","rt":"Customers","rcols":["Id"],"dis":true,"nt":true}""", json);
+        Assert.Contains("""{"n":"FK_B","cols":["ProductId"],"rs":"dbo","rt":"Products","rcols":["Id"],"nt":true}""", json);
+        Assert.Contains("""{"n":"FK_C","cols":["ShopId"],"rs":"dbo","rt":"Shops","rcols":["Id"]}""", json);
+        Assert.EndsWith("""],"refBy":["Sales","hr"],"fkHidden":2}""", json);
+
+        var plain = Encoding.UTF8.GetString(CatalogWire.SerializeSchema(new SchemaCatalog(null, "main", []), 1));
+        Assert.Equal("""{"name":"main","version":1,"objects":[]}""", plain);
+    }
+
+    [Fact]
     public void NonAsciiNames_AreNotEscaped()
     {
         var schema = new SchemaCatalog(null, "main", [new CatalogObject { Type = ObjectTypes.Table, Name = "Bestellungen_ÄÖÜ" }]);

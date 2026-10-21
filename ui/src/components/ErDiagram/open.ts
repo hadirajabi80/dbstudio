@@ -83,7 +83,21 @@ async function defaultSchema(connectionId: string, database: string | null): Pro
   const r = await cat.loadSchemas(connectionId, database);
   const d = useCatalog.getState().dbs[dbKey(connectionId, database)];
   const dialect = dialectOf(connectionId);
-  return d?.defaultSchema ?? r?.defaultSchema ?? r?.schemas[0]?.name ?? (dialect === 'sqlite' ? 'main' : dialect === 'tsql' ? 'dbo' : null);
+  const def = d?.defaultSchema ?? r?.defaultSchema ?? r?.schemas[0]?.name ?? (dialect === 'sqlite' ? 'main' : dialect === 'tsql' ? 'dbo' : null);
+  return populatedSchema(def, r?.schemas ?? []);
+}
+
+/**
+ * The login's default schema, unless it is known to be empty while other schemas hold objects (a database upgraded
+ * from SQL Server 2000 gives each user an empty schema of its own name): then dbo / public, else the fullest schema.
+ */
+export function populatedSchema(def: string | null, schemas: readonly { name: string; objectCount?: number | null }[]): string | null {
+  const count = (n: string | null) => schemas.find((s) => s.name === n)?.objectCount;
+  if (!def || count(def) !== 0) return def;
+  const withObjects = schemas.filter((s) => (s.objectCount ?? 0) > 0);
+  if (!withObjects.length) return def;
+  const conventional = withObjects.find((s) => s.name === 'dbo' || s.name === 'public');
+  return (conventional ?? [...withObjects].sort((a, b) => (b.objectCount ?? 0) - (a.objectCount ?? 0))[0]).name;
 }
 
 /** er.open: the schema of the target (connection / database → its default schema). */

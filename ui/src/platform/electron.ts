@@ -16,8 +16,10 @@ export function createElectronPlatform(b: DbStudioBridge): Platform {
     async saveFile({ suggestedName, filters, content }) {
       const path = await b.showSaveDialog({ defaultPath: suggestedName, filters });
       if (!path) return null;
-      const text = typeof content === 'string' ? content : await content.text();
-      await b.writeTextFile(path, text);
+      // A Blob is written byte for byte (an .xlsx is binary; Blob.text() would corrupt it). The main process accepts a
+      // Uint8Array on the same channel (desktop/src/main/validate.ts validateFileContent).
+      const data = typeof content === 'string' ? content : new Uint8Array(await content.arrayBuffer());
+      await b.writeTextFile(path, data as unknown as string);
       return path;
     },
     async openTextFile({ filters }) {

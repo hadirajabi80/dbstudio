@@ -162,9 +162,14 @@ export function createHandlers(engine: MockEngine) {
       const body = (await request.json()) as ResultSetExportRequest;
       const set = engine.resultSet(String(params.xid), Number(params.rs));
       if (!set) return err(404, 'NOT_FOUND', 'Result set no longer available');
-      const text = serializeRows(body.format === 'sql-insert' ? 'sql-insert' : body.format, set.columns, set.rows, { header: body.options.header ?? true });
       if (body.path) return ok({ path: body.path, rows: set.rows.length });
       const ext = body.format === 'sql-insert' ? 'sql' : body.format;
+      if (body.format === 'xlsx') {
+        const { toXlsx, XLSX_MIME } = await import('../components/Grid/xlsx');
+        const x = await toXlsx(set.columns, set.rows);
+        return new HttpResponse(x.bytes as BodyInit, { headers: { 'Content-Type': XLSX_MIME, 'Content-Disposition': `attachment; filename="result.${ext}"` } });
+      }
+      const text = serializeRows(body.format, set.columns, set.rows, { header: body.options.header ?? true });
       return new HttpResponse(text, {
         headers: { 'Content-Type': body.format === 'json' ? 'application/octet-stream' : 'text/plain', 'Content-Disposition': `attachment; filename="result.${ext}"` },
       });

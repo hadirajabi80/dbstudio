@@ -29,18 +29,64 @@ public sealed class CatalogQueryTests
     }
 
     [Fact]
-    public void ForeignKeyQuery_CoversBothDirections()
+    public void ForeignKeyQuery_CoversBothDirections_ByTheTablesSchemas()
     {
         var sql = SqlServerCatalogQueries.ForeignKeys;
-        Assert.Contains("fk.schema_id=@sid OR fk.referenced_object_id IN", sql);
+        Assert.Contains("WHERE po.schema_id=@sid OR ro.schema_id=@sid", sql);
+        Assert.DoesNotContain("fk.schema_id", sql);
+    }
+
+    [Theory]
+    [InlineData(nameof(SqlServerCatalogQueries.ForeignKeys))]
+    [InlineData(nameof(SqlServerCatalogQueries.DetailForeignKeys))]
+    [InlineData(nameof(SqlServerCatalogQueries.DetailReferencedBy))]
+    public void ForeignKeyQueries_ResolveNamesByJoins_NotMetadataFunctions(string name)
+    {
+        // OBJECT_NAME / OBJECT_SCHEMA_NAME / COL_NAME are evaluated per row (slow on big catalogs) and need SQL 2005 SP2.
+        var sql = SqlServerCatalogQueries.All[name];
+        Assert.DoesNotContain("OBJECT_NAME(", sql);
+        Assert.DoesNotContain("OBJECT_SCHEMA_NAME(", sql);
+        Assert.DoesNotContain("COL_NAME(", sql);
     }
 
     [Fact]
-    public void SchemaFilter_HidesSystemAndRoleSchemas()
+    public void ForeignKeyQuery_SelectsEveryColumnTheReaderMapsByName()
     {
-        Assert.Contains("'sys','INFORMATION_SCHEMA','guest'", SqlServerCatalogQueries.SchemaFilter);
-        Assert.Contains("type='R'", SqlServerCatalogQueries.SchemaFilter);
+        var sql = SqlServerCatalogQueries.ForeignKeys;
+        foreach (var alias in new[] { "fk_id", "fk_name", "parent_id", "parent_schema_id", "parent_schema", "parent_table", "parent_column",
+                     "ref_schema_id", "ref_schema", "ref_table", "ref_column", "ordinal" })
+            Assert.Contains(" AS " + alias, sql);
+        Assert.Contains("fk.is_disabled", sql);
+        Assert.Contains("fk.is_not_trusted", sql);
     }
+
+    [Fact]
+    public void SchemaFilter_HidesSystemSchemas_AndEmptyRoleOrGuestSchemas()
+    {
+        var f = SqlServerCatalogQueries.SchemaFilter;
+        Assert.Contains("s.name NOT IN ('sys','INFORMATION_SCHEMA')", f);
+        Assert.Contains("type='R'", f);
+        // a role-owned schema (CREATE SCHEMA hr AUTHORIZATION db_owner) that holds tables stays visible
+        Assert.Contains("OR EXISTS (SELECT 1 FROM sys.objects", f);
+    }
+
+    [Fact]
+    public void Queries_RunOnSqlServer2005()
+    {
+        Assert.DoesNotContain("is_readonly", SqlServerCatalogQueries.Parameters);
+        Assert.DoesNotContain("table_types", SqlServerCatalogQueries.UserTypes2005);
+        Assert.DoesNotContain("t.is_table_type", SqlServerCatalogQueries.UserTypes2005);
+    }
+
+    [Theory]
+    [InlineData("09.00.5000", true)]
+    [InlineData("8.00.2039", true)]
+    [InlineData("10.50.6000", false)]
+    [InlineData("16.00.1000", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void ServerVersion_2005Detection(string? version, bool expected) =>
+        Assert.Equal(expected, SqlServerCatalogReader.IsSqlServer2005OrOlder(version));
 
     [Fact]
     public void UseStatement_ForAwkwardDatabaseName_Parses()

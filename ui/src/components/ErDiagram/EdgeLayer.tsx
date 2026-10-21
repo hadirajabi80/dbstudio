@@ -12,7 +12,7 @@ interface EdgeProps {
 }
 
 const Edge = memo(function Edge({ edge, geom, hl, dim }: EdgeProps) {
-  const cls = `er-edge${edge.optional ? ' optional' : ''}${edge.ghost ? ' ghost' : ''}${hl ? ' hl' : ''}${dim ? ' dim' : ''}`;
+  const cls = `er-edge${edge.optional ? ' optional' : ''}${edge.ghost ? ' ghost' : ''}${edge.disabled ? ' disabled' : ''}${hl ? ' hl' : ''}${dim ? ' dim' : ''}`;
   return (
     <g className={cls} data-edge={edge.id}>
       <path className="er-edge-hit" d={geom.d} data-edge={edge.id} />
