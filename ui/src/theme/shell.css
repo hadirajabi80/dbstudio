@@ -68,6 +68,27 @@
   background: var(--bg-app);
   color: var(--fg-muted);
 }
+/* The search box's shortcut hint is quiet text in one soft pill ("Ctrl P" / "⌘P"), not a row of keycaps. */
+.palette-trigger .kbd-group {
+  flex: none; /* app.css gives every span in the trigger flex: 1; the hint keeps its natural width */
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-hover);
+}
+.palette-trigger .kbd-group kbd {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-weight: var(--weight-regular);
+  color: var(--fg-muted);
+}
+.palette-trigger svg {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+}
 .os-mac .kbd-group {
   gap: 1px;
 }

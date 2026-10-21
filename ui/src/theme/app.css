@@ -459,8 +459,8 @@ svg.lucide:not([data-stroke]) {
   min-width: 0;
   overflow: hidden;
   height: var(--input-h);
-  padding: 0 var(--space-1) 0 var(--space-2);
-  border: 1px solid var(--border-strong);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   background: var(--glass-input);
   color: var(--fg-muted);
@@ -1020,13 +1020,17 @@ body.resizing-row .splitter-horizontal {
 .monaco-component {
   --vscode-shadow-lg: var(--shadow-popup);
 }
-/* section 3: visible focus ring on every focusable; drawn inset over the editor so nothing shifts */
+/* section 3: the focused editor keeps a visible focus indicator, but a quiet one: a slim accent stripe on its left
+   edge (VS Code-like) instead of a ring around the whole editor, which read as a heavy "selected" frame. Drawn as an
+   overlay so nothing shifts. */
 .editor-host:focus-within::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: 2px;
   z-index: 20;
-  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+  background: var(--focus-ring);
+  opacity: 0.85;
   pointer-events: none;
 }
 .editor-hint {
