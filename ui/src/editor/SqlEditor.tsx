@@ -8,7 +8,7 @@ import * as monaco from './monaco';
 import type { ExplainMode, RunLabel, ServerDiagnostic } from '../api/types';
 import { createIntel, type Intel } from '../intel';
 import { intelOptionsFromSettings } from './settings';
-import type { SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
+import type { RunTargetOptions, SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from './monaco-setup';
 import { baseMonacoOptions, remeasureAfterFonts, suggestMetrics } from './monacoOptions';
 import { bindEditorFontSize, editorFontSize } from './fontZoom';
@@ -78,14 +78,14 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     );
   };
 
-  const runTarget = (label: RunLabel) => {
+  const runTarget = (label: RunLabel, opts?: RunTargetOptions) => {
     const ed = edRef.current, intel = intelRef.current, model = ed?.getModel();
     if (!ed || !intel || !model) return null;
     const sel = ed.getSelection();
     const pos = ed.getPosition();
     const cursor = pos ? model.getOffsetAt(pos) : 0;
     const selection: [number, number] | null = sel && !sel.isEmpty() ? [model.getOffsetAt(sel.getStartPosition()), model.getOffsetAt(sel.getEndPosition())] : null;
-    return resolveRunTarget(intel, uriRef.current, label, cursor, selection);
+    return resolveRunTarget(intel, uriRef.current, label, cursor, selection, opts);
   };
 
   const flash = (range: [number, number]) => {
@@ -154,8 +154,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
 
   useImperativeHandle(ref, () => ({
     focus: () => edRef.current?.focus(),
-    getRunTarget: (label: RunLabel) => {
-      const t = runTarget(label);
+    getRunTarget: (label: RunLabel, opts?: RunTargetOptions) => {
+      const t = runTarget(label, opts);
       // Every caller takes the statement away from the editor (run from the toolbar or Ctrl+Enter in a console,
       // multi-run, code, parameters): close the suggest list and parameter hints first (styles-r1-05).
       if (t && edRef.current) dismissEditorPopups(edRef.current);

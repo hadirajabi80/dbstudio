@@ -1,8 +1,8 @@
 // 1.1.2 explorer filter: type chips, column search, "load schema X" hints, 20k objects < 50 ms.
 import { describe, expect, it } from 'vitest';
 import type { CatalogObject, CatalogObjectType, ConnectionProfile } from '../../api/types';
-import type { ConnCatalog, DbCatalog } from '../../store/catalog';
-import { buildTree, typesOfChips, type TreeInput } from './tree';
+import { dbKey, type ConnCatalog, type DbCatalog } from '../../store/catalog';
+import { buildTree, nodeId, typesOfChips, type TreeInput } from './tree';
 
 const conn = (id: string, name: string): ConnectionProfile => ({
   id, name, providerId: 'sqlserver', color: null, folder: null, readOnly: false, props: {}, hasPassword: false, savePassword: false,
@@ -72,5 +72,61 @@ describe('explorer tree filter', () => {
     const times = Object.values(best).sort((a, b) => a - b);
     const summary = Object.entries(best).map(([f, ms]) => `${f}: ${ms.toFixed(1)} ms`).join(', ');
     expect(times[Math.floor(times.length / 2)], `best of ${RUNS} runs per filter: ${summary}`).toBeLessThan(50);
+  });
+});
+
+describe('explorer tree while the catalog revalidates (no collapse / flash after a save or refresh)', () => {
+  /** Connection, database, schema and the Tables folder expanded. */
+  function expandedInput(patch: (d: DbCatalog, c: ConnCatalog) => void): TreeInput {
+    const base = input();
+    const d = { ...base.dbs.k };
+    const c = { ...base.conns.c1 };
+    patch(d, c);
+    return {
+      ...base,
+      conns: { c1: c },
+      dbs: { [dbKey('c1', 'Shop')]: d },
+      expanded: new Set([nodeId.conn('c1'), nodeId.db('c1', 'Shop'), nodeId.schema('c1', 'Shop', 'dbo'), nodeId.folder('c1', 'Shop', 'dbo', 'table')]),
+    };
+  }
+  const shape = (rows: ReturnType<typeof buildTree>) => rows.map((r) => `${r.kind}:${r.label}`);
+
+  it('a ready schema with a force reload in flight keeps its children', () => {
+    const ready = buildTree(expandedInput(() => undefined));
+    expect(ready.some((r) => r.kind === 'object')).toBe(true);
+    const reloading = buildTree(expandedInput((d) => { d.revalidating = { dbo: true }; d.schemasRevalidating = true; }));
+    expect(shape(reloading)).toEqual(shape(ready));
+    expect(reloading.some((r) => r.kind === 'status')).toBe(false);
+  });
+
+  it('never replaces shown data with "Loading…" rows, even if a status says loading', () => {
+    const ready = buildTree(expandedInput(() => undefined));
+    const rows = buildTree(expandedInput((d, c) => {
+      c.status = 'loading';
+      d.schemasStatus = 'loading';
+      d.schemaStatus = { dbo: 'loading' };
+    }));
+    expect(rows.filter((r) => r.kind === 'status')).toEqual([]);
+    expect(shape(rows)).toEqual(shape(ready));
+  });
+
+  it('a first load still shows the loading rows', () => {
+    const rows = buildTree(expandedInput((d) => {
+      d.schemasResp = null;
+      d.schemasStatus = 'loading';
+    }));
+    expect(rows.find((r) => r.kind === 'status')?.label).toBe('Loading schemas…');
+    const objs = buildTree(expandedInput((d) => {
+      d.loaded = {};
+      d.schemaStatus = { dbo: 'loading' };
+    }));
+    expect(objs.find((r) => r.kind === 'status')?.label).toBe('Loading objects…');
+  });
+
+  it('spins the connection root while an explicit refresh reloads the database list, not for quiet revalidations', () => {
+    const rows = buildTree(expandedInput((_d, c) => { c.revalidating = true; }));
+    expect(rows.find((r) => r.kind === 'connection')?.busy).toBe(true);
+    const quiet = buildTree(expandedInput((d) => { d.revalidating = { dbo: true }; }));
+    expect(quiet.find((r) => r.kind === 'connection')?.busy).toBe(false);
   });
 });

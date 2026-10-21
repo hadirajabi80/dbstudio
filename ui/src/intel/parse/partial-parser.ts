@@ -392,6 +392,15 @@ class Parser {
       case 'SET':
         if (this.tsql) { this.parseTsqlSet(c); return; }
         break;
+      case 'USE':
+        if (this.tsql) {
+          // USE <database>: the name position completes database names
+          this.i++;
+          this.mark(c, 'use', t.end);
+          this.parseName();
+          return;
+        }
+        break;
     }
     if (this.pg && this.parsePgStatement(c, u)) return;
     this.parseExprStatement(c);

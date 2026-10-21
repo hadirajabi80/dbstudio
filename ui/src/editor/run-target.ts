@@ -14,10 +14,14 @@ export interface RunTarget {
  * - `statement`: the selection if there is one, else the statement at the cursor.
  * - `selection`: the selection (falls back to the statement at the cursor).
  * - `script`: the selection if there is one, else the whole document.
+ *
+ * `ignoreSelection` resolves as if nothing were selected (Ctrl+S in an "Edit:" console saves the whole document).
  */
-export function resolveRunTarget(intel: Intel, uri: string, label: RunLabel, cursor: number, selection: [number, number] | null): RunTarget | null {
+export function resolveRunTarget(
+  intel: Intel, uri: string, label: RunLabel, cursor: number, selection: [number, number] | null, opts: { ignoreSelection?: boolean } = {},
+): RunTarget | null {
   const text = intel.getText(uri);
-  const sel = selection && selection[1] > selection[0] && text.slice(selection[0], selection[1]).trim() ? selection : null;
+  const sel = !opts.ignoreSelection && selection && selection[1] > selection[0] && text.slice(selection[0], selection[1]).trim() ? selection : null;
   if (sel) {
     const batches = intel.batchesFor(uri, sel);
     if (!batches.length) return null;

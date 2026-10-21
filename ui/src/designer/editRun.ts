@@ -72,8 +72,9 @@ export async function runEditTab(tabId: string): Promise<boolean> {
     ]));
     toast('success', `Saved ${edit.ref.type} ${name}`, 'The script ran in one transaction.');
     useConnections.getState().touch(edit.connectionId);
-    // The stored definition changed: refresh the explorer/IntelliSense and the "Compare with server" baseline.
-    void useCatalog.getState().refresh(edit.connectionId);
+    // The stored definition changed: revalidate the object's schema in place (explorer/IntelliSense, no full refresh
+    // and no flash) and the "Compare with server" baseline.
+    void useCatalog.getState().revalidate(edit.connectionId, edit.database ?? edit.ref.database ?? null, [edit.ref.schema]);
     void api.ddl(edit.connectionId, edit.database, edit.ref)
       .then((d) => { if (useDesignerUi.getState().edits[tabId]) rememberEdit(tabId, { ...edit, serverDdl: d.ddl }); })
       .catch(() => undefined);
