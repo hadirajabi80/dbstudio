@@ -1,6 +1,7 @@
 // Pub/Sub (`redis.pubsub`, docs/PLAN-M2.md 5.5): channels and patterns to subscribe to, a live message list
 // (redis.subscribe stream; pause, clear, filter, JSON pretty on expand, drop counter), a publish form and the
 // server's active channels (PUBSUB CHANNELS / NUMSUB).
+import { displayShortcut } from '../../commands/keys';
 import { Pause, Play, RefreshCw, Send, Square, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
@@ -153,7 +154,7 @@ export function PubSubView({ tab }: TabViewProps) {
           <input className="input mono" aria-label="Publish channel" placeholder="channel" value={pubChannel} onChange={(e) => setPubChannel(e.target.value)} />
           <textarea className="input mono redis-textarea" aria-label="Message" rows={4} placeholder="message" value={pubMessage} onChange={(e) => setPubMessage(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void publish(); } }} />
-          <button className="btn btn-xs" disabled={!pubChannel || server?.readOnly} onClick={() => void publish()} title={server?.readOnly ? 'Read-only connection' : 'Publish (Ctrl+Enter)'}><Send size={13} /> Publish</button>
+          <button className="btn btn-xs" disabled={!pubChannel || server?.readOnly} onClick={() => void publish()} title={server?.readOnly ? 'Read-only connection' : `Publish (${displayShortcut('Mod+Enter')})`}><Send size={13} /> Publish</button>
         </section>
         <section>
           <h3>Active channels <button className="icon-btn" aria-label="Refresh channels" onClick={() => void loadChannels()}><RefreshCw size={13} /></button></h3>

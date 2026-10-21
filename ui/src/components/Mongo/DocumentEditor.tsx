@@ -1,6 +1,7 @@
 // Insert / Edit / Clone document dialog (docs/PLAN-M2.md 6.3): shell-JSON editor (ObjectId(), ISODate(),
 // NumberLong(), NumberDecimal(), BinData()…), validated on every keystroke here and again by the engine; Ctrl+Enter
 // saves. Edit replaces by _id; changing the _id becomes insert + delete after a confirmation; an array inserts many.
+import { displayShortcut } from '../../commands/keys';
 import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import type { MongoFieldPath } from '../../api/types';
@@ -97,7 +98,7 @@ export function DocumentEditor({ mode, cid, db, coll, doc, fields, theme, onClos
       className="mg-editor-dialog"
       footer={
         <>
-          <span className="mg-editor-hint muted">Shell syntax: ObjectId("…"), ISODate("…"), NumberLong("…"), NumberDecimal("…"), BinData(0, "…") · Ctrl+Enter saves</span>
+          <span className="mg-editor-hint muted">Shell syntax: ObjectId("…"), ISODate("…"), NumberLong("…"), NumberDecimal("…"), BinData(0, "…") · {displayShortcut('Mod+Enter')} saves</span>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={!!problem || busy} onClick={() => void save()} title={problem ?? undefined}>
             {mode === 'edit' ? 'Replace' : 'Insert'}

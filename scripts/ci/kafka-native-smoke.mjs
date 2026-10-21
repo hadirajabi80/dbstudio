@@ -185,6 +185,12 @@ try {
   process.exit(0);
 } catch (e) {
   if (lines.length) console.error(`  passed so far:\n  ${lines.join('\n  ')}`);
-  console.error(`Engine native smoke failed: ${e instanceof Error ? e.message : String(e)}`);
+  const message = e instanceof Error ? e.message : String(e);
+  console.error(`Engine native smoke failed: ${message}`);
+  // On GitHub Actions also emit an annotation, readable from the API without downloading the job log.
+  if (process.env.GITHUB_ACTIONS) {
+    const esc = (s) => s.replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A');
+    console.log(`::error title=Engine native smoke::${esc(`${message}\npassed so far:\n${lines.join('\n')}`.slice(0, 4000))}`);
+  }
   process.exit(e instanceof CheckFailed ? 1 : 2);
 }

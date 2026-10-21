@@ -1,6 +1,7 @@
 // Produce (docs/PLAN-M2.md 7.4, also "Produce similar"): key and value editors with formats (string / json / hex /
 // avro / protobuf / jsonschema against a Schema Registry subject + version), headers table, partition (auto/explicit),
 // key schema, compression, "Repeat N times" (cap 1000) with ${i} substitution. READ_ONLY on read-only connections.
+import { displayShortcut } from '../../commands/keys';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
@@ -95,7 +96,7 @@ export function ProduceView({ tab, theme }: { tab: ViewTab; theme: EffectiveThem
     <div className="kafka-view" data-testid="kafka-produce">
       <ViewHeader title={`Produce to ${st.topic}`} readOnly={ro}>
         <button type="button" className="btn btn-xs" onClick={() => openTopic(cid, st.topic, 'messages', { fetchSeq: Date.now() })}>Browse topic</button>
-        <button type="button" className="btn btn-xs btn-primary" disabled={busy || ro} title={ro ? 'The connection is read-only' : 'Produce (Ctrl+Enter in the value)'} onClick={() => void send()}>
+        <button type="button" className="btn btn-xs btn-primary" disabled={busy || ro} title={ro ? 'The connection is read-only' : `Produce (${displayShortcut('Mod+Enter')} in the value)`} onClick={() => void send()}>
           {busy ? 'Producing…' : d.repeat > 1 ? `Produce ${d.repeat}×` : 'Produce'}
         </button>
       </ViewHeader>

@@ -2,6 +2,7 @@
 // completion, enable toggle, per-stage preview of 10 documents debounced 500 ms and cancelled on edit), Run (paged
 // 20), Explain, Save / Open (settings ui.mongoPipelines), Import from text, Export to code in five languages.
 // Keyboard: Ctrl+Shift+A adds a stage, Alt+Up/Down moves the focused stage, Ctrl+/ toggles it.
+import { displayShortcut } from '../../commands/keys';
 import {
   ArrowDown, ArrowUp, ChevronDown, ChevronRight, Code, FileInput, FolderOpen, Gauge, GripVertical, Play, Plus, Save, Trash2, TriangleAlert,
 } from 'lucide-react';
@@ -268,7 +269,7 @@ export default function AggregationView({ tabId, cid, db, coll, state, patch, th
                   {WRITE_STAGES.has(s.op) && <span className="pill pill-warning" title="Writes to a collection when the pipeline runs; previews skip it"><TriangleAlert size={11} aria-hidden /> writes</span>}
                   <span className="mg-stage-summary muted" title={doc?.syntax}>{doc?.summary}</span>
                   <span className="flex-1" />
-                  <label className="mg-switch" title={s.enabled ? 'Disable stage (Ctrl+/)' : 'Enable stage (Ctrl+/)'}>
+                  <label className="mg-switch" title={s.enabled ? `Disable stage (${displayShortcut('Mod+/')})` : `Enable stage (${displayShortcut('Mod+/')})`}>
                     <input type="checkbox" role="switch" checked={s.enabled} onChange={(e) => update(s.id, { enabled: e.target.checked })} aria-label={`Stage ${i + 1} enabled`} />
                     <span aria-hidden />
                   </label>
@@ -304,7 +305,7 @@ export default function AggregationView({ tabId, cid, db, coll, state, patch, th
             );
           })}
         </ol>
-        <button className="btn mg-addstage" onClick={() => addStage()} title="Add stage (Ctrl+Shift+A)"><Plus size={14} aria-hidden /> Add stage</button>
+        <button className="btn mg-addstage" onClick={() => addStage()} title={`Add stage (${displayShortcut('Mod+Shift+A')})`}><Plus size={14} aria-hidden /> Add stage</button>
         {run.status !== 'idle' && (
           <section className="mg-run" aria-label="Pipeline output">
             <header className="mg-run-head">

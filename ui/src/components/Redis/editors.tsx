@@ -2,6 +2,7 @@
 // hash and sorted set (pair tables with a pending buffer: edit, add, delete, Ctrl+S saves), list (paged by index,
 // edit in place, push left/right, remove), set (members, add, remove), stream (entries newest first, add / delete
 // entries, consumer groups with consumers, pending entries and ACK) and RedisJSON (JSON editor).
+import { displayShortcut } from '../../commands/keys';
 import { Check, ChevronDown, ChevronRight, Plus, Trash2, Undo2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../api/client';
@@ -46,7 +47,7 @@ function PendingBar({ count, saving, onSave, onDiscard }: { count: number; savin
       <span>{count} pending change{count === 1 ? '' : 's'}</span>
       <span className="flex-1" />
       <button className="btn btn-xs" onClick={onDiscard}><Undo2 size={13} /> Discard</button>
-      <button className="btn btn-xs btn-primary" disabled={saving} onClick={onSave} title="Save (Ctrl+S)"><Check size={13} /> Save</button>
+      <button className="btn btn-xs btn-primary" disabled={saving} onClick={onSave} title={`Save (${displayShortcut('Mod+S')})`}><Check size={13} /> Save</button>
     </div>
   );
 }
@@ -183,7 +184,7 @@ export function StringEditor({ cid, db, value, readOnly, theme, reload, register
           <button className="btn btn-xs" onClick={() => { try { setDraft(JSON.stringify(JSON.parse(draft))); } catch { onError('The value is not valid JSON.'); } }} title="Compact the JSON to one line">Compact</button>
         )}
         {dirty && <button className="btn btn-xs" onClick={() => setDraft(text)}><Undo2 size={13} /> Revert</button>}
-        {editable && <button className="btn btn-xs btn-primary" disabled={!dirty || saving} onClick={() => void save()} title="Save (Ctrl+S)"><Check size={13} /> Save</button>}
+        {editable && <button className="btn btn-xs btn-primary" disabled={!dirty || saving} onClick={() => void save()} title={`Save (${displayShortcut('Mod+S')})`}><Check size={13} /> Save</button>}
       </div>
       <CodeEditor value={draft} onChange={setDraft} language={value.isJson ? 'json' : 'text'} theme={theme} ariaLabel={`Value of ${value.key}`}
         readOnly={!editable} onSave={() => void save()} wordWrap className="redis-value-code" />
@@ -232,7 +233,7 @@ export function JsonEditor({ cid, db, value, readOnly, theme, reload, registerSa
         {!parsed.ok && <span className="text-warning" role="alert">Invalid JSON</span>}
         <span className="flex-1" />
         {dirty && <button className="btn btn-xs" onClick={() => setDraft(text)}><Undo2 size={13} /> Revert</button>}
-        {!readOnly && <button className="btn btn-xs btn-primary" disabled={!dirty || saving || !parsed.ok} onClick={() => void save()} title="Save with JSON.SET (Ctrl+S)"><Check size={13} /> Save</button>}
+        {!readOnly && <button className="btn btn-xs btn-primary" disabled={!dirty || saving || !parsed.ok} onClick={() => void save()} title={`Save with JSON.SET (${displayShortcut('Mod+S')})`}><Check size={13} /> Save</button>}
       </div>
       <CodeEditor value={draft} onChange={setDraft} language="json" theme={theme} ariaLabel={`Document ${value.key}`} readOnly={readOnly} onSave={() => void save()} className="redis-value-code" />
     </div>

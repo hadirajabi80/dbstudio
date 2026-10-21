@@ -1,6 +1,7 @@
 // Documents view (docs/PLAN-M2.md 6.3): query bar, count badge (exact or estimated), pagination, List / JSON / Table
 // views that share one selection, Insert / Edit / Clone / Delete, Import / Export, Explain and a Watch toggle that
 // counts change-stream events ("+3 changes, click to refresh").
+import { displayShortcut } from '../../commands/keys';
 import {
   Braces, ChevronLeft, Code, ChevronRight, Copy, CopyPlus, Download, Import, LayoutList, Pencil, Plus, Radio, RefreshCw, Table2, Trash2,
 } from 'lucide-react';
@@ -201,7 +202,7 @@ export function DocumentsView({ tabId, cid, db, coll, state, patch, theme, visib
       <QueryBar draft={draft} applied={applied} onDraft={setDraft} onFind={run} onReset={() => { setDraft(DEFAULT_QUERY); run(DEFAULT_QUERY); }}
         onExplain={explain} fields={fields} theme={theme} busy={loading} history={histories.get(histKey)} />
       <div className="mg-toolbar" role="toolbar" aria-label="Documents">
-        <button className="btn btn-xs btn-primary" disabled={!canWrite} title={writeReason ?? 'Insert a document (Ctrl+Shift+I)'} onClick={() => void openEditor('insert')}>
+        <button className="btn btn-xs btn-primary" disabled={!canWrite} title={writeReason ?? `Insert a document (${displayShortcut('Mod+Shift+I')})`} onClick={() => void openEditor('insert')}>
           <Plus size={14} aria-hidden /> Insert
         </button>
         <button className="btn btn-xs" disabled={!canWrite} title={writeReason ?? 'Import JSON or CSV'} onClick={() => runCommand('mongo.import', { kind: 'source', connectionId: cid, providerId: 'mongodb', nodeType: 'collection', path: [db, coll] })}>

@@ -2,6 +2,7 @@
 // commands, sub-commands, keywords and cached key names, hover docs, argument hints) with Ctrl+Enter (line or
 // selection) and F5 (all lines); one result card per command: echo, elapsed, redis-cli text, a table for array /
 // hash-like replies, pretty JSON for JSON bulk replies, Copy. SELECT is tracked (the database follows the batch).
+import { displayShortcut } from '../../commands/keys';
 import { Copy, Lock, Play, ListEnd, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '../../api/client';
@@ -31,8 +32,8 @@ const MAX_CARDS = 100;
 let cardSeq = 0;
 
 export const WORKBENCH_SAMPLE = [
-  '# Redis Workbench: Ctrl+Enter runs the line or selection, F5 runs every line.',
-  '# Completion: commands, arguments and key names (Ctrl+Space). Hover a command for its docs.',
+  `# Redis Workbench: ${displayShortcut('Mod+Enter')} runs the line or selection, F5 runs every line.`,
+  `# Completion: commands, arguments and key names (${displayShortcut('MacCtrl+Space')}). Hover a command for its docs.`,
   'PING',
   'INFO server',
   'SCAN 0 MATCH user:* COUNT 1000',
@@ -151,7 +152,7 @@ export function WorkbenchView({ tab, theme }: TabViewProps) {
           <Select size="sm" aria-label="Database" mono value={db} onChange={(v) => setDb(Number(v))}
             options={Array.from({ length: server?.databases ?? 16 }, (_, i) => ({ value: i, label: `db${i}` }))} />
         )}
-        <button className="btn btn-xs btn-primary" disabled={running} onClick={() => void run(editorSel.current?.text ?? textRef.current)} title="Run line or selection (Ctrl+Enter)"><Play size={13} /> Run</button>
+        <button className="btn btn-xs btn-primary" disabled={running} onClick={() => void run(editorSel.current?.text ?? textRef.current)} title={`Run line or selection (${displayShortcut('Mod+Enter')})`}><Play size={13} /> Run</button>
         <button className="btn btn-xs" disabled={running} onClick={() => void run(textRef.current)} title="Run all lines (F5)"><ListEnd size={13} /> Run all</button>
         <Select size="sm" aria-label="History" value={null} placeholder={`History (${history.length})`} searchable menuMinWidth={360}
           options={[...history].reverse().map((h) => ({ value: h, label: h }))} mono
