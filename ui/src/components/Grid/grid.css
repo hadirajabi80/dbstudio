@@ -60,16 +60,37 @@
   background: var(--border);
   margin: 0 2px;
 }
+/* Empty / no-match state over the grid: an icon in a soft accent circle, a title, one hint line and an action. */
 .rs-empty-filter {
   position: absolute;
-  inset: 40px 0 auto 0;
+  inset: 56px 0 auto 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  color: var(--fg-muted, var(--text-muted));
-  font-size: var(--fs-sm);
+  gap: var(--space-1);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  text-align: center;
   pointer-events: none;
+}
+.rs-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-1);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.rs-empty-title {
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+.rs-empty-sub {
+  margin-bottom: var(--space-2);
 }
 .rs-empty-filter button {
   pointer-events: auto;

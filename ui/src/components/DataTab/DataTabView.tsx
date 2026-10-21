@@ -752,16 +752,27 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
                 controllerExtras={{ refresh: () => void refresh(), loadMore, exportAs: (f) => void exportAs(f), ...(editCtx ? pendingActions.controller : {}) }}
               />
               {noMatch && (
-                <div className="rs-empty-filter">
-                  <Funnel size={20} />
-                  <div>No rows match</div>
+                <div className="rs-empty-filter" role="status">
+                  <span className="rs-empty-icon"><Funnel size={20} strokeWidth={1.5} /></span>
+                  <div className="rs-empty-title">No rows match</div>
+                  <div className="rs-empty-sub">Try a different filter or search.</div>
                   <button className="btn btn-xs" onClick={() => void guarded(() => { setFilter(null); setQuick(''); })}>Clear filter</button>
                 </div>
               )}
               {!data.loading && loaded === 0 && !noMatch && (
-                <div className="rs-empty-filter">
-                  <Funnel size={20} />
-                  <div>The table is empty</div>
+                <div className="rs-empty-filter" role="status">
+                  <span className="rs-empty-icon"><Table2 size={20} strokeWidth={1.5} /></span>
+                  <div className="rs-empty-title">No rows yet</div>
+                  <div className="rs-empty-sub">{state.name} has no data.</div>
+                  {editability?.editable && (
+                    <button
+                      className="btn btn-xs btn-primary"
+                      title={cv('grid.insertRow').tooltip}
+                      onClick={() => { const g = gridController(gridKey); if (g?.insertRow) g.insertRow(); else useEdits.getState().addInsert(gridKey, columns.length); }}
+                    >
+                      <Plus size={14} /> Insert row
+                    </button>
+                  )}
                 </div>
               )}
             </>
