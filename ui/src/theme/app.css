@@ -822,6 +822,19 @@ body.resizing-row .splitter-horizontal {
 .tab.dragging {
   opacity: 0.5;
 }
+/* The permanent Objects tab: compact, no close button, a hairline after it separates it from the user's tabs. */
+.tab.pinned {
+  padding: 0 var(--space-3);
+  border-right-color: var(--border-strong);
+  cursor: default;
+}
+.tab.pinned .tab-title {
+  min-width: 0;
+  font-weight: var(--weight-strong);
+}
+.tab.pinned:not(.active) .tab-icon {
+  color: var(--accent);
+}
 .tab-icon {
   display: inline-flex;
   color: var(--text-muted);

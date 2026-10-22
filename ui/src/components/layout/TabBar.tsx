@@ -9,7 +9,8 @@ import { isDragOutsideWindow } from '../../store/editorGroups';
 import { useResults } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { useSessions } from '../../store/sessions';
-import { groupTabs, isDirty, useTabs, type Tab } from '../../store/tabs';
+import { OBJECTS_TAB_SETTING, useSettings } from '../../store/settings';
+import { groupTabs, isDirty, isPinnedTab, useTabs, type Tab } from '../../store/tabs';
 import { useUi } from '../../store/ui';
 import { connColorCss, connColorName } from '../../theme/connColors';
 import { showContextMenu } from '../common/Menu';
@@ -155,6 +156,39 @@ function TabIcon({ tab, providerId }: { tab: Tab; providerId?: string }) {
   return <SquareTerminal size={14} strokeWidth={1.5} />;
 }
 
+/**
+ * The permanent Objects tab: first in the strip, no close button, not draggable (other tabs dropped on it land after
+ * it). Its menu offers to hide it (Settings › General › Show the Objects tab).
+ */
+function PinnedTabItem({ tab, active }: { tab: Tab; active: boolean }) {
+  return (
+    <div
+      role="tab"
+      aria-selected={active}
+      tabIndex={active ? 0 : -1}
+      data-tab-id={tab.id}
+      data-pinned=""
+      className={`tab pinned${active ? ' active' : ''}`}
+      title={`${tab.title}: the objects of what is selected in the explorer (always open)`}
+      draggable={false}
+      onMouseDown={(e) => {
+        if (e.button === 0) useTabs.getState().activate(tab.id);
+        else if (e.button === 1) e.preventDefault();
+      }}
+      onContextMenu={(e) => showContextMenu(e, [
+        { label: 'Hide the Objects tab', onClick: () => useSettings.getState().update({ ui: { [OBJECTS_TAB_SETTING]: false } }) },
+      ])}
+    >
+      <span className="tab-icon">
+        <TabIcon tab={tab} />
+      </span>
+      <span className="tab-label">
+        <span className="tab-title">{tab.title}</span>
+      </span>
+    </div>
+  );
+}
+
 function TabItem({ tab, groupId, active, showConn, dropSide }: {
   tab: Tab; groupId: string; active: boolean; showConn: boolean; dropSide: 'before' | 'after' | null;
 }) {
@@ -168,6 +202,7 @@ function TabItem({ tab, groupId, active, showConn, dropSide }: {
   const dragging = useTabDrag((s) => s.tabId === tab.id);
   const dirty = isDirty(tab);
   const t = useTabs.getState();
+  if (isPinnedTab(tab)) return <PinnedTabItem tab={tab} active={active} />;
   const color = connColorCss(conn?.color);
   const tooltip = [
     tab.title,

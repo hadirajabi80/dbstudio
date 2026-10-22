@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SearchErrorItem, SearchHitItem } from '../../api/types.search';
 import {
-  buildRequest, dataAllowed, DEFAULT_OPTIONS, flattenGroups, groupHits, keyLabel, matchedText, scopeFromTarget, scopeLabel, segments, totals,
-  type SearchScope,
+  buildRequest, dataAllowed, DEFAULT_OPTIONS, findMatches, flattenGroups, focusLine, groupHits, isNavigableRow, keyLabel, matchedText,
+  scopeFromTarget, scopeLabel, segments, totals, validPattern, type ResultRow, type SearchScope,
 } from './model';
 
 const relational = (cid: string) => cid !== 'c_redis';
@@ -125,5 +125,32 @@ describe('results', () => {
     expect(segments('abc', [[1, 1], [1, 2], [9, 1]])).toEqual([{ text: 'a', hit: false }, { text: 'b', hit: true }, { text: 'c', hit: false }]);
     expect(matchedText({ text: 'Ann Smith', ranges: [[4, 5]] })).toBe('Smith');
     expect(keyLabel([{ column: 'Id', value: 7 }, { column: 'Line', value: null }])).toBe('Id = 7, Line = NULL');
+  });
+});
+
+describe('dialog helpers', () => {
+  const o = { term: 'cust', matchCase: false, wholeWord: false, regex: false };
+  it('findMatches: plain, case, whole word, regex, invalid', () => {
+    expect(findMatches('Cust customers', o)).toEqual([[0, 4], [5, 4]]);
+    expect(findMatches('Cust customers', { ...o, matchCase: true })).toEqual([[5, 4]]);
+    expect(findMatches('cust customers', { ...o, wholeWord: true })).toEqual([[0, 4]]);
+    expect(findMatches('a.b axb', { ...o, term: 'a.b' })).toEqual([[0, 3]]);
+    expect(findMatches('a.b axb', { ...o, term: 'a.b', regex: true })).toEqual([[0, 3], [4, 3]]);
+    expect(findMatches('x', { ...o, term: '(', regex: true })).toEqual([]);
+    expect(validPattern({ term: '(', regex: true })).toBe(false);
+    expect(validPattern({ term: '(', regex: false })).toBe(true);
+  });
+
+  it('focusLine: the code line (or the nearest one with the match), a column\'s line, else the first occurrence', () => {
+    const lines = ['CREATE TABLE t (', '  id int,', '  cust_name text', ');', 'SELECT cust FROM x'];
+    const object = groupHits([hit({ match: 'name', text: 'Customers' })], [], { nameOf: (c) => c }).flatMap((c) => c.schemas.flatMap((s) => s.objects))[0];
+    const code = (line: number): ResultRow => ({ kind: 'hit', key: 'k', depth: 3, parent: 'p', object, hit: hit({ match: 'code', text: 'SELECT cust FROM x', ranges: [[7, 4]], line }) });
+    expect(focusLine(lines, code(5), o)).toBe(4);
+    expect(focusLine(lines, code(4), o)).toBe(4); // off by one in the shown definition
+    const column: ResultRow = { kind: 'hit', key: 'k', depth: 3, parent: 'p', object, hit: hit({ match: 'column', text: 'cust_name', column: 'cust_name' }) };
+    expect(focusLine(lines, column, o)).toBe(2);
+    expect(focusLine(lines, { kind: 'object', key: 'o', depth: 2, parent: 's', group: object, expanded: false, expandable: false }, o)).toBe(2);
+    expect(isNavigableRow(column)).toBe(true);
+    expect(isNavigableRow({ kind: 'conn', key: 'c', depth: 0, group: { key: 'c', connectionId: 'c1', schemas: [], errors: [], count: 0 }, expanded: true })).toBe(false);
   });
 });

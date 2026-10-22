@@ -66,6 +66,11 @@ export interface ViewTab {
   key?: string | null;
   /** Unsaved work (designers); closing asks first. */
   dirty?: boolean;
+  /**
+   * A permanent tab (the Objects tab): first in the first editor group, never closed, moved, split off or detached.
+   * Only the main window has one; it is added and removed by its owner (components/ObjectList/home.ts).
+   */
+  pinned?: boolean;
 }
 
 export type Tab = ConsoleTab | ObjectTab | ViewTab;
@@ -165,6 +170,12 @@ interface TabsState extends GroupsState {
   /** Remember tabs as recently closed (Ctrl+Shift+T), e.g. the tabs of a detached window the user closed. */
   addClosed(tabs: Tab[]): void;
   setDetached(tabs: Tab[]): void;
+
+  // ---- pinned tabs ----
+  /** Adds a pinned view tab (first in the first group); it becomes active only when no tab is. No-op when present. */
+  pin(tab: Omit<ViewTab, 'pinned' | 'kind'>): void;
+  /** Removes a pinned tab (not remembered as recently closed). */
+  unpin(id: string): void;
 }
 
 function newId(prefix: string) {
@@ -178,12 +189,32 @@ function touchMru(mru: string[], id: string | null): string[] {
 
 const TAB_PREFIX: Record<Tab['kind'], string> = { console: 't', object: 'o', view: 'v' };
 
+/** The permanent Objects tab (and any other pinned view): never closed, moved, split off or detached. */
+export function isPinnedTab(t: Tab | undefined | null): boolean {
+  return !!t && t.kind === 'view' && t.pinned === true;
+}
+
+/** Tabs the user opened (everything but the pinned ones). */
+export function userTabs(tabs: readonly Tab[]): Tab[] {
+  return tabs.filter((t) => !isPinnedTab(t));
+}
+
+/** The tabs with the pinned ones first (the same array when they already are). */
+function pinnedFirst(tabs: Tab[]): Tab[] {
+  const pins = tabs.filter(isPinnedTab);
+  if (!pins.length || pins.every((t, i) => tabs[i] === t)) return tabs;
+  return [...pins, ...tabs.filter((t) => !isPinnedTab(t))];
+}
+
 type GroupInputs = Pick<TabsState, 'tabs' | 'activeId' | 'groups' | 'layout' | 'focusedGroup' | 'mru'>;
 
 /** The groups for the store state, with `extra` overriding parts of it. */
 function groupsFor(s: GroupInputs, extra: Partial<GroupInputs> = {}): GroupsState {
   const v = { ...s, ...extra };
-  return normalizeGroups({ tabIds: v.tabs.map((t) => t.id), activeId: v.activeId, groups: v.groups, layout: v.layout, focusedGroup: v.focusedGroup, mru: v.mru });
+  return normalizeGroups({
+    tabIds: v.tabs.map((t) => t.id), activeId: v.activeId, groups: v.groups, layout: v.layout, focusedGroup: v.focusedGroup, mru: v.mru,
+    pinned: v.tabs.filter(isPinnedTab).map((t) => t.id),
+  });
 }
 
 /** Tabs of a group in strip order. */
@@ -322,6 +353,7 @@ export const useTabs = create<TabsState>((set, get) => {
     },
 
     close(id) {
+      if (isPinnedTab(get().tabs.find((t) => t.id === id))) return;
       const closedTab = removeTab(id);
       if (closedTab) set({ closed: [...get().closed, closedTab].slice(-MAX_CLOSED) });
     },
@@ -331,7 +363,7 @@ export const useTabs = create<TabsState>((set, get) => {
       const s = get();
       const group = groupOf(s.groups, id);
       if (!group) return;
-      const others = s.tabs.filter((t) => t.id !== id && group.tabIds.includes(t.id));
+      const others = s.tabs.filter((t) => t.id !== id && group.tabIds.includes(t.id) && !isPinnedTab(t));
       const tabs = s.tabs.filter((t) => !others.includes(t));
       const mru = touchMru(s.mru.filter((x) => tabs.some((t) => t.id === x)), id);
       set({ tabs, activeId: id, mru, closed: [...s.closed, ...others].slice(-MAX_CLOSED), ...groupsFor(s, { tabs, activeId: id, mru }) });
@@ -390,7 +422,7 @@ export const useTabs = create<TabsState>((set, get) => {
       const tabs = [...s.tabs];
       const from = tabs.findIndex((t) => t.id === fromId);
       const to = tabs.findIndex((t) => t.id === toId);
-      if (from < 0 || to < 0 || from === to) return;
+      if (from < 0 || to < 0 || from === to || isPinnedTab(tabs[from]) || isPinnedTab(tabs[to])) return;
       const [t] = tabs.splice(from, 1);
       tabs.splice(to, 0, t);
       set({ tabs });
@@ -442,11 +474,13 @@ export const useTabs = create<TabsState>((set, get) => {
         known.add(t.id);
         tabs.push(t);
       }
+      tabs.splice(0, tabs.length, ...pinnedFirst(tabs));
       const activeId = tabs.some((t) => t.id === data.activeId) ? data.activeId : tabs[0]?.id ?? null;
       const saved = parseSerializedGroups(data.groups);
       const g = normalizeGroups({
         tabIds: tabs.map((t) => t.id), activeId, groups: saved?.groups ?? null, layout: saved?.layout ?? null,
         focusedGroup: saved?.focusedGroup ?? get().focusedGroup, mru: activeId ? [activeId] : [],
+        pinned: tabs.filter(isPinnedTab).map((t) => t.id),
       });
       // Every group shows the tab it showed when saved; those tabs start the MRU list.
       const mru = activeId ? [activeId, ...g.groups.map((x) => x.activeId).filter((x): x is string => !!x && x !== activeId)] : [];
@@ -472,7 +506,7 @@ export const useTabs = create<TabsState>((set, get) => {
       const s = get();
       const target = s.groups.find((g) => g.id === groupId);
       const tab = s.tabs.find((t) => t.id === tabId);
-      if (!target || !tab) return;
+      if (!target || !tab || isPinnedTab(tab)) return;
       const rest = s.tabs.filter((t) => t.id !== tabId);
       let at: number;
       if (beforeId && beforeId !== tabId && target.tabIds.includes(beforeId)) at = rest.findIndex((t) => t.id === beforeId);
@@ -495,7 +529,7 @@ export const useTabs = create<TabsState>((set, get) => {
     splitTab(tabId, side, targetGroup) {
       const s = get();
       const own = groupOf(s.groups, tabId);
-      if (!own) return null;
+      if (!own || isPinnedTab(s.tabs.find((t) => t.id === tabId))) return null;
       const anchor = targetGroup ?? own.id;
       if (!s.groups.some((g) => g.id === anchor)) return null;
       const alone = own.tabIds.length < 2;
@@ -541,7 +575,8 @@ export const useTabs = create<TabsState>((set, get) => {
       const activeIdx = tabs.findIndex((t) => t.id === s.activeId);
       let at = activeIdx >= 0 ? activeIdx + 1 : tabs.length;
       for (const raw of incoming) {
-        if (!isRestorableTab(raw)) continue;
+        // Pinned tabs belong to their window: another window never hands over its Objects tab.
+        if (!isRestorableTab(raw) || isPinnedTab(raw)) continue;
         const tab = (ids.has(raw.id) ? { ...raw, id: newId(TAB_PREFIX[raw.kind]) } : raw) as Tab;
         ids.add(tab.id);
         tabs.splice(at++, 0, tab);
@@ -561,16 +596,31 @@ export const useTabs = create<TabsState>((set, get) => {
     },
 
     take(id) {
+      if (isPinnedTab(get().tabs.find((t) => t.id === id))) return null;
       return removeTab(id);
     },
 
     addClosed(tabs) {
-      const valid = tabs.filter(isRestorableTab);
+      const valid = tabs.filter((t) => isRestorableTab(t) && !isPinnedTab(t));
       if (valid.length) set({ closed: [...get().closed, ...valid].slice(-MAX_CLOSED) });
     },
 
     setDetached(tabs) {
       set({ detached: tabs.filter(isRestorableTab) });
+    },
+
+    pin(t) {
+      const s = get();
+      if (s.tabs.some((x) => x.id === t.id)) return;
+      const tab: ViewTab = { ...t, kind: 'view', pinned: true };
+      const tabs = [tab, ...s.tabs];
+      const activeId = s.activeId && s.tabs.some((x) => x.id === s.activeId) ? s.activeId : tab.id;
+      const mru = s.mru.includes(activeId) ? s.mru : touchMru(s.mru, activeId);
+      set({ tabs, activeId, mru, ...groupsFor(s, { tabs, activeId, mru }) });
+    },
+
+    unpin(id) {
+      if (isPinnedTab(get().tabs.find((t) => t.id === id))) removeTab(id);
     },
   };
 });
@@ -587,8 +637,11 @@ export function isRestorableTab(t: unknown): t is Tab {
  * store (tests, older callers): new tabs join the focused group, removed ones leave theirs, empty groups close.
  */
 useTabs.subscribe((s) => {
-  const g = groupsFor(s);
-  if (!sameGroups(g, s)) useTabs.setState(g);
+  // Pinned tabs stay first (a drop or an insert before them, a `setState` from outside).
+  const tabs = pinnedFirst(s.tabs);
+  const g = groupsFor(s, { tabs });
+  if (tabs !== s.tabs) useTabs.setState({ tabs, ...g });
+  else if (!sameGroups(g, s)) useTabs.setState(g);
 });
 
 export function isDirty(t: Tab): boolean {

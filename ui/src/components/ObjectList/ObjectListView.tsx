@@ -81,9 +81,30 @@ interface Column {
   render(it: ObjectListItem): ReactNode;
 }
 
+/** A per-scope Objects tab ("Objects: Shop.dbo"). */
 export function ObjectListView({ tab, visible }: TabViewProps) {
-  useCommandsVersion(); // enablement of the toolbar commands (registry changes only; this view does not follow executions)
   const state = tab.state as ObjectsState;
+  const patch = useCallback((p: Partial<ObjectsState>) => {
+    const cur = useTabs.getState().tabs.find((t) => t.id === tab.id);
+    if (cur?.kind === 'view') useTabs.getState().updateView(tab.id, { state: { ...(cur.state as ObjectsState), ...p } });
+  }, [tab.id]);
+  return <ObjectList state={state} patch={patch} visible={visible} />;
+}
+
+export interface ObjectListProps {
+  state: ObjectsState;
+  /** Changes of the type filter, layout and sort. */
+  patch(p: Partial<ObjectsState>): void;
+  visible: boolean;
+  /** An object to select and scroll to once the list has it (the explorer's selection, in the Objects tab). */
+  highlight?: Pick<ObjectListItem, 'schema' | 'name' | 'type'> | null;
+  /** Shown before the toolbar (the Objects tab's breadcrumb). */
+  header?: ReactNode;
+}
+
+/** The object list of one connection / database / schema: toolbar, type groups, virtualized list or cards, status. */
+export function ObjectList({ state, patch, visible, highlight, header }: ObjectListProps) {
+  useCommandsVersion(); // enablement of the toolbar commands (registry changes only; this view does not follow executions)
   const { connectionId: cid, database, schema } = state;
   const conn = useConnection(cid);
   const catDb = useCatalog(() => catalogDatabase(cid, database));
@@ -125,7 +146,6 @@ export function ObjectListView({ tab, visible }: TabViewProps) {
   const shown = useMemo(() => sortObjects(filterObjects(source ?? [], group, query), state.sort), [source, group, query, state.sort]);
   const layout = state.layout ?? 'list';
   const multiSchema = schema === null;
-  const patch = (p: Partial<ObjectsState>) => useTabs.getState().updateView(tab.id, { state: { ...state, ...p } });
 
   const refOf = useCallback((it: ObjectListItem): ObjectRef => ({ database, schema: it.schema, name: it.name, type: it.type }), [database]);
   const targetOf = useCallback((it: ObjectListItem): ObjectTarget => ({ kind: 'object', connectionId: cid, database, ref: refOf(it) }), [cid, database, refOf]);
@@ -163,6 +183,26 @@ export function ObjectListView({ tab, visible }: TabViewProps) {
     setSelected(itemKey(shown[i]));
     reveal(i);
   };
+
+  // The highlighted object (explorer selection): selected and scrolled to once, when the list has it.
+  const highlightKey = highlight ? itemKey(highlight) : null;
+  const revealed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightKey) {
+      revealed.current = null;
+      return;
+    }
+    if (revealed.current === highlightKey) return;
+    const i = shown.findIndex((it) => itemKey(it) === highlightKey);
+    if (i < 0) return;
+    revealed.current = highlightKey;
+    setSelected(highlightKey);
+    const el = bodyRef.current;
+    if (el) {
+      const top = Math.floor(i / cols) * lineH;
+      if (top < el.scrollTop || top + lineH > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - Math.floor(el.clientHeight / 3));
+    }
+  }, [highlightKey, shown, cols, lineH]);
 
   const menuAt = (it: ObjectListItem, pos: { clientX: number; clientY: number; preventDefault?: () => void }) => {
     setSelected(itemKey(it));
@@ -358,6 +398,7 @@ export function ObjectListView({ tab, visible }: TabViewProps) {
 
   return (
     <div className="ol-view" style={{ display: visible ? undefined : 'none' }} data-command-scope="objects">
+      {header}
       <div className="ol-toolbar" role="toolbar" aria-label="Objects">
         <button className="btn btn-xs" aria-haspopup="menu" onClick={(e) => newMenu(e.currentTarget)} title="Create an object in this schema">
           <Plus size={13} /> New <ChevronDown size={11} />

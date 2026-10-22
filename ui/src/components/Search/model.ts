@@ -346,6 +346,77 @@ export function segments(text: string, ranges: readonly (readonly [number, numbe
   return out;
 }
 
+/**
+ * Where the search text occurs in `text` ([start, length], at most 100): the preview's highlights. JavaScript regex
+ * syntax, close to the engine's .NET one; an invalid pattern finds nothing.
+ */
+export function findMatches(text: string, o: Pick<SearchOptions, 'term' | 'matchCase' | 'wholeWord' | 'regex'>): [number, number][] {
+  if (!o.term) return [];
+  let re: RegExp;
+  try {
+    const src = o.regex ? o.term : o.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    re = new RegExp(o.wholeWord ? `(?<!\\w)(?:${src})(?!\\w)` : src, o.matchCase ? 'g' : 'gi');
+  } catch {
+    return [];
+  }
+  const out: [number, number][] = [];
+  for (const m of text.matchAll(re)) {
+    if (!m[0].length) continue;
+    out.push([m.index ?? 0, m[0].length]);
+    if (out.length >= 100) break;
+  }
+  return out;
+}
+
+export type MatchOptions = Pick<SearchOptions, 'term' | 'matchCase' | 'wholeWord' | 'regex'>;
+
+/**
+ * The line (0-based) of an object's definition the preview shows for a result row: a code match's line (the nearest
+ * line with the matched text when the shown definition differs from the searched one), a column's definition line,
+ * else the first occurrence of the search text (the first line without one).
+ */
+export function focusLine(lines: readonly string[], row: ResultRow, opts: MatchOptions): number {
+  const firstWith = (o: MatchOptions) => lines.findIndex((l) => findMatches(l, o).length > 0);
+  if (row.kind === 'hit' && row.hit.match === 'code' && row.hit.line) {
+    const want = Math.min(lines.length - 1, Math.max(0, row.hit.line - 1));
+    const nearest = (text: string) => {
+      if (!text) return -1;
+      if (lines[want]?.toLowerCase().includes(text)) return want;
+      let best = -1;
+      lines.forEach((l, i) => {
+        if (l.toLowerCase().includes(text) && (best < 0 || Math.abs(i - want) < Math.abs(best - want))) best = i;
+      });
+      return best;
+    };
+    // The whole matched line first, then the matched text alone.
+    const at = nearest(row.hit.text.trim().toLowerCase());
+    if (at >= 0) return at;
+    const part = nearest((matchedText(row.hit) ?? '').toLowerCase());
+    return part >= 0 ? part : want;
+  }
+  if (row.kind === 'hit' && row.hit.match === 'column') {
+    const col = firstWith({ term: row.hit.column ?? row.hit.text, matchCase: false, wholeWord: true, regex: false });
+    if (col >= 0) return col;
+  }
+  return Math.max(0, firstWith(opts));
+}
+
+/** True when the pattern is a valid regular expression here (search-as-you-type waits for a valid one). */
+export function validPattern(o: Pick<SearchOptions, 'term' | 'regex'>): boolean {
+  if (!o.regex) return true;
+  try {
+    new RegExp(o.term);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Rows the dialog's arrow keys stop on (objects, matches and errors; not the connection and schema headers). */
+export function isNavigableRow(r: ResultRow): boolean {
+  return r.kind === 'object' || r.kind === 'hit' || r.kind === 'error';
+}
+
 /** The matched text of a hit (opening a data hit without a key filters on it; a code hit reveals it). */
 export function matchedText(h: Pick<SearchHitItem, 'text' | 'ranges'>): string | null {
   const r = h.ranges?.[0];

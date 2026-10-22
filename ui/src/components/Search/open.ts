@@ -1,4 +1,5 @@
-// Opening the Search tab (Ctrl+Shift+F) and the objects its results point at.
+// Opening Find in database (Ctrl+Shift+F: the dialog; "Open in tab": the Search tab) and the objects its results
+// point at.
 import type { SearchHitItem } from '../../api/types.search';
 import { activateObject } from '../../app/actions';
 import { getEditor } from '../../app/editors';
@@ -6,11 +7,15 @@ import type { CommandTarget, ObjectTarget } from '../../commands/types';
 import { newCondition, newGroup } from '../../filter/model';
 import { isTabular } from '../../lib/sql';
 import { getConnection, providerKind } from '../../store/connections';
-import { useTabs, type ViewTab } from '../../store/tabs';
+import { useTabs } from '../../store/tabs';
 import { openDataTab, pairsToFilter } from '../DataTab/open';
 import { useExplorer } from '../Explorer/explorerStore';
 import { requestObjectSection } from '../ObjectTab/sectionRequests';
-import { DEFAULT_OPTIONS, matchedText, scopeFromTarget, SEARCH_TAB_KEY, SEARCH_VIEW, type ObjectGroup, type SearchScope, type SearchTabState } from './model';
+import { SEARCH_DIALOG_RUN, useSearchDialog } from './dialogStore';
+import {
+  DEFAULT_OPTIONS, matchedText, scopeFromTarget, SEARCH_TAB_KEY, SEARCH_VIEW, type ObjectGroup, type SearchScope, type SearchTabState,
+} from './model';
+import { useSearchRuns } from './searchStore';
 
 export function isRelationalConnection(connectionId: string): boolean {
   const c = getConnection(connectionId);
@@ -34,31 +39,35 @@ function editorSelection(tab: { id: string; kind: string } | undefined): string 
 }
 
 export interface OpenSearchResult {
-  tabId: string;
   /** The context could not be searched (a Redis/MongoDB/Kafka node): the scope fell back to every connection. */
   unsupported: boolean;
 }
 
+/** Identity of an explorer selection (the dialog re-scopes when it changed since the last open). */
+function selectionKey(t: CommandTarget | null): string | null {
+  return t ? JSON.stringify(t) : null;
+}
+
 /**
- * Ctrl+Shift+F / "Find in database…". The scope comes from `args` (a context menu target) or, when the explorer has
- * focus, its selected node; otherwise every connected connection (the active tab's connection is offered in the view).
- * Re-opening keeps the term (unless the console has a one-line selection) and switches to the new scope.
+ * Ctrl+Shift+F / "Find in database…": the Find in database dialog, with the last query, scope and results. The scope
+ * comes from `args` (a context menu target), else from the explorer's selected node when the explorer has focus or
+ * its selection changed since the dialog last opened (the first open included); otherwise the last scope stays (every
+ * connected connection the first time). A one-line selection in the focused console becomes the search text.
  */
 export function openSearch(args?: CommandTarget | null): OpenSearchResult {
   const tabs = useTabs.getState();
   const active = tabs.tabs.find((t) => t.id === tabs.activeId);
-  const existing = tabs.tabs.find((t): t is ViewTab => t.kind === 'view' && t.view === SEARCH_VIEW);
-  const prev = existing?.state as SearchTabState | undefined;
+  const dialog = useSearchDialog.getState();
+  const prev = dialog.state;
+  const selected = useExplorer.getState().selectedTarget;
+  const selKey = selectionKey(selected);
 
-  const target = args ?? (explorerHasFocus() ? useExplorer.getState().selectedTarget : null);
+  const explicit = args ?? (explorerHasFocus() ? selected : null);
+  const target = explicit ?? (!prev || selKey !== dialog.explorerKey ? selected : null);
   const fromTarget = scopeFromTarget(target, isRelationalConnection);
-  const unsupported = !!target && 'connectionId' in target && !fromTarget;
-  const searchingActive = active?.kind === 'view' && active.view === SEARCH_VIEW;
-  // From inside the Search tab itself: keep its scope.
-  const scope: SearchScope = fromTarget?.scope ?? (searchingActive && prev && !unsupported ? prev.scope : { kind: 'all' });
-  const consoleConnectionId = searchingActive
-    ? prev?.consoleConnectionId ?? null
-    : active?.connectionId && isRelationalConnection(active.connectionId) ? active.connectionId : null;
+  const unsupported = !!explicit && 'connectionId' in explicit && !fromTarget;
+  const scope: SearchScope = fromTarget?.scope ?? (unsupported || !prev ? { kind: 'all' } : prev.scope);
+  const consoleConnectionId = active?.connectionId && isRelationalConnection(active.connectionId) ? active.connectionId : prev?.consoleConnectionId ?? null;
   const selection = editorSelection(active);
 
   const state: SearchTabState = {
@@ -70,8 +79,26 @@ export function openSearch(args?: CommandTarget | null): OpenSearchResult {
     consoleConnectionId,
     nonce: Date.now(),
   };
-  const tabId = tabs.openView({ view: SEARCH_VIEW, title: 'Search', state, key: SEARCH_TAB_KEY });
-  return { tabId, unsupported };
+  dialog.show(state, selKey);
+  return { unsupported };
+}
+
+/** The Search tab (one, reused) with this query; returns its id. */
+export function openSearchTab(state: SearchTabState): string {
+  return useTabs.getState().openView({ view: SEARCH_VIEW, title: 'Search', state: { ...state, nonce: Date.now() }, key: SEARCH_TAB_KEY });
+}
+
+/**
+ * "Open in tab" (the dialog's pin button): the dialog's query, scope and results (still streaming or not) move into
+ * the Search tab, for a long session next to the other tabs. The dialog closes.
+ */
+export function moveSearchToTab(): string | null {
+  const dialog = useSearchDialog.getState();
+  if (!dialog.state) return null;
+  dialog.close();
+  const tabId = openSearchTab(dialog.state);
+  useSearchRuns.getState().transfer(SEARCH_DIALOG_RUN, tabId);
+  return tabId;
 }
 
 function objectTarget(o: Pick<ObjectGroup, 'connectionId' | 'database' | 'schema' | 'name' | 'type'>): ObjectTarget {

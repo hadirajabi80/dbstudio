@@ -5,16 +5,19 @@ import { canDetachTabs, canReattachTabs, detachTab, reattachTab } from '../../ap
 import { registerCommands, type Command } from '../../commands/registry';
 import { isTabTarget } from '../../commands/types';
 import { groupInDirection, groupOf, MAX_GROUPS, type SplitSide } from '../../store/editorGroups';
-import { useTabs } from '../../store/tabs';
+import { isPinnedTab, useTabs } from '../../store/tabs';
 
+/** The tab a command acts on; null for a pinned tab (the Objects tab never moves, splits off or leaves the window). */
 function tabIdOf(args: unknown): string | null {
-  return isTabTarget(args) ? args.tabId : useTabs.getState().activeId;
+  const id = isTabTarget(args) ? args.tabId : useTabs.getState().activeId;
+  return id && !isPinnedTab(useTabs.getState().tabs.find((t) => t.id === id)) ? id : null;
 }
 
 /** True when splitting the tab towards `side` would change anything (see useTabs.splitTab). */
 export function canSplit(tabId: string | null, side: SplitSide): boolean {
   if (!tabId) return false;
   const s = useTabs.getState();
+  if (isPinnedTab(s.tabs.find((t) => t.id === tabId))) return false;
   const own = groupOf(s.groups, tabId);
   if (!own) return false;
   if (own.tabIds.length < 2) return !!groupInDirection(s.layout, own.id, side);
@@ -100,7 +103,9 @@ export const EDITOR_GROUP_COMMANDS: Command<never>[] = [
     when: multi,
     run: () => {
       const s = useTabs.getState();
-      const target = s.focusedGroup;
+      // The group of the pinned Objects tab (it cannot move), else the focused one.
+      const pinned = s.tabs.find(isPinnedTab);
+      const target = (pinned && groupOf(s.groups, pinned.id)?.id) || s.focusedGroup;
       for (const g of s.groups) {
         if (g.id === target) continue;
         for (const id of g.tabIds) useTabs.getState().moveTab(id, target);

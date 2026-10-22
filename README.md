@@ -56,11 +56,14 @@ engine runs as a local sidecar and the React UI talks to it over authenticated H
 
 - **Results grid** streaming hundreds of thousands of rows: sort, filter, value viewer, right-to-left text, copy as
   TSV/CSV/JSON/Markdown/INSERT, export to CSV, JSON, SQL and **Excel (.xlsx)** with typed cells and a frozen header.
-- **Find in database** (Ctrl+Shift+F): search object names, columns, code (procedures, functions, views,
-  triggers) and optionally table data across all connections, or just the connection, database, schema or tables
-  selected in the explorer; results stream in grouped by object, with highlighted matches that open at the line.
-- **Objects page**: a Navicat-style list of every object in a database or schema, with type filters, live search,
-  counts and stats (rows, size, modified, comment), and a card view.
+- **Find in database** (Ctrl+Shift+F): a centred popup that searches object names, columns and code (procedures,
+  functions, views, triggers) as you type, and optionally table data, across all connections or just the connection,
+  database, schema or tables selected in the explorer; results stream in grouped by object with a preview of the
+  match, ↑/↓ and Enter open them at the line, and *Open in tab* keeps them next to your other tabs.
+- **Objects tab**: a permanent first tab, like Navicat's, that follows the explorer selection: a connection's
+  databases or schemas as cards, a schema's tables (or views, procedures, functions when you pick that folder) with
+  type filters, live search, counts and stats (rows, size, modified, comment), and a card view. It can be turned
+  off in Settings › General.
 - **Dependencies** in every object tab: what it **uses** and what it is **used by**, with click-through and
   "Open in ER diagram".
 - **ER diagrams** per schema, per selection or around a table, smooth with 500+ tables, crow's-foot edges, PNG/SVG

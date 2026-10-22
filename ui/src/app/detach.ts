@@ -8,7 +8,7 @@ import { isDetachedWindow, windowsApi } from '../platform/windows';
 import { useResults } from '../store/results';
 import { isRunning } from '../store/resultsReducer';
 import { useSessions } from '../store/sessions';
-import { isRestorableTab, useTabs, type Tab } from '../store/tabs';
+import { isPinnedTab, isRestorableTab, useTabs, type Tab } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
 
 /** True when this window can open tabs in new windows (desktop). */
@@ -69,7 +69,7 @@ async function cleanupAfterMove(tab: Tab): Promise<void> {
 export async function detachTab(tabId: string, position?: { x: number; y: number }): Promise<boolean> {
   const api = windowsApi();
   const tab = useTabs.getState().tabs.find((t) => t.id === tabId);
-  if (!api || !tab) return false;
+  if (!api || !tab || isPinnedTab(tab)) return false; // the Objects tab stays in the main window
   if (!(await releaseTab(tab, 'to a new window'))) return false;
   let ok = false;
   try {

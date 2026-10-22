@@ -539,3 +539,231 @@
   font-size: var(--fs-sm);
   line-height: 1.5;
 }
+
+/* ---------- the Ctrl+Shift+F dialog ---------- */
+.sx-overlay {
+  padding-top: max(24px, 7vh);
+  background: var(--bg-overlay-soft);
+}
+.sx-dialog {
+  position: relative;
+  width: min(880px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 48px));
+  min-width: min(560px, calc(100vw - 32px));
+  min-height: min(380px, calc(100vh - 48px));
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  resize: both;
+  animation: sx-dialog-in var(--dur) var(--ease);
+}
+@keyframes sx-dialog-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+.sx-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 8px 0 16px;
+  flex-shrink: 0;
+}
+.sx-dialog-icon {
+  color: var(--accent);
+}
+.sx-dialog-title {
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+.sx-toggle-preview.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sx-pin {
+  margin: 0 2px;
+}
+.sx-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.sx-panel .sx-head {
+  padding: 2px 16px 10px;
+  background: transparent;
+}
+.sx-panel .sx-status {
+  padding: 0 16px;
+  background: transparent;
+}
+.sx-panel .sx-results {
+  flex: 1 1 52%;
+  min-height: 96px;
+}
+.sx-panel .sx-row {
+  padding-right: 16px;
+}
+.sx-options-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border-subtle);
+}
+.sx-stale {
+  white-space: nowrap;
+}
+.sx-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 30px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sx-dialog-foot > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sx-dialog-foot kbd {
+  min-width: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 15px;
+  text-align: center;
+}
+.sx-foot-muted {
+  color: var(--fg-muted);
+}
+
+/* ---------- preview ---------- */
+.sx-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 38%;
+  min-height: 90px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-sunken) 70%, transparent);
+}
+.sx-pv-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 16px;
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.sx-pv-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: var(--weight-strong);
+}
+.sx-pv-at {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.sx-pv-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.sx-pv-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  color: var(--fg-muted);
+  font-size: var(--fs-sm);
+}
+.sx-pv-code {
+  margin: 0;
+  padding: 2px 0 8px;
+  font-size: var(--text-sm);
+  line-height: 19px;
+  color: var(--code-fg);
+  tab-size: 4;
+}
+.sx-pv-line {
+  display: flex;
+  min-width: max-content;
+}
+.sx-pv-line.focus {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.sx-pv-no {
+  position: sticky;
+  left: 0;
+  flex-shrink: 0;
+  width: 48px;
+  padding-right: 10px;
+  background: inherit;
+  color: var(--fg-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.sx-pv-line:not(.focus) .sx-pv-no {
+  background: color-mix(in srgb, var(--bg-sunken) 92%, var(--bg-elevated));
+}
+.sx-pv-line.focus .sx-pv-no {
+  color: var(--accent-on-selected);
+}
+.sx-pv-text {
+  white-space: pre;
+  padding-right: 16px;
+}
+.sx-pv-code mark,
+.sx-pv-data mark {
+  background: var(--mark-bg);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 35%, transparent);
+}
+.sx-pv-data {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 10px 16px;
+  font-size: var(--fs-sm);
+}
+.sx-pv-data dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-muted);
+}
+.sx-pv-data dd {
+  margin: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* The dialog keeps the focus in the search box: its selected result always looks selected. */
+.sx-panel .sx-row.active {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
