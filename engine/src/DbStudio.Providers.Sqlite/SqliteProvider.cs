@@ -2,13 +2,18 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 using DbStudio.Core.Models;
 using DbStudio.Core.Providers;
+using DbStudio.Core.Search;
 using Microsoft.Data.Sqlite;
 
 namespace DbStudio.Providers.Sqlite;
 
 /// <summary>SQLite via Microsoft.Data.Sqlite (docs/PLAN.md 2.5). Profile props: path, readOnly, createIfMissing, attach.</summary>
-public sealed class SqliteProvider : IDbProvider, IObjectBrowserProvider
+public sealed class SqliteProvider : IDbProvider, IObjectBrowserProvider, IDatabaseSearchProvider
 {
+    // ---- Find in database (Ctrl+Shift+F): a query-only connection.
+    public async Task<IDatabaseSearcher> OpenSearcherAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        await SqliteSearcher.OpenAsync(profile, ct).ConfigureAwait(false);
+
     // ---- WP3 object browser (dependencies + object list) on a catalog connection.
     public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
         new SqliteDependencyReader(await SqliteConnections.OpenAsync(profile, forceReadOnly: false, ct).ConfigureAwait(false));

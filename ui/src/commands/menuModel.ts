@@ -75,6 +75,8 @@ export const MENUS: MenuDef[] = [
       cmd('format.selection', 'Format selection', 'Mod+K Mod+F', { optional: true, registerAccelerator: false }),
       cmd('snippet.insert', 'Insert snippet…', 'Mod+J', { optional: true, registerAccelerator: false }),
       cmd('snippets.manage', 'Manage snippets…', undefined, { optional: true }),
+      sep,
+      cmd('search.findInDatabase', 'Find in database…', 'Mod+Shift+F', { optional: true }),
     ],
   },
   {
@@ -185,13 +187,13 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
     c('connections.openConsole'), 'separator',
     c('designer.newTable', true), n('designer.newView'), n('designer.newTrigger'), 'separator',
     c('connections.edit'), c('connections.duplicate'), 'separator',
-    c('connections.refreshCatalog'), c('connections.disconnect'), c('explorer.copyName'), 'separator',
+    c('search.findInDatabase', true), c('connections.refreshCatalog'), c('connections.disconnect'), c('explorer.copyName'), 'separator',
     // M2: ER diagram (M2-ER) and logs & activity (M2-L)
     c('er.open', true), c('view.logs', true), 'separator',
     c('connections.delete'),
   ],
   'explorer.container': [
-    c('objects.open', true), c('connections.openConsole'), 'separator',
+    c('objects.open', true), c('search.findInDatabase', true), c('connections.openConsole'), 'separator',
     n('designer.newTable'), n('designer.newView'), n('designer.newProcedure'), n('designer.newFunction'), n('designer.newPackage'),
     n('designer.newTrigger'), 'separator',
     c('connections.refreshCatalog'), c('er.open', true), c('explorer.copyName'),
@@ -199,7 +201,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.table': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
     c('designer.edit', true), c('explorer.openDdl'), c('explorer.copyDdl'), c('codegen.open', true),
-    c('er.openRelated', true), n('er.openSelected'), c('objects.dependencies', true), n('designer.newTrigger'), 'separator',
+    c('er.openRelated', true), n('er.openSelected'), c('objects.dependencies', true), c('search.findInDatabase', true), n('designer.newTrigger'), 'separator',
     c('connections.openConsole'), c('explorer.copyName'), c('explorer.copyQualifiedName'), 'separator',
     c('designer.newTable', true), c('connections.refreshCatalog'), 'separator',
     h('explorer.truncate'), h('explorer.drop'),

@@ -5,7 +5,7 @@ export interface GridController {
   key: string;
   editable: boolean;
   openFilter(column?: string): void;
-  /** Quick-filter menu for the focused cell (Ctrl+Shift+F). */
+  /** Quick-filter menu for the focused cell (Ctrl+Alt+F). */
   quickFilterCell(): void;
   clearFilter(): void;
   applyServerFilter?(): void;

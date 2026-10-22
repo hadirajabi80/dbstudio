@@ -1,5 +1,5 @@
 import { Code2, Copy, KeyRound, LoaderCircle, PencilRuler, Play, RefreshCw, SquareTerminal } from 'lucide-react';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import type { DdlResponse, ObjectDetails } from '../../api/types';
 import { copyText, newConsole, selectTop } from '../../app/actions';
@@ -8,7 +8,7 @@ import { commandView } from '../../commands/useCommands';
 import type { ObjectTarget } from '../../commands/types';
 import { FormattedToggle } from '../../editor/FormattedDdl';
 import { useFormattedDdl } from '../../editor/formatted-ddl';
-import { SqlEditor } from '../../editor/SqlEditor';
+import { SqlEditor, type SqlEditorHandle } from '../../editor/SqlEditor';
 import { formatCount } from '../../lib/format';
 import { isTabular, OBJECT_TYPE_SINGULAR, qualifiedName } from '../../lib/sql';
 import { useConnection, useDialect } from '../../store/connections';
@@ -17,7 +17,7 @@ import type { ObjectTab as ObjectTabT } from '../../store/tabs';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { ObjectIcon } from '../common/icons';
 import { dependencyCount } from '../Dependencies/model';
-import { useObjectSectionRequests, type ObjectSectionId } from './sectionRequests';
+import { findReveal, useObjectSectionRequests, type DdlReveal, type ObjectSectionId } from './sectionRequests';
 
 // WP3: the Dependencies section loads its code (and data) when first shown.
 const DependenciesPanel = lazy(() => import('../Dependencies/DependenciesPanel').then((m) => ({ default: m.DependenciesPanel })));
@@ -67,11 +67,33 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
 
   // "Show dependencies" (and other commands) ask for a section of this tab.
   const sectionRequest = useObjectSectionRequests((s) => s.requests[tab.id]);
+  // Find in database: a code match puts the cursor on the matched text in the DDL once it is shown.
+  const [reveal, setReveal] = useState<DdlReveal | null>(null);
+  const editorRef = useRef<SqlEditorHandle>(null);
   useEffect(() => {
-    if (sectionRequest) setSection(sectionRequest.section);
+    if (!sectionRequest) return;
+    setSection(sectionRequest.section);
+    if (sectionRequest.reveal) setReveal(sectionRequest.reveal);
   }, [sectionRequest]);
   const [depCount, setDepCount] = useState<number | undefined>(undefined);
   const onDepsLoaded = useCallback((g: Parameters<typeof dependencyCount>[0]) => setDepCount(dependencyCount(g)), []);
+
+  useEffect(() => {
+    if (!reveal || !visible || section !== 'ddl' || !ddl) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      const h = editorRef.current;
+      const doc = h?.getValue() ?? '';
+      if ((!h || !doc) && ++tries < 40) return;
+      clearInterval(timer);
+      setReveal(null);
+      const at = h && doc ? findReveal(doc, reveal) : null;
+      if (!h || !at) return;
+      if (h.selectRange) h.selectRange(at.line, at.col, at.line, at.endCol);
+      else h.revealLine(at.line, at.col);
+    }, 50);
+    return () => clearInterval(timer);
+  }, [reveal, visible, section, ddl]);
 
   const qualified = qualifiedName(ref, dialect, { always: true });
   // Non-destructive formatted view of the DDL (WP-H); "DDL in console" and Copy keep the stored text.
@@ -156,6 +178,7 @@ export function ObjectTabView({ tab, theme, visible }: { tab: ObjectTabT; theme:
             <div className="object-error">Could not load DDL: {error.ddl}</div>
           ) : ddl ? (
             <SqlEditor
+              ref={editorRef}
               tabId={`${tab.id}-ddl`}
               dialect={dialect}
               catalog={null}

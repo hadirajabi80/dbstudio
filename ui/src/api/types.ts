@@ -691,7 +691,9 @@ export interface DdlApplyResponse { ok: true; executed: number; elapsedMs: numbe
 
 /** Stream kinds; the engine dispatches `POST /streams` to the `IStreamFactory` registered under the same key. */
 export type StreamKind =
-  | 'redis.monitor' | 'redis.subscribe' | 'kafka.tail' | 'kafka.fetch' | 'mongo.changes' | 'logs.tail' | 'activity.poll';
+  | 'redis.monitor' | 'redis.subscribe' | 'kafka.tail' | 'kafka.fetch' | 'mongo.changes' | 'logs.tail' | 'activity.poll'
+  // Find in database (api/types.search.ts)
+  | 'db.search';
 export interface StreamOpenRequest { kind: StreamKind; connectionId: string; params: Record<string, unknown> }
 export interface StreamOpenResponse { streamId: string }
 /** `open` is re-sent about every second while items are dropped (with the running `dropped` total). */

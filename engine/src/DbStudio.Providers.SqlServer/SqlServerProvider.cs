@@ -1,13 +1,14 @@
 using System.Diagnostics;
 using DbStudio.Core.Models;
 using DbStudio.Core.Providers;
+using DbStudio.Core.Search;
 using DbStudio.Providers.SqlServer.TSql;
 using Microsoft.Data.SqlClient;
 
 namespace DbStudio.Providers.SqlServer;
 
 /// <summary>Microsoft SQL Server provider (Microsoft.Data.SqlClient, ScriptDom diagnostics).</summary>
-public sealed class SqlServerProvider : IDbProvider, IObjectBrowserProvider
+public sealed class SqlServerProvider : IDbProvider, IObjectBrowserProvider, IDatabaseSearchProvider
 {
     public string Id => "sqlserver";
     public string DisplayName => "Microsoft SQL Server";
@@ -77,6 +78,22 @@ public sealed class SqlServerProvider : IDbProvider, IObjectBrowserProvider
 
     public async Task<IObjectListReader> OpenObjectListReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
         await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
+
+    // ---- Find in database (Ctrl+Shift+F): one pooled catalog connection per search.
+    public async Task<IDatabaseSearcher> OpenSearcherAsync(ConnectionProfile profile, string? password, CancellationToken ct)
+    {
+        var conn = new SqlConnection(SqlServerConnectionStrings.Build(profile, password, pooling: true));
+        try
+        {
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            return new SqlServerSearcher(conn);
+        }
+        catch
+        {
+            await conn.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
 
     private static async Task<SqlServerDependencyReader> OpenBrowserAsync(ConnectionProfile profile, string? password, CancellationToken ct)
     {

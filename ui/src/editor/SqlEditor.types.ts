@@ -66,6 +66,8 @@ export interface SqlEditorHandle {
   getRunTarget(label: RunLabel, opts?: RunTargetOptions): { batches: SqlBatch[]; text: string; /** "selection" when the selection is what runs. */ label?: RunLabel } | null;
   insertText(text: string): void;
   revealLine(line: number, col?: number): void;
+  /** Select a range (1-based, end column exclusive) and scroll it into view (Find in database opening a code match). */
+  selectRange?(line: number, col: number, endLine: number, endCol: number): void;
   getValue(): string;
   // ---- M1.5 (WP-H) ----
   /** Shift+Alt+F. Returns the number of statements left unformatted. */

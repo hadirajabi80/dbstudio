@@ -54,7 +54,8 @@ export const GRID_COMMANDS: Command<never>[] = [
     when: has, run: (a?: unknown) => gridOf(a)?.openFilter(),
   },
   {
-    id: 'grid.quickFilterCell', title: 'Quick filter by the focused cell…', category: 'Grid', shortcut: 'Mod+Shift+F', scope: 'grid',
+    // Mod+Alt+F, not Mod+Shift+F: that is Find in database everywhere, the grid included (components/Search).
+    id: 'grid.quickFilterCell', title: 'Quick filter by the focused cell…', category: 'Grid', shortcut: 'Mod+Alt+F', scope: 'grid',
     when: has, run: (a?: unknown) => gridOf(a)?.quickFilterCell(),
   },
   { id: 'grid.clearFilter', title: 'Clear grid filter', category: 'Grid', scope: 'grid', icon: 'FunnelX', when: has, run: (a?: unknown) => gridOf(a)?.clearFilter() },

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using DbStudio.Core.Models;
 using DbStudio.Core.Providers;
+using DbStudio.Core.Search;
 using DbStudio.Providers.PostgreSql.Diagnostics;
 using Npgsql;
 
@@ -11,8 +12,12 @@ namespace DbStudio.Providers.PostgreSql;
 /// PostgreSQL provider (docs/PLAN-PG.md 2, Npgsql 9.x): sessions on dedicated unpooled connections, pooled catalog /
 /// designer / diagnostics connections, <c>PREPARE</c>-based server diagnostics.
 /// </summary>
-public sealed class PostgreSqlProvider : IDbProvider, IObjectBrowserProvider
+public sealed class PostgreSqlProvider : IDbProvider, IObjectBrowserProvider, IDatabaseSearchProvider
 {
+    // ---- Find in database (Ctrl+Shift+F): the catalog reader's pooled connections, one per database.
+    public async Task<IDatabaseSearcher> OpenSearcherAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        new PgSearcher((PgCatalogReader)await OpenCatalogReaderAsync(profile, password, ct).ConfigureAwait(false));
+
     // ---- WP3 object browser (dependencies + object list) over the catalog reader's pooled connections.
     public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
         new PgDependencyReader((PgCatalogReader)await OpenCatalogReaderAsync(profile, password, ct).ConfigureAwait(false));
