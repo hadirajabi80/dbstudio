@@ -17,7 +17,7 @@ import { useResults, viewKey } from '../store/results';
 import { createExecution, isRunning, type ExecutionState, type ResultSetState } from '../store/resultsReducer';
 import { isForeignSession, useSessions } from '../store/sessions';
 import { openRoutinesInEditMode, useSettings } from '../store/settings';
-import { useTabs, type ConsoleTab } from '../store/tabs';
+import { isPinnedTab, useTabs, type ConsoleTab } from '../store/tabs';
 import { SHORT_WINDOW, toast, useUi } from '../store/ui';
 import { displayShortcut } from '../commands/keys';
 import { pluralize } from '../components/common/text';
@@ -331,7 +331,7 @@ export async function preloadCatalog(connectionId: string, database: string | nu
 
 export async function closeTab(tabId: string): Promise<void> {
   const tab = useTabs.getState().tabs.find((t) => t.id === tabId);
-  if (!tab) return;
+  if (!tab || isPinnedTab(tab)) return; // the Objects tab is never closed
   const s = useSessions.getState().forTab(tabId);
   const exec = useResults.getState().executions[useResults.getState().byTab[tabId]];
   if (s?.txOpen || isRunning(exec)) {

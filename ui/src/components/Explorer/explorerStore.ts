@@ -92,6 +92,8 @@ interface ExplorerState {
   focusTree(): void;
   /** Expand the ancestors of an object, select it and scroll it into view (palette Alt+Enter). */
   reveal(t: ObjectTarget): void;
+  /** Expand `ancestors`, select the node and scroll it into view, leaving the focus where it is (Objects tab drill-down). */
+  selectNode(id: string, target: CommandTarget, ancestors: string[]): void;
   revealSeq: number;
 }
 
@@ -191,6 +193,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       get().expandAll(ids);
       const id = `o:${c}:${d}:${s}:${ref.type}:${ref.name}`;
       set({ filter: '', selected: id, selectedTarget: t, revealSeq: get().revealSeq + 1, focusTreeSeq: get().focusTreeSeq + 1 });
+    },
+    selectNode(id, target, ancestors) {
+      if (ancestors.length) get().expandAll(ancestors);
+      set({ selected: id, selectedTarget: target, revealSeq: get().revealSeq + 1 });
     },
   };
 });

@@ -1,0 +1,208 @@
+/* The permanent Objects tab (ObjectsHomeView): breadcrumb, connection cards, welcome content. Tokens only. */
+.oh-host {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  background: var(--bg-app);
+}
+.oh-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-app);
+}
+.oh-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.oh-body > .empty-state {
+  margin-top: 10vh;
+}
+
+/* ---------- breadcrumb ---------- */
+.oh-crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.oh-crumbs ol {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.oh-crumbs li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.oh-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.oh-crumb > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.oh-crumb {
+  cursor: pointer;
+}
+button.oh-crumb:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+button.oh-crumb:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.oh-crumb.current {
+  color: var(--fg);
+  font-weight: var(--weight-strong);
+}
+.oh-crumb-sep {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+.oh-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* ---------- connection: database / schema cards ---------- */
+.oh-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.oh-cards-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+.oh-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+.oh-count {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+.oh-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  grid-auto-rows: 64px;
+  gap: 10px;
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  outline: none;
+}
+.oh-cards .oh-card {
+  position: relative;
+  cursor: pointer;
+}
+.oh-cards:focus .oh-card.selected {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.oh-card .ol-card-text {
+  flex: 1;
+}
+.oh-card-go {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  transition: transform var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.oh-card:hover .oh-card-go,
+.oh-card.selected .oh-card-go {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+.oh-tile-database {
+  --ol-tint: var(--obj-db);
+  color: var(--obj-db);
+}
+.oh-tile-schema {
+  --ol-tint: var(--kind-schema);
+  color: var(--kind-schema);
+}
+.oh-badge {
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-on-selected);
+}
+.oh-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-top: 12vh;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* ---------- nothing selected: the welcome content ---------- */
+.oh-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: var(--space-1) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  flex-shrink: 0;
+}
+.oh-hint > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.oh-welcome-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.oh-welcome-body > .welcome {
+  position: absolute;
+  inset: 0;
+}

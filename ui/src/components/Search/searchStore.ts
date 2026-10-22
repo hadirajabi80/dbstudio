@@ -1,5 +1,6 @@
-// Runs of the Search tab: one `db.search` engine stream at a time per tab. Hits, progress and errors arrive as
-// `stream.data` batches (api/types.search.ts); results live here, not in the workspace.
+// Runs of Find in database: one `db.search` engine stream at a time per owner (the Search dialog, or a Search tab by
+// its id). Hits, progress and errors arrive as `stream.data` batches (api/types.search.ts); results live here, not in
+// the workspace. A run can move to another owner while it streams ("Open in tab" from the dialog).
 import { create } from 'zustand';
 import { api, errorMessage } from '../../api/client';
 import type { StreamEvent } from '../../api/types';
@@ -29,14 +30,24 @@ const EMPTY: SearchRun = {
 
 interface SearchRuns {
   runs: Record<string, SearchRun>;
-  start(tabId: string, request: SearchRequestParams): Promise<void>;
-  cancel(tabId: string): Promise<void>;
-  /** The tab closed: cancel and forget. */
-  dispose(tabId: string): void;
+  start(owner: string, request: SearchRequestParams): Promise<void>;
+  cancel(owner: string): Promise<void>;
+  /** The owner closed: cancel and forget. */
+  dispose(owner: string): void;
+  /** Move a run (finished or still streaming) to another owner; the target's own run is cancelled first. */
+  transfer(from: string, to: string): void;
 }
 
-/** Per tab: the run's sequence number (a newer start wins) and its stream subscription. */
-const live = new Map<string, { seq: number; off: (() => void) | null; streamId: string | null }>();
+/** A run in flight: its sequence number (a newer start wins), its owner (changes on transfer) and its stream. */
+interface Live {
+  seq: number;
+  owner: string;
+  off: (() => void) | null;
+  streamId: string | null;
+}
+
+/** Per owner. */
+const live = new Map<string, Live>();
 let seq = 0;
 
 export function emptyRun(): SearchRun {
@@ -44,21 +55,21 @@ export function emptyRun(): SearchRun {
 }
 
 export const useSearchRuns = create<SearchRuns>((set, get) => {
-  const patch = (tabId: string, p: Partial<SearchRun> | ((r: SearchRun) => Partial<SearchRun>)) =>
+  const patch = (owner: string, p: Partial<SearchRun> | ((r: SearchRun) => Partial<SearchRun>)) =>
     set((s) => {
-      const cur = s.runs[tabId] ?? EMPTY;
-      return { runs: { ...s.runs, [tabId]: { ...cur, ...(typeof p === 'function' ? p(cur) : p) } } };
+      const cur = s.runs[owner] ?? EMPTY;
+      return { runs: { ...s.runs, [owner]: { ...cur, ...(typeof p === 'function' ? p(cur) : p) } } };
     });
 
-  const stopStream = (tabId: string) => {
-    const l = live.get(tabId);
+  const stopStream = (owner: string) => {
+    const l = live.get(owner);
     if (!l) return null;
     l.off?.();
-    live.delete(tabId);
+    live.delete(owner);
     return l.streamId;
   };
 
-  const onItems = (tabId: string, items: SearchItem[]) => {
+  const onItems = (owner: string, items: SearchItem[]) => {
     const hits: SearchHitItem[] = [];
     const errors: SearchErrorItem[] = [];
     const progress: Record<string, SearchProgressItem> = {};
@@ -69,7 +80,7 @@ export const useSearchRuns = create<SearchRuns>((set, get) => {
       else if (it.kind === 'progress') progress[it.connectionId] = it;
       else if (it.kind === 'done') done = it;
     }
-    patch(tabId, (r) => ({
+    patch(owner, (r) => ({
       hits: hits.length ? [...r.hits, ...hits] : r.hits,
       errors: errors.length ? [...r.errors, ...errors] : r.errors,
       progress: Object.keys(progress).length ? { ...r.progress, ...progress } : r.progress,
@@ -80,63 +91,82 @@ export const useSearchRuns = create<SearchRuns>((set, get) => {
   return {
     runs: {},
 
-    async start(tabId, request) {
-      const prev = stopStream(tabId);
+    async start(owner, request) {
+      const prev = stopStream(owner);
       if (prev) void api.closeStream(prev).catch(() => undefined);
-      const mySeq = ++seq;
-      live.set(tabId, { seq: mySeq, off: null, streamId: null });
-      set((s) => ({ runs: { ...s.runs, [tabId]: { ...EMPTY, status: 'running', request, startedAt: Date.now() } } }));
+      const entry: Live = { seq: ++seq, owner, off: null, streamId: null };
+      live.set(owner, entry);
+      // Still the run in flight (not cancelled, restarted or disposed; it may have moved to another owner).
+      const current = () => live.get(entry.owner) === entry;
+      set((s) => ({ runs: { ...s.runs, [owner]: { ...EMPTY, status: 'running', request, startedAt: Date.now() } } }));
       let streamId: string;
       try {
         ({ streamId } = await api.openStream({ kind: SEARCH_STREAM_KIND, connectionId: 'engine', params: request as unknown as Record<string, unknown> }));
       } catch (e) {
-        if (live.get(tabId)?.seq !== mySeq) return;
-        live.delete(tabId);
-        patch(tabId, { status: 'error', error: errorMessage(e), elapsedMs: 0 });
+        if (!current()) return;
+        live.delete(entry.owner);
+        patch(entry.owner, { status: 'error', error: errorMessage(e), elapsedMs: 0 });
         return;
       }
-      const l = live.get(tabId);
-      if (l?.seq !== mySeq) {
+      if (!current()) {
         // Cancelled or restarted while the stream opened.
         void api.closeStream(streamId).catch(() => undefined);
         return;
       }
-      l.streamId = streamId;
-      patch(tabId, { streamId });
-      l.off = engineSocket.onStream(streamId, (ev: StreamEvent) => {
-        if (live.get(tabId)?.seq !== mySeq) return;
+      entry.streamId = streamId;
+      patch(entry.owner, { streamId });
+      entry.off = engineSocket.onStream(streamId, (ev: StreamEvent) => {
+        if (!current()) return;
         if (ev.type === 'stream.data') {
-          onItems(tabId, ev.items as SearchItem[]);
+          onItems(entry.owner, ev.items as SearchItem[]);
           return;
         }
         if (ev.state !== 'ended' && ev.state !== 'error') return;
-        stopStream(tabId);
-        const r = get().runs[tabId] ?? EMPTY;
+        stopStream(entry.owner);
+        const r = get().runs[entry.owner] ?? EMPTY;
         if (r.status !== 'running') return;
         const elapsedMs = Date.now() - r.startedAt;
-        if (ev.state === 'error') patch(tabId, { status: 'error', error: ev.reason ?? 'The search failed.', elapsedMs });
-        else patch(tabId, { status: ev.reason === 'completed' ? 'done' : 'cancelled', elapsedMs, progress: {} });
+        if (ev.state === 'error') patch(entry.owner, { status: 'error', error: ev.reason ?? 'The search failed.', elapsedMs });
+        else patch(entry.owner, { status: ev.reason === 'completed' ? 'done' : 'cancelled', elapsedMs, progress: {} });
       });
     },
 
-    async cancel(tabId) {
-      const r = get().runs[tabId];
-      const streamId = stopStream(tabId);
-      if (r?.status === 'running') patch(tabId, { status: 'cancelled', elapsedMs: Date.now() - r.startedAt, progress: {} });
+    async cancel(owner) {
+      const r = get().runs[owner];
+      const streamId = stopStream(owner);
+      if (r?.status === 'running') patch(owner, { status: 'cancelled', elapsedMs: Date.now() - r.startedAt, progress: {} });
       if (streamId) await api.closeStream(streamId).catch(() => undefined);
     },
 
-    dispose(tabId) {
-      void get().cancel(tabId);
+    dispose(owner) {
+      void get().cancel(owner);
       set((s) => {
         const runs = { ...s.runs };
-        delete runs[tabId];
+        delete runs[owner];
+        return { runs };
+      });
+    },
+
+    transfer(from, to) {
+      if (from === to) return;
+      if (get().runs[to] || live.has(to)) get().dispose(to);
+      const run = get().runs[from];
+      const l = live.get(from);
+      if (l) {
+        live.delete(from);
+        l.owner = to;
+        live.set(to, l);
+      }
+      set((s) => {
+        const runs = { ...s.runs };
+        delete runs[from];
+        if (run) runs[to] = run;
         return { runs };
       });
     },
   };
 });
 
-export function useSearchRun(tabId: string): SearchRun {
-  return useSearchRuns((s) => s.runs[tabId] ?? EMPTY);
+export function useSearchRun(owner: string): SearchRun {
+  return useSearchRuns((s) => s.runs[owner] ?? EMPTY);
 }

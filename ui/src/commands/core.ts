@@ -24,7 +24,7 @@ import { useResults } from '../store/results';
 import { isRunning } from '../store/resultsReducer';
 import { isForeignSession, useSessions } from '../store/sessions';
 import { useSettings } from '../store/settings';
-import { getActiveConsole, useTabs } from '../store/tabs';
+import { getActiveConsole, isPinnedTab, useTabs } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
 import { currentTheme } from '../theme/useTheme';
 import { aliasCommand, registerCommand, runCommand, type Command } from './registry';
@@ -72,7 +72,8 @@ function siblingTabIds(id: string | null): string[] {
   if (!id) return [];
   const s = useTabs.getState();
   const group = s.groups.find((g) => g.tabIds.includes(id));
-  return (group ? group.tabIds : s.tabs.map((t) => t.id)).filter((x) => x !== id);
+  const pinned = new Set(s.tabs.filter(isPinnedTab).map((t) => t.id));
+  return (group ? group.tabIds : s.tabs.map((t) => t.id)).filter((x) => x !== id && !pinned.has(x));
 }
 
 function anchorOf(selector: string) {
@@ -116,7 +117,8 @@ export const CORE_COMMANDS: Command<never>[] = [
 
   // Tabs
   {
-    id: 'tab.close', title: 'Close tab', category: 'Tabs', icon: 'X', shortcut: 'Mod+W', when: (a?: unknown) => !!tabIdOf(a),
+    id: 'tab.close', title: 'Close tab', category: 'Tabs', icon: 'X', shortcut: 'Mod+W',
+    when: (a?: unknown) => !!tabIdOf(a) && !isPinnedTab(useTabs.getState().tabs.find((t) => t.id === tabIdOf(a))),
     run: (a?: unknown) => { const id = tabIdOf(a); if (id) void closeTab(id); },
   },
   {

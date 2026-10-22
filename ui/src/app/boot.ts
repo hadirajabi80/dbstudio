@@ -10,9 +10,9 @@ import { providerKind, useConnections } from '../store/connections';
 import { useHistory } from '../store/history';
 import { useResults } from '../store/results';
 import { useSessions } from '../store/sessions';
-import { useSettings } from '../store/settings';
+import { showObjectsTab, useSettings } from '../store/settings';
 import { useSourceClients } from '../store/sourceClients';
-import { useTabs, type WorkspaceData } from '../store/tabs';
+import { userTabs, useTabs, type WorkspaceData } from '../store/tabs';
 import { toast, useUi } from '../store/ui';
 import { preloadCatalog } from './actions';
 import { bootDetachedTabs, liveDetachedTabs, wireMainWindowTabs } from './detach';
@@ -239,9 +239,17 @@ export async function boot(): Promise<void> {
       else useTabs.getState().setConnection(t.id, null);
     }
   }
+  // The permanent Objects tab (Settings › General): first in the first group, following the explorer selection. With it
+  // the window opens on it (Navicat's start page), so no console is opened for an empty workspace. Its module is already
+  // loaded with the commands (ObjectList/commands.ts); importing it here keeps it out of the initial bundle.
+  try {
+    (await import('../components/ObjectList/home')).installObjectsHome();
+  } catch (e) {
+    console.warn('[boot] the Objects tab could not be installed', e);
+  }
   // M2: the first console goes to a relational connection (Redis/MongoDB/Kafka have no consoles).
   const firstSql = useConnections.getState().connections.find((c) => providerKind(c.providerId) === 'relational');
-  if (useTabs.getState().tabs.length === 0 && firstSql) {
+  if (userTabs(useTabs.getState().tabs).length === 0 && firstSql && !showObjectsTab()) {
     useTabs.getState().newConsole({ connectionId: firstSql.id });
   }
   preloadTabCatalogs();

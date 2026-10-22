@@ -24,6 +24,7 @@ import { Welcome } from './components/Onboarding/Welcome';
 import { ParamsDialogHost } from './components/ParamsDialog/ParamsDialog';
 import { ExecuteRoutineHost } from './components/ExecuteRoutine/ExecuteRoutineDialog';
 import { useExecuteRoutine } from './components/ExecuteRoutine/store';
+import { SearchDialogHost } from './components/Search/SearchDialogHost';
 import { ShortcutSheet } from './components/Shortcuts/ShortcutSheet';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { DesignerHost } from './designer/host';
@@ -150,6 +151,7 @@ function Shell() {
       <ModalBoundary area="the multi-run dialog" open={(s) => s.multiRunFor} close={() => useUi.getState().openMultiRun(null)}>
         <MultiRunDialog />
       </ModalBoundary>
+      <SearchDialogHost />
       <ToastsBoundary>
         <Toasts />
       </ToastsBoundary>

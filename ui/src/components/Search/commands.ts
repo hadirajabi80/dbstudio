@@ -1,6 +1,7 @@
-// Find in database (auto-loaded by commands/index.ts): Ctrl+Shift+F opens the Search tab scoped to the explorer's
-// selected node (connection, database, schema, type folder, table) when the explorer has focus, to a context menu's
-// node when run from one, and to every connected connection otherwise. The view itself is lazy-loaded.
+// Find in database (auto-loaded by commands/index.ts): Ctrl+Shift+F opens the Find in database dialog scoped to a
+// context menu's node when run from one, else to the explorer's selected node (connection, database, schema, type
+// folder, table) when the explorer has focus or its selection changed, else to the last scope. The dialog's "Open in
+// tab" moves the results into the Search tab view registered here. Both are lazy-loaded.
 import { lazy } from 'react';
 import { registerCommands, type Command } from '../../commands/registry';
 import type { CommandTarget } from '../../commands/types';

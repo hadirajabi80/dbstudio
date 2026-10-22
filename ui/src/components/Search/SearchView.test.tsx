@@ -1,6 +1,6 @@
-// Find in database against the mock engine (db.search stream over the FakeSocket): Ctrl+Shift+F takes its scope from
-// the explorer selection, results stream in grouped connection › schema › object › match, the keyboard walks and opens
-// them, Esc cancels.
+// Find in database against the mock engine (db.search stream over the FakeSocket): Ctrl+Shift+F opens the dialog with
+// its scope from the explorer selection; in the Search tab ("Open in tab") results stream in grouped connection ›
+// schema › object › match, the keyboard walks and opens them, Esc cancels. The dialog itself: SearchDialog.test.tsx.
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineSocket } from '../../api/ws';
@@ -17,8 +17,9 @@ import { useUi } from '../../store/ui';
 import { installMockEngine, TEST_ENGINE_URL } from '../../test/mockServer';
 import { useExplorer } from '../Explorer/explorerStore';
 import { useObjectSectionRequests } from '../ObjectTab/sectionRequests';
-import { SEARCH_VIEW, type SearchTabState } from './model';
-import { openSearch } from './open';
+import { useSearchDialog } from './dialogStore';
+import { DEFAULT_OPTIONS, SEARCH_VIEW, type SearchScope, type SearchTabState } from './model';
+import { openSearchTab } from './open';
 import { SearchView } from './SearchView';
 import { useSearchRuns } from './searchStore';
 
@@ -38,6 +39,7 @@ beforeEach(async () => {
   useTabs.setState({ tabs: [], activeId: null, seq: 0, mru: [], closed: [] });
   useExplorer.setState({ selected: null, selectedTarget: null });
   useSearchRuns.setState({ runs: {} });
+  useSearchDialog.setState({ open: false, state: null, explorerKey: null });
   useCatalog.setState({ conns: {}, dbs: {} });
   await useSettings.getState().load();
   await useConnections.getState().load();
@@ -50,6 +52,10 @@ function Host({ id }: { id: string }) {
 
 const searchTab = () => useTabs.getState().tabs.find((t): t is ViewTab => t.kind === 'view' && t.view === SEARCH_VIEW);
 const stateOf = () => searchTab()!.state as SearchTabState;
+/** The Find in database dialog's query (Ctrl+Shift+F). */
+const dialogState = () => useSearchDialog.getState().state!;
+/** The Search tab ("Open in tab") on a scope. */
+const openTab = (scope: SearchScope) => openSearchTab({ ...DEFAULT_OPTIONS, scope, consoleConnectionId: null, nonce: 1 });
 
 /** Focus an element inside a fake explorer (the dispatcher and openSearch look at the focused element). */
 function focusExplorer(): HTMLElement {
@@ -80,41 +86,55 @@ describe('Ctrl+Shift+F', () => {
     Object.defineProperty(ev, 'target', { value: tree });
     act(() => onGlobalKeyDown(ev));
     expect(ev.defaultPrevented).toBe(true);
-    expect(stateOf().scope).toEqual({ kind: 'schema', connectionId: 'c_prod', database: 'Shop', schema: 'dbo' });
-    expect(useTabs.getState().activeId).toBe(searchTab()!.id);
+    expect(useSearchDialog.getState().open).toBe(true);
+    expect(dialogState().scope).toEqual({ kind: 'schema', connectionId: 'c_prod', database: 'Shop', schema: 'dbo' });
+    // A dialog, not a tab.
+    expect(searchTab()).toBeUndefined();
 
-    // A type folder: its schema and the type filter; a table: that table. Re-opening reuses the one Search tab.
+    // A type folder: its schema and the type filter; a table: that table.
     useExplorer.setState({ selectedTarget: { kind: 'container', connectionId: 'c_prod', database: 'Shop', schema: 'dbo', objectType: 'proc' } });
     tree.focus();
     act(() => void runCommand('search.findInDatabase'));
-    expect(stateOf()).toMatchObject({ scope: { kind: 'schema', schema: 'dbo' }, types: ['procs'] });
+    expect(dialogState()).toMatchObject({ scope: { kind: 'schema', schema: 'dbo' }, types: ['procs'] });
     useExplorer.setState({ selectedTarget: { kind: 'object', connectionId: 'c_prod', database: 'Shop', ref: { database: 'Shop', schema: 'dbo', name: 'orders', type: 'table' } } });
     tree.focus();
     act(() => void runCommand('search.findInDatabase'));
-    expect(stateOf().scope).toEqual({ kind: 'objects', connectionId: 'c_prod', database: 'Shop', objects: [{ schema: 'dbo', name: 'orders', type: 'table' }] });
-    expect(useTabs.getState().tabs.filter((t) => t.kind === 'view' && t.view === SEARCH_VIEW)).toHaveLength(1);
+    expect(dialogState().scope).toEqual({ kind: 'objects', connectionId: 'c_prod', database: 'Shop', objects: [{ schema: 'dbo', name: 'orders', type: 'table' }] });
+    expect(searchTab()).toBeUndefined();
     tree.parentElement!.remove();
   });
 
-  it('searches every connected connection when the explorer does not have focus, and offers the console connection', () => {
+  it('without explorer focus: the selection scopes the first open and a changed selection; else the last scope stays', () => {
     useExplorer.setState({ selectedTarget: { kind: 'connection', connectionId: 'c_prod' } });
     useTabs.getState().newConsole({ connectionId: 'c_pg' });
     (document.activeElement as HTMLElement | null)?.blur();
     act(() => void runCommand('search.findInDatabase'));
-    expect(stateOf().scope).toEqual({ kind: 'all' });
-    expect(stateOf().consoleConnectionId).toBe('c_pg');
+    expect(dialogState().scope).toEqual({ kind: 'connection', connectionId: 'c_prod' });
+    expect(dialogState().consoleConnectionId).toBe('c_pg'); // "Only Postgres Shop" is offered
+
+    // The user widens the scope, closes, reopens with the same selection: the scope stays.
+    act(() => useSearchDialog.getState().update({ scope: { kind: 'all' }, term: 'orders' }));
+    act(() => useSearchDialog.getState().close());
+    act(() => void runCommand('search.findInDatabase'));
+    expect(dialogState()).toMatchObject({ scope: { kind: 'all' }, term: 'orders' });
+
+    // Another node selected since: the dialog follows it.
+    act(() => useSearchDialog.getState().close());
+    useExplorer.setState({ selectedTarget: { kind: 'container', connectionId: 'c_prod', database: 'Shop', schema: 'Sales' } });
+    act(() => void runCommand('search.findInDatabase'));
+    expect(dialogState()).toMatchObject({ scope: { kind: 'schema', schema: 'Sales' }, term: 'orders' });
   });
 
   it('a context menu passes its node; Redis is not searchable', () => {
     expect(isEnabled('search.findInDatabase', { kind: 'connection', connectionId: 'c_redis' })).toBe(false);
     act(() => void runCommand('search.findInDatabase', { kind: 'connection', connectionId: 'c_ora' }));
-    expect(stateOf().scope).toEqual({ kind: 'connection', connectionId: 'c_ora' });
+    expect(dialogState().scope).toEqual({ kind: 'connection', connectionId: 'c_ora' });
     // Selected Redis node with the explorer focused: falls back to every connection with a note.
     useExplorer.setState({ selectedTarget: { kind: 'connection', connectionId: 'c_redis' } });
     const tree = focusExplorer();
     useUi.setState({ toasts: [] });
     act(() => void runCommand('search.findInDatabase'));
-    expect(stateOf().scope).toEqual({ kind: 'all' });
+    expect(dialogState().scope).toEqual({ kind: 'all' });
     expect(useUi.getState().toasts.some((t) => t.kind === 'info' && /cannot be searched/.test(t.text))).toBe(true);
     tree.parentElement!.remove();
     expect(runCommand('search.findInDatabase', { kind: 'connection', connectionId: 'c_redis' })).toBe(false);
@@ -123,7 +143,7 @@ describe('Ctrl+Shift+F', () => {
 
 describe('Search tab', () => {
   it('streams grouped results, walks them with the keyboard and opens matches', async () => {
-    const { tabId } = openSearch({ kind: 'connection', connectionId: 'c_prod' });
+    const tabId = openTab({ kind: 'connection', connectionId: 'c_prod' });
     render(<Host id={tabId} />);
     const input = screen.getByRole('textbox', { name: 'Search for' });
     fireEvent.change(input, { target: { value: 'customer' } });
@@ -166,7 +186,7 @@ describe('Search tab', () => {
   });
 
   it('data search opens the table filtered on the row; Esc cancels a running search', async () => {
-    const { tabId } = openSearch({ kind: 'container', connectionId: 'c_shop', database: 'main', schema: 'main' });
+    const tabId = openTab({ kind: 'schema', connectionId: 'c_shop', database: 'main', schema: 'main' });
     act(() => useTabs.getState().updateView(tabId, { state: { ...stateOf(), term: 'Lovelace', names: false, columns: false, code: false, data: true, rowLimit: 3 } }));
     render(<Host id={tabId} />);
     expect(screen.getByRole('checkbox', { name: 'Table data' })).toBeChecked();
@@ -199,7 +219,7 @@ describe('Search tab', () => {
   });
 
   it('the scope picker lists connections and switches the scope', async () => {
-    const { tabId } = openSearch({ kind: 'connection', connectionId: 'c_prod' });
+    const tabId = openTab({ kind: 'connection', connectionId: 'c_prod' });
     render(<Host id={tabId} />);
     fireEvent.click(screen.getByRole('button', { name: /Prod SQL/ }));
     const picker = screen.getByRole('dialog', { name: 'Where to search' });

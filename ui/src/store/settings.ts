@@ -170,3 +170,11 @@ export const OPEN_ROUTINES_IN_EDIT_KEY = 'openRoutinesInEditMode';
 export function openRoutinesInEditMode(s: Pick<FullSettings, 'ui'> = useSettings.getState().settings): boolean {
   return s.ui[OPEN_ROUTINES_IN_EDIT_KEY] === true;
 }
+
+/** settings.ui key of "Show the Objects tab" (Settings ▸ General; free-form ui, no engine change). */
+export const OBJECTS_TAB_SETTING = 'objectsTab';
+
+/** "Show the Objects tab": the permanent first tab that lists the objects of the explorer selection. On by default. */
+export function showObjectsTab(s: Pick<FullSettings, 'ui'> = useSettings.getState().settings): boolean {
+  return s.ui[OBJECTS_TAB_SETTING] !== false;
+}

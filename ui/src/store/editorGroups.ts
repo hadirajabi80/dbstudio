@@ -7,7 +7,8 @@
 //  - every tab is in exactly one group; a group's `tabIds` follow the order of `useTabs.tabs`;
 //  - there is always at least one group; empty groups are removed while another group exists;
 //  - the globally active tab (`useTabs.activeId`) is the active tab of the focused group;
-//  - the layout tree names every group exactly once, splits have >= 2 children and sizes that sum to 1.
+//  - the layout tree names every group exactly once, splits have >= 2 children and sizes that sum to 1;
+//  - pinned tabs (the permanent Objects tab) open the first group in visual order, before its other tabs.
 
 export const MAX_GROUPS = 3;
 /** Smallest share of its split a group can be resized to. */
@@ -292,6 +293,8 @@ export interface NormalizeInput {
   focusedGroup?: string | null;
   /** Most recently used tabs first: picks the active tab of a group that lost its active tab. */
   mru?: string[];
+  /** Pinned tabs (first in `tabIds`): they always open the first group in visual order. */
+  pinned?: string[];
 }
 
 /** Repairs the groups for the current tabs (see the invariants at the top). */
@@ -317,6 +320,15 @@ export function normalizeGroups(input: NormalizeInput): GroupsState {
     target.tabIds = [...target.tabIds, ...unassigned];
   }
   for (const g of groups) g.tabIds.sort((a, b) => pos.get(a)! - pos.get(b)!);
+
+  // Pinned tabs live in the first group (left / top), never in another one.
+  const pins = (input.pinned ?? []).filter((id) => pos.has(id));
+  if (pins.length) {
+    const firstId = layoutGroupIds(normalizeLayout(input.layout ?? null, groups.map((g) => g.id)))[0];
+    const first = groups.find((g) => g.id === firstId) ?? groups[0];
+    for (const g of groups) g.tabIds = g.tabIds.filter((id) => !pins.includes(id));
+    first.tabIds = [...pins, ...first.tabIds].sort((a, b) => pos.get(a)! - pos.get(b)!);
+  }
 
   // Empty groups close (one group always remains).
   if (groups.length > 1) {
