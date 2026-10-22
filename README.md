@@ -56,6 +56,9 @@ engine runs as a local sidecar and the React UI talks to it over authenticated H
 
 - **Results grid** streaming hundreds of thousands of rows: sort, filter, value viewer, right-to-left text, copy as
   TSV/CSV/JSON/Markdown/INSERT, export to CSV, JSON, SQL and **Excel (.xlsx)** with typed cells and a frozen header.
+- **Find in database** (Ctrl+Shift+F): search object names, columns, code (procedures, functions, views,
+  triggers) and optionally table data across all connections, or just the connection, database, schema or tables
+  selected in the explorer; results stream in grouped by object, with highlighted matches that open at the line.
 - **Objects page**: a Navicat-style list of every object in a database or schema, with type filters, live search,
   counts and stats (rows, size, modified, comment), and a card view.
 - **Dependencies** in every object tab: what it **uses** and what it is **used by**, with click-through and
@@ -330,6 +333,7 @@ Docker (or with `DBSTUDIO_IT=0`) the integration tests are skipped and the rest 
 | Run on multiple connections | Ctrl+Alt+Enter |
 | Reopen closed tab / switch tabs | Ctrl+Shift+T / Ctrl+Tab, Ctrl+1…9 |
 | Maximize results | Ctrl+Shift+R |
+| Find in database (scope = explorer selection) | Ctrl+Shift+F |
 | Settings | Ctrl+, |
 | ER diagram | Ctrl+Alt+E |
 | Logs & activity | Ctrl+Alt+Shift+L |
