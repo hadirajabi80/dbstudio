@@ -13,6 +13,7 @@ import { createLogsHandlers } from './m2/logs';
 import { createMongoHandlers } from './m2/mongo';
 import { createRedisHandlers } from './m2/redis';
 import { createObjectsHandlers } from './objects';
+import { createSearchHandlers } from './search';
 
 const P = '*/api/v1';
 
@@ -243,5 +244,6 @@ function m2Handlers(engine: MockEngine, ok: Parameters<typeof createM2Context>[1
     ...createKafkaHandlers(ctx),
     ...createLogsHandlers(ctx),
     ...createErHandlers(ctx),
+    ...createSearchHandlers(ctx), // Find in database (db.search stream)
   ];
 }

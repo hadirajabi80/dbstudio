@@ -721,7 +721,7 @@ export function DataGrid(p: DataGridProps) {
       { label: 'Copy selection as', submenu: commandMenuItems(GRID_COPY_AS_MENU, args) },
       { label: 'View value', onClick: () => p.onOpenViewer?.(selInfo(col, row)) },
       { separator: true },
-      { label: 'Filter', shortcut: displayShortcut('Mod+Shift+F'), submenu: filterSubmenu(col, v) },
+      { label: 'Filter', shortcut: displayShortcut('Mod+Alt+F'), submenu: filterSubmenu(col, v) },
     ];
     if (fk && v !== null && r.src !== undefined && p.onNavigateFk) {
       items.push({ label: `Go to referenced row (${fk.refTable})`, shortcut: displayShortcut('Mod+Click'), onClick: () => p.onNavigateFk!(fk, fk.ordinals.map((o) => valueAt(r, o))) });
@@ -871,10 +871,11 @@ export function DataGrid(p: DataGridProps) {
     if (ctrl && e.shiftKey && k === 'c') {
       e.preventDefault();
       void copyAs('csv');
-    } else if (ctrl && e.shiftKey && k === 'f') {
+    } else if (ctrl && e.altKey && !e.shiftKey && (k === 'f' || e.code === 'KeyF')) {
+      // grid.quickFilterCell (Mod+Alt+F); Mod+Shift+F is Find in database.
       e.preventDefault();
       quickFilterAtCell();
-    } else if (ctrl && !e.shiftKey && k === 'f') {
+    } else if (ctrl && !e.shiftKey && !e.altKey && k === 'f') {
       e.preventDefault();
       p.onOpenFilter?.();
     } else if (e.key === 'F7') {

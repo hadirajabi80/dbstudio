@@ -22,7 +22,7 @@ Setup: fresh profile (browser: `http://localhost:5177/?fresh` with `npm run dev:
 | 9 | Ctrl+P, `orders`, Alt+Enter | Explorer opens on the left with `Orders` selected and scrolled into view; focus is on the tree. | — |
 | 10 | Arrow keys, Right/Left, Enter on a table | Tree navigation; Enter opens the Data tab (WP-G) or the object details. Shift+F10 opens the context menu; arrows + first letters (typeahead) move; Enter runs. | context `explorer.table` |
 | 11 | Ctrl+F (explorer focused) | Focus moves to the explorer filter; type `cust`; type chips: Tab to *Tables*, Space; column toggle searches column names. Esc clears. | `explorer.focusFilter` |
-| 12 | Ctrl+Alt+D on a table | Data tab opens (WP-G). Ctrl+F in the grid opens the filter bar; Ctrl+Shift+F quick-filters by the focused cell. | `data.open`, `grid.filter`, `grid.quickFilterCell` |
+| 12 | Ctrl+Alt+D on a table | Data tab opens (WP-G). Ctrl+F in the grid opens the filter bar; Ctrl+Alt+F quick-filters by the focused cell (Ctrl+Shift+F is Find in database). | `data.open`, `grid.filter`, `grid.quickFilterCell` |
 | 13 | Edit a cell (Enter/F2), Ctrl+S | Pending-changes preview with SQL and parameters; Enter submits. | `grid.submitChanges` |
 | 14 | F4 on a table | Table designer (WP-I). | `designer.edit` |
 | 15 | Shift+Alt+F in a console | SQL is formatted (WP-H). | `format.document` |

@@ -176,6 +176,13 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       ed.setPosition({ lineNumber: line, column: col });
       ed.focus();
     },
+    selectRange: (line: number, col: number, endLine: number, endCol: number) => {
+      const ed = edRef.current;
+      if (!ed) return;
+      ed.revealRangeInCenterIfOutsideViewport({ startLineNumber: line, startColumn: col, endLineNumber: endLine, endColumn: endCol });
+      ed.setSelection({ startLineNumber: line, startColumn: col, endLineNumber: endLine, endColumn: endCol });
+      ed.focus();
+    },
     getValue: () => edRef.current?.getModel()?.getValue() ?? propsRef.current.value,
     formatDocument: () => doFormat(false),
     formatSelection: () => doFormat(true),

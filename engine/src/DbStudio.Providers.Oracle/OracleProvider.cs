@@ -1,13 +1,30 @@
 using System.Diagnostics;
 using DbStudio.Core.Models;
 using DbStudio.Core.Providers;
+using DbStudio.Core.Search;
 using Oracle.ManagedDataAccess.Client;
 
 namespace DbStudio.Providers.Oracle;
 
 /// <summary>Oracle Database provider (Oracle.ManagedDataAccess.Core, managed driver).</summary>
-public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider
+public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider, IDatabaseSearchProvider
 {
+    // ---- Find in database (Ctrl+Shift+F): one pooled catalog connection per search.
+    public async Task<IDatabaseSearcher> OpenSearcherAsync(ConnectionProfile profile, string? password, CancellationToken ct)
+    {
+        var conn = new OracleConnection(OracleConnectionStrings.Build(profile, password, pooling: true));
+        try
+        {
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            return new OracleSearcher(conn);
+        }
+        catch
+        {
+            await conn.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     // ---- WP3 object browser (dependencies + object list): one pooled catalog connection per call.
     public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
         await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
