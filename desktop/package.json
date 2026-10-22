@@ -1,7 +1,7 @@
 {
   "name": "dbstudio-desktop",
   "productName": "Rowlit",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Rowlit: see your data in a better light. A fast desktop client for SQL Server, Oracle, PostgreSQL, SQLite, Redis, MongoDB and Kafka",
   "author": "Rowlit contributors",
   "license": "UNLICENSED",
