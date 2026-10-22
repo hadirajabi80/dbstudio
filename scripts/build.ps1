@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Builds the DbStudio Windows installer: engine (self-contained single file) + UI + Electron/NSIS.
+  Builds the Rowlit Windows installer: engine (self-contained single file) + UI + Electron/NSIS.
 
 .DESCRIPTION
   Version comes from version.json at the repo root and is injected without editing package files:
     engine   -> dotnet publish -p:Version=<v>
     ui       -> VITE_APP_VERSION=<v>
     desktop  -> electron-builder -c.extraMetadata.version=<v>
-  Output: desktop/dist/DbStudio-Setup-<version>.exe
+  Output: desktop/dist/Rowlit-Setup-<version>.exe
 
 .EXAMPLE
   ./scripts/build.ps1                    # everything
@@ -38,7 +38,10 @@ $isWindowsRid = $Runtime -like 'win-*'
 # Windows keeps engine/publish (electron-builder win.extraResources); other RIDs go to engine/publish/<rid>
 # (mac.extraResources maps engine/publish/osx-${arch}).
 $publishDir = if ($isWindowsRid) { Join-Path $root 'engine/publish' } else { Join-Path $root "engine/publish/$Runtime" }
-$engineName = if ($isWindowsRid) { 'DbStudio.Engine.exe' } else { 'DbStudio.Engine' }
+# The engine is published as Rowlit.Engine(.exe), the process name users see; the assembly (and so the apphost that
+# dotnet publish writes) is still DbStudio.Engine. A single-file apphost can be renamed freely.
+$exeSuffix = if ($isWindowsRid) { '.exe' } else { '' }
+$engineName = "Rowlit.Engine$exeSuffix"
 if (-not $isWindowsRid -and -not $EngineOnly) { throw "-Runtime $Runtime needs -EngineOnly; build the macOS app on a Mac with scripts/build.sh." }
 $uiDir = Join-Path $root 'ui'
 $desktopDir = Join-Path $root 'desktop'
@@ -59,7 +62,7 @@ function Ensure-NodeModules([string]$dir) {
   }
 }
 
-Write-Host "DbStudio $version ($Configuration, $Runtime)" -ForegroundColor Green
+Write-Host "Rowlit $version ($Configuration, $Runtime)" -ForegroundColor Green
 
 # 1. Engine: self-contained single-file exe. IncludeNativeLibrariesForSelfExtract bundles the native
 #    SNI (SqlClient) and e_sqlite3 libraries (PLAN R2).
@@ -77,10 +80,13 @@ if (-not $SkipEngine) {
       -p:Version=$version `
       -nologo
   }
-  # The installer and engine-process.ts expect DbStudio.Engine.exe; the Host project may publish DbStudio.Host.exe.
+  # The installer and engine-process.ts expect Rowlit.Engine.exe; dotnet publish writes DbStudio.Engine.exe (the
+  # assembly name) or, for an older Host project, DbStudio.Host.exe.
   $engineExe = Join-Path $publishDir $engineName
-  $hostExe = Join-Path $publishDir ($engineName -replace 'Engine', 'Host')
-  if (-not (Test-Path $engineExe) -and (Test-Path $hostExe)) { Move-Item $hostExe $engineExe }
+  foreach ($published in "DbStudio.Engine$exeSuffix", "DbStudio.Host$exeSuffix") {
+    $publishedExe = Join-Path $publishDir $published
+    if (-not (Test-Path $engineExe) -and (Test-Path $publishedExe)) { Move-Item $publishedExe $engineExe }
+  }
   if (-not (Test-Path $engineExe)) { throw "Engine executable not found in $publishDir" }
   $sizeMb = [math]::Round((Get-Item $engineExe).Length / 1MB, 1)
   Write-Step "Engine: $engineExe ($sizeMb MB)"
@@ -103,7 +109,7 @@ Invoke-Npm $desktopDir @('run', 'build')
 
 if ($SkipInstaller) { Write-Step 'Done (installer skipped)'; return }
 
-foreach ($required in (Join-Path $publishDir 'DbStudio.Engine.exe'), (Join-Path $uiDir 'dist/index.html')) {
+foreach ($required in (Join-Path $publishDir 'Rowlit.Engine.exe'), (Join-Path $uiDir 'dist/index.html')) {
   if (-not (Test-Path $required)) { throw "Missing $required - run without -SkipEngine/-SkipUi first." }
 }
 
@@ -118,9 +124,9 @@ try {
 } finally { Pop-Location }
 
 if ($Dir) {
-  Write-Step "Done: $(Join-Path $desktopDir 'dist/win-unpacked/DbStudio.exe')"
+  Write-Step "Done: $(Join-Path $desktopDir 'dist/win-unpacked/Rowlit.exe')"
 } else {
-  $installer = Join-Path $desktopDir "dist/DbStudio-Setup-$version.exe"
+  $installer = Join-Path $desktopDir "dist/Rowlit-Setup-$version.exe"
   if (-not (Test-Path $installer)) { throw "Installer not found: $installer" }
   Write-Step "Done: $installer ($([math]::Round((Get-Item $installer).Length / 1MB, 1)) MB)"
 }

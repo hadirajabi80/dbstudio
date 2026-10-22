@@ -123,7 +123,7 @@ describe('update and window-chrome IPC', () => {
 // ---- notifications
 describe('notification IPC', () => {
   it('showNotification: one-line title and body, capped; bad input rejected', () => {
-    assert.deepEqual(v.validateNotification({ title: 'DbStudio 1.1.0 is ready', body: 'Restart to update.' }), { title: 'DbStudio 1.1.0 is ready', body: 'Restart to update.' });
+    assert.deepEqual(v.validateNotification({ title: 'Rowlit 1.1.0 is ready', body: 'Restart to update.' }), { title: 'Rowlit 1.1.0 is ready', body: 'Restart to update.' });
     assert.deepEqual(v.validateNotification({ title: ' a\nb ' }), { title: 'a b', body: '' });
     assert.equal(v.validateNotification({ title: 'x'.repeat(500), body: 'y'.repeat(1000) }).title.length, 120);
     assert.equal(v.validateNotification({ title: 'x', body: 'y'.repeat(1000) }).body.length, 300);

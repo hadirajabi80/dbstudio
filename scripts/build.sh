@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Builds the DbStudio macOS app: engine (self-contained single file, per arch) + UI + Electron DMG/ZIP.
+# Builds the Rowlit macOS app: engine (self-contained single file, per arch) + UI + Electron DMG/ZIP.
 # macOS counterpart of scripts/build.ps1 (DMGs can only be built on a Mac; CI uses macos-latest).
 #
 # Version comes from version.json and is injected without editing package files:
 #   engine   -> dotnet publish -p:Version=<v>
 #   ui       -> VITE_APP_VERSION=<v>
 #   desktop  -> electron-builder -c.extraMetadata.version=<v>
-# Output: desktop/dist/DbStudio-<version>-mac-<arm64|x64>.dmg and .zip
+# Output: desktop/dist/Rowlit-<version>-mac-<arm64|x64>.dmg and .zip
 #
 # Usage:
 #   bash scripts/build.sh                    # everything, arm64 + x64
 #   bash scripts/build.sh --arch arm64       # one architecture only (faster)
 #   bash scripts/build.sh --skip-installer   # engine publish + UI build + desktop compile, no electron-builder
 #   bash scripts/build.sh --engine-only      # just dotnet publish into engine/publish/osx-<arch>
-#   bash scripts/build.sh --dir              # unpacked app in desktop/dist/mac-arm64/DbStudio.app (no DMG)
+#   bash scripts/build.sh --dir              # unpacked app in desktop/dist/mac-arm64/Rowlit.app (no DMG)
 #   bash scripts/build.sh --skip-engine --skip-ui
 #
 # Signing (see README "Install on Windows / macOS"):
@@ -67,7 +67,7 @@ UI_DIR="$ROOT/ui"
 DESKTOP_DIR="$ROOT/desktop"
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
 
-printf '\033[32mDbStudio %s (%s, macOS %s)\033[0m\n' "$VERSION" "$CONFIGURATION" "${ARCHES[*]}"
+printf '\033[32mRowlit %s (%s, macOS %s)\033[0m\n' "$VERSION" "$CONFIGURATION" "${ARCHES[*]}"
 
 ensure_node_modules() {
   local dir="$1"
@@ -115,16 +115,19 @@ if [[ $SKIP_ENGINE == 0 ]]; then
       -p:DebugType=embedded \
       -p:Version="$VERSION" \
       -nologo
-    # electron-builder and engine-process.ts expect DbStudio.Engine; the Host project may publish DbStudio.Host.
-    if [[ ! -f "$out/DbStudio.Engine" && -f "$out/DbStudio.Host" ]]; then mv "$out/DbStudio.Host" "$out/DbStudio.Engine"; fi
-    [[ -f "$out/DbStudio.Engine" ]] || die "Engine executable not found in $out"
-    chmod 755 "$out/DbStudio.Engine"
+    # electron-builder and engine-process.ts expect Rowlit.Engine (the process name users see); dotnet publish writes
+    # DbStudio.Engine (the assembly name) or, for an older Host project, DbStudio.Host. A single-file apphost can be renamed.
+    for published in DbStudio.Engine DbStudio.Host; do
+      if [[ ! -f "$out/Rowlit.Engine" && -f "$out/$published" ]]; then mv "$out/$published" "$out/Rowlit.Engine"; fi
+    done
+    [[ -f "$out/Rowlit.Engine" ]] || die "Engine executable not found in $out"
+    chmod 755 "$out/Rowlit.Engine"
     rm -f "$out/web.config" "$out"/*.pdb
-    step "Engine ($rid): $(du -h "$out/DbStudio.Engine" | cut -f1)"
+    step "Engine ($rid): $(du -h "$out/Rowlit.Engine" | cut -f1)"
     host_arch="$(uname -m)"; [[ "$host_arch" == "x86_64" ]] && host_arch=x64
     if [[ $VERIFY == 1 && "$(uname -s)" == "Darwin" && "$arch" == "$host_arch" ]]; then
       step "Engine ($rid): handshake check"
-      verify_engine "$out/DbStudio.Engine" || die "The $rid engine did not report ready."
+      verify_engine "$out/Rowlit.Engine" || die "The $rid engine did not report ready."
     fi
   done
 fi
@@ -146,7 +149,7 @@ ensure_node_modules "$DESKTOP_DIR"
 if [[ $SKIP_INSTALLER == 1 ]]; then step "Done (installer skipped)"; exit 0; fi
 
 for arch in "${ARCHES[@]}"; do
-  [[ -x "$ROOT/engine/publish/osx-$arch/DbStudio.Engine" ]] || die "Missing engine/publish/osx-$arch/DbStudio.Engine - run without --skip-engine first."
+  [[ -x "$ROOT/engine/publish/osx-$arch/Rowlit.Engine" ]] || die "Missing engine/publish/osx-$arch/Rowlit.Engine - run without --skip-engine first."
 done
 [[ -f "$UI_DIR/dist/index.html" ]] || die "Missing ui/dist/index.html - run without --skip-ui first."
 
@@ -184,11 +187,11 @@ step "electron-builder (${TARGETS[*]}; ${ARCHES[*]})"
 
 # 4. Check what was produced: bundle signature (incl. the engine and its entitlements), artifacts.
 for arch in "${ARCHES[@]}"; do
-  app="$DESKTOP_DIR/dist/mac-$arch/DbStudio.app"
+  app="$DESKTOP_DIR/dist/mac-$arch/Rowlit.app"
   # electron-builder names the x64 folder plain "mac".
-  [[ -d "$app" || "$arch" != x64 ]] || app="$DESKTOP_DIR/dist/mac/DbStudio.app"
+  [[ -d "$app" || "$arch" != x64 ]] || app="$DESKTOP_DIR/dist/mac/Rowlit.app"
   [[ -d "$app" ]] || die "App bundle not found for $arch in desktop/dist"
-  engine="$app/Contents/Resources/engine/DbStudio.Engine"
+  engine="$app/Contents/Resources/engine/Rowlit.Engine"
   [[ -x "$engine" ]] || die "$engine is missing or not executable"
   if [[ $VERIFY == 1 ]]; then
     step "codesign --verify ($arch)"
@@ -198,7 +201,7 @@ for arch in "${ARCHES[@]}"; do
   fi
   if [[ $DIR == 0 ]]; then
     for ext in dmg zip; do
-      f="$DESKTOP_DIR/dist/DbStudio-$VERSION-mac-$arch.$ext"
+      f="$DESKTOP_DIR/dist/Rowlit-$VERSION-mac-$arch.$ext"
       [[ -f "$f" ]] || die "Artifact not found: $f"
       step "Done: $f ($(du -h "$f" | cut -f1))"
     done

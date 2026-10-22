@@ -16,22 +16,22 @@ const base = { isPackaged: true, repoRoot: '/src/DbStudio', parentPid: 42, env: 
 
 describe('engine binary per platform', () => {
   it('names: .exe on Windows only', () => {
-    assert.deepEqual(ep.engineExeCandidates('win32'), ['DbStudio.Engine.exe', 'DbStudio.Host.exe']);
-    assert.deepEqual(ep.engineExeCandidates('darwin'), ['DbStudio.Engine', 'DbStudio.Host']);
-    assert.deepEqual(ep.engineExeCandidates('linux'), ['DbStudio.Engine', 'DbStudio.Host']);
+    assert.deepEqual(ep.engineExeCandidates('win32'), ['Rowlit.Engine.exe', 'DbStudio.Engine.exe', 'DbStudio.Host.exe']);
+    assert.deepEqual(ep.engineExeCandidates('darwin'), ['Rowlit.Engine', 'DbStudio.Engine', 'DbStudio.Host']);
+    assert.deepEqual(ep.engineExeCandidates('linux'), ['Rowlit.Engine', 'DbStudio.Engine', 'DbStudio.Host']);
   });
 
-  it('macOS packaged: Contents/Resources/engine/DbStudio.Engine, made executable', () => {
+  it('macOS packaged: Contents/Resources/engine/Rowlit.Engine, made executable', () => {
     const chmodded = [];
     const l = ep.resolveEngineLaunch({
       ...base,
       platform: 'darwin',
-      resourcesPath: '/Applications/DbStudio.app/Contents/Resources',
-      exists: (p) => /DbStudio\.Engine$/.test(p),
+      resourcesPath: '/Applications/Rowlit.app/Contents/Resources',
+      exists: (p) => /Rowlit\.Engine$/.test(p),
       makeExecutable: (p) => chmodded.push(p),
     });
     assert.equal(l.kind, 'spawn');
-    assert.match(l.spec.command, /Contents[\\/]Resources[\\/]engine[\\/]DbStudio\.Engine$/);
+    assert.match(l.spec.command, /Contents[\\/]Resources[\\/]engine[\\/]Rowlit\.Engine$/);
     assert.match(l.spec.cwd, /Contents[\\/]Resources[\\/]engine$/);
     assert.deepEqual(l.spec.args, ['--parent-pid', '42']);
     assert.deepEqual(chmodded, [l.spec.command]);
@@ -40,12 +40,13 @@ describe('engine binary per platform', () => {
   it('macOS packaged: falls back to the Host apphost name, and to the first name when nothing exists', () => {
     const opts = { ...base, platform: 'darwin', resourcesPath: '/r', makeExecutable: () => {} };
     assert.match(ep.resolveEngineLaunch({ ...opts, exists: (p) => p.endsWith('DbStudio.Host') }).spec.command, /DbStudio\.Host$/);
-    assert.match(ep.resolveEngineLaunch({ ...opts, exists: () => false }).spec.command, /DbStudio\.Engine$/);
+    assert.match(ep.resolveEngineLaunch({ ...opts, exists: (p) => p.endsWith('DbStudio.Engine') }).spec.command, /DbStudio\.Engine$/);
+    assert.match(ep.resolveEngineLaunch({ ...opts, exists: () => false }).spec.command, /Rowlit\.Engine$/);
   });
 
   it('Windows packaged is unchanged and never chmods', () => {
     const l = ep.resolveEngineLaunch({ ...base, platform: 'win32', resourcesPath: 'C:\\app\\resources', exists: () => true });
-    assert.match(l.spec.command, /resources[\\/]engine[\\/]DbStudio\.Engine\.exe$/);
+    assert.match(l.spec.command, /resources[\\/]engine[\\/]Rowlit\.Engine\.exe$/);
   });
 
   it('DBSTUDIO_ENGINE_PATH is made executable too', () => {

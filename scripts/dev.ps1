@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  DbStudio development loop: engine (--dev) + Vite (hot reload) + Electron pointed at Vite.
+  Rowlit development loop: engine (--dev) + Vite (hot reload) + Electron pointed at Vite.
 
 .DESCRIPTION
   1. dotnet run the engine in --dev mode on a fixed port with a fixed token (CORS allows http://localhost:5173).
@@ -123,7 +123,7 @@ try {
   $electron = Start-Process -FilePath $electronExe -ArgumentList @('.') -WorkingDirectory $desktop -NoNewWindow -PassThru
   $started.Add($electron)
 
-  Write-Host 'Running. Close the DbStudio window or press Ctrl+C to stop everything.' -ForegroundColor Green
+  Write-Host 'Running. Close the Rowlit window or press Ctrl+C to stop everything.' -ForegroundColor Green
   while (-not $electron.HasExited) {
     if ($engine.HasExited) { Write-Warning "Engine exited with code $($engine.ExitCode)."; break }
     if ($vite.HasExited) { Write-Warning "Vite exited with code $($vite.ExitCode)."; break }

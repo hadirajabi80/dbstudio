@@ -140,7 +140,7 @@ describe('install mode (Windows, Developer ID signed macOS)', () => {
     assert.equal(c.status.percent, 42);
     updater.emit('update-downloaded', { version: '0.3.0' });
     assert.equal(c.status.state, 'ready');
-    assert.equal(c.status.releaseUrl, 'https://github.com/hadirajabi80/dbstudio/releases/tag/v0.3.0');
+    assert.equal(c.status.releaseUrl, 'https://github.com/hadirajabi80/rowlit/releases/tag/v0.3.0');
     assert.equal(sent.at(-1).state, 'ready');
     // A downloaded update is not checked again (the 6-hourly timer just reports it).
     assert.equal((await c.check()).state, 'ready');
@@ -178,7 +178,7 @@ describe('notify mode (ad-hoc signed macOS)', () => {
     assert.equal(r.state, 'available');
     assert.equal(r.mode, 'notify');
     assert.equal(r.version, '0.3.1');
-    assert.equal(r.releaseUrl, 'https://github.com/hadirajabi80/dbstudio/releases/tag/v0.3.1');
+    assert.equal(r.releaseUrl, 'https://github.com/hadirajabi80/rowlit/releases/tag/v0.3.1');
     assert.equal(c.quitAndInstall(), false, 'Squirrel.Mac would refuse an ad-hoc signed app');
     assert.deepEqual(updater.installs, []);
   });
@@ -243,9 +243,9 @@ describe('mode per OS and macOS signature', () => {
   });
 
   it('release page URLs only for plain versions', () => {
-    assert.equal(u.releasePageUrl('1.2.3'), 'https://github.com/hadirajabi80/dbstudio/releases/tag/v1.2.3');
-    assert.equal(u.releasePageUrl('1.2.3-beta.1'), 'https://github.com/hadirajabi80/dbstudio/releases/tag/v1.2.3-beta.1');
-    assert.equal(u.releasePageUrl('../../evil'), 'https://github.com/hadirajabi80/dbstudio/releases');
+    assert.equal(u.releasePageUrl('1.2.3'), 'https://github.com/hadirajabi80/rowlit/releases/tag/v1.2.3');
+    assert.equal(u.releasePageUrl('1.2.3-beta.1'), 'https://github.com/hadirajabi80/rowlit/releases/tag/v1.2.3-beta.1');
+    assert.equal(u.releasePageUrl('../../evil'), 'https://github.com/hadirajabi80/rowlit/releases');
     assert.equal(u.releasePageUrl(undefined), u.RELEASES_URL);
   });
 });

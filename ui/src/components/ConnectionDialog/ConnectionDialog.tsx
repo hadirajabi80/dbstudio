@@ -21,7 +21,7 @@ type Values = Record<string, unknown>;
  */
 const FIELD_TEXT: Record<string, Record<string, { label?: string; help?: string }>> = {
   sqlite: {
-    readOnly: { label: 'Open file read-only', help: 'SQLite opens the file with Mode=ReadOnly: nothing can write to it, not even DbStudio.' },
+    readOnly: { label: 'Open file read-only', help: 'SQLite opens the file with Mode=ReadOnly: nothing can write to it, not even Rowlit.' },
   },
 };
 
@@ -348,7 +348,7 @@ export function ConnectionDialog({ state, onClose }: Props) {
               <label className="check">
                 <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} />
                 {/* One label on every provider (design-r1-05); SQLite's "Open file read-only" is its own field above. */}
-                Read-only <span className="muted">(DbStudio blocks statements that change data)</span>
+                Read-only <span className="muted">(Rowlit blocks statements that change data)</span>
               </label>
               {fields.some((f) => f.type === 'password') && (
                 <label className="check">

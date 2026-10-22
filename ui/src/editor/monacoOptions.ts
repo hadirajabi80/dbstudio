@@ -1,4 +1,4 @@
-// Options shared by every Monaco editor in DbStudio: the SQL console (SqlEditor), CodeView, the designer DDL
+// Options shared by every Monaco editor in Rowlit: the SQL console (SqlEditor), CodeView, the designer DDL
 // previews and the DiffEditor. Spread them first and add the editor-specific options after.
 import * as monaco from './monaco';
 import { cssVar } from '../theme/gridTheme';

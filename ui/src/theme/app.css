@@ -1,4 +1,4 @@
-/* DbStudio app styles: the M1 frame with the M1.5 refinements merged in. One rule per selector across app.css and
+/* Rowlit app styles: the M1 frame with the M1.5 refinements merged in. One rule per selector across app.css and
    shell.css (theme/tokens.test.ts checks it); colours, font sizes and font weights only via tokens.css. */
 *,
 *::before,

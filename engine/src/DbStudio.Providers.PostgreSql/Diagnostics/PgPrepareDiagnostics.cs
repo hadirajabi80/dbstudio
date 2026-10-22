@@ -64,7 +64,7 @@ public sealed class PgPrepareDiagnostics : ISqlDiagnostics
 
         var b = PgConnectionStrings.Builder(profile, password, pooling: true);
         b.Options = ((b.Options ?? "") + " -c default_transaction_read_only=on -c statement_timeout=3000").Trim();
-        b.ApplicationName = "DbStudio diagnostics";
+        b.ApplicationName = "Rowlit diagnostics";
         b.Timeout = Math.Min(b.Timeout, 10);
 
         var diagnostics = new List<SqlDiagnostic>();

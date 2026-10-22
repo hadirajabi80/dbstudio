@@ -21,8 +21,8 @@ public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider
         try
         {
             await conn.OpenAsync(ct).ConfigureAwait(false);
-            conn.ModuleName = "DbStudio";
-            conn.ClientInfo = "DbStudio catalog";
+            conn.ModuleName = "Rowlit";
+            conn.ClientInfo = "Rowlit catalog";
             return new OracleDependencyReader(conn);
         }
         catch
@@ -74,8 +74,8 @@ public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider
         try
         {
             await conn.OpenAsync(ct).ConfigureAwait(false);
-            conn.ModuleName = "DbStudio";
-            conn.ClientInfo = "DbStudio session " + options.SessionId;
+            conn.ModuleName = "Rowlit";
+            conn.ClientInfo = "Rowlit session " + options.SessionId;
 
             await ExecAsync(conn, $"ALTER SESSION SET NLS_DATE_FORMAT = {OracleSqlText.Literal(profile.GetString("nlsDateFormat") ?? DefaultNlsDateFormat)}", ct).ConfigureAwait(false);
             await ExecAsync(conn, $"ALTER SESSION SET NLS_TIMESTAMP_FORMAT = {OracleSqlText.Literal(profile.GetString("nlsTimestampFormat") ?? DefaultNlsTimestampFormat)}", ct).ConfigureAwait(false);
@@ -105,8 +105,8 @@ public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider
         try
         {
             await conn.OpenAsync(ct).ConfigureAwait(false);
-            conn.ModuleName = "DbStudio";
-            conn.ClientInfo = "DbStudio catalog";
+            conn.ModuleName = "Rowlit";
+            conn.ClientInfo = "Rowlit catalog";
             return new OracleCatalogReader(conn);
         }
         catch

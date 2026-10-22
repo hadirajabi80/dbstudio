@@ -3,7 +3,7 @@
 
 export type DesktopOs = 'win32' | 'darwin' | 'linux';
 
-/** process.platform narrowed to the three platforms DbStudio knows; BSDs etc. behave like Linux. */
+/** process.platform narrowed to the three platforms Rowlit knows; BSDs etc. behave like Linux. */
 export function desktopOs(platform: NodeJS.Platform = process.platform): DesktopOs {
   return platform === 'win32' || platform === 'darwin' ? platform : 'linux';
 }
@@ -27,8 +27,8 @@ export const WINDOWS_MATERIAL_MIN_BUILD = 22621;
 /**
  * Windows backdrop. Mica rather than acrylic: Mica is tinted from the wallpaper (and the window's light/dark mode, which
  * main keeps in step with the app theme), so the top bar keeps the same colour, and its text the same contrast,
- * whatever window is behind DbStudio. Acrylic blurs the live content behind the window: measured on Windows 11, a dark
- * DbStudio over a white browser turned the acrylic bar mid-grey (and a light one over a dark window would turn dark),
+ * whatever window is behind Rowlit. Acrylic blurs the live content behind the window: measured on Windows 11, a dark
+ * Rowlit over a white browser turned the acrylic bar mid-grey (and a light one over a dark window would turn dark),
  * and it costs GPU on every frame behind it. Microsoft recommends Mica for an app's base layer and title bar and
  * acrylic for transient surfaces (flyouts, menus).
  */

@@ -16,7 +16,7 @@ export function softMarkers(diags: Diagnostic[], sev: MarkerSeverities): MarkerL
   return diags.map((d) => ({
     startLineNumber: d.line, startColumn: d.col,
     endLineNumber: d.endLine, endColumn: d.endLine === d.line && d.endCol <= d.col ? d.col + 1 : d.endCol,
-    severity: sev[d.severity], message: d.message, code: d.code, source: 'DbStudio',
+    severity: sev[d.severity], message: d.message, code: d.code, source: 'Rowlit',
   }));
 }
 

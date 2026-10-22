@@ -1,4 +1,4 @@
-// DbStudio Electron main process: single instance, dbstudio:// protocol, window, menu, IPC, engine sidecar.
+// Rowlit Electron main process: single instance, dbstudio:// protocol, window, menu, IPC, engine sidecar.
 import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from 'electron';
 import * as path from 'node:path';
 import { IPC } from '../shared/channels';
@@ -13,7 +13,7 @@ import { engineErrorPageUrl } from './error-page';
 import { RotatingLog } from './fs-utils';
 import { registerIpc } from './ipc';
 import { buildMenu } from './menu';
-import { electronProfileDir, engineLogFile, iconPath, repoRoot, uiDir } from './paths';
+import { electronProfileDir, engineLogFile, iconPath, initDataDir, repoRoot, uiDir } from './paths';
 import { desktopOs, quitWhenAllWindowsClosed } from './platform';
 import { registerSchemePrivileges, registerUiProtocol } from './protocol';
 import { runSmoke } from './smoke';
@@ -42,19 +42,37 @@ function readDevUrl(): string | undefined {
 
 const devUrl = readDevUrl();
 
+// Before anything touches the data folder: resolve it, moving a DbStudio (<= 1.1.0) folder to Rowlit once
+// (data-dir.ts). The engine is told the result explicitly, so both always use the same folder.
+const data = initDataDir();
+process.env.DBSTUDIO_DATA_DIR = data.dir;
+
 // Must happen before 'ready'.
 app.setPath('userData', electronProfileDir());
 app.setAppUserModelId(APP_ID);
 registerSchemePrivileges();
 
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  if (data.inUse) {
+    // The DbStudio folder could not be moved because DbStudio itself is still running (it holds the same profile).
+    void app.whenReady().then(() => {
+      dialog.showErrorBox(
+        'Rowlit',
+        'DbStudio is still running.\n\nQuit DbStudio, then start Rowlit again: your connections, passwords and settings move over automatically.',
+      );
+      app.quit();
+    });
+  } else {
+    app.quit();
+  }
 } else {
   main();
 }
 
 function main(): void {
   const log = new RotatingLog(engineLogFile());
+  log.write('main', `data folder: ${data.dir} (${data.source})`);
+  for (const note of data.notes) log.write('main', `data folder: ${note}`);
   let mainWindow: BrowserWindow | null = null;
   let titleLocked = false;
   let quitting = false;
@@ -79,7 +97,7 @@ function main(): void {
     });
   } catch (e) {
     app.whenReady().then(() => {
-      dialog.showErrorBox('DbStudio', `Invalid engine configuration: ${(e as Error).message}`);
+      dialog.showErrorBox('Rowlit', `Invalid engine configuration: ${(e as Error).message}`);
       app.quit();
     });
     return;
@@ -99,13 +117,13 @@ function main(): void {
     if (!mainWindow || mainWindow.isDestroyed()) return !quitWhenAllWindowsClosed(os);
     const r = await dialog.showMessageBox(mainWindow, {
       type: 'error',
-      title: 'DbStudio',
-      message: 'The DbStudio engine stopped unexpectedly.',
+      title: 'Rowlit',
+      message: 'The Rowlit engine stopped unexpectedly.',
       detail:
         `Exit code: ${exit.code ?? exit.signal ?? 'unknown'}.\n` +
         'Open sessions and uncommitted transactions were lost; editor tabs are kept.\n\n' +
         `Log: ${log.file}`,
-      buttons: ['Restart Engine', 'Quit DbStudio'],
+      buttons: ['Restart Engine', 'Quit Rowlit'],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
@@ -128,8 +146,8 @@ function main(): void {
     for (;;) {
       const r = await dialog.showMessageBox(mainWindow, {
         type: 'error',
-        title: 'DbStudio',
-        message: 'The DbStudio engine could not be started.',
+        title: 'Rowlit',
+        message: 'The Rowlit engine could not be started.',
         detail: err.message,
         buttons: ['Retry', 'Open Log', 'Quit'],
         defaultId: 0,
@@ -169,7 +187,7 @@ function main(): void {
 
   app.on('second-instance', () => {
     if (!mainWindow) {
-      // macOS with every window closed: launching DbStudio again opens a window.
+      // macOS with every window closed: launching Rowlit again opens a window.
       if (app.isReady() && !quitting) mainWindow = openMainWindow();
       return;
     }

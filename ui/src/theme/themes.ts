@@ -506,11 +506,11 @@ const SOLARIZED_DARK: ThemeVars = {
 
 /** The code themes besides "Match app theme" (themes of the app list reuse their colours). */
 export const EDITOR_THEMES: readonly EditorTheme[] = [
-  { id: 'light', name: 'DbStudio Light', base: 'light', vars: {} },
+  { id: 'light', name: 'Rowlit Light', base: 'light', vars: {} },
   { id: 'github-light', name: 'GitHub Light', base: 'light', vars: GITHUB_LIGHT },
   { id: 'paper', name: 'Paper', base: 'light', vars: PAPER },
   { id: 'solarized-light', name: 'Solarized Light', base: 'light', vars: SOLARIZED_LIGHT },
-  { id: 'dark', name: 'DbStudio Dark', base: 'dark', vars: {} },
+  { id: 'dark', name: 'Rowlit Dark', base: 'dark', vars: {} },
   { id: 'midnight', name: 'Midnight', base: 'dark', vars: MIDNIGHT },
   { id: 'nord', name: 'Nord', base: 'dark', vars: NORD },
   { id: 'dracula', name: 'Dracula', base: 'dark', vars: VIOLET },

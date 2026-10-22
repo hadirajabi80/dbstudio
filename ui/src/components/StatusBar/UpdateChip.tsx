@@ -22,7 +22,7 @@ export function UpdateChip() {
       className={`sb-item sb-button sb-update tone-${d.tone}${ready ? ' ready' : ''}`}
       onClick={() => (ready ? void restartToUpdate() : openSettings('updates'))}
       title={ready ? `${d.text} Click to restart now.` : `${d.text} Click for update settings.`}
-      aria-label={error ? 'Update check failed — update settings' : ready ? `Restart to update to DbStudio ${status.version}` : d.chip}
+      aria-label={error ? 'Update check failed — update settings' : ready ? `Restart to update to Rowlit ${status.version}` : d.chip}
     >
       <Icon size={12} className={status.state === 'checking' ? 'spin' : undefined} aria-hidden="true" />
       {/* a failed check is a quiet mark only: an offline machine should not carry a red label all day */}

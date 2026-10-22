@@ -141,19 +141,19 @@ public sealed class SqlServerScripterGoldenTests
 
     public static TheoryData<string, string, string?, string> StorageCases => new()
     {
-        { DependentTypes.ColumnstoreIndex, "IX_cs", "NONCLUSTERED COLUMNSTORE", "Orders has a columnstore index IX_cs; DbStudio cannot recreate it in a rebuild" },
-        { DependentTypes.XmlIndex, "XI_Doc", "XML", "Orders has an XML index XI_Doc; DbStudio cannot recreate it in a rebuild" },
-        { DependentTypes.SpatialIndex, "SI_Geo", "SPATIAL", "Orders has a spatial index SI_Geo; DbStudio cannot recreate it in a rebuild" },
-        { DependentTypes.OtherIndex, "IX_hash", "NONCLUSTERED_HASH", "Orders has a nonclustered hash index IX_hash; DbStudio cannot recreate it" },
-        { DependentTypes.FulltextIndex, "", "FT_Catalog", "Orders has a full-text index (catalog FT_Catalog); DbStudio cannot recreate it" },
-        { DependentTypes.Partitioning, "PK_Orders", "PS_OrderDate", "index PK_Orders of Orders is partitioned on PS_OrderDate; DbStudio cannot recreate it" },
-        { DependentTypes.Partitioning, "", "PS_OrderDate", "Orders is partitioned on PS_OrderDate; DbStudio cannot recreate it" },
-        { DependentTypes.Filegroup, "", "FG_Archive", "Orders is stored on filegroup FG_Archive; DbStudio cannot recreate it" },
-        { DependentTypes.Filegroup, "", "FG_Lob (TEXTIMAGE_ON)", "Orders is stored on filegroup FG_Lob (TEXTIMAGE_ON); DbStudio cannot recreate it" },
-        { DependentTypes.Compression, "PK_Orders", "PAGE", "index PK_Orders of Orders uses PAGE compression; DbStudio cannot recreate it" },
-        { DependentTypes.Compression, "", "ROW", "Orders uses ROW compression; DbStudio cannot recreate it" },
-        { DependentTypes.ChangeTracking, "", null, "Orders has change tracking enabled; DbStudio cannot recreate it" },
-        { DependentTypes.Cdc, "", null, "Orders is tracked by change data capture (CDC); DbStudio cannot recreate it" },
+        { DependentTypes.ColumnstoreIndex, "IX_cs", "NONCLUSTERED COLUMNSTORE", "Orders has a columnstore index IX_cs; Rowlit cannot recreate it in a rebuild" },
+        { DependentTypes.XmlIndex, "XI_Doc", "XML", "Orders has an XML index XI_Doc; Rowlit cannot recreate it in a rebuild" },
+        { DependentTypes.SpatialIndex, "SI_Geo", "SPATIAL", "Orders has a spatial index SI_Geo; Rowlit cannot recreate it in a rebuild" },
+        { DependentTypes.OtherIndex, "IX_hash", "NONCLUSTERED_HASH", "Orders has a nonclustered hash index IX_hash; Rowlit cannot recreate it" },
+        { DependentTypes.FulltextIndex, "", "FT_Catalog", "Orders has a full-text index (catalog FT_Catalog); Rowlit cannot recreate it" },
+        { DependentTypes.Partitioning, "PK_Orders", "PS_OrderDate", "index PK_Orders of Orders is partitioned on PS_OrderDate; Rowlit cannot recreate it" },
+        { DependentTypes.Partitioning, "", "PS_OrderDate", "Orders is partitioned on PS_OrderDate; Rowlit cannot recreate it" },
+        { DependentTypes.Filegroup, "", "FG_Archive", "Orders is stored on filegroup FG_Archive; Rowlit cannot recreate it" },
+        { DependentTypes.Filegroup, "", "FG_Lob (TEXTIMAGE_ON)", "Orders is stored on filegroup FG_Lob (TEXTIMAGE_ON); Rowlit cannot recreate it" },
+        { DependentTypes.Compression, "PK_Orders", "PAGE", "index PK_Orders of Orders uses PAGE compression; Rowlit cannot recreate it" },
+        { DependentTypes.Compression, "", "ROW", "Orders uses ROW compression; Rowlit cannot recreate it" },
+        { DependentTypes.ChangeTracking, "", null, "Orders has change tracking enabled; Rowlit cannot recreate it" },
+        { DependentTypes.Cdc, "", null, "Orders is tracked by change data capture (CDC); Rowlit cannot recreate it" },
     };
 
     /// <summary>features-r1-02: storage the model does not hold refuses the identity rebuild instead of being dropped.</summary>
@@ -189,7 +189,7 @@ public sealed class SqlServerScripterGoldenTests
         };
         var message = Assert.Throws<ArgumentException>(() => Scripter.ScriptTable(orders, desired, context)).Message;
         Assert.Equal(
-            "The table cannot be rebuilt safely: DbStudio cannot recreate these in a rebuild: Orders has a columnstore index IX_cs; " +
+            "The table cannot be rebuilt safely: Rowlit cannot recreate these in a rebuild: Orders has a columnstore index IX_cs; " +
             "index PK_Orders of Orders uses PAGE compression; Orders is tracked by change data capture (CDC). Change the identity in a script instead.",
             message);
 

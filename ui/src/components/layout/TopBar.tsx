@@ -1,4 +1,5 @@
 import { Keyboard, Menu as MenuIcon, Moon, PanelLeft, Plus, Search, Settings, SquareTerminal, Sun, SunMoon } from 'lucide-react';
+import { APP_NAME } from '../../app/brand';
 import { ariaKeyShortcuts, isMac } from '../../commands/keys';
 import { menuCommandIds, MENUS, type MenuEntry } from '../../commands/menuModel';
 import { getCommand } from '../../commands/registry';
@@ -6,6 +7,7 @@ import { useCommandContext } from '../../commands/useCommands';
 import { getPlatform } from '../../platform';
 import { useSettings } from '../../store/settings';
 import { useUi } from '../../store/ui';
+import { RowlitMark } from '../../theme/brand/RowlitMark';
 import type { EffectiveTheme } from '../../theme/useTheme';
 import { showMenuBelow, type MenuItem } from '../common/Menu';
 import { Kbd, withShortcut } from '../Shortcuts/Kbd';
@@ -44,15 +46,11 @@ export function TopBar({ theme }: { theme: EffectiveTheme }) {
 
   return (
     <header className="topbar" aria-label="Application">
-      <div className="brand" aria-label="DbStudio">
+      <div className="brand" aria-label={APP_NAME}>
         <span className="brand-mark" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 32 32">
-            <rect width="32" height="32" rx="8" className="brand-bg" />
-            <ellipse cx="16" cy="9.5" rx="8" ry="3.2" className="brand-fg-fill" />
-            <path d="M8 9.5v13c0 1.8 3.6 3.2 8 3.2s8-1.4 8-3.2v-13M8 16c0 1.8 3.6 3.2 8 3.2s8-1.4 8-3.2" fill="none" className="brand-fg-stroke" strokeWidth="2.2" />
-          </svg>
+          <RowlitMark size={18} />
         </span>
-        <span className="brand-name">DbStudio</span>
+        <span className="brand-name">{APP_NAME}</span>
       </div>
       {(browser || nativeMenuPopup) && (
         <button

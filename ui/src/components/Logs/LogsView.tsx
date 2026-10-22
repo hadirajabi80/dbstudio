@@ -92,7 +92,7 @@ export function LogsView({ tab, visible }: TabViewProps) {
   const conn = useConnection(isEngineTab ? null : cid);
   const providerId = conn?.providerId;
   const readOnly = !!conn?.readOnly;
-  const connName = isEngineTab ? 'DbStudio engine' : conn?.name ?? cid;
+  const connName = isEngineTab ? 'Rowlit engine' : conn?.name ?? cid;
 
   const patch = useCallback((p: Partial<LogsTabState>) => {
     const cur = useTabs.getState().tabs.find((t) => t.id === tab.id);
@@ -532,7 +532,7 @@ export function LogsView({ tab, visible }: TabViewProps) {
   const sourceOptions = merged.logs.map((s) => ({
     value: s.info.id,
     label: s.info.title,
-    group: s.cid === ENGINE_LOG_CID ? 'DbStudio' : connName,
+    group: s.cid === ENGINE_LOG_CID ? 'Rowlit' : connName,
     hint: !s.info.available ? 'no access' : !s.info.supportsRange ? 'live' : undefined,
   }));
   const activityAvailable = !isEngineTab;

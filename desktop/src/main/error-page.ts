@@ -12,7 +12,7 @@ export function engineErrorPageUrl(o: { message: string; output: string[]; logFi
   const tail = o.output.slice(-25).join('\n');
   const html = `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-<title>DbStudio - engine failed to start</title>
+<title>Rowlit - engine failed to start</title>
 <style>
   body { margin: 0; background: ${bg}; color: ${fg}; font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
   main { max-width: 760px; margin: 12vh auto 0; padding: 0 24px; }
@@ -21,7 +21,7 @@ export function engineErrorPageUrl(o: { message: string; output: string[]; logFi
   code, pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }
   pre { background: ${panel}; padding: 12px 14px; border-radius: 6px; overflow: auto; max-height: 40vh; white-space: pre-wrap; }
 </style></head><body><main>
-  <h1>The DbStudio engine could not be started</h1>
+  <h1>The Rowlit engine could not be started</h1>
   <p>${esc(o.message)}</p>
   ${tail ? `<pre>${esc(tail)}</pre>` : ''}
   <p>Engine log: <code>${esc(o.logFile)}</code></p>

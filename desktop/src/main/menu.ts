@@ -70,7 +70,7 @@ function entry(it: MenuEntry, o: MenuOptions): MenuItemConstructorOptions | null
     if (it.id === 'restartEngine') return o.onRestartEngine ? { label: it.label, click: o.onRestartEngine } : null;
     return null;
   }
-  const label = it.command === 'help.about' ? `About DbStudio ${app.getVersion()}` : it.label;
+  const label = it.command === 'help.about' ? `About Rowlit ${app.getVersion()}` : it.label;
   return {
     label,
     accelerator: toAccelerator(it.shortcut),

@@ -1,4 +1,4 @@
-﻿# DbStudio M1.5 â€” Final QA Sign-off
+﻿# Rowlit M1.5 â€” Final QA Sign-off
 
 **Author:** Fable, lead architect  
 **Date:** 2026-10-18  

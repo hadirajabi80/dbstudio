@@ -52,7 +52,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'format', label: 'SQL formatting', icon: <WandSparkles size={16} />, description: 'How Format SQL lays out your statements.', render: () => <FormattingSection /> },
   { id: 'connections', label: 'Connections', icon: <Cable size={16} />, description: 'Sessions and limits.', render: () => <ConnectionsSection /> },
   ...(SnippetsSettings ? [{ id: 'snippets' as const, label: 'Snippets', icon: <Braces size={16} />, description: 'Your SQL snippets next to the built-in ones.' }] : []),
-  { id: 'updates', label: 'Updates', icon: <Download size={16} />, description: 'Your version of DbStudio and new releases.', render: () => <UpdatesCard /> },
+  { id: 'updates', label: 'Updates', icon: <Download size={16} />, description: 'Your version of Rowlit and new releases.', render: () => <UpdatesCard /> },
 ];
 
 const SNIPPET_WORDS = 'snippets snippet templates prefix code completion';
@@ -149,7 +149,7 @@ function Inner() {
               );
             })}
           </nav>
-          <div className="settings-side-foot">DbStudio {version}</div>
+          <div className="settings-side-foot">Rowlit {version}</div>
         </aside>
 
         <main className="settings-main" role="tabpanel" aria-label={q ? 'Search results' : current.label}>

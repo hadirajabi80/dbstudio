@@ -1,4 +1,4 @@
-// Public types of the DbStudio IntelliSense engine (pure TypeScript: no DOM, no React, no Monaco).
+// Public types of the Rowlit IntelliSense engine (pure TypeScript: no DOM, no React, no Monaco).
 import type { CatalogObjectType, Dialect, ObjectRef, SqlBatch } from '../api/types';
 
 export type { Dialect, ObjectRef, SqlBatch };

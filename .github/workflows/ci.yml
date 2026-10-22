@@ -52,7 +52,7 @@ jobs:
         run: |
           $v = (Get-Content -Raw version.json | ConvertFrom-Json).version
           "version=$v" >> $env:GITHUB_OUTPUT
-          Write-Host "DbStudio $v"
+          Write-Host "Rowlit $v"
 
       # ---- engine -----------------------------------------------------------------------------
       - name: Engine tests
@@ -112,13 +112,13 @@ jobs:
 
       # PLAN-M2 D8: the published engine starts and answers GET /providers (M2-K adds the librdkafka load check).
       - name: Engine native smoke
-        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/DbStudio.Engine.exe
+        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/Rowlit.Engine.exe
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: DbStudio-Setup-${{ steps.version.outputs.version }}
-          path: desktop/dist/DbStudio-Setup-*.exe
+          name: Rowlit-Setup-${{ steps.version.outputs.version }}
+          path: desktop/dist/Rowlit-Setup-*.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -159,7 +159,7 @@ jobs:
         run: |
           v=$(node -p "require('./version.json').version")
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "DbStudio $v"
+          echo "Rowlit $v"
 
       # ---- tests ------------------------------------------------------------------------------
       - name: Engine tests (includes the real Keychain round trip)
@@ -203,15 +203,15 @@ jobs:
       # PLAN-M2 D8: the published osx-arm64 engine starts and answers GET /providers (M2-K adds the librdkafka load
       # check and the osx-x64 file/otool/codesign checks).
       - name: Engine native smoke
-        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/osx-arm64/DbStudio.Engine
+        run: node scripts/ci/kafka-native-smoke.mjs engine/publish/osx-arm64/Rowlit.Engine
 
       - name: Upload DMG and ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: DbStudio-${{ steps.version.outputs.version }}-mac
+          name: Rowlit-${{ steps.version.outputs.version }}-mac
           path: |
-            desktop/dist/DbStudio-*-mac-*.dmg
-            desktop/dist/DbStudio-*-mac-*.zip
+            desktop/dist/Rowlit-*-mac-*.dmg
+            desktop/dist/Rowlit-*-mac-*.zip
           if-no-files-found: error
           retention-days: 14
 

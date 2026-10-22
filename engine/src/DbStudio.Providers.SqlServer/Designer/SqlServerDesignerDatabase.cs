@@ -135,7 +135,7 @@ public sealed class SqlServerDesignerDatabase : IDesignerDatabase
     {
         var b = new SqlConnectionStringBuilder(SqlServerConnectionStrings.Build(profile, password, pooling: false));
         if (!string.IsNullOrWhiteSpace(database)) b.InitialCatalog = database;
-        b.ApplicationName = "DbStudio designer";
+        b.ApplicationName = "Rowlit designer";
         var conn = new SqlConnection(b.ConnectionString);
         try
         {

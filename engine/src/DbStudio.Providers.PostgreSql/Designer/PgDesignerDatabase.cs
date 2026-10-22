@@ -73,7 +73,7 @@ public sealed class PgDesignerDatabase : IDesignerDatabase
     {
         PgDriver.EnsureInitialized();
         var b = PgConnectionStrings.Builder(profile, password, pooling, database);
-        b.ApplicationName = "DbStudio designer";
+        b.ApplicationName = "Rowlit designer";
         var conn = new NpgsqlConnection(b.ConnectionString);
         try
         {

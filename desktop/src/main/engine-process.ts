@@ -13,10 +13,14 @@ import type { EngineInfo } from '../../../ui/src/platform/bridge';
 export type { EngineInfo };
 
 export const READY_PREFIX = 'DBSTUDIO_READY ';
-/** File names tried, in order, inside resources/engine on Windows. The Host project may publish under either name. */
-export const ENGINE_EXE_CANDIDATES = ['DbStudio.Engine.exe', 'DbStudio.Host.exe'];
+/**
+ * File names tried, in order, inside resources/engine on Windows. The build scripts publish the engine as
+ * Rowlit.Engine.exe (the name Task Manager / Activity Monitor show); the older DbStudio.Engine.exe and the Host
+ * project's own DbStudio.Host.exe are still accepted (builds made before the rename, ad-hoc publishes).
+ */
+export const ENGINE_EXE_CANDIDATES = ['Rowlit.Engine.exe', 'DbStudio.Engine.exe', 'DbStudio.Host.exe'];
 /** macOS/Linux: the same apphost names without an extension. */
-export const ENGINE_EXE_CANDIDATES_POSIX = ['DbStudio.Engine', 'DbStudio.Host'];
+export const ENGINE_EXE_CANDIDATES_POSIX = ['Rowlit.Engine', 'DbStudio.Engine', 'DbStudio.Host'];
 /** How long a POSIX engine gets to handle SIGTERM (roll back transactions, close sessions) before SIGKILL. */
 export const DEFAULT_KILL_GRACE_MS = 3_000;
 
@@ -123,9 +127,9 @@ function isLoopbackHttpUrl(s: string): boolean {
  * Resolution order:
  *  1. DBSTUDIO_ENGINE_URL + DBSTUDIO_ENGINE_TOKEN: attach to a running engine (no spawn).
  *  2. DBSTUDIO_ENGINE_CMD: a full command line (e.g. `node test/fake-engine.mjs`).
- *  3. DBSTUDIO_ENGINE_PATH: path to a prebuilt engine exe (e.g. engine/publish/DbStudio.Engine.exe).
- *  4. Packaged: resources/engine/<DBSTUDIO_ENGINE_EXE or a candidate name> (DbStudio.Engine.exe on Windows,
- *     DbStudio.Engine on macOS/Linux, i.e. DbStudio.app/Contents/Resources/engine/DbStudio.Engine).
+ *  3. DBSTUDIO_ENGINE_PATH: path to a prebuilt engine exe (e.g. engine/publish/Rowlit.Engine.exe).
+ *  4. Packaged: resources/engine/<DBSTUDIO_ENGINE_EXE or a candidate name> (Rowlit.Engine.exe on Windows,
+ *     Rowlit.Engine on macOS/Linux, i.e. Rowlit.app/Contents/Resources/engine/Rowlit.Engine).
  *  5. Dev: `dotnet run --project engine/src/DbStudio.Host --no-launch-profile -- ...`.
  * In every spawn case `--parent-pid <pid>` is appended (plus `--dev` when the UI comes from Vite).
  */

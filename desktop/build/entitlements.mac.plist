@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Hardened-runtime entitlements for DbStudio.app and everything signed inside it (electron-builder uses this file
-  for the app and, via entitlementsInherit, for helpers and Contents/Resources/engine/DbStudio.Engine).
+  Hardened-runtime entitlements for Rowlit.app and everything signed inside it (electron-builder uses this file
+  for the app and, via entitlementsInherit, for helpers and Contents/Resources/engine/Rowlit.Engine).
 
   - allow-jit: V8 (Electron 20+ on arm64) and the .NET JIT map executable memory with MAP_JIT.
   - allow-unsigned-executable-memory: the .NET runtime still creates W+X pages outside MAP_JIT in some paths

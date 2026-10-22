@@ -25,7 +25,7 @@ public sealed record KafkaSettings
     public string? SchemaRegistryUrl { get; init; }
     public string? SchemaRegistryUser { get; init; }
     public string? SchemaRegistrySecret { get; init; }
-    public string ClientId { get; init; } = "DbStudio";
+    public string ClientId { get; init; } = "Rowlit";
     public int RequestTimeoutMs { get; init; } = 15000;
     public IReadOnlyDictionary<string, string> Extra { get; init; } = new Dictionary<string, string>();
 
@@ -80,7 +80,7 @@ public sealed record KafkaSettings
             SchemaRegistryUrl = registry?.TrimEnd('/'),
             SchemaRegistryUser = Blank(profile.GetString("schemaRegistryUser")),
             SchemaRegistrySecret = Blank(profile.GetString("schemaRegistrySecret")),
-            ClientId = Blank(profile.GetString("clientId")) ?? "DbStudio",
+            ClientId = Blank(profile.GetString("clientId")) ?? "Rowlit",
             RequestTimeoutMs = timeout,
             Extra = ParseExtra(profile.GetString("extra")),
         };

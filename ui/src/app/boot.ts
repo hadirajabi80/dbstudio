@@ -200,7 +200,7 @@ async function loadBasics(): Promise<string | null> {
   await Promise.all([useSettings.getState().load(), useConnections.getState().load()]);
   restoreZoom();
   const connErr = useConnections.getState().error;
-  useUi.getState().setEngineError(connErr ? `Cannot reach the DbStudio engine: ${connErr}` : null);
+  useUi.getState().setEngineError(connErr ? `Cannot reach the Rowlit engine: ${connErr}` : null);
   return connErr;
 }
 

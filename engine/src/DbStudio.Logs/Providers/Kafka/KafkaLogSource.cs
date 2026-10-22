@@ -155,7 +155,7 @@ public sealed class KafkaLogSource(IKafkaLogGateway gateway, JobManager jobs, Fu
     public async Task<IReadOnlyList<LogSourceInfo>> ListAsync(LogTarget target, CancellationToken ct)
     {
         var client = new LogSourceInfo(Client, "Client log (librdkafka)", "log", true, true, LogLevels.Standard, true,
-            Reason: "Kafka has no broker log over the protocol; this is the log of DbStudio's own client.");
+            Reason: "Kafka has no broker log over the protocol; this is the log of Rowlit's own client.");
         IReadOnlyList<KafkaLogLine>? lines = null;
         try { lines = await gateway.ReadAsync(target, ct).ConfigureAwait(false); }
         catch (EngineException ex) { client = client.Unavailable(ex.Message, null); }

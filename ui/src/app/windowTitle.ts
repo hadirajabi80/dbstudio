@@ -1,4 +1,4 @@
-// Window title: "<tab title> — <connection> — DbStudio". Many tab titles already name their connection
+// Window title: "<tab title> — <connection> — Rowlit". Many tab titles already name their connection
 // ("Logs & activity — Prod SQL", "Cache · db0", "ER: Shop"), so the connection is only appended when the title does
 // not contain it as one of its parts.
 
@@ -18,6 +18,6 @@ export function windowTitle(tabTitle: string | null | undefined, connection: str
   const parts: string[] = [];
   if (tabTitle) parts.push(tabTitle);
   if (connection && !(tabTitle && titleNamesConnection(tabTitle, connection))) parts.push(connection);
-  parts.push('DbStudio');
+  parts.push('Rowlit');
   return parts.join(' — ');
 }

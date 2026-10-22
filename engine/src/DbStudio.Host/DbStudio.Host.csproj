@@ -4,8 +4,14 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Published as DbStudio.Engine.exe (Electron spawns it); namespaces stay DbStudio.Host. -->
+    <!-- The assembly stays DbStudio.Engine (namespaces and the DbStudio.* module discovery depend on the name); the
+         build scripts publish the apphost as Rowlit.Engine.exe / Rowlit.Engine, the process name users see. -->
     <AssemblyName>DbStudio.Engine</AssemblyName>
+    <!-- Version resource: Task Manager shows FileDescription (AssemblyTitle) for the engine process. -->
+    <AssemblyTitle>Rowlit Engine</AssemblyTitle>
+    <Product>Rowlit</Product>
+    <Company>Rowlit contributors</Company>
+    <Copyright>Copyright (c) 2026 Rowlit contributors</Copyright>
     <RootNamespace>DbStudio.Host</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>

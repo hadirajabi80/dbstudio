@@ -32,7 +32,7 @@ public sealed class SettingsTests
     {
         var s = KafkaSettings.From(P(), null);
         Assert.Equal("PLAINTEXT", s.SecurityProtocol);
-        Assert.Equal("DbStudio", s.ClientId);
+        Assert.Equal("Rowlit", s.ClientId);
         Assert.Equal(15000, s.RequestTimeoutMs);
         Assert.False(s.UsesSasl);
         var c = s.ToClientConfig();

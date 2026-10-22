@@ -13,9 +13,9 @@
 //   - librdkafka.dylib exists next to the engine, `file` shows the expected architecture, `otool -L` lists only system
 //     libraries (/usr/lib, /System), for osx-arm64 and (when published) the sibling osx-x64 engine;
 //   - osx-x64 runs through the same REST checks when Rosetta is available (`arch -x86_64`), else static checks only;
-//   - `codesign --verify --strict` on every librdkafka.dylib inside desktop/dist/**/DbStudio.app (when packaged).
+//   - `codesign --verify --strict` on every librdkafka.dylib inside desktop/dist/**/Rowlit.app (when packaged).
 //
-// Usage: node scripts/ci/kafka-native-smoke.mjs <path to DbStudio.Engine[.exe]> [--no-mac-extras]
+// Usage: node scripts/ci/kafka-native-smoke.mjs <path to Rowlit.Engine[.exe]> [--no-mac-extras]
 // Exit codes: 0 ok, 1 check failed, 2 usage / engine did not start.
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -165,7 +165,7 @@ try {
     const arch = rid.endsWith('x64') ? 'x64' : 'arm64';
     lines.push(checkDylib(engineDir, arch));
     const sibling = join(dirname(engineDir), arch === 'arm64' ? 'osx-x64' : 'osx-arm64');
-    const siblingExe = join(sibling, 'DbStudio.Engine');
+    const siblingExe = join(sibling, 'Rowlit.Engine');
     if (existsSync(siblingExe)) {
       const otherArch = arch === 'arm64' ? 'x64' : 'arm64';
       lines.push(checkDylib(sibling, otherArch));
@@ -175,7 +175,7 @@ try {
     // Packaged apps: every librdkafka.dylib must carry a valid signature (signed with the app, hardened runtime).
     const repo = resolve(engineDir, '..', '..', '..');
     const apps = findFiles(join(repo, 'desktop', 'dist'), 'librdkafka.dylib');
-    if (apps.length === 0) lines.push('codesign: no packaged DbStudio.app under desktop/dist (skipped)');
+    if (apps.length === 0) lines.push('codesign: no packaged Rowlit.app under desktop/dist (skipped)');
     for (const dylib of apps) {
       try {
         run('codesign', ['--verify', '--strict', '--verbose=2', dylib]);

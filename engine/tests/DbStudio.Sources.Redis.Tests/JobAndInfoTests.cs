@@ -138,8 +138,8 @@ public sealed class JobAndInfoTests
         await using var h = await RedisHarness.StartAsync();
         var c = await h.ClientAsync();
         var clients = await _info.ClientsAsync(c);
-        Assert.Contains(clients, x => x.Name == "DbStudio");
-        var victim = clients.First(x => x.Name == "DbStudio");
+        Assert.Contains(clients, x => x.Name == "Rowlit");
+        var victim = clients.First(x => x.Name == "Rowlit");
         Assert.True(victim.Fields.ContainsKey("addr"));
         await _info.KillClientAsync(c, new RedisClientKillRequest(victim.Id));
         await Assert.ThrowsAsync<EngineException>(() => _info.KillClientAsync(c, new RedisClientKillRequest("abc")));

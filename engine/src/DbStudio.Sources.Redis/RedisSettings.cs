@@ -129,7 +129,7 @@ public sealed record RedisSettings(
             SyncTimeout = Math.Max(5000, ConnectTimeoutSeconds * 1000),
             AsyncTimeout = Math.Max(10_000, ConnectTimeoutSeconds * 2000),
             ConnectRetry = 1,
-            ClientName = "DbStudio",
+            ClientName = "Rowlit",
             AllowAdmin = true,
             DefaultDatabase = Mode == RedisMode.Cluster ? null : Database,
             KeepAlive = 30,

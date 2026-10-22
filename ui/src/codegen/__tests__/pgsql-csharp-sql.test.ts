@@ -124,7 +124,7 @@ describe('C# for PostgreSQL', () => {
 describe('SQL scripts for PostgreSQL', () => {
   const all = sql('all');
 
-  it('uses :name binds the DbStudio console accepts, never ?', () => {
+  it('uses :name binds the Rowlit console accepts, never ?', () => {
     expect(all).toContain('Parameters (:name) are prompted for');
     expect(all).toContain('WHERE id = :id;');
     expect(all).toMatch(/WHERE order_id = :order_id\n {2}AND line_no = :line_no;/);

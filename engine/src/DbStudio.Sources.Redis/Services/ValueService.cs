@@ -53,7 +53,7 @@ public sealed class ValueService
             "zset" => await ZsetAsync(d, db, key, ttl, encoding, memory, q).ConfigureAwait(false),
             "stream" => await StreamAsync(c, d, db, key, ttl, encoding, memory, q).ConfigureAwait(false),
             "rejson" => await JsonAsync(d, db, key, ttl, encoding, memory).ConfigureAwait(false),
-            _ => throw new EngineException(400, ErrorCodes.NotSupported, $"Key '{key}' has a module type DbStudio cannot display yet; use the Workbench."),
+            _ => throw new EngineException(400, ErrorCodes.NotSupported, $"Key '{key}' has a module type Rowlit cannot display yet; use the Workbench."),
         };
     }
 

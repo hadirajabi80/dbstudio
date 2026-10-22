@@ -79,7 +79,7 @@ public sealed class CommandService
         "MONITOR" => "MONITOR cannot run here: open Info › Monitor, which streams it with a time limit.",
         "SUBSCRIBE" or "PSUBSCRIBE" or "SSUBSCRIBE" or "UNSUBSCRIBE" or "PUNSUBSCRIBE" => $"{name} cannot run here: use the Pub/Sub tab.",
         "QUIT" or "RESET" or "HELLO" or "AUTH" or "CLIENT SETNAME" or "READONLY" =>
-            $"{name} would change the shared connection: DbStudio manages authentication and the connection itself (edit the connection instead).",
+            $"{name} would change the shared connection: Rowlit manages authentication and the connection itself (edit the connection instead).",
         _ => $"{name} cannot run in the Workbench or CLI (use the Pub/Sub or Slowlog tab, or redis-cli).",
     };
 

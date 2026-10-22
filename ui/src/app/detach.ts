@@ -99,7 +99,7 @@ export async function reattachTab(tabId: string): Promise<boolean> {
     return false;
   }
   if (!ok) {
-    toast('warning', 'The main window is not open', 'Open DbStudio again, then move the tab back.');
+    toast('warning', 'The main window is not open', 'Open Rowlit again, then move the tab back.');
     return false;
   }
   useTabs.getState().take(tabId);

@@ -1,5 +1,5 @@
 /*
- * DbStudio design tokens (docs/PLAN-M1.5.md section 3). The single place where colours are written down:
+ * Rowlit design tokens (docs/PLAN-M1.5.md section 3). The single place where colours are written down:
  * every component uses these variables (QA lint: no hex colours outside src/theme/).
  * Theme is switched by [data-theme] on <html>; settings.theme 'system' follows the OS live (theme/useTheme.ts).
  *
@@ -122,11 +122,13 @@
   /* brand */
   --brand: #2563eb;
   --brand-fg: #ffffff;
+  /* the Rowlit mark draws a hairline rim only where its navy tile would melt into the background */
+  --brand-mark-rim: transparent;
 
   /* glass top bar (shell.css). --glass-bg sits on --bg-app (browser, Windows 10: solid window) with a backdrop blur;
      --glass-bg-native sits on the OS material shown through the transparent window (Mica on Windows 11, vibrancy on
      macOS; main keeps the window's light/dark mode in step with the theme). --glass-material is the darkest material
-     DbStudio assumes behind the light bar (Mica light measured ~#f0f1f8): only the contrast tests read it. */
+     Rowlit assumes behind the light bar (Mica light measured ~#f0f1f8): only the contrast tests read it. */
   --glass-bg: rgb(255 255 255 / 62%);
   --glass-bg-native: rgb(255 255 255 / 45%);
   --glass-material: #e8eaf0;
@@ -263,6 +265,7 @@
 
   --brand: #5b9cff;
   --brand-fg: #0b1220;
+  --brand-mark-rim: rgb(255 255 255 / 14%);
 
   /* glass top bar (see the light block); Mica dark measured ~#1d2124, --glass-material is a lighter worst case */
   --glass-bg: rgb(36 39 45 / 66%);
@@ -323,6 +326,14 @@
 
 /* ------------------------------------------------- theme-independent scale */
 :root {
+  /* The Rowlit mark (theme/brand/RowlitMark.tsx): the app icon's colours, the same in every theme. Kept in step with
+     PALETTE in desktop/build/make-icon.mjs, which renders the app icons. */
+  --brand-mark-tile-top: #24345e;
+  --brand-mark-tile-bottom: #0b1430;
+  --brand-mark-row: #5a6e9e;
+  --brand-mark-lit-start: #ffc54d;
+  --brand-mark-lit-end: #ff6a5c;
+
   /* typography */
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
   --font-mono: 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;

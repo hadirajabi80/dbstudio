@@ -55,7 +55,7 @@ function errorDetails(area: string, error: unknown, componentStack: string): str
     /* no platform in some tests */
   }
   const lines = [
-    `DbStudio ${version}`.trim(),
+    `Rowlit ${version}`.trim(),
     `Area: ${area}`,
     `Error: ${errorMessage(error)}`,
     '',
@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    console.error(`[DbStudio] Render error in ${this.props.area}:`, error, info.componentStack ?? '');
+    console.error(`[Rowlit] Render error in ${this.props.area}:`, error, info.componentStack ?? '');
     this.setState({ componentStack: info.componentStack ?? '' });
   }
 
@@ -151,9 +151,9 @@ export function ErrorPanel({ area, variant, error, componentStack, onRetry, onCl
     };
     try {
       const p = navigator.clipboard?.writeText(text);
-      if (p) p.then(done, (e) => console.warn('[DbStudio] copy failed', e));
+      if (p) p.then(done, (e) => console.warn('[Rowlit] copy failed', e));
     } catch (e) {
-      console.warn('[DbStudio] copy failed', e);
+      console.warn('[Rowlit] copy failed', e);
     }
   };
   const engineLog = canOpenEngineLog();
@@ -193,7 +193,7 @@ export function ErrorPanel({ area, variant, error, componentStack, onRetry, onCl
         </div>
         <p className="error-boundary-message">{message}</p>
         <p className="error-boundary-hint">
-          {variant === 'root' ? 'The window could not be drawn. Your tabs and connections are kept.' : 'The rest of DbStudio keeps working.'}
+          {variant === 'root' ? 'The window could not be drawn. Your tabs and connections are kept.' : 'The rest of Rowlit keeps working.'}
         </p>
         <div className="error-boundary-actions">
           <button type="button" className="btn btn-primary btn-xs" onClick={onRetry} ref={retryRef}>

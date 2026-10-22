@@ -34,7 +34,7 @@ public sealed class ConnectionStringTests
         var b = new SqlConnectionStringBuilder(SqlServerConnectionStrings.Build(profile, "p@ss;word=1", pooling));
 
         Assert.Equal(@"host\SQLEXPRESS", b.DataSource);
-        Assert.Equal("DbStudio", b.ApplicationName);
+        Assert.Equal("Rowlit", b.ApplicationName);
         Assert.False(b.MultipleActiveResultSets);
         Assert.Equal(pooling, b.Pooling);
         Assert.Equal(timeout, b.ConnectTimeout);

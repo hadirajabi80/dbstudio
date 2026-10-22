@@ -22,7 +22,7 @@ async function start() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       {/* Last resort: without it a render error unmounts everything and Electron shows a white window. */}
-      <ErrorBoundary area="DbStudio" variant="root">
+      <ErrorBoundary area="Rowlit" variant="root">
         <App />
       </ErrorBoundary>
     </StrictMode>,

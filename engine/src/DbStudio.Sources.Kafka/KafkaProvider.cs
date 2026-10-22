@@ -51,7 +51,7 @@ public sealed class KafkaProvider(
         new FormField("schemaRegistryUrl", "Schema Registry URL", "text", Placeholder: "http://localhost:8081"),
         new FormField("schemaRegistryUser", "Schema Registry user", "text"),
         new FormField("schemaRegistrySecret", "Schema Registry secret", "password"),
-        new FormField("clientId", "Client id", "text", Default: JsonValue.Create("DbStudio")),
+        new FormField("clientId", "Client id", "text", Default: JsonValue.Create("Rowlit")),
         new FormField("requestTimeoutMs", "Request timeout (ms)", "number", Default: JsonValue.Create(15000)),
         new FormField("extra", "Extra librdkafka settings", "text", Placeholder: "key=value;key2=value2",
             Help: "Passed to librdkafka as is (advanced)."),

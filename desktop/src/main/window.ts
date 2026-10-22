@@ -147,7 +147,7 @@ export function createMainWindow(o: CreateWindowOptions): BrowserWindow {
     minWidth: 800,
     minHeight: 500,
     show: false,
-    title: 'DbStudio',
+    title: 'Rowlit',
     backgroundColor: solidBg(),
     icon: fs.existsSync(icon) ? icon : undefined,
     autoHideMenuBar: false,

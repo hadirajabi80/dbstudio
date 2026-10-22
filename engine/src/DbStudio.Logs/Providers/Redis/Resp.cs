@@ -238,7 +238,7 @@ public sealed class RespConnection : IAsyncDisposable
                 var auth = string.IsNullOrEmpty(ep.User) ? new[] { "AUTH", ep.Password } : new[] { "AUTH", ep.User, ep.Password };
                 await c.ExecuteAsync(auth, ct).ConfigureAwait(false);
             }
-            await c.ExecuteAsync(["CLIENT", "SETNAME", "DbStudio-logs"], ct).ConfigureAwait(false);
+            await c.ExecuteAsync(["CLIENT", "SETNAME", "Rowlit-logs"], ct).ConfigureAwait(false);
         }
         catch (RedisReplyException ex) when (ex.IsUnknownCommand)
         {

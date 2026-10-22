@@ -216,7 +216,7 @@ export function effectiveMonacoTheme(t: ActiveTheme = getActiveTheme()): MonacoT
   return buildMonacoTheme(ed.base, ed.tokens);
 }
 
-/** Defines both DbStudio theme ids as the effective code theme (editor/monaco-setup.ts defineThemes, and every switch). */
+/** Defines both Rowlit theme ids as the effective code theme (editor/monaco-setup.ts defineThemes, and every switch). */
 export function defineMonacoThemes(
   editor: { defineTheme(id: string, data: MonacoThemeData): void },
   ids: { readonly light: string; readonly dark: string },

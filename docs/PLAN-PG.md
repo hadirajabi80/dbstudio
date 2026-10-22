@@ -1,4 +1,4 @@
-# PostgreSQL support for DbStudio — implementer spec (PG-A / PG-B / PG-C)
+# PostgreSQL support for Rowlit — implementer spec (PG-A / PG-B / PG-C)
 
 Status of the code studied: commit `d833840` (M1.5 complete), clean working tree. Every path below is absolute under `E:\DbStudio`. Where I say "verify", the implementer must confirm a detail I inferred rather than read.
 
@@ -143,7 +143,7 @@ Fields (same `FormField` shapes as `SqlServerConnectionStrings.FormSpec`):
 | `sslMode` | select | `prefer`; options `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full` |
 | `trustServerCertificate` | bool | `false` (help: "accept self-signed certificates with require") |
 | `searchPath` | text | placeholder `"$user", public`; help "session search_path (leave empty for the server/role default)" |
-| `applicationName` | text | default `DbStudio` |
+| `applicationName` | text | default `Rowlit` |
 | `connectTimeout` | number | `15` |
 | `options` | text | extra `-c name=value` server options (advanced), placeholder `-c statement_timeout=0` |
 
@@ -240,7 +240,7 @@ Fields (same `FormField` shapes as `SqlServerConnectionStrings.FormSpec`):
 
 ### 2.6 Diagnostics (`Diagnostics/PgPrepareDiagnostics.cs`, D-PG5)
 
-`AnalyzeAsync(sql, profile, password, ct)`: return `[]` when `profile is null`. Tokenize + `SplitStatements` (PgSql); for each statement whose `StatementClassifier` category is `Query` (SELECT/WITH…SELECT/VALUES/TABLE) or `Dml` (INSERT/UPDATE/DELETE/MERGE, incl. `WITH … INSERT`): rewrite placeholders with `PgSqlText.Rewrite`, then on a pooled diagnostics connection (`Options=-c default_transaction_read_only=on -c statement_timeout=3000 -c search_path=<profile>`; `ApplicationName="DbStudio diagnostics"`) run `BEGIN READ ONLY; PREPARE __dbstudio_diag AS <text>; ROLLBACK` as three commands (always `ROLLBACK` in `finally`). A `PostgresException` → `SqlDiagnostic(line, col, line, col + tokenLength, "error", SqlState, MessageText [+ " Hint: …"])` with `Position` mapped through `MapPosition` minus the `PREPARE __dbstudio_diag AS ` prefix length, then offset by the statement's document position. Skip (no diagnostic) for `42P18`/`42P08` (indeterminate/ambiguous parameter type) and `25006` (read-only violation cannot happen on PREPARE). `EngineName = "pg-prepare"`. Never sent: DDL, `DO`, `CALL`, `COPY`, `SET/SHOW`, transaction control, `EXPLAIN` (EXPLAIN ANALYZE would execute), `CREATE TABLE AS`/`SELECT INTO`. Budget: ≤ 20 statements per call, 3 s statement timeout; the UI already debounces 400 ms. `PostgreSqlProvider.Diagnostics = new PgPrepareDiagnostics()`.
+`AnalyzeAsync(sql, profile, password, ct)`: return `[]` when `profile is null`. Tokenize + `SplitStatements` (PgSql); for each statement whose `StatementClassifier` category is `Query` (SELECT/WITH…SELECT/VALUES/TABLE) or `Dml` (INSERT/UPDATE/DELETE/MERGE, incl. `WITH … INSERT`): rewrite placeholders with `PgSqlText.Rewrite`, then on a pooled diagnostics connection (`Options=-c default_transaction_read_only=on -c statement_timeout=3000 -c search_path=<profile>`; `ApplicationName="Rowlit diagnostics"`) run `BEGIN READ ONLY; PREPARE __dbstudio_diag AS <text>; ROLLBACK` as three commands (always `ROLLBACK` in `finally`). A `PostgresException` → `SqlDiagnostic(line, col, line, col + tokenLength, "error", SqlState, MessageText [+ " Hint: …"])` with `Position` mapped through `MapPosition` minus the `PREPARE __dbstudio_diag AS ` prefix length, then offset by the statement's document position. Skip (no diagnostic) for `42P18`/`42P08` (indeterminate/ambiguous parameter type) and `25006` (read-only violation cannot happen on PREPARE). `EngineName = "pg-prepare"`. Never sent: DDL, `DO`, `CALL`, `COPY`, `SET/SHOW`, transaction control, `EXPLAIN` (EXPLAIN ANALYZE would execute), `CREATE TABLE AS`/`SELECT INTO`. Budget: ≤ 20 statements per call, 3 s statement timeout; the UI already debounces 400 ms. `PostgreSqlProvider.Diagnostics = new PgPrepareDiagnostics()`.
 
 ### 2.7 Designer (`Designer/PgDdlScripter.cs`, `Designer/PgDesignerDatabase.cs`)
 
@@ -265,7 +265,7 @@ Fields (same `FormField` shapes as `SqlServerConnectionStrings.FormSpec`):
 ### 2.10 Seed script `engine/tests/docker/seed-postgres.sql` (idempotent)
 
 ```sql
--- DbStudio "shop" fixture for PostgreSQL (docs/PLAN.md 4.14). Same data as ShopSchema: 3 countries, 5 customers, 6 orders, 4 products, 7 lines.
+-- Rowlit "shop" fixture for PostgreSQL (docs/PLAN.md 4.14). Same data as ShopSchema: 3 countries, 5 customers, 6 orders, 4 products, 7 lines.
 DROP SCHEMA IF EXISTS sales CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS customer_totals;
 DROP VIEW IF EXISTS customer_orders;

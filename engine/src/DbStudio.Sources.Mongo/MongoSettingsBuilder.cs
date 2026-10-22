@@ -121,7 +121,7 @@ public static partial class MongoSettingsBuilder
         }
         settings.ConnectTimeout = TimeSpan.FromSeconds(seconds);
         settings.ServerSelectionTimeout = TimeSpan.FromSeconds(seconds);
-        settings.ApplicationName = NullIfEmpty(profile.GetString("appName")) ?? url.ApplicationName ?? "DbStudio";
+        settings.ApplicationName = NullIfEmpty(profile.GetString("appName")) ?? url.ApplicationName ?? "Rowlit";
         return settings;
     }
 

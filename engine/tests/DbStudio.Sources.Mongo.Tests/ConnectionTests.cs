@@ -86,7 +86,7 @@ public sealed class MongoSettingsBuilderTests
         Assert.Equal("Me", s.ApplicationName);
         var d = MongoSettingsBuilder.Build(T.Profile(), null);
         Assert.Equal(TimeSpan.FromSeconds(10), d.ServerSelectionTimeout);
-        Assert.Equal("DbStudio", d.ApplicationName);
+        Assert.Equal("Rowlit", d.ApplicationName);
         Assert.Equal("readPreference", Field(Assert.Throws<EngineException>(() => MongoSettingsBuilder.Build(T.Profile(props: [("readPreference", "fastest")]), null))));
         Assert.Equal("connectTimeout", Field(Assert.Throws<EngineException>(() => MongoSettingsBuilder.Build(T.Profile(props: [("connectTimeout", 0)]), null))));
     }

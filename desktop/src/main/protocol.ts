@@ -109,7 +109,7 @@ export function registerUiProtocol(root: string): void {
     if (path.extname(url.pathname) === '' || url.pathname.endsWith('.html')) {
       const index = path.join(resolvedRoot, 'index.html');
       if (await isFile(index)) return serveFile(index, csp);
-      return notFound(`DbStudio UI not found at ${resolvedRoot}. Run "npm run build" in ui/.`);
+      return notFound(`Rowlit UI not found at ${resolvedRoot}. Run "npm run build" in ui/.`);
     }
     return notFound();
   });

@@ -17,7 +17,7 @@ public sealed record SrVersion(string Subject, int Version, int Id, string Schem
     public SrSchema ToSchema() => new(Id, SchemaType, Schema, References);
 }
 
-/// <summary>The Confluent Schema Registry REST API subset DbStudio uses (seam: tests pass a fake HttpMessageHandler).</summary>
+/// <summary>The Confluent Schema Registry REST API subset Rowlit uses (seam: tests pass a fake HttpMessageHandler).</summary>
 public interface ISchemaRegistry
 {
     Task<IReadOnlyList<string>> SubjectsAsync(CancellationToken ct);

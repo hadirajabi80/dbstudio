@@ -4,8 +4,8 @@ using System.Text;
 namespace DbStudio.Core.Services;
 
 /// <summary>
-/// Locations of the engine's files (docs/PLAN.md 2.8). Root is <c>%APPDATA%\DbStudio</c> on Windows,
-/// <c>~/Library/Application Support/DbStudio</c> on macOS and <c>~/.config/DbStudio</c> (XDG) on Linux, overridable with
+/// Locations of the engine's files (docs/PLAN.md 2.8). Root is <c>%APPDATA%\Rowlit</c> on Windows,
+/// <c>~/Library/Application Support/Rowlit</c> on macOS and <c>~/.config/Rowlit</c> (XDG) on Linux, overridable with
 /// the <c>DBSTUDIO_DATA_DIR</c> environment variable (tests use a temp dir).
 /// </summary>
 public sealed class AppPaths

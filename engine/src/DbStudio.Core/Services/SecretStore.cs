@@ -27,6 +27,7 @@ public interface ISecretStore
 [SupportedOSPlatform("windows")]
 public sealed class DpapiSecretStore : ISecretStore
 {
+    // DPAPI entropy: keeps its DbStudio-era value, otherwise secrets saved before the Rowlit rename could not be decrypted.
     private static readonly byte[] AppEntropy = "DbStudio.v1.§secrets"u8.ToArray();
 
     private readonly string _file;

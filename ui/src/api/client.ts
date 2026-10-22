@@ -105,7 +105,7 @@ async function send(method: string, path: string, opts: RequestOptions = {}): Pr
     res = await fetch(buildUrl(c.baseUrl, path, opts.query), { method, headers, body, signal: opts.signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw new ApiError('ABORTED', 'Request aborted', 0);
-    throw new ApiError('NETWORK', `Cannot reach the DbStudio engine (${errorMessage(e)})`, 0);
+    throw new ApiError('NETWORK', `Cannot reach the Rowlit engine (${errorMessage(e)})`, 0);
   }
   if (res.status === 304 || res.ok) return res;
   throw await toApiError(res);

@@ -73,7 +73,7 @@ export function logsTabKey(connectionId: string): string {
 }
 
 export function logsTitle(connectionId: string): string {
-  if (connectionId === ENGINE_LOG_CID) return 'Logs & activity — DbStudio engine';
+  if (connectionId === ENGINE_LOG_CID) return 'Logs & activity — Rowlit engine';
   return `Logs & activity — ${getConnection(connectionId)?.name ?? connectionId}`;
 }
 

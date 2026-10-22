@@ -1,91 +1,110 @@
-# DbStudio
+<p align="center">
+  <img src="desktop/build/icons/rowlit.svg" width="112" height="112" alt="Rowlit">
+</p>
 
-DbStudio is a fast, keyboard-first desktop database client for **Microsoft SQL Server**, **Oracle**, **PostgreSQL**
-and **SQLite**, with workspaces for **Redis**, **MongoDB** and **Kafka**, for **Windows** and **macOS** (Apple
-Silicon and Intel).
-It pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas grid that stays
-smooth at hundreds of thousands of rows, and keeps every database driver out of the UI: a .NET 10 engine
-runs as a local sidecar process and the React UI talks to it over authenticated HTTP and WebSocket.
+<h1 align="center">Rowlit</h1>
 
-## Features (M1)
+<p align="center"><strong>See your data in a better light.</strong><br>
+A fast, keyboard-first desktop database client for Windows and macOS.</p>
 
-- **Connections**: form-driven dialog per provider, Test Connection with server info, folders and colour
-  tags (production = red), read-only connections enforced by the engine, passwords stored with Windows DPAPI or the macOS Keychain.
-- **Object explorer**: databases/schemas, tables, views, procedures, functions, Oracle packages, sequences,
-  synonyms, triggers; lazy loading, fuzzy filter, "Select top 1000", "Open DDL", drag a table into the editor.
-- **SQL editor**: multi-tab, per-tab connection/database and transaction mode (Auto/Manual with Commit/Rollback),
-  run statement at cursor, selection or whole script, destructive-statement guard (DELETE/UPDATE without WHERE,
-  DROP, TRUNCATE).
-- **IntelliSense**: context-aware completion for tables, columns, aliases, joins (FK-based join snippets),
-  functions and packages; signature help, hover, go-to-definition (F12), live syntax diagnostics
-  (ScriptDom for T-SQL, SQLite prepare, Oracle compile errors after CREATE).
-- **Results**: one tab per result set plus Messages, streaming rows, type-aware formatting, NULL styling,
-  client-side sort/filter, value viewer for long text/JSON/XML/binary, copy as TSV/CSV/JSON/Markdown/INSERT,
-  export to CSV/JSON/SQL, cancel, elapsed time and row counts.
-- **Oracle and SQL Server specifics**: DBMS_OUTPUT panel, PRINT/RAISERROR messages with click-to-line,
-  `GO` batches, `EXEC` rewrite for SQL*Plus habits.
-- **History** with full-text search and pinning; **session restore** of open tabs and unsaved text;
-  light/dark themes following the OS; command palette.
+<p align="center">
+  <a href="https://github.com/hadirajabi80/rowlit/releases/latest"><b>Download for Windows</b></a> ·
+  <a href="https://github.com/hadirajabi80/rowlit/releases/latest"><b>Download for macOS</b></a> ·
+  <a href="https://github.com/hadirajabi80/rowlit/releases">All releases</a>
+</p>
 
-## Features (M1.5 shell)
+**Microsoft SQL Server**, **Oracle**, **PostgreSQL** and **SQLite**, plus workspaces for **Redis**, **MongoDB** and
+**Kafka**, in one app. Rowlit pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas
+grid that stays smooth at hundreds of thousands of rows, and keeps every database driver out of the UI: a .NET 10
+engine runs as a local sidecar and the React UI talks to it over authenticated HTTP and WebSocket.
 
-- **Everything one keystroke away**: every menu, toolbar and context-menu action is a registered command, listed in
-  the command palette (Ctrl+Shift+P / ⇧⌘P) with its shortcut; F1 or Ctrl+K Ctrl+S opens a searchable shortcut sheet.
-  Shortcuts are platform-aware (Ctrl on Windows, ⌘ on macOS).
-- **Go to object** (Ctrl+P): fuzzy search over every loaded schema of every open connection, with `t:` `v:` `p:`
-  `f:` `c:` prefixes; Enter opens, Ctrl+Enter opens the data, Shift+Enter inserts the name, Alt+Enter reveals it.
-- **Several connections at once**: connection pill and database pill on every console (Ctrl+Shift+K / Ctrl+Shift+D),
-  colour bars on tabs, explorer roots and pills, read-only lock glyphs, production colour on the Run button,
-  an *Active connections* panel (sessions, state, elapsed time, cancel, disconnect), and **Run on multiple
-  connections** (Ctrl+Alt+Enter) with results grouped per connection.
-- **Explorer and history filters**: object-type chips, column search and "load schema to search it" hints in the
-  explorer; Connection / Status / When / Only pinned chips in the history.
-- **First launch**: welcome screen with provider cards, "Open a SQLite file" and "Try the sample database";
-  the connection dialog's *Connect* saves and opens a console in one step; a one-time tips strip after the first run.
-- **Design system**: tokens for light and dark themes (following the OS live), lucide icons, empty states,
-  visible focus rings, screen-reader announcements of run results, Settings (Ctrl+,).
+> **Coming from DbStudio?** Rowlit is the new name of DbStudio (1.1.0 and earlier). Installing Rowlit, or letting
+> DbStudio update itself, replaces the old app in place; your connections, saved passwords, settings, history,
+> diagrams and open tabs carry over automatically.
 
-## Features (M2)
+## Features
 
-- **PostgreSQL** as a fourth SQL provider (Npgsql): explorer with schemas, tables, views, materialized views,
-  functions, procedures, sequences, types and extensions; `search_path`-aware IntelliSense with lower-case folding,
-  `$$ … $$` bodies and PL/pgSQL keywords; server diagnostics through `PREPARE` in a read-only, rolled-back transaction
-  (never executes); manual transactions with a savepoint per statement, so one failed statement never aborts the
-  transaction; `$1`, `:name` and `@name` parameters; NOTICE/RAISE messages with CONTEXT; `EXPLAIN (FORMAT JSON)`
-  in the plan viewer (estimated and ANALYZE); table designer, formatter, snippets and code generation for `pgsql`.
-- **ER diagram** (Ctrl+Alt+E, or "Diagram of related tables" on a table, or `er:` in Ctrl+P): per schema, per
-  selection or a table and its foreign-key neighbours, for SQL Server, Oracle, PostgreSQL and SQLite. Auto layout
-  (layered or grid, in a worker), drag to arrange (saved per connection and scope), minimap, search, level of detail
-  for 500+ tables, crow's-foot edges, keyboard-only navigation (Tab, Enter opens data, F4 designs), drag a column
-  onto another table to create a foreign key, PNG and SVG export.
-- **Redis** (standalone, cluster, sentinel; TLS): key browser over SCAN with a folder tree, TTL countdown and an
-  editor per type (string with JSON/hex views, hash, list, set, sorted set, stream with consumer groups, ReJSON),
-  delete-by-pattern as a cancellable job, workbench with command completion and docs, CLI, Pub/Sub, slowlog, info
-  dashboard and memory analysis.
-- **MongoDB** (URI and SRV, replica sets, Atlas): documents as list, JSON or table with Extended JSON round trips
-  (ObjectId, Date, Decimal128, Binary, Long), filter/projection/sort with field and operator completion, aggregation
-  builder with per-stage previews and code export (five languages), schema analysis, indexes with build progress,
-  validation rules, explain tree with COLLSCAN warnings, import (JSON, JSONL, CSV) and export, change-stream badge.
-- **Kafka** (PLAINTEXT, SASL, SSL; Schema Registry): cluster overview, topics with configs, partitions, purge and
-  typed-confirmation deletes, message browser by offset, timestamp or latest/oldest across partitions with string,
-  JSON, hex, integer, Avro and Protobuf decoders, live tail, produce with headers and schemas, consumer groups with
-  lag and offset reset (dry run first, refused while the group is active).
-- **Logs & activity** (Ctrl+Alt+Shift+L, the explorer's "Logs & activity", or *Activity* in the Connections panel):
-  server logs per provider (SQL Server error and agent logs and system_health, Oracle alert log, PostgreSQL server log,
-  Redis slowlog/latency/MONITOR, MongoDB getLog/profiler/change stream, Kafka client log) with level, time and search
-  filters, live tail and export; an Activity grid of sessions, operations, locks and blocking chains with Kill
-  (typed confirmation), Kafka jobs and consumer groups; missing privileges show the exact GRANT to ask for. The
-  engine's own log is always available (also from engine error toasts: *Open engine log*).
-- Redis, MongoDB and Kafka keep one shared client per connection (listed under *Clients* in the Connections panel),
-  enforce read-only connections in the engine and stream live data (tails, Pub/Sub, change streams) over the same
-  WebSocket as query results. Ctrl+P finds Redis keys (`k:`), Mongo collections (`coll:`) and Kafka topics (`t:`).
+### Databases
+
+- **SQL Server, Oracle, PostgreSQL, SQLite**: explorer for databases, schemas, tables, views, routines, packages,
+  sequences, synonyms, triggers and types, with lazy loading, fuzzy filter, "Select top 1000" and "Open DDL".
+- **Redis** (standalone, cluster, sentinel, TLS): key browser with a folder tree and TTL countdown, an editor per
+  type (strings with JSON/hex views, hashes, lists, sets, sorted sets, streams, ReJSON), workbench, CLI, Pub/Sub,
+  slowlog, info dashboard and memory analysis.
+- **MongoDB** (URI and SRV, replica sets, Atlas): documents as list, JSON or table with Extended JSON round trips,
+  filter/projection/sort completion, aggregation builder with per-stage previews and code export, schema analysis,
+  indexes, validation rules, explain, import and export.
+- **Kafka** (PLAINTEXT, SASL, SSL, Schema Registry): topics, partitions and configs, a message browser by offset or
+  time with JSON, Avro and Protobuf decoders, live tail, produce, consumer groups with lag and offset reset.
+- **Several connections at once**: colour-coded connections (production = red), read-only connections enforced by
+  the engine, an *Active connections* panel and **Run on multiple connections** with results grouped per connection.
+
+### Writing SQL
+
+- **IntelliSense** for tables, columns, aliases, FK-based joins, functions and packages, **schemas and databases**
+  (also after `USE`), with signature help, hover, go to definition (F12) and live diagnostics.
+- **Editor**: per-tab connection and database, auto or manual transactions, run statement, selection or script,
+  destructive-statement guard, parameters, snippets, the SQL formatter and query plans (estimated and actual).
+- **Split editor groups**: drag tabs between groups, split side by side or stacked, or **detach a tab into its own
+  window** and move it back.
+- **Edit database objects** in place: Ctrl+S saves the **whole** procedure, function, view or trigger to the server,
+  with *Compare with server* before you do.
+- **Execute procedures and functions** without opening them: typed inputs, NULL/Default toggles, validation and a
+  live preview; results open on a full-page result view with **OUT parameters and the return value as a card**.
+
+### Exploring data
+
+- **Results grid** streaming hundreds of thousands of rows: sort, filter, value viewer, right-to-left text, copy as
+  TSV/CSV/JSON/Markdown/INSERT, export to CSV, JSON, SQL and **Excel (.xlsx)** with typed cells and a frozen header.
+- **Objects page**: a Navicat-style list of every object in a database or schema, with type filters, live search,
+  counts and stats (rows, size, modified, comment), and a card view.
+- **Dependencies** in every object tab: what it **uses** and what it is **used by**, with click-through and
+  "Open in ER diagram".
+- **ER diagrams** per schema, per selection or around a table, smooth with 500+ tables, crow's-foot edges, PNG/SVG
+  export; relationships also show up on old or permission-restricted SQL Server databases.
+- **Table designer** with DDL preview, and **code generation** for C#, Go, TypeScript, Java, Python and Prisma.
+- **Logs & activity**: server logs per provider, sessions, operations, locks and blocking chains with Kill, side by
+  side with your queries.
+
+### The app
+
+- **Keyboard first**: every action is in the command palette (Ctrl+Shift+P), Ctrl+P goes to any object, F1 opens
+  the searchable shortcut sheet; shortcuts follow the platform (Ctrl on Windows, ⌘ on macOS).
+- **7 app colour themes** (Light, Paper, Solarized Light, Dark, Midnight, Nord, Violet) and **11 code themes**,
+  chosen independently; a redesigned, searchable **Settings** dialog.
+- **Updates itself**: update status and download progress in the status bar, *Check for updates* in Settings and a
+  notification when a new version is ready (Windows installs it on restart; macOS tells you when one is available).
+- History with full-text search, session restore of open tabs and unsaved text, a welcome screen with a sample
+  database, and crash isolation: one failing panel never takes the window down.
+
+## Install
+
+| Platform | File on the [latest release](https://github.com/hadirajabi80/rowlit/releases/latest) |
+|---|---|
+| Windows 10/11 (x64) | `Rowlit-Setup-<version>.exe` |
+| macOS 12+, Apple Silicon (M1–M4) | `Rowlit-<version>-mac-arm64.dmg` |
+| macOS 12+, Intel | `Rowlit-<version>-mac-x64.dmg` |
+
+**Windows:** run the installer. It installs per user (no admin rights) and lets you pick the folder. It is not
+code-signed yet, so SmartScreen shows "Windows protected your PC": click **More info**, then **Run anyway**.
+
+**macOS:** open the DMG and drag **Rowlit** to **Applications** (the `.zip` holds the same app for scripted
+installs). Builds without an Apple Developer ID are only ad-hoc signed, so on first launch Gatekeeper says the app
+"cannot be opened" or "is damaged". Either right-click (Control-click) Rowlit in Applications and choose **Open**
+twice (macOS 15+: open it once, then **System Settings > Privacy & Security > Open Anyway**), or run
+`xattr -dr com.apple.quarantine /Applications/Rowlit.app`. If you had DbStudio, drag **DbStudio** from Applications
+to the Trash after Rowlit has started once; your data has moved to Rowlit.
+
+Rowlit keeps running when you close its last window on macOS (click the Dock icon to get it back; ⌘Q quits). On
+macOS the SQL Server "Windows Authentication" option is labelled **Integrated (Kerberos)** and needs a Kerberos
+ticket (`kinit user@REALM`); SQL Login works everywhere.
 
 ## Architecture
 
 ```
 +-----------------------------------------------------------------------------------+
 | Electron main (desktop/)                                                          |
-|  - spawns engine sidecar: DbStudio.Engine.exe --parent-pid <pid>                  |
+|  - spawns engine sidecar: Rowlit.Engine.exe --parent-pid <pid>                    |
 |  - reads one stdout line:  DBSTUDIO_READY {"port":51234,"token":"<32B base64url>"}|
 |  - registers dbstudio:// scheme -> serves ui/dist (origin dbstudio://app)         |
 |  - preload exposes window.dbstudio { getEngineInfo(), showSaveDialog(), ... }     |
@@ -117,25 +136,23 @@ runs as a local sidecar process and the React UI talks to it over authenticated 
 - The renderer is sandboxed (`contextIsolation`, `sandbox`, no Node), served from the privileged
   `dbstudio://app` origin with a strict CSP; the only bridge is `window.dbstudio`
   (contract: `ui/src/platform/bridge.ts`).
-- If the engine dies, DbStudio offers to restart it and the UI reconnects with the new port/token.
+- If the engine dies, Rowlit offers to restart it and the UI reconnects with the new port/token.
+- Internal identifiers (the `DbStudio.*` .NET projects, the `dbstudio://` scheme, `window.dbstudio`, IPC channels,
+  `DBSTUDIO_*` variables) keep their historical names on purpose.
 
 The full design is in [docs/PLAN.md](docs/PLAN.md).
 
 | Folder | What |
 |---|---|
 | `engine/` | .NET 10 solution (`DbStudio.slnx`): Core, Host (HTTP/WS API), SQL providers, `Sources.{Redis,Mongo,Kafka}`, `Logs`, tests |
-| `ui/` | React 18 + TypeScript + Vite renderer, IntelliSense in `src/intel`, editor in `src/editor` |
-| `desktop/` | Electron shell: main process, preload, packaging (`electron-builder.yml`) |
+| `ui/` | React + TypeScript + Vite renderer, IntelliSense in `src/intel`, editor in `src/editor` |
+| `desktop/` | Electron shell: main process, preload, packaging (`electron-builder.yml`), app icons (`build/`) |
 | `scripts/` | `dev.ps1`, `build.ps1` (Windows installer), `build.sh` (macOS DMG), `stamp-version.ps1` |
 
-## Prerequisites
-
-- Windows 10/11 x64, or macOS 12+ (arm64 or x64) for development and macOS builds
-- [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` >= 10.0)
-- [Node.js 24](https://nodejs.org/) with npm
-- Optional: Docker Desktop for the sample and test databases (SQL Server, Oracle, PostgreSQL, Redis, MongoDB, Kafka)
-
 ## Development
+
+Prerequisites: Windows 10/11 x64 (or macOS 12+ for macOS builds), [.NET SDK 10](https://dotnet.microsoft.com/download),
+[Node.js 24](https://nodejs.org/) with npm, and optionally Docker Desktop for the sample and test databases.
 
 ```powershell
 ./scripts/dev.ps1            # engine (--dev, port 5121) + Vite (5173, hot reload) + Electron
@@ -170,7 +187,7 @@ Tests:
 ```powershell
 dotnet test engine/DbStudio.slnx      # engine (Docker-backed tests skip without Docker)
 cd ui; npm test                       # vitest
-cd desktop; npm test                  # type-check, engine lifecycle tests, Electron smoke test
+cd desktop; npm test                  # type-check, engine lifecycle and data-folder tests, Electron smoke test
 ```
 
 ### Desktop environment variables
@@ -180,75 +197,54 @@ cd desktop; npm test                  # type-check, engine lifecycle tests, Elec
 | `DBSTUDIO_DEV_URL` | Load the renderer from this localhost URL (Vite) instead of `dbstudio://app` |
 | `DBSTUDIO_ENGINE_URL` + `DBSTUDIO_ENGINE_TOKEN` | Attach to an already running engine instead of spawning one |
 | `DBSTUDIO_ENGINE_CMD` | Full command line used to start the engine (e.g. the fake engine) |
-| `DBSTUDIO_ENGINE_PATH` | Path to a prebuilt engine exe (e.g. `engine/publish/DbStudio.Engine.exe`) |
-| `DBSTUDIO_ENGINE_EXE` | Exe name inside `resources/engine` (default `DbStudio.Engine.exe`, then `DbStudio.Host.exe`; on macOS `DbStudio.Engine`, then `DbStudio.Host`) |
+| `DBSTUDIO_ENGINE_PATH` | Path to a prebuilt engine exe (e.g. `engine/publish/Rowlit.Engine.exe`) |
+| `DBSTUDIO_ENGINE_EXE` | Exe name inside `resources/engine` (default `Rowlit.Engine.exe`, then `DbStudio.Engine.exe`, `DbStudio.Host.exe`; on macOS the same names without `.exe`) |
 | `DBSTUDIO_ENGINE_TIMEOUT_MS` | READY handshake timeout (default 15 s; 180 s for `dotnet run`) |
 | `DBSTUDIO_UI_DIR` | Folder served at `dbstudio://app` (default `ui/dist`, or `resources/ui` when installed) |
 | `DBSTUDIO_DATA_DIR` | Data folder, for the shell and the engine (default: see [Where things live](#where-things-live)) |
 | `DBSTUDIO_SECRET_STORE` | Engine password store: `dpapi`, `keychain`, `file` or `memory` (default: DPAPI on Windows, Keychain on macOS, `file` elsewhere) |
-
-## Install on Windows / macOS
-
-**Windows 10/11 (x64):** run `DbStudio-Setup-<version>.exe`. It installs per user (no admin rights needed) and lets
-you pick the folder. The installer is not code-signed yet, so SmartScreen shows "Windows protected your PC": click
-**More info**, then **Run anyway**.
-
-**macOS 12+:** download the DMG for your Mac (`DbStudio-<version>-mac-arm64.dmg` for Apple Silicon M1/M2/M3/M4,
-`...-mac-x64.dmg` for Intel; "About This Mac" shows which), open it and drag **DbStudio** to **Applications**. The
-`.zip` holds the same app for scripted installs.
-
-Builds without an Apple Developer ID are only ad-hoc signed and not notarized, so on first launch Gatekeeper says
-"DbStudio cannot be opened because Apple cannot check it for malicious software" (or, for a downloaded file,
-"is damaged and can't be opened"). Either:
-
-- **Right-click (Control-click) DbStudio in Applications, choose Open, then Open again.** On macOS 15+, if there is
-  no Open button: try to open the app once, then go to **System Settings > Privacy & Security** and click
-  **Open Anyway** next to the DbStudio message. You only do this once per installed version.
-- Or remove the quarantine flag in Terminal: `xattr -dr com.apple.quarantine /Applications/DbStudio.app`
-
-Builds signed with a Developer ID and notarized (see [Signing](#signing-and-notarization-macos)) open without any of
-this. DbStudio keeps running when you close its last window on macOS (click the Dock icon to get it back; Cmd+Q
-quits). On macOS the SQL Server "Windows Authentication" option is labelled **Integrated (Kerberos)** and needs a
-Kerberos ticket for your domain account (`kinit user@REALM`); SQL Login works everywhere.
 
 ## Building the installer
 
 ### Windows (NSIS)
 
 ```powershell
-./scripts/build.ps1                  # -> desktop/dist/DbStudio-Setup-<version>.exe
+./scripts/build.ps1                  # -> desktop/dist/Rowlit-Setup-<version>.exe
 ./scripts/build.ps1 -SkipInstaller   # engine publish + UI build + desktop compile only
 ./scripts/build.ps1 -EngineOnly      # just the self-contained engine in engine/publish
 ./scripts/build.ps1 -Dir             # unpacked app in desktop/dist/win-unpacked
 ```
 
-The build publishes the engine as a self-contained single-file `win-x64` executable
+The build publishes the engine as a self-contained single-file `win-x64` executable, `Rowlit.Engine.exe`
 (`IncludeNativeLibrariesForSelfExtract`, so SqlClient's native SNI and SQLite ship inside it), builds the UI,
 and packages both into an NSIS x64 installer with electron-builder. The target machine needs neither .NET
 nor Node. The version comes from [`version.json`](version.json) and is injected at build time;
 `./scripts/stamp-version.ps1 -Set 0.2.0` writes it into all three packages for a release commit.
 The installer is not code-signed yet, so Windows SmartScreen will warn on first run.
 
+The installer keeps the `appId` (`com.dbstudio.desktop`) and NSIS GUID of DbStudio, so it upgrades an installed
+DbStudio in place: the old app, its folder and its shortcuts are removed and Rowlit is installed in
+`%LOCALAPPDATA%\Programs\Rowlit` (`desktop/build/installer.nsh`). Never change either value.
+
 ### macOS (DMG + ZIP)
 
 DMGs can only be built on a Mac (Xcode command-line tools: `xcode-select --install`), or by CI:
 
 ```bash
-bash scripts/build.sh                    # -> desktop/dist/DbStudio-<version>-mac-{arm64,x64}.{dmg,zip}
+bash scripts/build.sh                    # -> desktop/dist/Rowlit-<version>-mac-{arm64,x64}.{dmg,zip}
 bash scripts/build.sh --arch arm64       # one architecture only
-bash scripts/build.sh --dir              # unpacked desktop/dist/mac-arm64/DbStudio.app, no DMG
+bash scripts/build.sh --dir              # unpacked desktop/dist/mac-arm64/Rowlit.app, no DMG
 bash scripts/build.sh --engine-only      # just the engines in engine/publish/osx-{arm64,x64}
 ```
 
 The engine is published self-contained per architecture (`osx-arm64`, `osx-x64`) as a single-file
-`DbStudio.Engine` with its native `libe_sqlite3.dylib` next to it (so it is signed with the app instead of being
+`Rowlit.Engine` with its native `libe_sqlite3.dylib` next to it (so it is signed with the app instead of being
 extracted at run time). The script checks that the host-architecture engine starts, then electron-builder produces
-one DMG and one ZIP per architecture with the engine in `DbStudio.app/Contents/Resources/engine/`. Separate
+one DMG and one ZIP per architecture with the engine in `Rowlit.app/Contents/Resources/engine/`. Separate
 per-arch downloads were chosen over a universal app: the .NET single-file engine cannot be merged with `lipo`, so a
 universal build would ship both engines and both Electron slices to everyone (about twice the size). The app uses
 the hardened runtime with `desktop/build/entitlements.mac.plist` (JIT and unsigned executable memory for V8 and
-the .NET runtime, library validation off for ad-hoc signatures). The icon (`desktop/build/icon.icns`) is generated
-with `cd desktop; npm run icon`.
+the .NET runtime, library validation off for ad-hoc signatures).
 
 From Windows you can still cross-publish and smoke-check the macOS engines:
 `./scripts/build.ps1 -EngineOnly -Runtime osx-arm64` (and `osx-x64`); electron-builder itself refuses to package
@@ -266,12 +262,20 @@ Create the app-specific password at appleid.apple.com. In CI, set the repository
 (base64 of the `.p12`), `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`;
 without them the macOS job produces ad-hoc signed DMGs.
 
+### App icon
+
+The icon master is `desktop/build/icons/rowlit.svg` (plus `rowlit-macos.svg` on Apple's icon grid and the
+pixel-hinted `rowlit-small.svg`). `cd desktop; npm run icon` renders `build/icon.png`, `build/icon.ico`
+(16–256 px), `build/icon.icns` (16–1024 px) and `ui/public/favicon.svg` from the same shapes, with no image
+libraries. In the app the mark is drawn by `ui/src/theme/brand/RowlitMark.tsx` from the `--brand-mark-*` tokens.
+
 ### CI
 
 `.github/workflows/ci.yml` has two jobs. **Windows** (`windows-latest`) runs the engine, UI and desktop tests,
 builds the NSIS installer and uploads it. **macOS** (`macos-latest`) runs the engine tests (including a real
 Keychain round trip) and the desktop tests, then `scripts/build.sh` and uploads the arm64 and x64 DMGs and ZIPs.
-Download them from the run's **Artifacts** section.
+Download them from the run's **Artifacts** section. Pushing a `v<version>` tag runs `release.yml`, which publishes
+the installers, `latest.yml` / `latest-mac.yml` and the release notes from `docs/release-notes/`.
 
 ## Sample and test databases (Docker)
 
@@ -284,7 +288,7 @@ docker compose -f engine/tests/docker/compose.yml up -d                     # SQ
 docker compose -f engine/tests/docker/compose.yml --profile kafka up -d     # + Kafka and Schema Registry
 ```
 
-| Server | Connect DbStudio to | Credentials |
+| Server | Connect Rowlit to | Credentials |
 |---|---|---|
 | SQL Server 2022 | `localhost,14333`, database `shop` | `sa` / `DbStudio_Dev_2026!` |
 | Oracle 23 Free | `localhost:15211`, service `FREEPDB1` | `shop` / `shop` |
@@ -337,14 +341,18 @@ Ctrl+Enter and F5 belong to the editor; the menu shows them without registering 
 
 ## Where things live
 
-The data folder is `%APPDATA%\DbStudio` on Windows, `~/Library/Application Support/DbStudio` on macOS and
-`$XDG_CONFIG_HOME/DbStudio` (default `~/.config/DbStudio`) on Linux; `DBSTUDIO_DATA_DIR` overrides it.
+The data folder is `%APPDATA%\Rowlit` on Windows, `~/Library/Application Support/Rowlit` on macOS and
+`$XDG_CONFIG_HOME/Rowlit` (default `~/.config/Rowlit`) on Linux; `DBSTUDIO_DATA_DIR` overrides it.
+
+On its first start Rowlit moves an existing DbStudio folder (`%APPDATA%\DbStudio`, `~/Library/Application
+Support/DbStudio`) to this location in one step, and re-points the sample database connection. If DbStudio is still
+running the move waits for the next start; nothing is copied half-way or deleted (`desktop/src/main/data-dir.ts`).
 
 | What | Where (inside the data folder) |
 |---|---|
 | Saved connections, settings, query history | `connections.json`, `settings.json`, `history.db` |
 | Saved data filters, ER diagram layouts | `filters.json`, `diagrams.json` |
-| Saved passwords | Windows: `secrets.dat`, encrypted with DPAPI for the current Windows user (they do not roam to other machines or accounts). macOS: the login keychain, one "DbStudio" item per connection (Keychain Access shows them; they never touch the data folder). Linux: `secrets.aes.json`, AES-GCM with a key in `secrets.key` (mode 0600); this only keeps passwords out of plain files, it does not protect them from software running as you |
+| Saved passwords | Windows: `secrets.dat`, encrypted with DPAPI for the current Windows user (they do not roam to other machines or accounts). macOS: the login keychain, one item per connection under the service name "DbStudio" (kept from before the rename, so existing passwords stay readable; Keychain Access shows them). Linux: `secrets.aes.json`, AES-GCM with a key in `secrets.key` (mode 0600); this only keeps passwords out of plain files, it does not protect them from software running as you |
 | Open tabs and unsaved editor text | `workspace.json` |
 | Logs (engine output, startup errors) | `logs/` (Help > Open Logs Folder) |
 | Electron profile (cache, window position) | `electron/` |

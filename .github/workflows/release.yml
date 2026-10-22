@@ -59,8 +59,8 @@ jobs:
         with:
           name: release-windows
           path: |
-            desktop/dist/DbStudio-Setup-*.exe
-            desktop/dist/DbStudio-Setup-*.exe.blockmap
+            desktop/dist/Rowlit-Setup-*.exe
+            desktop/dist/Rowlit-Setup-*.exe.blockmap
             desktop/dist/latest.yml
           if-no-files-found: error
 
@@ -105,9 +105,9 @@ jobs:
         with:
           name: release-macos
           path: |
-            desktop/dist/DbStudio-*-mac-*.dmg
-            desktop/dist/DbStudio-*-mac-*.zip
-            desktop/dist/DbStudio-*-mac-*.zip.blockmap
+            desktop/dist/Rowlit-*-mac-*.dmg
+            desktop/dist/Rowlit-*-mac-*.zip
+            desktop/dist/Rowlit-*-mac-*.zip.blockmap
             desktop/dist/latest-mac.yml
           if-no-files-found: error
 
@@ -130,7 +130,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          name: DbStudio ${{ env.TAG }}
+          name: Rowlit ${{ env.TAG }}
           body_path: docs/release-notes/${{ env.TAG }}.md
           files: artifacts/*
           fail_on_unmatched_files: true

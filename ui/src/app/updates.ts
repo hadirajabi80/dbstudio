@@ -4,13 +4,14 @@
 // the checking, downloading and installing; nothing here is ever a modal dialog. The status bar chip
 // (components/StatusBar/UpdateChip.tsx) and Settings › Updates show the same state machine (describeUpdate).
 import { useEffect } from 'react';
+import { REPO_URL } from './brand';
 import { getPlatform } from '../platform';
 import type { UpdateStatus } from '../platform/bridge';
 import { autoCheckUpdates, useSettings } from '../store/settings';
 import { toast } from '../store/ui';
 import { useUpdates } from '../store/updates';
 
-export const RELEASES_URL = 'https://github.com/hadirajabi80/dbstudio/releases';
+export const RELEASES_URL = `${REPO_URL}/releases`;
 
 /** Announcements already made this session, per kind and version ("arrived:1.1.0", "ready:1.1.0"). */
 const announced = new Set<string>();
@@ -23,7 +24,7 @@ export function resetUpdateAnnouncements(): void {
 /**
  * Tells the user about a new version once per version: a transient toast when an update starts downloading in the
  * background (install mode; the ready/available card in the toast stack covers the rest), and an OS notification when
- * it is ready to install (or, in notify mode, available) while DbStudio is in the background.
+ * it is ready to install (or, in notify mode, available) while Rowlit is in the background.
  */
 export function announceUpdate(prev: UpdateStatus | null, next: UpdateStatus): void {
   const v = next.version;
@@ -35,12 +36,12 @@ export function announceUpdate(prev: UpdateStatus | null, next: UpdateStatus): v
   };
   const notify = (title: string, body: string) => getPlatform().showNotification?.({ title, body });
   if (next.mode === 'install' && (next.state === 'available' || next.state === 'downloading') && once('arrived')) {
-    toast('info', `DbStudio ${v} is available`, 'Downloading in the background — progress is in the status bar.');
+    toast('info', `Rowlit ${v} is available`, 'Downloading in the background — progress is in the status bar.');
   } else if (next.mode === 'install' && next.state === 'ready' && once('ready')) {
     announced.add(`arrived:${v}`);
-    notify(`DbStudio ${v} is ready`, 'Restart DbStudio to finish updating, or it installs when you quit.');
+    notify(`Rowlit ${v} is ready`, 'Restart Rowlit to finish updating, or it installs when you quit.');
   } else if (next.mode === 'notify' && next.state === 'available' && once('ready')) {
-    notify(`DbStudio ${v} is available`, 'Download the new version from GitHub.');
+    notify(`Rowlit ${v} is available`, 'Download the new version from GitHub.');
   }
 }
 
@@ -77,13 +78,13 @@ export function useUpdateWiring(): void {
 function report(s: UpdateStatus): void {
   switch (s.state) {
     case 'up-to-date':
-      toast('success', "You're up to date", `DbStudio ${s.currentVersion} is the latest version.`);
+      toast('success', "You're up to date", `Rowlit ${s.currentVersion} is the latest version.`);
       break;
     case 'downloading':
       // Once per version (the background download may already have been announced).
       if (s.version && announced.has(`arrived:${s.version}`)) break;
       if (s.version) announced.add(`arrived:${s.version}`);
-      toast('info', s.version ? `Downloading DbStudio ${s.version}…` : 'Downloading the update…', "You'll be asked to restart when it is ready.");
+      toast('info', s.version ? `Downloading Rowlit ${s.version}…` : 'Downloading the update…', "You'll be asked to restart when it is ready.");
       break;
     case 'disabled':
       toast('info', 'Updates are not checked in this build', s.message);
@@ -124,7 +125,7 @@ export async function checkForUpdatesNow(): Promise<void> {
 /** "Restart now" (install mode). */
 export async function restartToUpdate(): Promise<void> {
   const ok = await getPlatform().quitAndInstall?.().catch(() => false);
-  if (!ok) toast('warning', 'The update could not be installed now', 'It will be installed when DbStudio quits.');
+  if (!ok) toast('warning', 'The update could not be installed now', 'It will be installed when Rowlit quits.');
 }
 
 /** "Download" (notify mode: ad-hoc signed macOS). */
@@ -151,17 +152,17 @@ export function describeUpdate(s: UpdateStatus | null): UpdateDescription {
     case 'checking':
       return { tone: 'busy', text: 'Checking for updates…', chip: 'Checking for updates…' };
     case 'up-to-date':
-      return { tone: 'success', text: `You're up to date — DbStudio ${s.currentVersion} is the latest version.`, chip: null };
+      return { tone: 'success', text: `You're up to date — Rowlit ${s.currentVersion} is the latest version.`, chip: null };
     case 'available':
       return s.mode === 'notify'
-        ? { tone: 'accent', text: `DbStudio ${v} is available to download.`, chip: `v${v} available` }
-        : { tone: 'accent', text: `DbStudio ${v} is available — downloading in the background…`, chip: `v${v} available` };
+        ? { tone: 'accent', text: `Rowlit ${v} is available to download.`, chip: `v${v} available` }
+        : { tone: 'accent', text: `Rowlit ${v} is available — downloading in the background…`, chip: `v${v} available` };
     case 'downloading': {
       const percent = Math.max(0, Math.min(100, Math.round(s.percent ?? 0)));
-      return { tone: 'busy', text: `Downloading DbStudio ${v ?? 'update'}… ${percent}%`, chip: `Downloading ${percent}%`, percent };
+      return { tone: 'busy', text: `Downloading Rowlit ${v ?? 'update'}… ${percent}%`, chip: `Downloading ${percent}%`, percent };
     }
     case 'ready':
-      return { tone: 'accent', text: `DbStudio ${v} is ready — restart to finish updating (or it installs when you quit).`, chip: 'Restart to update' };
+      return { tone: 'accent', text: `Rowlit ${v} is ready — restart to finish updating (or it installs when you quit).`, chip: 'Restart to update' };
     case 'error':
       return { tone: 'warning', text: `Couldn't check for updates${s.message ? `: ${s.message}` : '.'}`, chip: 'Update check failed' };
     case 'disabled':

@@ -31,7 +31,7 @@ export interface DbStudioBridge {
   onMenuCommand(cb: (cmd: MenuCommand) => void): () => void;
   /** Engine process died; the main process shows a restart dialog and calls this after a restart with fresh info. */
   onEngineRestarted(cb: (info: EngineInfo) => void): () => void;
-  /** Workspace (open tabs, unsaved text) persistence in %APPDATA%\DbStudio\workspace.json. */
+  /** Workspace (open tabs, unsaved text) persistence in %APPDATA%\Rowlit\workspace.json. */
   loadWorkspace(): Promise<unknown | null>;
   saveWorkspace(data: unknown): Promise<void>;
   setTitle(title: string): void;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>Rowlit</title>
+  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#24345e"/><stop offset="1" stop-color="#0b1430"/></linearGradient><linearGradient id="lit" gradientUnits="userSpaceOnUse" x1="3" y1="0" x2="13" y2="0"><stop offset="0" stop-color="#ffc54d"/><stop offset="1" stop-color="#ff6a5c"/></linearGradient><clipPath id="clip"><rect x="0" y="0" width="16" height="16" rx="3.2" fill="#fff"/></clipPath></defs>
+  <rect x="0" y="0" width="16" height="16" rx="3.2" fill="url(#tile)"/>
+  <g clip-path="url(#clip)"><rect x="3" y="4" width="10" height="2" rx="1" fill="#5a6e9e"/><rect x="3" y="10" width="10" height="2" rx="1" fill="#5a6e9e"/><rect x="3" y="7" width="10" height="2" rx="1" fill="url(#lit)"/></g>
+</svg>

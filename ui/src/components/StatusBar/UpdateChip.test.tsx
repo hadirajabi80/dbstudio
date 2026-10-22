@@ -59,7 +59,7 @@ describe('status bar update chip', () => {
     setPlatform(createElectronPlatform(b));
     render(<UpdateChip />);
     act(() => useUpdates.setState({ status: status({ state: 'ready', version: '1.1.0' }) }));
-    const chip = screen.getByRole('button', { name: 'Restart to update to DbStudio 1.1.0' });
+    const chip = screen.getByRole('button', { name: 'Restart to update to Rowlit 1.1.0' });
     expect(chip).toHaveTextContent('Restart to update');
     fireEvent.click(chip);
     await act(async () => undefined);

@@ -1,4 +1,4 @@
-// One-time global Monaco setup: worker, the four DbStudio SQL languages, lexer-driven tokens, themes and the
+// One-time global Monaco setup: worker, the four Rowlit SQL languages, lexer-driven tokens, themes and the
 // language feature providers. Providers resolve per-model state through the registry (multi-editor safe).
 // Colours (themes, run flash) come from the design tokens in ui/src/theme, never from literals here.
 import * as monaco from './monaco';
@@ -76,7 +76,7 @@ function installStyles(): void {
   document.head.appendChild(st);
 }
 
-/** Both DbStudio themes, built from the design tokens (theme/monacoTheme.ts) before the first editor paints. */
+/** Both Rowlit themes, built from the design tokens (theme/monacoTheme.ts) before the first editor paints. */
 function defineThemes(): void {
   defineMonacoThemes(monaco.editor, THEME_IDS);
 }
@@ -155,7 +155,7 @@ function registerLanguage(dialect: Dialect): void {
   // at the cursor when nothing is selected.
   const fmtOptions = (model: monaco.editor.ITextModel) => bindingFor(model)?.formatOptions?.() ?? getEditorConfig().format;
   monaco.languages.registerDocumentFormattingEditProvider(id, {
-    displayName: 'DbStudio SQL formatter',
+    displayName: 'Rowlit SQL formatter',
     provideDocumentFormattingEdits(model) {
       const text = model.getValue();
       const r = formatSql(text, dialect, fmtOptions(model));
@@ -176,7 +176,7 @@ function registerLanguage(dialect: Dialect): void {
     },
   });
   monaco.languages.registerDocumentRangeFormattingEditProvider(id, {
-    displayName: 'DbStudio SQL formatter',
+    displayName: 'Rowlit SQL formatter',
     provideDocumentRangeFormattingEdits(model, range) {
       const r = formatRange(model.getValue(), dialect, [model.getOffsetAt(range.getStartPosition()), model.getOffsetAt(range.getEndPosition())], fmtOptions(model));
       if (!r) return [];

@@ -54,7 +54,7 @@ public sealed class MongoProvider : IDataSourceProvider
                 new FormOption("nearest", "Nearest"),
             ]),
         new FormField("connectTimeout", "Connect timeout (s)", "number", Default: JsonValue.Create(10)),
-        new FormField("appName", "App name", "text", Default: JsonValue.Create("DbStudio")),
+        new FormField("appName", "App name", "text", Default: JsonValue.Create("Rowlit")),
     ]);
 
     private static async Task<IMongoGateway> DefaultGatewayAsync(ConnectionProfile profile, string? password, CancellationToken ct)

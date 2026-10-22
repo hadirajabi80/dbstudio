@@ -139,7 +139,7 @@ public sealed class ConnectionTests
         Assert.True(o.Ssl);
         Assert.Equal("127.0.0.1", o.SslHost);
         Assert.Equal("u", o.User);
-        Assert.Equal("DbStudio", o.ClientName);
+        Assert.Equal("Rowlit", o.ClientName);
         Assert.True(o.AllowAdmin);
     }
 

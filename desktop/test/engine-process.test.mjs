@@ -61,7 +61,10 @@ describe('resolveEngineLaunch', () => {
     assert.match(l.spec.command, /resources[\\/]engine[\\/]DbStudio\.Host\.exe$/);
     assert.equal(l.spec.readyTimeoutMs, 15_000);
     const l2 = ep.resolveEngineLaunch({ ...win, isPackaged: true, exists: () => true });
-    assert.match(l2.spec.command, /DbStudio\.Engine\.exe$/);
+    assert.match(l2.spec.command, /Rowlit\.Engine\.exe$/);
+    // a build made before the rename (DbStudio.Engine.exe) still starts
+    const l3 = ep.resolveEngineLaunch({ ...win, isPackaged: true, exists: (p) => p.endsWith('DbStudio.Engine.exe') });
+    assert.match(l3.spec.command, /resources[\\/]engine[\\/]DbStudio\.Engine\.exe$/);
   });
   it('DBSTUDIO_ENGINE_CMD override, plus --dev when the UI comes from Vite', () => {
     const l = ep.resolveEngineLaunch({ ...base, devServer: true, env: { DBSTUDIO_ENGINE_CMD: 'node fake.mjs --noisy', DBSTUDIO_ENGINE_TIMEOUT_MS: '3000' } });

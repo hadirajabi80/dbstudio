@@ -251,7 +251,7 @@ class MockRedisServer {
       return { id: 124 - i, ts: new Date((now - i * 517) * 1000).toISOString(), durationUs: 12_000 + ((i * 7919) % 180_000), args, client: `10.0.1.${10 + (i % 5)}:5${1000 + i}`, name: i % 3 ? null : 'worker' };
     });
     this.clients = [
-      { id: '7', addr: '127.0.0.1:52011', name: 'DbStudio', user: 'default', db: 0, ageSeconds: 120, idleSeconds: 0, cmd: 'client|list', flags: 'N', fields: {} },
+      { id: '7', addr: '127.0.0.1:52011', name: 'Rowlit', user: 'default', db: 0, ageSeconds: 120, idleSeconds: 0, cmd: 'client|list', flags: 'N', fields: {} },
       { id: '12', addr: '10.0.1.10:51120', name: 'api-1', user: 'app', db: 0, ageSeconds: 86_400, idleSeconds: 2, cmd: 'get', flags: 'N', fields: {} },
       { id: '13', addr: '10.0.1.11:51121', name: 'api-2', user: 'app', db: 0, ageSeconds: 86_399, idleSeconds: 1, cmd: 'hget', flags: 'N', fields: {} },
       { id: '21', addr: '10.0.1.20:40001', name: 'worker', user: 'jobs', db: 1, ageSeconds: 3600, idleSeconds: 30, cmd: 'blpop', flags: 'b', fields: {} },
@@ -614,7 +614,7 @@ export function createRedisHandlers(ctx: M2MockContext): RequestHandler[] {
           const sub = a[0]?.toUpperCase();
           if (sub === 'LIST') return ok('bulk', server.clients.map((c) => Object.entries(c.fields).map(([k, v]) => `${k}=${v}`).join(' ')).join('\n') + '\n');
           if (sub === 'ID') return ok('int', 7);
-          if (sub === 'GETNAME') return ok('bulk', 'DbStudio');
+          if (sub === 'GETNAME') return ok('bulk', 'Rowlit');
           return fail('ERR unknown subcommand');
         }
         case 'SLOWLOG': {

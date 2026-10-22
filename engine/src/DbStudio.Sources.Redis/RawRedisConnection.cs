@@ -76,7 +76,7 @@ public sealed class RawRedisConnection : IAsyncDisposable
                     : await conn.CommandAsync(["AUTH", settings.User, settings.Password], ct).ConfigureAwait(false);
                 if (auth.IsError) throw RedisErrors.FromServerError(auth.Text ?? "AUTH failed", "auth");
             }
-            await conn.CommandAsync(["CLIENT", "SETNAME", "DbStudio-dedicated"], ct).ConfigureAwait(false);
+            await conn.CommandAsync(["CLIENT", "SETNAME", "Rowlit-dedicated"], ct).ConfigureAwait(false);
             if (database != 0)
             {
                 var sel = await conn.CommandAsync(["SELECT", database.ToString(CultureInfo.InvariantCulture)], ct).ConfigureAwait(false);

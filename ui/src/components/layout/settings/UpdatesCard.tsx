@@ -2,10 +2,12 @@
 // status bar chip: checking / up to date / available / downloading x% / ready → Restart now), automatic checks and
 // the release notes. The browser build has no updater: it links to the releases page.
 import { CircleAlert, CircleCheck, Download, ExternalLink, LoaderCircle, RefreshCw } from 'lucide-react';
+import { APP_NAME } from '../../../app/brand';
 import { checkForUpdatesNow, describeUpdate, openReleasePage, RELEASES_URL, restartToUpdate } from '../../../app/updates';
 import { getPlatform } from '../../../platform';
 import { AUTO_CHECK_UPDATES_KEY, autoCheckUpdates, useSettings } from '../../../store/settings';
 import { useUpdates } from '../../../store/updates';
+import { RowlitMark } from '../../../theme/brand/RowlitMark';
 import { Card, SearchBlock, ToggleRow } from './controls';
 
 export function UpdatesCard() {
@@ -25,21 +27,17 @@ export function UpdatesCard() {
   return (
     <>
       <Card
-        title="DbStudio"
+        title={APP_NAME}
         description={desktop ? 'Updates are downloaded in the background from GitHub Releases and installed when you restart.' : 'New versions are published on GitHub Releases.'}
       >
-        <SearchBlock keywords="updates version check for updates new release notes download restart install about dbstudio">
+        <SearchBlock keywords="updates version check for updates new release notes download restart install about rowlit dbstudio">
           <div className="upd-hero">
             <span className="upd-logo" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 32 32">
-                <rect width="32" height="32" rx="8" className="brand-bg" />
-                <ellipse cx="16" cy="9.5" rx="8" ry="3.2" className="brand-fg-fill" />
-                <path d="M8 9.5v13c0 1.8 3.6 3.2 8 3.2s8-1.4 8-3.2v-13M8 16c0 1.8 3.6 3.2 8 3.2s8-1.4 8-3.2" fill="none" className="brand-fg-stroke" strokeWidth="2.2" />
-              </svg>
+              <RowlitMark size={28} />
             </span>
             <div className="upd-info">
               <div className="upd-version">
-                {desktop ? <>Version <span className="tabular">{version}</span></> : 'DbStudio in the browser'}
+                {desktop ? <>Version <span className="tabular">{version}</span></> : `${APP_NAME} in the browser`}
               </div>
               {desktop ? (
                 <div className={`upd-status tone-${d.tone}`} role="status" aria-live="polite">

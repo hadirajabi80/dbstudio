@@ -62,8 +62,8 @@ public sealed partial class OracleDesignerDatabase : IDesignerDatabase
         try
         {
             await conn.OpenAsync(ct).ConfigureAwait(false);
-            conn.ModuleName = "DbStudio";
-            conn.ClientInfo = "DbStudio designer";
+            conn.ModuleName = "Rowlit";
+            conn.ClientInfo = "Rowlit designer";
             return conn;
         }
         catch

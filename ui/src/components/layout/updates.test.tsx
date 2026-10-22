@@ -60,13 +60,13 @@ afterEach(() => {
 });
 
 describe('update notice', () => {
-  it('Windows / signed macOS: "DbStudio X.Y.Z is ready" — Restart now installs, Later hides it', async () => {
+  it('Windows / signed macOS: "Rowlit X.Y.Z is ready" — Restart now installs, Later hides it', async () => {
     const { b } = fakeBridge();
     setPlatform(createElectronPlatform(b));
     render(<Toasts />);
     expect(screen.queryByRole('group', { name: 'Update' })).toBeNull();
     act(() => useUpdates.getState().setStatus(status({ state: 'ready', version: '0.3.0', releaseUrl: `${RELEASES_URL}/tag/v0.3.0` })));
-    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('DbStudio 0.3.0 is ready');
+    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('Rowlit 0.3.0 is ready');
     fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));
     await act(async () => undefined);
     expect(b.quitAndInstall).toHaveBeenCalledTimes(1);
@@ -80,7 +80,7 @@ describe('update notice', () => {
     setPlatform(createElectronPlatform(b));
     render(<Toasts />);
     act(() => useUpdates.getState().setStatus(status({ state: 'available', mode: 'notify', version: '0.3.1', releaseUrl: `${RELEASES_URL}/tag/v0.3.1` })));
-    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('DbStudio 0.3.1 is available');
+    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('Rowlit 0.3.1 is available');
     expect(screen.queryByRole('button', { name: 'Restart now' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Download' }));
     await act(async () => undefined);
@@ -104,9 +104,9 @@ describe('update notice', () => {
     renderHook(() => useUpdateWiring());
     render(<Toasts />);
     await act(async () => undefined);
-    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('DbStudio 0.4.0 is ready');
+    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('Rowlit 0.4.0 is ready');
     push(status({ state: 'ready', version: '0.4.1' }));
-    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('DbStudio 0.4.1 is ready');
+    expect(screen.getByRole('group', { name: 'Update' })).toHaveTextContent('Rowlit 0.4.1 is ready');
   });
 });
 
@@ -221,17 +221,17 @@ describe('new version announcements', () => {
     push(status({ state: 'available', version: '1.1.0' }));
     push(status({ state: 'downloading', version: '1.1.0', percent: 10 }));
     push(status({ state: 'downloading', version: '1.1.0', percent: 60 }));
-    expect(useUi.getState().toasts.map((t) => [t.kind, t.text])).toEqual([['info', 'DbStudio 1.1.0 is available']]);
+    expect(useUi.getState().toasts.map((t) => [t.kind, t.text])).toEqual([['info', 'Rowlit 1.1.0 is available']]);
     expect(showNotification).not.toHaveBeenCalled();
     push(status({ state: 'ready', version: '1.1.0' }));
     push(status({ state: 'ready', version: '1.1.0' }));
     expect(showNotification).toHaveBeenCalledTimes(1);
-    expect(showNotification).toHaveBeenCalledWith({ title: 'DbStudio 1.1.0 is ready', body: expect.stringMatching(/Restart/) });
+    expect(showNotification).toHaveBeenCalledWith({ title: 'Rowlit 1.1.0 is ready', body: expect.stringMatching(/Restart/) });
     // the ready card in the toast stack is the in-app notice: no second transient toast
     expect(useUi.getState().toasts).toHaveLength(1);
     // a newer version is announced again
     push(status({ state: 'available', version: '1.2.0' }));
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['DbStudio 1.1.0 is available', 'DbStudio 1.2.0 is available']);
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Rowlit 1.1.0 is available', 'Rowlit 1.2.0 is available']);
   });
 
   it('notify mode (ad-hoc signed macOS): an OS notification for the available version; no duplicate toast', async () => {
@@ -243,7 +243,7 @@ describe('new version announcements', () => {
     push(status({ state: 'available', mode: 'notify', version: '1.1.0' }));
     push(status({ state: 'available', mode: 'notify', version: '1.1.0' }));
     expect(showNotification).toHaveBeenCalledTimes(1);
-    expect(showNotification.mock.calls[0][0].title).toBe('DbStudio 1.1.0 is available');
+    expect(showNotification.mock.calls[0][0].title).toBe('Rowlit 1.1.0 is available');
     expect(useUi.getState().toasts).toEqual([]);
   });
 
@@ -265,7 +265,7 @@ describe('new version announcements', () => {
     await act(async () => undefined);
     push(status({ state: 'available', version: '1.1.0' }));
     await CORE_COMMANDS.find((c) => c.id === 'help.checkForUpdates')!.run(undefined as never);
-    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['DbStudio 1.1.0 is available']);
+    expect(useUi.getState().toasts.map((t) => t.text)).toEqual(['Rowlit 1.1.0 is available']);
   });
 });
 
@@ -285,7 +285,7 @@ describe('Settings › Updates', () => {
     await act(async () => resolve(status({ state: 'up-to-date' })));
     expect(screen.getByRole('status')).toHaveTextContent("You're up to date");
     act(() => useUpdates.getState().setStatus(status({ state: 'downloading', version: '0.3.0', percent: 30 })));
-    expect(screen.getByRole('status')).toHaveTextContent('Downloading DbStudio 0.3.0… 30%');
+    expect(screen.getByRole('status')).toHaveTextContent('Downloading Rowlit 0.3.0… 30%');
     expect(screen.getByRole('progressbar', { name: 'Download progress' })).toHaveAttribute('aria-valuenow', '30');
     act(() => useUpdates.getState().setStatus(status({ state: 'ready', version: '0.3.0' })));
     fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));

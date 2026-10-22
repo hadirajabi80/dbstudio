@@ -211,9 +211,9 @@ public sealed class SqlServerDdlScripter : IDdlScripter
         // Storage features the model does not hold (features-r1-02): CREATE TABLE [x__new] would come back without them.
         var storage = dependents.Where(x => DependentTypes.UnsupportedStorage.Contains(x.Type)).Select(x => DescribeStorage(original.Name, x)).Distinct().ToList();
         if (storage.Count == 1)
-            throw new ArgumentException($"{refused}{storage[0]}; DbStudio cannot recreate it in a rebuild. Change the identity in a script instead.");
+            throw new ArgumentException($"{refused}{storage[0]}; Rowlit cannot recreate it in a rebuild. Change the identity in a script instead.");
         if (storage.Count > 1)
-            throw new ArgumentException($"{refused}DbStudio cannot recreate these in a rebuild: {string.Join("; ", storage)}. Change the identity in a script instead.");
+            throw new ArgumentException($"{refused}Rowlit cannot recreate these in a rebuild: {string.Join("; ", storage)}. Change the identity in a script instead.");
 
         // Old column name -> new column name of the columns that survive (inbound FKs and column permissions follow renames).
         var renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

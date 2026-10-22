@@ -1,14 +1,17 @@
 # electron-builder config.
-#   Windows: NSIS x64 installer          -> desktop/dist/DbStudio-Setup-<version>.exe     (scripts/build.ps1)
-#   macOS:   DMG + ZIP, arm64 and x64    -> desktop/dist/DbStudio-<version>-mac-<arch>.dmg (scripts/build.sh, on a Mac)
+#   Windows: NSIS x64 installer          -> desktop/dist/Rowlit-Setup-<version>.exe     (scripts/build.ps1)
+#   macOS:   DMG + ZIP, arm64 and x64    -> desktop/dist/Rowlit-<version>-mac-<arch>.dmg (scripts/build.sh, on a Mac)
 # Inputs (produced by the build scripts before this runs):
-#   ../engine/publish              self-contained single-file engine for win-x64 (DbStudio.Engine.exe)
-#   ../engine/publish/osx-arm64    self-contained engine for macOS arm64 (DbStudio.Engine + native dylibs)
+#   ../engine/publish              self-contained single-file engine for win-x64 (Rowlit.Engine.exe)
+#   ../engine/publish/osx-arm64    self-contained engine for macOS arm64 (Rowlit.Engine + native dylibs)
 #   ../engine/publish/osx-x64      self-contained engine for macOS x64
 #   ../ui/dist                     built renderer
+# The product was called DbStudio up to 1.1.0. appId (Windows AppUserModelId, macOS bundle id) and nsis.guid keep the
+# DbStudio values ON PURPOSE: they make Rowlit an in-place upgrade of an installed DbStudio (same uninstall entry,
+# auto-update from 1.1.0 keeps working, the same macOS bundle id). Never change them.
 appId: com.dbstudio.desktop
-productName: DbStudio
-copyright: Copyright (c) 2026 DbStudio contributors
+productName: Rowlit
+copyright: Copyright (c) 2026 Rowlit contributors
 
 directories:
   output: dist
@@ -27,10 +30,12 @@ asar: true
 # electron-builder write resources/app-update.yml into the app and latest.yml (Windows) / latest-mac.yml (macOS) plus
 # the .blockmap files next to the installers, which .github/workflows/release.yml uploads to the v<version> release.
 # The file names inside latest*.yml are the artifactName values below, i.e. exactly the uploaded asset names.
+# The repository was renamed dbstudio -> rowlit; an installed DbStudio 1.1.0 still asks github.com/hadirajabi80/dbstudio,
+# which GitHub redirects (electron-updater follows redirects for releases.atom, latest.yml and the downloads).
 publish:
   provider: github
   owner: hadirajabi80
-  repo: dbstudio
+  repo: rowlit
   releaseType: release
 
 # Shared by every platform; the engine (different per OS/arch) is mapped in win/mac below.
@@ -54,7 +59,7 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.ico
-  artifactName: DbStudio-Setup-${version}.${ext}
+  artifactName: Rowlit-Setup-${version}.${ext}
   # Unsigned for now (PLAN R10: SmartScreen warning until a certificate is bought).
   extraResources:
     - from: ../engine/publish
@@ -75,11 +80,17 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: DbStudio
+  # = the GUID electron-builder derived from appId com.dbstudio.desktop for DbStudio <= 1.1.0 (UUID v5): the install
+  # key HKCU\Software\<guid> and the uninstall entry of the installed DbStudio. Pinned so the upgrade is in place.
+  guid: 638c85c7-bac1-506a-ad41-0d2725b07a14
+  # build/installer.nsh: an upgrade from DbStudio installs into ...\Programs\Rowlit instead of the old folder.
+  include: build/installer.nsh
+  shortcutName: Rowlit
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
-  uninstallDisplayName: DbStudio ${version}
-  # %APPDATA%\DbStudio holds saved connections, history and the workspace; keep it on uninstall.
+  uninstallDisplayName: Rowlit ${version}
+  # %APPDATA%\Rowlit (moved from %APPDATA%\DbStudio on first start, src/main/data-dir.ts) holds saved connections,
+  # secrets, history and the workspace; keep it on uninstall.
   deleteAppDataOnUninstall: false
   runAfterFinish: true
 
@@ -94,7 +105,7 @@ mac:
       arch: [arm64, x64]
   icon: build/icon.icns
   category: public.app-category.developer-tools
-  artifactName: DbStudio-${version}-mac-${arch}.${ext}
+  artifactName: Rowlit-${version}-mac-${arch}.${ext}
   minimumSystemVersion: "12.0"
   darkModeSupport: true
   # Signing: scripts/build.sh passes -c.mac.identity=- (ad-hoc) unless CSC_LINK/CSC_NAME provide a Developer ID
@@ -105,7 +116,7 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSHumanReadableCopyright: Copyright (c) 2026 DbStudio contributors
+    NSHumanReadableCopyright: Copyright (c) 2026 Rowlit contributors
   # ${arch} is arm64 or x64, matching the .NET RIDs osx-arm64 / osx-x64.
   extraResources:
     - from: ../engine/publish/osx-${arch}
@@ -119,7 +130,7 @@ mac:
         - "!*.staticwebassets.*.json"
 
 dmg:
-  title: DbStudio ${version}
+  title: Rowlit ${version}
   writeUpdateInfo: false
   contents:
     - x: 140

@@ -1,4 +1,4 @@
-// In-memory fake of the DbStudio engine: connections, catalog, sessions, streaming execution, history.
+// In-memory fake of the Rowlit engine: connections, catalog, sessions, streaming execution, history.
 // Used by `npm run dev:mock` (through MSW + FakeSocket) and by component tests.
 import type {
   CatalogObject, CatalogSchema, CatalogSnapshot, CellValue, ColumnInfo, ConnectionInput, ConnectionProfile, DatabasesResponse,
@@ -412,7 +412,7 @@ export class MockEngine {
       // PostgreSQL-only statements: SHOW, DO blocks, LISTEN/NOTIFY, RAISE NOTICE inside DO, pg_sleep.
       const show = /^SHOW\s+(\w+)/i.exec(sql);
       if (show) {
-        const v: Record<string, string> = { search_path: '"$user", public', server_version: '17.2', timezone: 'UTC', transaction_isolation: 'read committed', application_name: 'DbStudio' };
+        const v: Record<string, string> = { search_path: '"$user", public', server_version: '17.2', timezone: 'UTC', transaction_isolation: 'read committed', application_name: 'Rowlit' };
         out.sets.push({ columns: [col(show[1].toLowerCase(), 'text', 'string', 0)], rows: [[v[show[1].toLowerCase()] ?? 'on']] });
         return out;
       }

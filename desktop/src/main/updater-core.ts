@@ -12,7 +12,7 @@ export type { UpdateMode, UpdateStatus };
 
 /** GitHub repository the releases (and latest.yml / latest-mac.yml) are published to (electron-builder.yml publish). */
 export const RELEASE_OWNER = 'hadirajabi80';
-export const RELEASE_REPO = 'dbstudio';
+export const RELEASE_REPO = 'rowlit';
 export const RELEASES_URL = `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases`;
 
 /** First automatic check after start, then every 6 hours. */

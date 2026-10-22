@@ -10,7 +10,7 @@ public static class PgConnectionStrings
     public const int DefaultPort = 5432;
     public const int DefaultConnectTimeout = 15;
     public const string DefaultDatabase = "postgres";
-    public const string DefaultApplicationName = "DbStudio";
+    public const string DefaultApplicationName = "Rowlit";
     public const string ReadOnlyOption = "-c default_transaction_read_only=on";
 
     public static ConnectionFormSpec FormSpec { get; } = new(

@@ -37,9 +37,9 @@ const role = (r: NativeRole, extra: Partial<MenuRoleItem> = {}): MenuRoleItem =>
 
 export const MENUS: MenuDef[] = [
   {
-    id: 'app', label: 'DbStudio', platform: 'darwin',
+    id: 'app', label: 'Rowlit', platform: 'darwin',
     items: [
-      cmd('help.about', 'About DbStudio'),
+      cmd('help.about', 'About Rowlit'),
       cmd('help.checkForUpdates', 'Check for Updates…'), sep,
       cmd('view.settings', 'Settings…', 'Mod+,'), sep,
       role('services'), sep, role('hide'), role('hideOthers'), role('unhide'), sep, role('quit'),
@@ -156,7 +156,7 @@ export const MENUS: MenuDef[] = [
       { type: 'native', id: 'restartEngine', label: 'Restart engine' },
       sep,
       cmd('help.checkForUpdates', 'Check for Updates…', undefined, { platform: 'win32' }),
-      cmd('help.about', 'About DbStudio', undefined, { platform: 'win32' }),
+      cmd('help.about', 'About Rowlit', undefined, { platform: 'win32' }),
     ],
   },
 ];

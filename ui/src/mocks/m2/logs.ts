@@ -227,7 +227,7 @@ function sessionRows(providerId: string, connectionId: string, streams: M2MockCo
         { id: '64', kind: 'session', user: 'report', host: 'bi-01', app: 'Power BI', database: 'Shop', state: 'suspended', command: 'SELECT', waitType: 'LCK_M_S', blockedBy: '57', text: 'SELECT * FROM dbo.Orders WHERE Id = @id', since: ago(31_000), durationMs: 31_000 + jitter(), cpu: 3, reads: 12, canKill: true, fields: k('64') },
         { id: '70', kind: 'session', user: 'app', host: 'web-01', app: 'Shop.Web', database: 'Shop', state: 'suspended', command: 'INSERT', waitType: 'LCK_M_IX', blockedBy: '61', text: 'INSERT INTO dbo.OrderEvents (OrderId, Kind) VALUES (@id, 3)', since: ago(12_000), durationMs: 12_000 + jitter(), canKill: true, fields: k('70') },
         { id: '75', kind: 'session', user: 'app', host: 'web-03', app: 'Shop.Web', database: 'Shop', state: 'running', command: 'SELECT', text: 'SELECT TOP (100) * FROM dbo.Products ORDER BY Name', since: ago(350), durationMs: 350, cpu: 20, reads: 310, canKill: true, fields: k('75') },
-        { id: '80', kind: 'session', user: 'sa', host: 'dba-laptop', app: 'DbStudio', database: 'master', state: 'sleeping', command: 'AWAITING COMMAND', since: ago(5_000), canKill: true, fields: k('80') },
+        { id: '80', kind: 'session', user: 'sa', host: 'dba-laptop', app: 'Rowlit', database: 'master', state: 'sleeping', command: 'AWAITING COMMAND', since: ago(5_000), canKill: true, fields: k('80') },
         { id: 'lock:OBJECT:Shop.dbo.Orders:57', kind: 'lock', database: 'Shop', state: 'GRANT', canKill: false, fields: { resource: 'OBJECT: Shop.dbo.Orders', mode: 'IX', count: '1', owner: '57' } },
         { id: 'lock:KEY:Shop.dbo.Orders:61', kind: 'lock', database: 'Shop', state: 'WAIT', blockedBy: '57', canKill: false, fields: { resource: 'KEY: Shop.dbo.Orders (8194443284a0)', mode: 'U', count: '1', owner: '61' } },
       ];
@@ -246,7 +246,7 @@ function sessionRows(providerId: string, connectionId: string, streams: M2MockCo
         { id: '4321', kind: 'session', user: 'app', host: '10.0.0.5', app: 'shop-api', database: 'shop', state: 'idle in transaction', command: 'UPDATE', text: 'UPDATE stock SET qty = qty - 1 WHERE product_id = 42', durationMs: 180_000, waitType: 'Client: ClientRead', canKill: true, fields: k('4321') },
         { id: '4390', kind: 'session', user: 'app', host: '10.0.0.6', app: 'shop-api', database: 'shop', state: 'active', command: 'UPDATE', text: 'UPDATE stock SET qty = qty - 3 WHERE product_id = 42', durationMs: 41_000 + jitter(), waitType: 'Lock: transactionid', blockedBy: '4321', canKill: true, fields: k('4390') },
         { id: '4402', kind: 'session', user: 'report', host: '10.0.0.30', app: 'metabase', database: 'shop', state: 'active', command: 'SELECT', text: 'SELECT date_trunc(\'day\', created_at), count(*) FROM orders GROUP BY 1', durationMs: 7_800 + jitter(), canKill: true, fields: k('4402') },
-        { id: '4410', kind: 'session', user: 'postgres', host: '127.0.0.1', app: 'DbStudio', database: 'shop', state: 'idle', durationMs: 2_000, canKill: true, fields: k('4410') },
+        { id: '4410', kind: 'session', user: 'postgres', host: '127.0.0.1', app: 'Rowlit', database: 'shop', state: 'idle', durationMs: 2_000, canKill: true, fields: k('4410') },
       ];
     }
     case 'redis':

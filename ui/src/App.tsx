@@ -212,7 +212,7 @@ function EngineBanner() {
         onClick={async () => {
           await useConnections.getState().load();
           const e = useConnections.getState().error;
-          useUi.getState().setEngineError(e ? `Cannot reach the DbStudio engine: ${e}` : null);
+          useUi.getState().setEngineError(e ? `Cannot reach the Rowlit engine: ${e}` : null);
           if (!e) await useSettings.getState().load();
         }}
       >

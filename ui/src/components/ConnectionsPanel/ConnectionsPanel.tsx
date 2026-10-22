@@ -131,7 +131,7 @@ export function ConnectionsPanel() {
       )}
       {foreign.length > 0 && (
         <section className="session-group foreign-group" aria-label="In use by another window">
-          <div className="session-group-header" title="Sessions of another DbStudio window that is still open. Close or commit them there.">
+          <div className="session-group-header" title="Sessions of another Rowlit window that is still open. Close or commit them there.">
             <AppWindow size={14} className="muted" aria-hidden="true" />
             <span className="session-conn-name">In use by another window</span>
             <span className="muted">{pluralize(foreign.length, 'session')}</span>

@@ -1,5 +1,5 @@
 {
-  "path": "C:\\Users\\me\\AppData\\Roaming\\DbStudio\\sample\\shop.sqlite",
+  "path": "C:\\Users\\me\\AppData\\Roaming\\Rowlit\\sample\\shop.sqlite",
   "connectionId": "c_sample",
   "profile": {
     "id": "c_sample",
@@ -9,7 +9,7 @@
     "folder": null,
     "readOnly": false,
     "props": {
-      "path": "C:\\Users\\me\\AppData\\Roaming\\DbStudio\\sample\\shop.sqlite",
+      "path": "C:\\Users\\me\\AppData\\Roaming\\Rowlit\\sample\\shop.sqlite",
       "readOnly": false,
       "createIfMissing": false
     },

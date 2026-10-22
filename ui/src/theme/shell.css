@@ -100,14 +100,16 @@
 .brand-mark {
   display: inline-flex;
 }
-.brand-bg {
-  fill: var(--brand);
+/* the Rowlit mark (theme/brand/RowlitMark.tsx): colours come from the --brand-mark-* tokens */
+.rowlit-mark {
+  flex-shrink: 0;
+  display: block;
 }
-.brand-fg-fill {
-  fill: var(--brand-fg);
+.rowlit-mark-tile {
+  stroke: var(--brand-mark-rim);
 }
-.brand-fg-stroke {
-  stroke: var(--brand-fg);
+.rowlit-mark-row {
+  fill: var(--brand-mark-row);
 }
 .topbar-sep {
   flex-shrink: 0;
@@ -895,6 +897,27 @@ html.native-material .topbar {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+}
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.welcome-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-brand-name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.welcome-brand-tagline {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
 }
 .welcome-head h1 {
   margin: 0;

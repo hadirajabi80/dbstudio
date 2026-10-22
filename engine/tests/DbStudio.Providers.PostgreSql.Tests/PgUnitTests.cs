@@ -32,7 +32,7 @@ public sealed class PgConnectionStringTests
         Assert.False(b.Pooling);
         Assert.True(b.IncludeErrorDetail);
         Assert.Equal(SslMode.Prefer, b.SslMode);
-        Assert.Equal("DbStudio", b.ApplicationName);
+        Assert.Equal("Rowlit", b.ApplicationName);
         Assert.Equal(15, b.Timeout);
         Assert.Null(b.Options);
     }

@@ -208,7 +208,7 @@ export function createHandlers(engine: MockEngine) {
 
     // M1.5: sample database (3.8)
     http.post(`${P}/sample-db`, () => {
-      const path = String.raw`C:\Users\me\AppData\Roaming\DbStudio\sample\shop.sqlite`;
+      const path = String.raw`C:\Users\me\AppData\Roaming\Rowlit\sample\shop.sqlite`;
       const existing = engine.connections.find((c) => c.name === 'Sample: Shop');
       const profile = existing ?? engine.createConnection({ name: 'Sample: Shop', providerId: 'sqlite', color: null, folder: null, readOnly: false, props: { path }, savePassword: false, password: null });
       return ok({ path, connectionId: profile.id, profile, created: !existing });

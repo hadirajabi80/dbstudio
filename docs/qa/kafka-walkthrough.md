@@ -92,14 +92,14 @@ mock build are in `docs/qa/kafka/`.
 
 ## Native packaging (librdkafka, D8) — blocking
 28. win-x64: `scripts/build.ps1 -EngineOnly` (single file, `IncludeNativeLibrariesForSelfExtract=true`), then
-    `node scripts/ci/kafka-native-smoke.mjs engine/publish/DbStudio.Engine.exe` → "Engine native smoke ok: … librdkafka
+    `node scripts/ci/kafka-native-smoke.mjs engine/publish/Rowlit.Engine.exe` → "Engine native smoke ok: … librdkafka
     2.6.1; kafka test -> Cannot reach the Kafka brokers …". The smoke checks GET /providers (7 providers),
     GET /kafka/library (forces `Library.VersionString`) and POST /connections/test (kafka @ 127.0.0.1:1 must fail with a
     librdkafka error, `error.detail = "librdkafka 2.6.1"`; a load failure would answer ENGINE_ERROR "librdkafka-missing").
-29. macOS (CI macOS job, same script on `engine/publish/osx-arm64/DbStudio.Engine`): additionally `librdkafka.dylib` next to
+29. macOS (CI macOS job, same script on `engine/publish/osx-arm64/Rowlit.Engine`): additionally `librdkafka.dylib` next to
     the apphost for osx-arm64 and osx-x64 (`file` shows the architecture, `otool -L` only /usr/lib and /System
     dependencies), the osx-x64 engine runs the REST checks under Rosetta when available, and `codesign --verify --strict`
-    passes for every librdkafka.dylib inside `desktop/dist/**/DbStudio.app`.
+    passes for every librdkafka.dylib inside `desktop/dist/**/Rowlit.app`.
 30. Installer smoke: Kafka connection test from the installed app on Windows, Apple Silicon and Intel Macs.
 
 ### Packaging notes (measured 2026-10-18, win-x64, Release, single file, compressed)
@@ -107,7 +107,7 @@ mock build are in `docs/qa/kafka/`.
   +45 MB). The bundled natives are librdkafka.dll 2.3 MB, libcrypto-3-x64 4.7 MB, libssl-3-x64 0.8 MB, libcurl 0.6 MB,
   zstd 0.65 MB, zlib1, librdkafkacpp, msvcp140, vcruntime140 (13 MB uncompressed in the extraction folder, together
   with SNI and e_sqlite3).
-- First start (extraction to `%TEMP%\.net\DbStudio.Engine\<hash>`): ready in 0.71 s; warm start 0.52 s (< 1.5 s budget,
+- First start (extraction to `%TEMP%\.net\Rowlit.Engine\<hash>`): ready in 0.71 s; warm start 0.52 s (< 1.5 s budget,
   so the folder-layout fallback of D8 is not needed).
 - macOS (D8): `scripts/build.sh` publishes with `IncludeNativeLibrariesForSelfExtract=false`, so the SDK places
   `runtimes/osx-<arch>/native/librdkafka.dylib` (osx-arm64 6.7 MB, osx-x64 7.7 MB in librdkafka.redist 2.6.1; the smoke asserts that it links

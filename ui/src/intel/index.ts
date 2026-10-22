@@ -1,4 +1,4 @@
-// Public API of the DbStudio IntelliSense engine (PLAN 4.12). Pure TypeScript; no DOM/React/Monaco.
+// Public API of the Rowlit IntelliSense engine (PLAN 4.12). Pure TypeScript; no DOM/React/Monaco.
 import type { CatalogObject, CatalogSnapshot } from '../api/types';
 import type {
   CompletionItem, CompletionResult, DefinitionResult, Diagnostic, Dialect, HoverInfo, IntelOptions, SignatureHelpInfo,

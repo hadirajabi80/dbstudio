@@ -28,7 +28,7 @@ const CODICON_KEY: Record<string, string> = {
   Value: 'enumerator', Constructor: 'constructor', Property: 'property', Text: 'text',
 };
 
-/** DbStudio completion kind → Monaco kind, read from editor/monaco-setup.ts (KIND), so the test follows the code. */
+/** Rowlit completion kind → Monaco kind, read from editor/monaco-setup.ts (KIND), so the test follows the code. */
 function sqlKinds(): Record<string, string> {
   const src = read('editor/monaco-setup.ts');
   const block = /const KIND[^{]*\{([\s\S]*?)\n\};/.exec(src);

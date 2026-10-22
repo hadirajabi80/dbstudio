@@ -7,7 +7,7 @@ namespace DbStudio.Providers.SqlServer;
 /// <summary>Connection form and connection-string building for SQL Server (docs/PLAN.md 2.5 and 3.1).</summary>
 public static class SqlServerConnectionStrings
 {
-    public const string ApplicationName = "DbStudio";
+    public const string ApplicationName = "Rowlit";
     public const int DefaultConnectTimeout = 15;
 
     public static ConnectionFormSpec FormSpec { get; } = new(

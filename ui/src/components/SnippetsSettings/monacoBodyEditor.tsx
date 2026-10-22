@@ -1,4 +1,4 @@
-// Monaco implementation of SnippetBodyEditor: the dialect's DbStudio SQL language and theme, no line numbers, word
+// Monaco implementation of SnippetBodyEditor: the dialect's Rowlit SQL language and theme, no line numbers, word
 // wrap, auto height between MIN_H and MAX_H, and the tab stops ($1, ${1:x}, $0) marked like in the previews.
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import * as monaco from '../../editor/monaco';

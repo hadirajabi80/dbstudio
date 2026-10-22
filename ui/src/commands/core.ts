@@ -475,7 +475,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   },
 
   // Help
-  { id: 'help.about', title: 'About DbStudio', category: 'Help', icon: 'Info', run: () => toast('info', `DbStudio ${getPlatform().appVersion}`, 'A fast desktop client for SQL Server, Oracle and SQLite.') },
+  { id: 'help.about', title: 'About Rowlit', category: 'Help', icon: 'Info', run: () => toast('info', `Rowlit ${getPlatform().appVersion}`, 'See your data in a better light. A fast desktop client for SQL Server, Oracle, PostgreSQL, SQLite, Redis, MongoDB and Kafka.') },
   {
     id: 'help.checkForUpdates', title: 'Check for Updates…', category: 'Help', icon: 'RefreshCw', keywords: 'update upgrade new version release',
     run: () => checkForUpdatesNow(),

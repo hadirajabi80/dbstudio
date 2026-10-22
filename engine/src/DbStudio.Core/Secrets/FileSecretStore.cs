@@ -25,6 +25,7 @@ public sealed class FileSecretStore : PersistentSecretStoreBase
     public const string FileName = "secrets.aes.json";
     public const string KeyFileName = "secrets.key";
     private const int KeySize = 32, NonceSize = 12, TagSize = 16;
+    // Part of the encrypted format: keeps its DbStudio-era value so existing secrets stay readable after the rename.
     private static readonly byte[] AadPrefix = "DbStudio.v1.secrets:"u8.ToArray();
 
     private readonly string _file;
@@ -106,7 +107,7 @@ public sealed class FileSecretStore : PersistentSecretStoreBase
         if (File.Exists(_keyFile))
         {
             var existing = File.ReadAllBytes(_keyFile);
-            if (existing.Length != KeySize) throw new CryptographicException($"{_keyFile} is not a valid DbStudio key file.");
+            if (existing.Length != KeySize) throw new CryptographicException($"{_keyFile} is not a valid Rowlit key file.");
             RestrictPermissions(_keyFile);
             return _key = existing;
         }

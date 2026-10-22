@@ -35,6 +35,6 @@ export async function startBrowserMocks(): Promise<MockEngine> {
   };
 
   (window as unknown as { __mockEngine?: MockEngine }).__mockEngine = engine;
-  console.info('[DbStudio] running against the in-browser mock engine');
+  console.info('[Rowlit] running against the in-browser mock engine');
   return engine;
 }

@@ -35,7 +35,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Serilog;
 using Serilog.Events;
 
-// DbStudio engine: ASP.NET Core minimal API on 127.0.0.1 (docs/PLAN.md sections 1–3).
+// Rowlit engine (DbStudio.* projects): ASP.NET Core minimal API on 127.0.0.1 (docs/PLAN.md sections 1–3).
 // stdout carries exactly one line, "DBSTUDIO_READY {...}"; every log goes to the rolling file (and stderr with --dev).
 
 EngineOptions options;

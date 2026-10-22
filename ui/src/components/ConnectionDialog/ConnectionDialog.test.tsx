@@ -78,7 +78,7 @@ describe('ConnectionDialog', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('inventory');
     await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await user.type(screen.getByLabelText('Folder'), 'Local');
-    await user.click(screen.getByRole('checkbox', { name: /^Read-only \(DbStudio blocks statements that change data\)$/ }));
+    await user.click(screen.getByRole('checkbox', { name: /^Read-only \(Rowlit blocks statements that change data\)$/ }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -104,7 +104,7 @@ describe('ConnectionDialog', () => {
     expect(screen.getByRole('option', { name: 'Oracle' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Open file read-only' })).toBeInTheDocument();
     // design-r1-05: the engine guard has the one "Read-only" label every provider shows; the SQLite file mode is its own field
-    expect(screen.getByRole('checkbox', { name: /^Read-only \(DbStudio blocks statements that change data\)$/ })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /^Read-only \(Rowlit blocks statements that change data\)$/ })).toBeInTheDocument();
   });
 
   it('edits an existing connection keeping the stored password', async () => {

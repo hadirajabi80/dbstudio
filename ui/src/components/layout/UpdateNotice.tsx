@@ -3,8 +3,8 @@ import { openReleasePage, restartToUpdate } from '../../app/updates';
 import { updateNotice, useUpdates } from '../../store/updates';
 
 /**
- * Unobtrusive, persistent card in the toast stack (bottom right): "DbStudio X.Y.Z is ready — Restart now / Later"
- * once an update is downloaded (Windows, signed macOS; Later installs on quit), or "DbStudio X.Y.Z is available —
+ * Unobtrusive, persistent card in the toast stack (bottom right): "Rowlit X.Y.Z is ready — Restart now / Later"
+ * once an update is downloaded (Windows, signed macOS; Later installs on quit), or "Rowlit X.Y.Z is available —
  * Download / Later" on an ad-hoc signed macOS build, where Download opens the release page.
  */
 export function UpdateNotice() {
@@ -19,7 +19,7 @@ export function UpdateNotice() {
       {ready ? <RefreshCw size={16} className="toast-icon" /> : <Download size={16} className="toast-icon" />}
       <div className="toast-body">
         <div className="toast-text">
-          DbStudio {notice.version} is {ready ? 'ready' : 'available'}
+          Rowlit {notice.version} is {ready ? 'ready' : 'available'}
         </div>
         <div className="toast-detail">
           {ready ? 'Restart to finish updating, or it installs when you quit.' : 'Download the new version from GitHub.'}

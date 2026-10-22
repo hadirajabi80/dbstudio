@@ -36,7 +36,7 @@ Pass/fail per step. Run in both themes and at 150 % app zoom. Keyboard-only step
 9. MongoDB: Server log (getLog; "showing the last 1024 lines" note), one Profiler source per database (profiling off →
    hint with `db.getSiblingDB("shop").setProfilingLevel(1, { slowms: 100 })`), Change stream (replica set only; standalone
    shows the reason), Current operations. As `app`: clusterMonitor grant text.
-10. Kafka: Client log (librdkafka) with the note that Kafka has no broker log over the protocol; Activity lists DbStudio's
+10. Kafka: Client log (librdkafka) with the note that Kafka has no broker log over the protocol; Activity lists Rowlit's
     own fetch jobs and tails (cancel = Kill).
 11. SQLite: only the engine log is offered; Activity says it is not available for this connection.
 

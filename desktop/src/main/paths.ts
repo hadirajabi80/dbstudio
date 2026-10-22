@@ -1,15 +1,28 @@
 import { app } from 'electron';
 import * as path from 'node:path';
+import { resolveDataDir, type DataDirResult } from './data-dir';
+
+let resolved: DataDirResult | null = null;
 
 /**
- * <appData>/DbStudio — shared with the engine (history.db, settings, connections); the engine computes the same
- * folder (engine/src/DbStudio.Core/Platform/DataDirectory.cs):
- *   Windows %APPDATA%\DbStudio, macOS ~/Library/Application Support/DbStudio, Linux $XDG_CONFIG_HOME|~/.config/DbStudio.
- * DBSTUDIO_DATA_DIR overrides it (tests use a temp folder so they never touch real user data).
+ * <appData>/Rowlit: shared with the engine (history.db, settings, connections, secrets) and holding the Chromium
+ * profile. Resolved once per process; a packaged build moves an existing DbStudio folder here on first start
+ * (data-dir.ts). DBSTUDIO_DATA_DIR overrides it (tests use a temp folder so they never touch real user data).
  */
+export function initDataDir(): DataDirResult {
+  if (!resolved) {
+    resolved = resolveDataDir({
+      appData: app.getPath('appData'),
+      env: process.env,
+      migrate: app.isPackaged,
+      appVersion: app.getVersion(),
+    });
+  }
+  return resolved;
+}
+
 export function dataDir(): string {
-  if (process.env.DBSTUDIO_DATA_DIR) return path.resolve(process.env.DBSTUDIO_DATA_DIR);
-  return path.join(app.getPath('appData'), 'DbStudio');
+  return initDataDir().dir;
 }
 
 /** Chromium profile (cache, local storage, window state) lives below the data dir, not mixed into it. */

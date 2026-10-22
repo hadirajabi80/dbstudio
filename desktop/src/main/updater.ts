@@ -24,7 +24,7 @@ function broadcast(status: UpdateStatus): void {
   }
 }
 
-/** codesign of the running .app (Contents/MacOS/DbStudio -> DbStudio.app). Any failure counts as not signed. */
+/** codesign of the running .app (Contents/MacOS/Rowlit -> Rowlit.app). Any failure counts as not signed. */
 function macSignature(): Promise<MacSignature> {
   const bundle = path.resolve(path.dirname(process.execPath), '..', '..');
   return new Promise((resolve) => {

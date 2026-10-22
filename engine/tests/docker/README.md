@@ -139,7 +139,7 @@ curl -s $h -X POST http://127.0.0.1:5121/api/v1/sessions/$SID/execute -d '{"batc
 `docker compose -f engine/tests/docker/compose.yml --profile kafka up -d`, then `bash engine/tests/docker/seed-kafka.sh`
 (topics `orders` (3 partitions, 120 JSON messages with keys and headers), `payments-avro`, `events-proto`,
 `compacted-users`; Schema Registry subjects `payments-avro-value` (Avro) and `events-proto-value` (Protobuf); groups
-`billing` (lag) and `shipping`). DbStudio connection: bootstrap `localhost:19092`, PLAINTEXT, Schema Registry
+`billing` (lag) and `shipping`). Rowlit connection: bootstrap `localhost:19092`, PLAINTEXT, Schema Registry
 `http://localhost:18081`.
 
 ```powershell

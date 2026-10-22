@@ -1,11 +1,13 @@
 import { ArrowRight, File, FolderOpen, Sparkles, SquareTerminal } from 'lucide-react';
 import type { ProviderId } from '../../api/types';
+import { APP_NAME, APP_TAGLINE } from '../../app/brand';
 import { connectAndOpen, openSampleDatabase, openSqliteFile } from '../../app/actions';
 import { useConnections } from '../../store/connections';
 import { useUi } from '../../store/ui';
 import { ColorDot } from '../common/ConnectionBadge';
 import { PROVIDER_LABEL } from '../common/icons';
 import { ProviderLogo } from '../../theme/brand/ProviderLogo';
+import { RowlitMark } from '../../theme/brand/RowlitMark';
 import { Kbd } from '../Shortcuts/Kbd';
 
 const PROVIDERS: { id: ProviderId; blurb: string }[] = [
@@ -31,6 +33,13 @@ export function Welcome({ ready }: { ready: boolean }) {
     <div className="welcome" role="region" aria-label="Welcome">
       <div className="welcome-inner">
         <header className="welcome-head">
+          <div className="welcome-brand">
+            <RowlitMark size={40} />
+            <span className="welcome-brand-text">
+              <span className="welcome-brand-name">{APP_NAME}</span>
+              <span className="welcome-brand-tagline">{APP_TAGLINE}</span>
+            </span>
+          </div>
           <h1>{first ? 'Connect to a database' : 'Welcome back'}</h1>
           <p>
             {first

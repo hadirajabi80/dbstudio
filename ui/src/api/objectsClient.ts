@@ -9,7 +9,7 @@ type Query = Record<string, string | null | undefined>;
 
 async function getJson<T>(path: string, query: Query, signal?: AbortSignal): Promise<T> {
   const c = getClientConfig();
-  if (!c) throw new ApiError('NETWORK', 'The DbStudio engine is not connected yet', 0);
+  if (!c) throw new ApiError('NETWORK', 'The Rowlit engine is not connected yet', 0);
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) if (v) qs.set(k, v);
   const url = `${c.baseUrl}${API_PREFIX}${path}${qs.size ? `?${qs}` : ''}`;
@@ -18,7 +18,7 @@ async function getJson<T>(path: string, query: Query, signal?: AbortSignal): Pro
     res = await fetch(url, { headers: { Authorization: `Bearer ${c.token}`, [CLIENT_ID_HEADER]: uiClientId() }, signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw new ApiError('ABORTED', 'Request aborted', 0);
-    throw new ApiError('NETWORK', `Cannot reach the DbStudio engine (${errorMessage(e)})`, 0);
+    throw new ApiError('NETWORK', `Cannot reach the Rowlit engine (${errorMessage(e)})`, 0);
   }
   const text = await res.text();
   if (!res.ok) {

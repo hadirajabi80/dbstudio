@@ -89,6 +89,10 @@ public sealed class SecurityCli : ISecurityCli
 /// </summary>
 public sealed partial class KeychainSecretStore : PersistentSecretStoreBase
 {
+    /// <summary>
+    /// Keychain service of every saved password. Keeps the DbStudio-era name after the product was renamed to Rowlit:
+    /// passwords saved by DbStudio &lt;= 1.1.0 are found under it, so nothing has to be migrated.
+    /// </summary>
     public const string DefaultService = "DbStudio";
     private const string Prefix = "b64:";
     /// <summary>errSecItemNotFound as reported by the security tool.</summary>

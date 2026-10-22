@@ -189,7 +189,7 @@ export function CodegenTabView({ tab, theme, visible }: TabViewProps) {
     const ok = await useUi.getState().askConfirm({
       title: 'Run the procedure to infer its result columns?',
       message:
-        `Use this only when SQL Server cannot describe ${name} without running it. DbStudio runs it with NULL parameters inside a transaction, rolls it back and reads the shape of its first result set. ` +
+        `Use this only when SQL Server cannot describe ${name} without running it. Rowlit runs it with NULL parameters inside a transaction, rolls it back and reads the shape of its first result set. ` +
         'Side effects outside the transaction are NOT rolled back: e-mail (sp_send_dbmail), sequence values, linked-server calls, xp_ procedures, file or network access.',
       items: [sql],
       confirmLabel: 'Run and roll back',

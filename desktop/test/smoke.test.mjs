@@ -121,7 +121,7 @@ it('electron app: engine that never becomes ready hits the timeout path and is k
   const r = JSON.parse(line.slice('DBSTUDIO_SMOKE_RESULT '.length));
   assert.equal(r.startFailed, true);
   assert.match(r.error, /did not report ready within 2 s/);
-  assert.match(r.errorPage, /^The DbStudio engine could not be started \| \d+/);
+  assert.match(r.errorPage, /^The Rowlit engine could not be started \| \d+/);
   const log = readFileSync(join(dataDir, 'logs', 'engine-process.log'), 'utf8');
   const childPids = [...log.matchAll(/FAKE_CHILD_PID (\d+)/g)].map((m) => Number(m[1]));
   assert.equal(childPids.length, 1);

@@ -1,4 +1,4 @@
-// The DbStudio SQL editor: Monaco + the intel engine (completion, signature help, hover, F12, soft and server
+// The Rowlit SQL editor: Monaco + the intel engine (completion, signature help, hover, F12, soft and server
 // diagnostics) with SSMS/DataGrip run keybindings. Implements the frozen SqlEditor.types.ts contract.
 //
 // Multi-instance safety: every keybinding is a per-editor action (addAction), global Monaco registrations happen
@@ -291,7 +291,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     // Ctrl+Shift+L is Explain (actual) in M1.5 (PLAN-M1.5 section 3 reserved shortcuts); lower case keeps its palette entry
     subs.push(ed.addAction({ id: 'dbstudio.lowerCase', label: 'Transform to Lower Case', run: (x) => x.trigger('dbstudio', 'editor.action.transformToLowercase', {}) }));
     // M1.5 (WP-H): formatter, snippets, explain. KeyMod.CtrlCmd = Ctrl on Windows/Linux, Cmd on macOS.
-    // Format Document (Shift+Alt+F, context menu) is Monaco's built-in command over the DbStudio formatting
+    // Format Document (Shift+Alt+F, context menu) is Monaco's built-in command over the Rowlit formatting
     // provider (monaco-setup.ts); a second custom action would list the same command twice.
     // Ctrl+Alt+L (⌘⌥L, DataGrip's "Reformat code", user-01) runs the same command. Inside a console the registry's
     // format.document gets the key first (capture phase); this covers the other editors (designers, wizards). A key

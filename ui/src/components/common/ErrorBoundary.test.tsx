@@ -98,7 +98,7 @@ describe('ErrorBoundary panel', () => {
   });
 
   it('the root panel offers "Reload window"; in the browser there is no "Open engine log"', () => {
-    render(<ErrorBoundary area="DbStudio" variant="root"><Thrower /></ErrorBoundary>);
+    render(<ErrorBoundary area="Rowlit" variant="root"><Thrower /></ErrorBoundary>);
     expect(screen.getByRole('button', { name: /Reload window/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Try again/ })).toHaveFocus();
     expect(screen.queryByRole('button', { name: /Open engine log/ })).toBeNull();
