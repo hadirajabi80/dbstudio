@@ -59,7 +59,9 @@ public sealed class OracleParamBinder : ParamBinderBase
                 break;
             case ParamKinds.Decimal:
                 parameter.OracleDbType = OracleDbType.Decimal;
-                parameter.Value = value ?? DBNull.Value;
+                // NUMBER holds 38 digits, System.Decimal only 28-29: a longer value (1/3 read back from the grid) is bound
+                // as an OracleDecimal from its text, so it is neither rounded nor fails the "verify unchanged" comparison.
+                parameter.Value = p.EffectiveDirection != ParamDirections.Out && ExactDecimal(p) is { } exact ? exact : value ?? DBNull.Value;
                 break;
             case ParamKinds.Float:
                 parameter.OracleDbType = OracleDbType.BinaryDouble;
@@ -105,6 +107,88 @@ public sealed class OracleParamBinder : ParamBinderBase
                 break;
         }
         return parameter;
+    }
+
+    /// <summary>
+    /// The value of a decimal param as an <see cref="OracleDecimal"/> when System.Decimal would lose digits of it (more than
+    /// 28 significant digits, or an exponent outside its range); null when System.Decimal holds it exactly.
+    /// </summary>
+    public static OracleDecimal? ExactDecimal(QueryParam p)
+    {
+        if (p.Value is not System.Text.Json.Nodes.JsonValue jv) return null;
+        var text = (jv.GetValueKind() == System.Text.Json.JsonValueKind.String ? jv.GetValue<string>() : jv.ToJsonString()).Trim();
+        if (text.Length == 0) return null;
+        if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var m) && SameNumber(m, text)) return null;
+        try
+        {
+            return ParseExact(NormalizeNumberText(text));
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException or OracleTypeException)
+        {
+            return null; // ParamValues.ToClr reports values that are not numbers
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="m"/> keeps every significant digit written in <paramref name="text"/>: System.Decimal
+    /// rounds after 28-29 digits (and turns 1E-40 into 0) without failing. The magnitude cannot differ otherwise (an
+    /// overflow fails TryParse), so comparing the significant digits is enough.
+    /// </summary>
+    private static bool SameNumber(decimal m, string text) =>
+        SignificantDigits(text) == SignificantDigits(m.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>"-001.2300E+5" → "123": the mantissa digits without sign, point, leading and trailing zeros.</summary>
+    private static string SignificantDigits(string text)
+    {
+        var e = text.IndexOfAny(['e', 'E']);
+        var mantissa = e < 0 ? text : text[..e];
+        return new string(mantissa.Where(char.IsAsciiDigit).ToArray()).Trim('0');
+    }
+
+    /// <summary>
+    /// Plain decimal text → OracleDecimal with all of its digits. A NUMBER keeps up to 40 significant digits (1/3 reads
+    /// back as 0.3333…3 with 40 threes) but OracleDecimal.Parse fails above 38, so the digits are parsed in chunks and
+    /// combined with OracleDecimal arithmetic (exact: only powers of ten and integer chunks are involved).
+    /// </summary>
+    public static OracleDecimal ParseExact(string plain)
+    {
+        var t = plain.Trim();
+        var negative = t.StartsWith('-');
+        t = t.TrimStart('-', '+');
+        var point = t.IndexOf('.');
+        var scale = point < 0 ? 0 : t.Length - point - 1;
+        var digits = (point < 0 ? t : t.Remove(point, 1)).TrimStart('0');
+        if (digits.Length == 0) return OracleDecimal.Zero;
+        if (digits.Any(c => !char.IsAsciiDigit(c))) throw new FormatException($"'{plain}' is not a number.");
+        var value = OracleDecimal.Zero;
+        for (var i = 0; i < digits.Length; i += 18)
+        {
+            var chunk = digits.Substring(i, Math.Min(18, digits.Length - i));
+            value = OracleDecimal.Add(OracleDecimal.Multiply(value, Pow10(chunk.Length)), OracleDecimal.Parse(chunk));
+        }
+        if (scale > 0) value = OracleDecimal.Multiply(value, OracleDecimal.Parse("0." + new string('0', scale - 1) + "1"));
+        return negative ? OracleDecimal.Negate(value) : value;
+
+        static OracleDecimal Pow10(int n) => OracleDecimal.Parse("1" + new string('0', n));
+    }
+
+    /// <summary>OracleDecimal.Parse takes plain decimal text: "1.5E+3" is expanded to "1500".</summary>
+    private static string NormalizeNumberText(string text)
+    {
+        var e = text.IndexOfAny(['e', 'E']);
+        if (e < 0) return text;
+        var exponent = int.Parse(text[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        var mantissa = text[..e];
+        var negative = mantissa.StartsWith('-');
+        mantissa = mantissa.TrimStart('-', '+');
+        var point = mantissa.IndexOf('.');
+        var digits = mantissa.Replace(".", "", StringComparison.Ordinal);
+        var intLen = (point < 0 ? mantissa.Length : point) + exponent;
+        string result;
+        if (intLen <= 0) result = "0." + new string('0', -intLen) + digits;
+        else if (intLen >= digits.Length) result = digits + new string('0', intLen - digits.Length);
+        else result = digits[..intLen] + "." + digits[intLen..];
+        return (negative ? "-" : "") + result;
     }
 
     private static string FormatOffset(TimeSpan offset) =>

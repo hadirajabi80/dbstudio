@@ -107,7 +107,8 @@ public sealed class OracleScripterGoldenTests
     public void Views_OrReplace_Force_Rename()
     {
         // Renamed: a plain CREATE of the new name (ORA-00955 when it exists, never replaced), then the old view dropped.
-        var s = Scripter.ScriptView(new ViewDefinition(null, "order_totals", "totals", "SELECT customer_id, SUM(total) total FROM orders GROUP BY customer_id;\n/", new ViewOptions(Force: true, CheckOption: true)), Context);
+        // The original name is the stored spelling (as read from the server); the new name folds to upper case.
+        var s = Scripter.ScriptView(new ViewDefinition(null, "order_totals", "TOTALS", "SELECT customer_id, SUM(total) total FROM orders GROUP BY customer_id;\n/", new ViewOptions(Force: true, CheckOption: true)), Context);
         Assert.False(s.Transactional);
         Assert.Equal(2, s.Statements.Count);
         Assert.Equal("CREATE FORCE VIEW SHOP.ORDER_TOTALS AS\nSELECT customer_id, SUM(total) total FROM orders GROUP BY customer_id\nWITH CHECK OPTION", s.Statements[0].Sql);
@@ -119,6 +120,53 @@ public sealed class OracleScripterGoldenTests
         Assert.Equal("CREATE VIEW SHOP.ORDER_TOTALS AS\nSELECT 1 x FROM dual", Assert.Single(created.Statements).Sql);
         var edited = Scripter.ScriptView(new ViewDefinition(null, "order_totals", "ORDER_TOTALS", "SELECT 1 x FROM dual", new ViewOptions()), Context);
         Assert.Equal("CREATE OR REPLACE VIEW SHOP.ORDER_TOTALS AS\nSELECT 1 x FROM dual", Assert.Single(edited.Statements).Sql);
+
+        // A stored lower-case (quoted) view keeps its exact name when edited, and is dropped by it when renamed.
+        var lower = Scripter.ScriptView(new ViewDefinition("SHOP", "order_totals", "order_totals", "SELECT 1 x FROM dual", new ViewOptions()), Context);
+        Assert.Equal("CREATE OR REPLACE VIEW SHOP.\"order_totals\" AS\nSELECT 1 x FROM dual", Assert.Single(lower.Statements).Sql);
+        var renamed = Scripter.ScriptView(new ViewDefinition("SHOP", "totals2", "order_totals", "SELECT 1 x FROM dual", new ViewOptions()), Context);
+        Assert.Equal("CREATE VIEW SHOP.TOTALS2 AS\nSELECT 1 x FROM dual", renamed.Statements[0].Sql);
+        Assert.Equal("DROP VIEW SHOP.\"order_totals\"", renamed.Statements[1].Sql);
+    }
+
+    /// <summary>
+    /// A table whose stored names are lower case (created quoted: "lower_tab", columns "id", "select") is altered by
+    /// those exact names; only names the user typed anew fold to upper case.
+    /// </summary>
+    [Fact]
+    public void StoredLowerCaseNames_AreNotFolded()
+    {
+        var original = new TableModel
+        {
+            Schema = "SHOP", Name = "lower_tab",
+            Columns =
+            [
+                new TableColumnModel { Id = "id", Name = "id", Type = "NUMBER(10)", Nullable = false },
+                new TableColumnModel { Id = "Name", Name = "Name", Type = "VARCHAR2(30)" },
+                new TableColumnModel { Id = "select", Name = "select", Type = "VARCHAR2(10)" },
+            ],
+            PrimaryKey = new PrimaryKeyModel { Name = "SYS_C001", Columns = ["id"] },
+        };
+        var desired = original with
+        {
+            Columns =
+            [
+                original.Columns[0],
+                original.Columns[1] with { Name = "full_name", Type = "VARCHAR2(60)", Comment = "c" },
+                new TableColumnModel { Name = "newcol", Type = "NUMBER(5)" },
+            ],
+        };
+        var sql = Scripter.ScriptTable(original, desired, Context).Statements.Select(s => s.Sql).ToList();
+        Assert.Equal(
+        [
+            "ALTER TABLE SHOP.\"lower_tab\" DROP COLUMN \"select\"",
+            "ALTER TABLE SHOP.\"lower_tab\" RENAME COLUMN \"Name\" TO FULL_NAME",
+            "ALTER TABLE SHOP.\"lower_tab\" MODIFY (FULL_NAME VARCHAR2(60))",
+            "ALTER TABLE SHOP.\"lower_tab\" ADD (NEWCOL NUMBER(5))",
+            "COMMENT ON COLUMN SHOP.\"lower_tab\".FULL_NAME IS 'c'",
+        ], sql);
+        // Unchanged: no statements (the stored names are not "renamed" to their folded spelling).
+        Assert.Empty(Scripter.ScriptTable(original, original, Context).Statements);
     }
 }
 
@@ -223,6 +271,33 @@ public sealed class OracleParamBinderTests
         Assert.Equal(2, bound.Outputs.Count());
     }
 
+    /// <summary>
+    /// NUMBER values beyond System.Decimal (up to 40 significant digits, as 1/3 is read back) bind as an exact
+    /// OracleDecimal, so a grid edit neither rounds them nor fails the "verify unchanged" comparison.
+    /// </summary>
+    [Fact]
+    public void Bind_DecimalBeyondSystemDecimal_IsExact()
+    {
+        static QueryParam P(string v) => new("p", ParamKinds.Decimal, JsonValue.Create(v));
+        var third = global::Oracle.ManagedDataAccess.Types.OracleDecimal.Divide(1, 3);
+        var exact = OracleParamBinder.ExactDecimal(P("0." + new string('3', 40)));
+        Assert.NotNull(exact);
+        Assert.Equal(third.ToString(), exact.Value.ToString());
+        Assert.Equal("-1234567890123456789012345678901234.5678", OracleParamBinder.ExactDecimal(P("-1234567890123456789012345678901234.5678"))!.Value.ToString());
+        Assert.Equal("0." + new string('0', 99) + "15", OracleParamBinder.ExactDecimal(P("1.5E-100"))!.Value.ToString());
+        // System.Decimal holds these exactly: the ordinary decimal bind is kept.
+        Assert.Null(OracleParamBinder.ExactDecimal(P("12.5")));
+        Assert.Null(OracleParamBinder.ExactDecimal(P("12345678901234567890.25")));
+        Assert.Null(OracleParamBinder.ExactDecimal(P("1.5E+3")));
+        Assert.Null(OracleParamBinder.ExactDecimal(P("not a number")));
+
+        using var cmd = new OracleCommand("SELECT :p FROM dual") { BindByName = true };
+        OracleParamBinder.Instance.Bind(cmd, [P("0." + new string('3', 40))], new ParamBindCursor());
+        var parameter = (OracleParameter)cmd.Parameters[0];
+        Assert.Equal(OracleDbType.Decimal, parameter.OracleDbType);
+        Assert.Equal(third.ToString(), parameter.Value!.ToString());
+    }
+
     [Fact]
     public void ToWire_ConvertsOracleTypes()
     {
@@ -233,6 +308,7 @@ public sealed class OracleParamBinderTests
 }
 
 /// <summary>Live Oracle: params, describe, explain, designer round trip (skipped without Docker).</summary>
+[Collection(ShopSchemaWriters.Name)]
 public sealed class OracleM15ConformanceTests(OracleFixture fixture) : M15ConformanceTests<OracleFixture>(fixture)
 {
     protected override IDdlScripter Scripter { get; } = new OracleDdlScripter();

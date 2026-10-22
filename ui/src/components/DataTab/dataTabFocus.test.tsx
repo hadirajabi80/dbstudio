@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { api } from '../../api/client';
 import type { CellValue, ColumnInfo, ColumnKind, ObjectDetails } from '../../api/types';
 import { installGridMockEngine, until } from '../../mocks/m15/testServer';
+import { useCatalog } from '../../store/catalog';
 import { useConnections } from '../../store/connections';
 import { useEdits } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
@@ -182,6 +183,13 @@ describe('Data tab pending edits and the filter bar (design-r1-02)', () => {
 // dataTabKeyless.test.tsx.
 describe('keyless paging order (features-r1-04)', () => {
   const pages = () => calls.filter((c) => c.includes('LIMIT'));
+  // The mock catalog knows customers' primary key, and a data tab loads its table's schema: these cases are about an
+  // object whose key is unknown, so no catalog is available.
+  beforeEach(() => {
+    useCatalog.setState({ dbs: {} });
+    vi.spyOn(api, 'catalog').mockRejectedValue(new Error('catalog unavailable'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
 
   it('a large keyless object pages unordered and says so', async () => {
     columns = KEYLESS;

@@ -14,7 +14,7 @@ import type { CellValue, ColumnInfo } from '../../api/types';
 import { catalogDatabase, idleSessionTabs, offerCloseIdle } from '../../app/actions';
 import { runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
-import { countSql, describeSql, distinctSql, keylessOrder, selectPageSql, uniqueOrderKey, type SortSpec, type TableTarget } from '../../data/sqlgen';
+import { countSql, describeSql, distinctSql, isRowidColumn, keylessOrder, selectPageSql, uniqueOrderKey, type SortSpec, type TableTarget } from '../../data/sqlgen';
 import { buildPredicate, type PredicateResult } from '../../filter/sql';
 import { appendAnd, columnSignature, normalizeNode, type FilterGroup, type GridViewModel, type SortKey } from '../../filter/model';
 import { countActiveConditions } from '../../filter/values';
@@ -22,7 +22,7 @@ import type { ExecParam } from '../../filter/wire';
 import { ChunkedList } from '../../lib/chunked';
 import { formatCount, formatDuration } from '../../lib/format';
 import type { CellLocator } from '../../lib/serialize';
-import { useCatalog, useSnapshot } from '../../store/catalog';
+import { dbKey, useCatalog, useSnapshot } from '../../store/catalog';
 import { useConnection, useDialect } from '../../store/connections';
 import { hasPending, pendingCount, useEditBuffer, useEdits } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
@@ -163,23 +163,44 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
     return next;
   }, []);
   const lastNonce = useRef(state.nonce);
-  const session = useSessions((s) => s.sessions[s.byTab[tab.id]]);
 
-  const found = useMemo(() => findTable(snapshot, state.schema, state.name), [snapshot, state.schema, state.name]);
+  const session = useSessions((s) => s.sessions[s.byTab[tab.id]]);
+  /** Oracle: unqualified names resolve in the tab session's CURRENT_SCHEMA (the tab's schema), not the login schema. */
+  const currentSchema = dialect === 'plsql' ? (session?.database ?? database ?? null) : null;
+  const found = useMemo(() => findTable(snapshot, state.schema, state.name, currentSchema), [snapshot, state.schema, state.name, currentSchema]);
   const isView = state.type === 'view' || found?.obj.t === 'view';
-  const columns = useMemo(() => data.columns ?? [], [data.columns]);
+  /** Every column read, including the hidden Oracle ROWID of a keyless table (always the last one). */
+  const allColumns = useMemo(() => data.columns ?? [], [data.columns]);
+  /** The columns shown, filtered, sorted and exported: the table's own columns. */
+  const columns = useMemo(() => allColumns.filter((c) => !isRowidColumn(c, dialect)), [allColumns, dialect]);
   const keyColumns = useMemo(() => {
     if (found?.obj.pk?.length) return found.obj.pk;
     return columns.filter((c) => c.isKey).map((c) => c.name);
   }, [found, columns]);
   const target: TableTarget = useMemo(
-    () => ({ schema: found?.schema ?? state.schema, name: found?.obj.n ?? state.name, keyColumns, defaultSchema: snapshot?.defaultSchema ?? null }),
-    [found, state.schema, state.name, keyColumns, snapshot?.defaultSchema],
+    () => ({ schema: found?.schema ?? state.schema, name: found?.obj.n ?? state.name, keyColumns, defaultSchema: currentSchema ?? snapshot?.defaultSchema ?? null }),
+    [found, state.schema, state.name, keyColumns, currentSchema, snapshot?.defaultSchema],
   );
   const editability = useMemo(
-    () => (data.columns ? tableEditability(data.columns, state.schema, state.name, snapshot, conn, isView) : null),
-    [data.columns, state.schema, state.name, snapshot, conn, isView],
+    () => (data.columns ? tableEditability(data.columns, state.schema, state.name, snapshot, conn, isView, dialect, currentSchema) : null),
+    [data.columns, state.schema, state.name, snapshot, conn, isView, dialect, currentSchema],
   );
+  // The table's schema may not be loaded in the catalog yet (opened from search, FK navigation, a restored tab): its
+  // primary key, identity and computed columns decide what can be edited, so load it.
+  const schemasKnown = useCatalog((s) => !!s.dbs[dbKey(connectionId, catDb)]?.schemasResp);
+  useEffect(() => {
+    if (!connectionId || !state.schema) return;
+    if (!schemasKnown) {
+      // Nothing of this connection's catalog loaded yet (a restored tab, the explorer collapsed): the default schema
+      // and the schema list first, then the table's own schema (this effect runs again).
+      void useCatalog.getState().ensureDefault(connectionId, catDb).catch(() => undefined);
+      return;
+    }
+    const d = useCatalog.getState().dbs[dbKey(connectionId, catDb)];
+    if (!d?.schemasResp || d.schemaStatus[state.schema]) return;
+    if (!d.schemasResp.schemas.some((s) => s.name === state.schema)) return;
+    void useCatalog.getState().loadSchema(connectionId, catDb, state.schema).catch(() => undefined);
+  }, [connectionId, catDb, state.schema, schemasKnown]);
   const fks = useMemo<FkLink[]>(() => (data.columns ? foreignKeys(data.columns, target.schema, target.name, snapshot) : []), [data.columns, target, snapshot]);
   const refs = useMemo(() => referencingTables(target.schema, target.name, snapshot), [target, snapshot]);
   const overlay = useMemo(() => overlayRows(data.rows, buffer.committed), [data.rows, data.rev, buffer.committed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,15 +232,15 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   );
 
   const predicate = useMemo(
-    () => (data.columns ? buildPredicate(filter, data.columns, dialect, { alias: null, quick }) : null),
-    [data.columns, filter, quick, dialect],
+    () => (data.columns ? buildPredicate(filter, columns, dialect, { alias: null, quick }) : null),
+    [data.columns, columns, filter, quick, dialect],
   );
   const sortKeys = useMemo<SortKey[]>(
     () => sortNames.map((s) => ({ column: columns.findIndex((c) => c.name === s.column), dir: s.dir })).filter((k) => k.column >= 0),
     [sortNames, columns],
   );
   // Null until the columns are known: the first load computes the same signature itself (no double page 0 / COUNT).
-  const sigNow = data.columns && predicate ? querySig(connectionId, predicate, specFor(sortNames, data.columns)) : null;
+  const sigNow = data.columns && predicate ? querySig(connectionId, predicate, specFor(sortNames, columns)) : null;
   const loadedSig = useRef<string | null>(null);
   const pending = pendingCount(buffer.pending);
   /**
@@ -232,6 +253,10 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   const uniqueKey = useRef<string[] | null | undefined>(undefined);
   /** ORDER BY fallback the loaded rows were read with (keyless objects; null = no ORDER BY). */
   const loadedFallback = useRef<string[] | null>(null);
+  /** The loaded rows carry the hidden Oracle ROWID column (keyless table, see TableTarget.rowid). */
+  const withRowid = useRef(false);
+  /** Selecting ROWID failed once for this object: read it without (and read-only) from now on. */
+  const rowidRefused = useRef(false);
 
   /** COUNT(*) on the tab's own session, queued behind the page that asked for it. */
   const runCountNow = async (where: string | null, params: ExecParam[], seq: number, t: TableTarget) => {
@@ -352,8 +377,10 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
         if (probe.error || !probe.resultSets[0]) throw Object.assign(new Error(probe.error?.message ?? 'Could not read the columns'), { code: probe.error?.code ?? null });
         cols = probe.resultSets[0].columns;
       }
-      const pred = buildPredicate(filter, cols, dialect, { alias: null, quick });
-      const spec = specFor(sortNames, cols);
+      // The hidden ROWID column of an earlier page is neither searched nor sorted.
+      const own = cols.filter((c) => !isRowidColumn(c, dialect));
+      const pred = buildPredicate(filter, own, dialect, { alias: null, quick });
+      const spec = specFor(sortNames, own);
       const sig = querySig(connectionId, pred, spec);
       loadedSig.current = sig;
       // Paging order (features-r1-04): the primary key, else a unique index/constraint (tables), else a fallback that
@@ -380,11 +407,28 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
         }
       }
       const replace = offset === 0;
-      const t: TableTarget = { ...target, keyColumns: keys, ...(fallback ? { orderFallback: fallback } : {}) };
-      const page = selectPageSql(t, dialect, { where: pred.where, sort: spec, offset, limit, serverVersion: s.serverInfo.productVersion });
+      // Oracle table without a primary key: read ROWID too (hidden last column), so its rows can be edited by ROWID.
+      // Decided with page 0; later pages keep the same columns.
+      if (req === 0) withRowid.current = dialect === 'plsql' && !isView && !found?.obj.pk?.length && !rowidRefused.current;
+      const t: TableTarget = { ...target, keyColumns: keys, ...(fallback ? { orderFallback: fallback } : {}), ...(withRowid.current ? { rowid: true } : {}) };
+      let page = selectPageSql(t, dialect, { where: pred.where, sort: spec, offset, limit, serverVersion: s.serverInfo.productVersion });
       // One history entry per (re)load of the table; later pages are internal.
-      const res = await run(s.sessionId, page.sql, pred.params, { label: 'data', maxRows: limit, source, ...(req === 'next' ? { skipHistory: true } : {}) });
+      const runPage = () => run(s.sessionId, page.sql, pred.params, { label: 'data', maxRows: limit, source, ...(req === 'next' ? { skipHistory: true } : {}) });
+      let res = await runPage();
       if (seq !== loadSeq.current) return;
+      if ((res.error || res.status === 'error') && withRowid.current && req === 0) {
+        // An object without ROWID (a complex view opened as a table, an external table: ORA-01445/01446/02031): read it
+        // without, read-only. When that fails too, the error is not about ROWID (a bad filter) and ROWID stays.
+        const first = page;
+        page = selectPageSql({ ...t, rowid: false }, dialect, { where: pred.where, sort: spec, offset, limit, serverVersion: s.serverInfo.productVersion });
+        const retry = await runPage();
+        if (seq !== loadSeq.current) return;
+        if (!retry.error && retry.status === 'ok') {
+          rowidRefused.current = true;
+          withRowid.current = false;
+          res = retry;
+        } else page = first;
+      }
       if (res.error || res.status !== 'ok') {
         colsRef.current = cols;
         setData((d) => ({ ...d, columns: cols, loading: false, error: res.error?.message ?? `Query ${res.status}`, errorCode: res.error?.code ?? null }));
@@ -544,7 +588,7 @@ export function DataTabView({ tab, theme, visible }: TabViewProps) {
   const shownPred = deferred ? data.applied : predicate;
   const signature = useMemo(() => columnSignature(columns), [columns]);
   const editCtx: EditContext | null = editability?.editable && editability.target ? {
-    gridKey, tabId: tab.id, connectionId, database: session?.database ?? database, dialect, target: editability.target, columns,
+    gridKey, tabId: tab.id, connectionId, database: session?.database ?? database, dialect, target: editability.target, columns: allColumns,
     rowAt: (i) => overlay.get(i), sourceLength: overlay.length, sqliteVersion: session?.serverInfo.productVersion ?? null, tabTitle: tab.title, exclusive,
   } : null;
   // Ctrl+S / Save write the pending edits directly; the SQL preview is opt-in (user-02).

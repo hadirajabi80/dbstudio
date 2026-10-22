@@ -19,7 +19,45 @@ export interface TableTarget {
    * orderable column (T-SQL heaps, views). Without it OFFSET paging can repeat or skip rows.
    */
   orderFallback?: string[];
+  /**
+   * Oracle table without a primary key: every read also selects the ROWID pseudo-column (named `ROWID`, last column),
+   * which is then the row identity of UPDATE / DELETE / refetch and is returned by INSERT … RETURNING (like SQL
+   * Developer and Navicat). The data tab hides that column.
+   */
+  rowid?: boolean;
 }
+
+/** Name of the hidden Oracle ROWID column of a keyless table (see `TableTarget.rowid`). */
+export const ROWID_COLUMN = 'ROWID';
+
+/** The Oracle ROWID column (`SELECT t.*, ROWID`): never written, never shown as a data column of the table. */
+export const isRowidColumn = (c: Pick<ColumnInfo, 'name'>, dialect: Dialect | null | undefined): boolean =>
+  dialect === 'plsql' && c.name.toUpperCase() === ROWID_COLUMN;
+
+/** `t.*, ROWID` (or `*`): the select list of a read of the target. */
+function selectList(t: TableTarget, dialect: Dialect, table: string): string {
+  return t.rowid && dialect === 'plsql' ? `${table}.*, ${ROWID_COLUMN}` : '*';
+}
+
+/**
+ * Column types a WHERE cannot compare with `=`: Oracle LOBs (ORA-22848, ORA-00932), LONG, BFILE, XMLType; T-SQL
+ * text / ntext / image (Msg 402); PostgreSQL json (no equality operator).
+ */
+const NOT_COMPARABLE_TYPE: Partial<Record<Dialect, RegExp>> = {
+  plsql: /^(n?clob|blob|bfile|long( raw)?|(sys\.)?xmltype|json)$/i,
+  tsql: /^(n?text|image|xml|geography|geometry)$/i,
+  pgsql: /^(json|xml|point|line|lseg|box|path|polygon|circle)$/i,
+};
+
+/** Can `col = :old` be used for this column in an optimistic-concurrency check? */
+export function isComparableColumn(c: ColumnInfo, dialect: Dialect): boolean {
+  const k = c.kind;
+  if (k === 'binary' || k === 'json' || k === 'xml' || k === 'cursor' || k === 'other') return false;
+  return !NOT_COMPARABLE_TYPE[dialect]?.test(c.dbType.trim());
+}
+
+/** Oracle stores '' as NULL: an old value '' can only be matched with IS NULL. */
+const isNullValue = (v: CellValue, dialect: Dialect) => v === null || v === undefined || (dialect === 'plsql' && v === '');
 
 export interface ColumnValue {
   column: ColumnInfo;
@@ -197,7 +235,7 @@ function versionAtLeast(v: string | null | undefined, min: [number, number]): bo
 function keyWhere(pb: ParamBuilder, key: ColumnValue[], dialect: Dialect): string {
   return key.map((k) => {
     const c = quoteIdent(k.column.name, dialect);
-    if (k.value === null) return `${c} IS NULL`;
+    if (isNullValue(k.value, dialect)) return `${c} IS NULL`;
     return `${c} = ${pb.add(paramKindFor(k.column.kind, k.value, dialect), bindValue(k.column.kind, k.value, dialect))}`;
   }).join(' AND ');
 }
@@ -213,9 +251,11 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
     const sets = change.set.map((s) => `${q(s.column.name)} = ${bind(s)}`).join(', ');
     let where = keyWhere(pb, change.key, dialect);
     if (opts.verifyUnchanged) {
+      // LOB / text / json columns cannot be compared with `=` (ORA-22848), and approximate numbers not reliably (a
+      // BINARY_FLOAT / real 0.1 read back as 0.1 is not the stored single-precision value): written, not verified.
       const checks = change.set
-        .filter((s) => !change.key.some((k) => k.column.name === s.column.name))
-        .map((s) => (s.old === null ? `${q(s.column.name)} IS NULL` : `${q(s.column.name)} = ${pb.add(paramKindFor(s.column.kind, s.old, dialect), bindValue(s.column.kind, s.old, dialect))}`));
+        .filter((s) => !change.key.some((k) => k.column.name === s.column.name) && isComparable({ column: s.column, value: s.old }, dialect))
+        .map((s) => (isNullValue(s.old, dialect) ? `${q(s.column.name)} IS NULL` : `${q(s.column.name)} = ${pb.add(paramKindFor(s.column.kind, s.old, dialect), bindValue(s.column.kind, s.old, dialect))}`));
       if (checks.length) where += ` AND ${checks.join(' AND ')}`;
     }
     return { kind: 'update', ref: change.ref, sql: `UPDATE ${table} SET ${sets} WHERE ${where}`, params: pb.params, returning: [], expectOne: true };
@@ -225,8 +265,8 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
     let where = keyWhere(pb, change.key, dialect);
     if (opts.verifyUnchanged && change.original?.length) {
       const checks = change.original
-        .filter((o) => !change.key.some((k) => k.column.name === o.column.name) && isComparable(o))
-        .map((o) => (o.value === null ? `${q(o.column.name)} IS NULL` : `${q(o.column.name)} = ${bind(o)}`));
+        .filter((o) => !change.key.some((k) => k.column.name === o.column.name) && isComparable(o, dialect) && !isRowidColumn(o.column, dialect))
+        .map((o) => (isNullValue(o.value, dialect) ? `${q(o.column.name)} IS NULL` : `${q(o.column.name)} = ${bind(o)}`));
       if (checks.length) where += ` AND ${checks.join(' AND ')}`;
     }
     return { kind: 'delete', ref: change.ref, sql: `DELETE FROM ${table} WHERE ${where}`, params: pb.params, returning: [], expectOne: true };
@@ -264,12 +304,18 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
       }
     }
   } else if (dialect === 'plsql') {
-    const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} (${q(t.keyColumns[0] ?? change.values[0]?.column.name ?? 'ID')}) VALUES (DEFAULT)`;
+    // Nothing typed: one column set to its DEFAULT (never the ROWID pseudo-column).
+    const defaultCol = [...t.keyColumns, ...(opts.columns ?? []).map((c) => c.name), ...change.values.map((v) => v.column.name)]
+      .find((n) => !isRowidColumn({ name: n }, dialect)) ?? 'ID';
+    const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} (${q(defaultCol)}) VALUES (DEFAULT)`;
     if (ret.length) {
       const outs = ret.map((k, i) => {
         const name = `out${i + 1}`;
-        const kc = change.values.find((v) => v.column.name.toLowerCase() === k.toLowerCase())?.column;
-        pb.params.push({ name, kind: kc ? kindToParam(kc.kind, dialect) : 'decimal', value: null, direction: 'out' });
+        const same = (c: ColumnInfo) => c.name.toLowerCase() === k.toLowerCase();
+        const kc = change.values.find((v) => same(v.column))?.column ?? opts.columns?.find(same);
+        // ROWID comes back as text (it is compared as text in the WHERE of later statements).
+        const kind: ParamKind = isRowidColumn({ name: k }, dialect) ? 'string' : kc ? kindToParam(kc.kind, dialect) : 'decimal';
+        pb.params.push({ name, kind, value: null, direction: 'out' });
         return `:${name}`;
       });
       sql = `${head} RETURNING ${ret.map(q).join(', ')} INTO ${outs.join(', ')}`;
@@ -288,9 +334,8 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
   return { kind: 'insert', ref: change.ref, sql, params: pb.params, returning: ret, followUp, expectOne: false };
 }
 
-function isComparable(cv: ColumnValue): boolean {
-  const k = cv.column.kind;
-  if (k === 'binary' || k === 'json' || k === 'xml' || k === 'float' || k === 'cursor' || k === 'other') return false;
+function isComparable(cv: ColumnValue, dialect: Dialect): boolean {
+  if (cv.column.kind === 'float' || !isComparableColumn(cv.column, dialect)) return false;
   return cv.value === null || typeof cv.value !== 'object';
 }
 
@@ -362,6 +407,7 @@ export function orderByClause(sort: SortSpec[] | undefined, keyColumns: string[]
 /** `SELECT * FROM t [WHERE …] ORDER BY … OFFSET/FETCH | LIMIT/OFFSET` (row counts are generated integers). */
 export function selectPageSql(t: TableTarget, dialect: Dialect, o: PageOptions): PageSql {
   const table = tableSql(t, dialect);
+  const cols = selectList(t, dialect, table);
   const where = o.where ? `\nWHERE ${o.where}` : '';
   const order = orderByClause(o.sort, t.keyColumns, dialect, t.orderFallback);
   const limit = Math.max(1, Math.floor(o.limit));
@@ -375,10 +421,10 @@ export function selectPageSql(t: TableTarget, dialect: Dialect, o: PageOptions):
   }
   if (dialect === 'plsql') {
     if (major !== null && major < 12) {
-      const inner = `SELECT *\nFROM ${table}${where}${order ? `\nORDER BY ${order}` : ''}`;
+      const inner = `SELECT ${cols}\nFROM ${table}${where}${order ? `\nORDER BY ${order}` : ''}`;
       return { sql: `SELECT * FROM (\n${inner}\n)\nWHERE ROWNUM <= ${limit}`, pageable: false };
     }
-    return { sql: `SELECT *\nFROM ${table}${where}${order ? `\nORDER BY ${order}` : ''}\nOFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`, pageable: true };
+    return { sql: `SELECT ${cols}\nFROM ${table}${where}${order ? `\nORDER BY ${order}` : ''}\nOFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`, pageable: true };
   }
   return { sql: `SELECT *\nFROM ${table}${where}${order ? `\nORDER BY ${order}` : ''}\nLIMIT ${limit} OFFSET ${offset}`, pageable: true };
 }
@@ -412,7 +458,8 @@ export function refetchSql(t: TableTarget, dialect: Dialect, keys: ColumnValue[]
   const pb = new ParamBuilder(dialect, 'k', 1, { positional: true });
   const parts = keys.map((k) => keyWhere(pb, k, dialect));
   const where = parts.length === 1 ? parts[0] : parts.map((p) => (k1(p) ? p : `(${p})`)).join(' OR ');
-  return { sql: `SELECT *\nFROM ${tableSql(t, dialect)}\nWHERE ${where}`, params: pb.params };
+  const table = tableSql(t, dialect);
+  return { sql: `SELECT ${selectList(t, dialect, table)}\nFROM ${table}\nWHERE ${where}`, params: pb.params };
 }
 
 const k1 = (p: string) => !p.includes(' AND ');

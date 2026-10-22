@@ -124,7 +124,7 @@ export type CatalogObjectType =
   | 'table' | 'view' | 'mview' | 'proc' | 'func' | 'tablefunc'
   | 'synonym' | 'sequence' | 'package' | 'type' | 'trigger';
 
-/** [name, typeText, nullable(0|1), isPk(0|1), flags(1=identity/autoinc, 2=computed/virtual, 4=hidden), comment] */
+/** [name, typeText, nullable(0|1), isPk(0|1), flags(1=identity/autoinc, 2=computed/virtual, 4=hidden, 8=read-only: Oracle GENERATED ALWAYS identity), comment] */
 export type CatalogColumnTuple = [string, string, 0 | 1, 0 | 1, number, string | null];
 /** [name, type, direction, hasDefault(0|1)]; direction in|out|inout|return */
 export type CatalogParamTuple = [string, string, 'in' | 'out' | 'inout' | 'return', 0 | 1];

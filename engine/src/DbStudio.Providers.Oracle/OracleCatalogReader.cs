@@ -78,6 +78,17 @@ public sealed class OracleCatalogReader : ICatalogReader
         {
             columns = await OracleDb.QueryAsync(_conn, OracleCatalogQueries.ColumnsNoIdentity, r => ReadColumn(r, schema), ct, owner).ConfigureAwait(false);
         }
+        try
+        {
+            // Flag 8: GENERATED ALWAYS identity, which the data grid must not write (ORA-32795 / ORA-32796).
+            var always = (await OracleDb.QueryAsync(_conn, OracleCatalogQueries.IdentityAlways,
+                r => (Table: r.GetString(0), Column: r.GetString(1)), ct, owner).ConfigureAwait(false)).ToHashSet();
+            if (always.Count > 0)
+                columns = columns.Select(c => always.Contains((c.Table, c.Name)) ? c with { Flags = c.Flags | 8 } : c).ToList();
+        }
+        catch (OracleException ex) when (ex.Number is 942 or 904) // pre-12c: no ALL_TAB_IDENTITY_COLS
+        {
+        }
 
         var constraintRows = await OracleDb.QueryAsync(_conn, OracleCatalogQueries.Constraints, r => new RawConstraintColumn(
             r.GetString(0), r.GetString(1), r.GetString(2), OracleDb.Str(r, 3), OracleDb.Str(r, 4), r.GetString(6), OracleDb.Int(r, 7) ?? 0),

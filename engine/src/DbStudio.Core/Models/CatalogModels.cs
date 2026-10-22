@@ -43,7 +43,7 @@ public sealed class CatalogObject
     public string? Status { get; init; }
 }
 
-/// <param name="Flags">1 = identity/autoincrement, 2 = computed/virtual/generated, 4 = hidden.</param>
+/// <param name="Flags">1 = identity/autoincrement, 2 = computed/virtual/generated, 4 = hidden, 8 = never written by DML (Oracle GENERATED ALWAYS identity).</param>
 public sealed record CatalogColumn(string Name, string TypeText, bool Nullable, bool IsPk, int Flags = 0, string? Comment = null);
 
 /// <param name="RefSchema">Referenced schema (SQLite: database name, usually "main").</param>

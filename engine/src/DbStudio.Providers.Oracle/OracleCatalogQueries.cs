@@ -59,6 +59,10 @@ public static class OracleCatalogQueries
         "nullable, virtual_column, 'NO' AS identity_column, hidden_column FROM all_tab_cols " +
         "WHERE owner=:owner AND hidden_column='NO' AND column_id IS NOT NULL ORDER BY table_name, column_id";
 
+    /// <summary>12c+: identity columns GENERATED ALWAYS (never written by INSERT/UPDATE); ORA-00942 on older servers.</summary>
+    public const string IdentityAlways =
+        "SELECT table_name, column_name FROM all_tab_identity_cols WHERE owner=:owner AND generation_type='ALWAYS'";
+
     public const string Constraints =
         "SELECT c.constraint_name, c.constraint_type, c.table_name, c.r_owner, c.r_constraint_name, c.status, cc.column_name, cc.position " +
         "FROM all_constraints c JOIN all_cons_columns cc ON cc.owner=c.owner AND cc.constraint_name=c.constraint_name AND cc.table_name=c.table_name " +
@@ -172,7 +176,7 @@ public static class OracleCatalogQueries
         [nameof(Schemas)] = Schemas, [nameof(SchemasFallback)] = SchemasFallback, [nameof(CurrentSchema)] = CurrentSchema,
         [nameof(SessionInfo)] = SessionInfo, [nameof(VersionBanner)] = VersionBanner, [nameof(VersionFallback)] = VersionFallback,
         [nameof(Objects)] = Objects, [nameof(TableComments)] = TableComments, [nameof(ColumnComments)] = ColumnComments,
-        [nameof(Columns)] = Columns, [nameof(ColumnsNoIdentity)] = ColumnsNoIdentity, [nameof(Constraints)] = Constraints,
+        [nameof(Columns)] = Columns, [nameof(ColumnsNoIdentity)] = ColumnsNoIdentity, [nameof(IdentityAlways)] = IdentityAlways, [nameof(Constraints)] = Constraints,
         [nameof(ReferencedColumns)] = ReferencedColumns(3), [nameof(Procedures)] = Procedures, [nameof(Arguments)] = Arguments,
         [nameof(Synonyms)] = Synonyms, [nameof(PublicSynonym)] = PublicSynonym, [nameof(Sequences)] = Sequences,
         [nameof(ObjectByName)] = ObjectByName, [nameof(DetailColumns)] = DetailColumns, [nameof(DetailColumnFlags)] = DetailColumnFlags,

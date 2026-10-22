@@ -4,6 +4,7 @@ using DbStudio.Core.Search;
 namespace DbStudio.Providers.Oracle.Tests;
 
 /// <summary>Find in database on the seeded SHOP schema.</summary>
+[Collection(ShopSchemaWriters.Name)]
 public sealed class OracleSearchTests(OracleFixture fixture) : IClassFixture<OracleFixture>
 {
     private void RequireAvailable() => Skip.IfNot(fixture.IsAvailable, fixture.SkipReason ?? "Oracle not available.");

@@ -12,7 +12,7 @@ import { appendAnd, columnSignature, EMPTY_VIEW, type GridViewModel } from '../.
 import { countActiveConditions } from '../../filter/values';
 import { formatCount, formatDuration } from '../../lib/format';
 import type { CellLocator } from '../../lib/serialize';
-import { useCatalog, useSnapshot } from '../../store/catalog';
+import { dbKey, useCatalog, useSnapshot } from '../../store/catalog';
 import { useConnection } from '../../store/connections';
 import { pendingCount, useEditBuffer, useEdits } from '../../store/edits';
 import { useFilters } from '../../store/filters';
@@ -214,12 +214,26 @@ export function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionSta
   const columns = rs.columns;
   const orig = originalBatch(exec);
   const singleSelect = !!orig && exec.resultSets.length === 1 && analyzeSelect(orig.sql, dialect).ok;
+  const session = useSessions((s) => s.sessions[s.byTab[exec.tabId]]);
+  /** Oracle: the console's CURRENT_SCHEMA, where the unqualified table of the query lives. */
+  const currentSchema = dialect === 'plsql' ? (session?.database ?? tabDb ?? null) : null;
   const editability = useMemo(
-    () => (rs.done ? resultEditability(columns, { singleSelect, snapshot, conn }) : null),
-    [rs.done, columns, singleSelect, snapshot, conn],
+    () => (rs.done ? resultEditability(columns, { singleSelect, snapshot, conn, dialect, currentSchema }) : null),
+    [rs.done, columns, singleSelect, snapshot, conn, dialect, currentSchema],
   );
   const table = editability?.target ?? null;
   const tableCol = columns.find((c) => c.table);
+  // A result from a table of a schema the catalog has not loaded (Oracle `SELECT * FROM other.t`): load it, its primary
+  // key decides whether the rows can be edited.
+  const tableSchema = tableCol?.schema ?? null;
+  const schemasKnown = useCatalog((s) => !!s.dbs[dbKey(exec.connectionId, catDb)]?.schemasResp);
+  useEffect(() => {
+    if (!rs.done || !tableSchema || !schemasKnown) return;
+    const d = useCatalog.getState().dbs[dbKey(exec.connectionId, catDb)];
+    if (!d?.schemasResp || d.schemaStatus[tableSchema]) return;
+    if (!d.schemasResp.schemas.some((s) => s.name === tableSchema)) return;
+    void useCatalog.getState().loadSchema(exec.connectionId, catDb, tableSchema).catch(() => undefined);
+  }, [rs.done, tableSchema, schemasKnown, exec.connectionId, catDb]);
   const fks = useMemo<FkLink[]>(() => foreignKeys(columns, tableCol?.schema ?? null, tableCol?.table ?? null, snapshot), [columns, tableCol, snapshot]);
   const refs = useMemo(() => (table ? referencingTables(table.schema, table.name, snapshot) : []), [table, snapshot]);
   const overlay = useMemo(() => overlayRows(rs.rows, buffer.committed), [rs.rows, rs.rev, buffer.committed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -234,7 +248,6 @@ export function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionSta
   const sfActive = !!serverFilter && exec.batches[0]?.sql === serverFilter.sql;
   const avail = useMemo(() => serverFilterAvailability(exec, columns, dialect), [exec, columns, dialect]);
 
-  const session = useSessions((s) => s.sessions[s.byTab[exec.tabId]]);
   const editCtx: EditContext | null = editability?.editable && editability.target ? {
     gridKey: key, tabId: exec.tabId, connectionId: exec.connectionId, database: session?.database ?? tabDb, dialect, target: editability.target,
     columns, rowAt: (i) => overlay.get(i), sourceLength: overlay.length, sqliteVersion: session?.serverInfo.productVersion ?? null,

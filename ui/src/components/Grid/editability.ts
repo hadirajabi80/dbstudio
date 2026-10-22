@@ -1,6 +1,6 @@
 // Can a result set be edited in place? (PLAN-M1.5 A1: single-table SELECT with every key column present.)
-import type { CatalogObject, CatalogSnapshot, ColumnInfo, ConnectionProfile } from '../../api/types';
-import type { TableTarget } from '../../data/sqlgen';
+import type { CatalogObject, CatalogSnapshot, ColumnInfo, ConnectionProfile, Dialect } from '../../api/types';
+import { ROWID_COLUMN, isRowidColumn, type TableTarget } from '../../data/sqlgen';
 
 export interface Editability {
   editable: boolean;
@@ -15,14 +15,28 @@ export interface Editability {
 
 const NOT = (reason: string): Editability => ({ editable: false, reason, target: null, editableColumns: new Set(), keyOrdinals: [] });
 
-export function findTable(snapshot: CatalogSnapshot | null | undefined, schema: string | null, name: string): { schema: string; obj: CatalogObject } | null {
+/**
+ * The catalog table or view `schema.name`. Names match case-insensitively, but an exact spelling wins: Oracle can hold
+ * both "lower_tab" and LOWER_TAB. Without a schema, `preferSchema` (the session's current schema), then the default
+ * schema are searched first.
+ */
+export function findTable(
+  snapshot: CatalogSnapshot | null | undefined, schema: string | null, name: string, preferSchema?: string | null,
+): { schema: string; obj: CatalogObject } | null {
   if (!snapshot) return null;
   const low = name.toLowerCase();
+  const first = [preferSchema, snapshot.defaultSchema].filter((s): s is string => !!s);
+  const rank = (s: string) => {
+    const i = first.indexOf(s);
+    return i < 0 ? first.length : i;
+  };
+  const exactSchema = schema ? snapshot.schemas.filter((s) => s.name === schema) : [];
   const schemas = schema
-    ? snapshot.schemas.filter((s) => s.name.toLowerCase() === schema.toLowerCase())
-    : [...snapshot.schemas].sort((a, b) => (a.name === snapshot.defaultSchema ? -1 : b.name === snapshot.defaultSchema ? 1 : 0));
+    ? (exactSchema.length ? exactSchema : snapshot.schemas.filter((s) => s.name.toLowerCase() === schema.toLowerCase()))
+    : [...snapshot.schemas].sort((a, b) => rank(a.name) - rank(b.name));
+  const isTable = (o: CatalogObject) => o.t === 'table' || o.t === 'view';
   for (const s of schemas) {
-    const obj = s.objects.find((o) => (o.t === 'table' || o.t === 'view') && o.n.toLowerCase() === low);
+    const obj = s.objects.find((o) => isTable(o) && o.n === name) ?? s.objects.find((o) => isTable(o) && o.n.toLowerCase() === low);
     if (obj) return { schema: s.name, obj };
   }
   return null;
@@ -31,18 +45,28 @@ export function findTable(snapshot: CatalogSnapshot | null | undefined, schema: 
 /** Editability of a table/view opened in a Data tab (columns known from the first page). */
 export function tableEditability(
   columns: readonly ColumnInfo[], schema: string | null, name: string, snapshot: CatalogSnapshot | null | undefined,
-  conn: ConnectionProfile | undefined, isView = false,
+  conn: ConnectionProfile | undefined, isView = false, dialect?: Dialect | null, currentSchema?: string | null,
 ): Editability {
   if (conn?.readOnly) return NOT('Read-only connection');
-  const found = findTable(snapshot, schema, name);
+  const found = findTable(snapshot, schema, name, currentSchema);
   const pk = found?.obj.pk?.length ? found.obj.pk : columns.filter((c) => c.isKey).map((c) => c.name);
+  const t = { schema: found?.schema ?? schema, name: found?.obj.n ?? name };
+  // Oracle table without a primary key: the hidden ROWID column the data tab reads identifies the rows.
+  if (!pk.length && !isView && hasRowid(columns, dialect)) {
+    return finish(columns, { ...t, keyColumns: [ROWID_COLUMN], rowid: true }, found?.obj, snapshot, dialect, currentSchema);
+  }
   if (!pk.length) return NOT(isView ? 'View without a key: read-only' : 'No primary key: read-only');
-  return finish(columns, { schema: found?.schema ?? schema, name: found?.obj.n ?? name, keyColumns: pk }, found?.obj, snapshot);
+  return finish(columns, { ...t, keyColumns: pk }, found?.obj, snapshot, dialect, currentSchema);
 }
 
 /** Editability of a console result set. */
 export function resultEditability(
-  columns: readonly ColumnInfo[], opts: { singleSelect: boolean; snapshot: CatalogSnapshot | null | undefined; conn: ConnectionProfile | undefined },
+  columns: readonly ColumnInfo[],
+  opts: {
+    singleSelect: boolean; snapshot: CatalogSnapshot | null | undefined; conn: ConnectionProfile | undefined; dialect?: Dialect | null;
+    /** The session's current schema (Oracle CURRENT_SCHEMA): where an unqualified table of the query lives. */
+    currentSchema?: string | null;
+  },
 ): Editability {
   if (opts.conn?.readOnly) return NOT('Read-only connection');
   if (!opts.singleSelect) return NOT('Only results of a single SELECT can be edited');
@@ -51,32 +75,47 @@ export function resultEditability(
   if (tables.size === 0) return NOT('Columns are not from a table');
   if (tables.size > 1) return NOT('Results of a JOIN are not editable');
   const [{ schema, table }] = [...tables.values()];
-  const found = findTable(opts.snapshot, schema, table);
+  const found = findTable(opts.snapshot, schema, table, opts.currentSchema);
   const pk = found?.obj.pk?.length ? found.obj.pk : columns.filter((c) => c.isKey && c.table).map((c) => c.name);
-  if (!pk.length) return NOT(`${table} has no primary key`);
+  const t = { schema: found?.schema ?? schema, name: found?.obj.n ?? table };
+  // Oracle `SELECT t.*, ROWID FROM t` (the PL/SQL Developer idiom) edits a table without a primary key by ROWID.
+  const view = found?.obj.t === 'view';
+  if (!pk.length && !view && hasRowid(columns, opts.dialect)) {
+    return finish(columns, { ...t, keyColumns: [ROWID_COLUMN], rowid: true }, found?.obj, opts.snapshot, opts.dialect, opts.currentSchema);
+  }
+  if (!pk.length) return NOT(opts.dialect === 'plsql' && !view ? `${table} has no primary key: select ROWID too (SELECT t.*, ROWID FROM …) to edit` : `${table} has no primary key`);
   const missing = pk.filter((k) => !columns.some((c) => c.name.toLowerCase() === k.toLowerCase()));
   if (missing.length) return NOT(`Add the key column${missing.length > 1 ? 's' : ''} ${missing.join(', ')} to edit`);
-  return finish(columns, { schema: found?.schema ?? schema, name: found?.obj.n ?? table, keyColumns: pk }, found?.obj, opts.snapshot);
+  return finish(columns, { ...t, keyColumns: pk }, found?.obj, opts.snapshot, opts.dialect, opts.currentSchema);
 }
 
-function finish(columns: readonly ColumnInfo[], t: TableTarget, obj: CatalogObject | undefined, snapshot: CatalogSnapshot | null | undefined): Editability {
+const hasRowid = (columns: readonly ColumnInfo[], dialect: Dialect | null | undefined) => columns.some((c) => isRowidColumn(c, dialect));
+
+function finish(
+  columns: readonly ColumnInfo[], t: TableTarget, obj: CatalogObject | undefined, snapshot: CatalogSnapshot | null | undefined,
+  dialect?: Dialect | null, currentSchema?: string | null,
+): Editability {
   const tuples = obj?.c ?? null;
   const identity = tuples ? tuples.filter((c) => (c[4] & 1) === 1).map((c) => c[0]) : [];
-  const computed = new Set(tuples ? tuples.filter((c) => (c[4] & 2) === 2).map((c) => c[0].toLowerCase()) : []);
+  // Computed / virtual columns and Oracle GENERATED ALWAYS identities (flag 8) are never written.
+  const readOnly = new Set(tuples ? tuples.filter((c) => (c[4] & 2) === 2 || (c[4] & 8) === 8).map((c) => c[0].toLowerCase()) : []);
   const known = tuples ? new Set(tuples.map((c) => c[0].toLowerCase())) : null;
   const editableColumns = new Set<number>();
   columns.forEach((c, i) => {
     const n = c.name.toLowerCase();
+    if (isRowidColumn(c, dialect)) return;
     if (known && !known.has(n)) return; // alias or expression
     if (!known && !c.table) return;
-    if (computed.has(n) || c.kind === 'cursor' || c.kind === 'binary') return;
+    if (readOnly.has(n) || c.kind === 'cursor' || c.kind === 'binary') return;
     editableColumns.add(i);
   });
   const keyOrdinals = t.keyColumns.map((k) => columns.findIndex((c) => c.name.toLowerCase() === k.toLowerCase()));
   if (keyOrdinals.some((i) => i < 0)) return NOT(`Add the key columns ${t.keyColumns.join(', ')} to edit`);
+  // Oracle: unqualified names resolve in the session's CURRENT_SCHEMA, which may differ from the login schema.
+  const defaultSchema = (dialect === 'plsql' ? currentSchema : null) ?? snapshot?.defaultSchema ?? null;
   return {
     editable: true, reason: null, editableColumns, keyOrdinals,
-    target: { ...t, keyColumns: keyOrdinals.map((i) => columns[i].name), identityColumns: identity, defaultSchema: snapshot?.defaultSchema ?? null },
+    target: { ...t, keyColumns: keyOrdinals.map((i) => columns[i].name), identityColumns: identity, defaultSchema },
   };
 }
 

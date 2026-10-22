@@ -57,9 +57,12 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         ArgumentNullException.ThrowIfNull(desired);
         var warnings = new List<string>();
         CollectWarnings(desired, warnings);
-        desired = Normalize(desired, context);
+        // The original model comes from the server: its names are exact. A desired name equal to one of them is the same
+        // stored object (kept as written, "lower_tab" stays lower case); any other name is folded like Oracle does.
+        var stored = original is null ? null : StoredNames(original);
+        desired = Normalize(desired, context, stored);
         DesignerValidation.ValidateTable(desired);
-        if (original is not null) original = Normalize(original, context);
+        if (original is not null) original = Normalize(original, context, stored);
         var diff = TableDiff.Compute(original, desired);
         var statements = new List<DdlStatement>();
         var table = Table(desired.Schema, desired.Name);
@@ -91,9 +94,34 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         if (t.Columns.Any(c => c.Computed is { Persisted: true })) warnings.Add("Oracle virtual columns are never stored; PERSISTED is ignored.");
     }
 
-    /// <summary>Folds identifiers and drops options Oracle cannot represent, so they never count as changes.</summary>
-    public static TableModel Normalize(TableModel t, DdlScriptContext context)
+    /// <summary>Every identifier of a model read from the server (exact spellings).</summary>
+    public static IReadOnlySet<string> StoredNames(TableModel t)
     {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Add(string? n)
+        {
+            if (!string.IsNullOrWhiteSpace(n)) names.Add(n.Trim());
+        }
+        Add(t.Schema);
+        Add(t.Name);
+        Add(t.Options.Tablespace);
+        foreach (var c in t.Columns) { Add(c.Name); Add(c.Id); }
+        if (t.PrimaryKey is { } pk) { Add(pk.Name); pk.Columns.ForEach(Add); }
+        foreach (var u in t.Uniques) { Add(u.Name); u.Columns.ForEach(Add); }
+        foreach (var i in t.Indexes) { Add(i.Name); i.Columns.ForEach(c => Add(c.Name)); }
+        foreach (var f in t.ForeignKeys) { Add(f.Name); f.Columns.ForEach(Add); Add(f.RefSchema); Add(f.RefTable); f.RefColumns.ForEach(Add); }
+        foreach (var c in t.Checks) Add(c.Name);
+        return names;
+    }
+
+    /// <summary>
+    /// Folds identifiers and drops options Oracle cannot represent, so they never count as changes. Names listed in
+    /// <paramref name="stored"/> are exact spellings of existing objects and are kept as written.
+    /// </summary>
+    public static TableModel Normalize(TableModel t, DdlScriptContext context, IReadOnlySet<string>? stored = null)
+    {
+        string Fold(string name) => stored is not null && stored.Contains(name.Trim()) ? name.Trim() : OracleDdlScripter.Fold(name);
+        string? FoldOrNull(string? name) => string.IsNullOrWhiteSpace(name) ? null : Fold(name);
         var schema = string.IsNullOrWhiteSpace(t.Schema) ? context.DefaultSchema : Fold(t.Schema);
         return t with
         {
@@ -142,7 +170,7 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         var table = Table(original.Schema ?? schema, original.Name);
         if (!original.Name.Equals(desired.Name, StringComparison.Ordinal))
         {
-            statements.Add(new DdlStatement($"ALTER TABLE {table} RENAME TO {Ident(desired.Name)}", DdlKinds.Rename));
+            statements.Add(new DdlStatement($"ALTER TABLE {table} RENAME TO {Q(desired.Name)}", DdlKinds.Rename));
             table = Table(original.Schema ?? schema, desired.Name);
         }
         if (!string.Equals(original.Schema, desired.Schema, StringComparison.Ordinal) && original.Schema is not null && desired.Schema is not null)
@@ -155,16 +183,16 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         if (d.PrimaryKeyDropped is { } pk) statements.Add(DropConstraint(table, pk.Name, "primary key"));
 
         foreach (var c in d.Dropped)
-            statements.Add(new DdlStatement($"ALTER TABLE {table} DROP COLUMN {Ident(c.Name)}", DdlKinds.Drop, $"Dropping column {c.Name} deletes its data."));
+            statements.Add(new DdlStatement($"ALTER TABLE {table} DROP COLUMN {Q(c.Name)}", DdlKinds.Drop, $"Dropping column {c.Name} deletes its data."));
         foreach (var m in d.Renamed)
-            statements.Add(new DdlStatement($"ALTER TABLE {table} RENAME COLUMN {Ident(m.Old.Name)} TO {Ident(m.New.Name)}", DdlKinds.Rename));
+            statements.Add(new DdlStatement($"ALTER TABLE {table} RENAME COLUMN {Q(m.Old.Name)} TO {Q(m.New.Name)}", DdlKinds.Rename));
 
         foreach (var m in d.Matched)
         {
             if (m.ComputedChanged)
             {
                 if (m.New.Computed is not null && m.Old.Computed is not null)
-                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY ({Ident(m.New.Name)} AS ({TableDiff.StripOuterParens(m.New.Computed.Expression)}))", DdlKinds.Alter));
+                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY ({Q(m.New.Name)} AS ({TableDiff.StripOuterParens(m.New.Computed.Expression)}))", DdlKinds.Alter));
                 else
                     warnings.Add($"Column {m.New.Name}: Oracle cannot turn a stored column into a virtual one (or back); drop and re-add it.");
                 continue;
@@ -172,14 +200,14 @@ public sealed partial class OracleDdlScripter : IDdlScripter
             if (m.IdentityChanged)
             {
                 if (m.New.Identity is null)
-                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Ident(m.New.Name)} DROP IDENTITY", DdlKinds.Alter));
+                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Q(m.New.Name)} DROP IDENTITY", DdlKinds.Alter));
                 else if (m.Old.Identity is null)
                     // ORA-30673: MODIFY ... AS IDENTITY only alters a column that already is an identity. Refuse the design
                     // up front instead of scripting DDL that always fails (after earlier statements were committed).
                     throw new ArgumentException(
                         $"Oracle cannot add an identity to an existing column ({m.New.Name}); add a new identity column instead.");
                 else
-                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Ident(m.New.Name)} {IdentityClause(m.New.Identity)}", DdlKinds.Alter));
+                    statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY {Q(m.New.Name)} {IdentityClause(m.New.Identity)}", DdlKinds.Alter));
             }
             var parts = new List<string>();
             if (m.TypeChanged && m.New.Computed is null) parts.Add(m.New.Type.Trim());
@@ -189,7 +217,7 @@ public sealed partial class OracleDdlScripter : IDdlScripter
             string? warning = null;
             if (m.TypeChanged && m.New.Computed is null) warning = TypeChangeWarning(m.Old, m.New);
             if (m.NullabilityChanged && !m.New.Nullable) warning = (warning is null ? "" : warning + " ") + $"Fails if {m.New.Name} contains NULLs.";
-            statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY ({Ident(m.New.Name)} {string.Join(" ", parts)})", DdlKinds.Alter, warning));
+            statements.Add(new DdlStatement($"ALTER TABLE {table} MODIFY ({Q(m.New.Name)} {string.Join(" ", parts)})", DdlKinds.Alter, warning));
         }
 
         foreach (var c in d.Added)
@@ -206,8 +234,8 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         foreach (var ix in d.IndexesAdded) statements.Add(new DdlStatement(CreateIndexSql(desired, ix), DdlKinds.Index));
 
         if (d.CommentChanged) statements.Add(CommentSql($"TABLE {table}", desired.Comment));
-        foreach (var m in d.Matched.Where(m => m.CommentChanged)) statements.Add(CommentSql($"COLUMN {table}.{Ident(m.New.Name)}", m.New.Comment));
-        foreach (var c in d.Added.Where(c => !string.IsNullOrWhiteSpace(c.Comment))) statements.Add(CommentSql($"COLUMN {table}.{Ident(c.Name)}", c.Comment));
+        foreach (var m in d.Matched.Where(m => m.CommentChanged)) statements.Add(CommentSql($"COLUMN {table}.{Q(m.New.Name)}", m.New.Comment));
+        foreach (var c in d.Added.Where(c => !string.IsNullOrWhiteSpace(c.Comment))) statements.Add(CommentSql($"COLUMN {table}.{Q(c.Name)}", c.Comment));
     }
 
     /// <summary>
@@ -273,13 +301,13 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         foreach (var ck in t.Checks) parts.Add(CheckSql(t, ck, ++n));
         foreach (var fk in t.ForeignKeys) parts.Add(ForeignKeySql(t, fk));
         var sql = $"CREATE TABLE {Table(t.Schema, t.Name)} (\n{string.Join(",\n", parts.Select(p => "    " + p))}\n)";
-        if (!string.IsNullOrWhiteSpace(t.Options.Tablespace)) sql += " TABLESPACE " + Ident(t.Options.Tablespace);
+        if (!string.IsNullOrWhiteSpace(t.Options.Tablespace)) sql += " TABLESPACE " + Q(t.Options.Tablespace);
         return sql;
     }
 
     public static string ColumnSql(TableColumnModel c)
     {
-        var sb = new StringBuilder(Ident(c.Name));
+        var sb = new StringBuilder(Q(c.Name));
         if (c.Computed is not null)
         {
             if (!string.IsNullOrWhiteSpace(c.Type)) sb.Append(' ').Append(c.Type.Trim());
@@ -296,7 +324,7 @@ public sealed partial class OracleDdlScripter : IDdlScripter
     private static string IdentityClause(IdentityModel id) =>
         $"GENERATED {(id.Always ? "ALWAYS" : "BY DEFAULT")} AS IDENTITY (START WITH {id.Seed.ToString(CultureInfo.InvariantCulture)} INCREMENT BY {id.Increment.ToString(CultureInfo.InvariantCulture)})";
 
-    private static string ConstraintName(string? name, string fallback) => Ident(string.IsNullOrWhiteSpace(name) ? Fold(Truncate(fallback)) : name);
+    private static string ConstraintName(string? name, string fallback) => Q(string.IsNullOrWhiteSpace(name) ? Fold(Truncate(fallback)) : name);
 
     private static string PrimaryKeySql(TableModel t, PrimaryKeyModel pk) =>
         $"CONSTRAINT {ConstraintName(pk.Name, "PK_" + t.Name)} PRIMARY KEY ({string.Join(", ", pk.Columns.Select(Ident))})";
@@ -317,19 +345,19 @@ public sealed partial class OracleDdlScripter : IDdlScripter
     }
 
     public static string CreateIndexSql(TableModel t, IndexModel ix) =>
-        $"CREATE {(ix.Unique ? "UNIQUE " : "")}INDEX {Table(t.Schema, ix.Name)} ON {Table(t.Schema, t.Name)} ({string.Join(", ", ix.Columns.Select(c => Ident(c.Name) + (c.Desc ? " DESC" : "")))})";
+        $"CREATE {(ix.Unique ? "UNIQUE " : "")}INDEX {Table(t.Schema, ix.Name)} ON {Table(t.Schema, t.Name)} ({string.Join(", ", ix.Columns.Select(c => Q(c.Name) + (c.Desc ? " DESC" : "")))})";
 
     private static DdlStatement DropConstraint(string table, string? name, string what)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException($"The {what} to drop has no name; reload the table from the server.");
-        return new DdlStatement($"ALTER TABLE {table} DROP CONSTRAINT {Ident(name)}", DdlKinds.Drop);
+        return new DdlStatement($"ALTER TABLE {table} DROP CONSTRAINT {Q(name)}", DdlKinds.Drop);
     }
 
     private static void AddComments(TableModel t, string table, List<DdlStatement> statements)
     {
         if (!string.IsNullOrWhiteSpace(t.Comment)) statements.Add(CommentSql($"TABLE {table}", t.Comment));
         foreach (var c in t.Columns.Where(c => !string.IsNullOrWhiteSpace(c.Comment)))
-            statements.Add(CommentSql($"COLUMN {table}.{Ident(c.Name)}", c.Comment));
+            statements.Add(CommentSql($"COLUMN {table}.{Q(c.Name)}", c.Comment));
     }
 
     private static DdlStatement CommentSql(string target, string? comment) =>
@@ -343,13 +371,16 @@ public sealed partial class OracleDdlScripter : IDdlScripter
         DesignerValidation.ValidateView(view);
         var warnings = new List<string>();
         if (view.Options.SchemaBinding) warnings.Add("Schema binding is a SQL Server option; ignored.");
-        var schema = string.IsNullOrWhiteSpace(view.Schema) ? context.DefaultSchema : Fold(view.Schema);
-        var name = Fold(view.Name);
+        // An edited view's original name and schema come from the server (exact, "lower_view" stays lower case); the
+        // name is kept as written while it is unchanged, a new name is folded.
+        var editingStored = view.OriginalName is not null;
+        var schema = string.IsNullOrWhiteSpace(view.Schema) ? context.DefaultSchema : editingStored ? view.Schema.Trim() : Fold(view.Schema);
+        var name = editingStored && view.Name.Trim() == view.OriginalName!.Trim() ? view.Name.Trim() : Fold(view.Name);
         var statements = new List<DdlStatement>();
         // OR REPLACE only when editing the same view: a new name is a plain CREATE, so an existing object of that name
         // fails with ORA-00955 instead of being replaced. A renamed view is created first, then the old one dropped
         // (DDL commits each statement: if the CREATE fails nothing has changed).
-        var original = view.OriginalName is null ? null : Fold(view.OriginalName);
+        var original = view.OriginalName?.Trim();
         var editing = original is not null && original.Equals(name, StringComparison.Ordinal);
         var sb = new StringBuilder(editing ? "CREATE OR REPLACE " : "CREATE ");
         if (view.Options.Force) sb.Append("FORCE ");
@@ -388,14 +419,22 @@ public sealed partial class OracleDdlScripter : IDdlScripter
     private static string? FoldOrNull(string? name) => string.IsNullOrWhiteSpace(name) ? null : Fold(name);
 
     /// <summary>Unquoted when the folded name is a plain upper-case identifier that is not reserved, else "quoted".</summary>
-    public static string Ident(string name)
+    public static string Ident(string name) => Q(Fold(name));
+
+    /// <summary>
+    /// An exact (already folded or stored) name: unquoted when it is a plain upper-case identifier that is not reserved,
+    /// else "quoted" as written. Every name in a normalized model goes through this, so a stored lower-case name
+    /// ("lower_tab", a column "id") is never folded to upper case.
+    /// </summary>
+    public static string Q(string name)
     {
-        var n = Fold(name);
+        var n = name.Trim();
         return SimpleIdentifier().IsMatch(n) && n == n.ToUpperInvariant() && !OracleReservedWords.All.Contains(n) ? n : OracleSqlText.Quote(n);
     }
 
+    /// <summary>schema.name of exact (stored or normalized) names.</summary>
     public static string Table(string? schema, string name) =>
-        string.IsNullOrWhiteSpace(schema) ? Ident(name) : Ident(schema) + "." + Ident(name);
+        string.IsNullOrWhiteSpace(schema) ? Q(name) : Q(schema) + "." + Q(name);
 
     /// <summary>Generated names stay within 128 bytes (12.2+); older servers allow 30.</summary>
     private static string Truncate(string name) => name.Length <= 128 ? name : name[..128];
