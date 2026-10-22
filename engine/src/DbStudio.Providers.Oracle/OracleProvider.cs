@@ -6,8 +6,32 @@ using Oracle.ManagedDataAccess.Client;
 namespace DbStudio.Providers.Oracle;
 
 /// <summary>Oracle Database provider (Oracle.ManagedDataAccess.Core, managed driver).</summary>
-public sealed class OracleProvider : IDbProvider
+public sealed class OracleProvider : IDbProvider, IObjectBrowserProvider
 {
+    // ---- WP3 object browser (dependencies + object list): one pooled catalog connection per call.
+    public async Task<IDependencyReader> OpenDependencyReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
+
+    public async Task<IObjectListReader> OpenObjectListReaderAsync(ConnectionProfile profile, string? password, CancellationToken ct) =>
+        await OpenBrowserAsync(profile, password, ct).ConfigureAwait(false);
+
+    private static async Task<OracleDependencyReader> OpenBrowserAsync(ConnectionProfile profile, string? password, CancellationToken ct)
+    {
+        var conn = new OracleConnection(OracleConnectionStrings.Build(profile, password, pooling: true));
+        try
+        {
+            await conn.OpenAsync(ct).ConfigureAwait(false);
+            conn.ModuleName = "DbStudio";
+            conn.ClientInfo = "DbStudio catalog";
+            return new OracleDependencyReader(conn);
+        }
+        catch
+        {
+            await conn.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public const string DefaultNlsDateFormat = "YYYY-MM-DD HH24:MI:SS";
     public const string DefaultNlsTimestampFormat = "YYYY-MM-DD HH24:MI:SS.FF";
     public const string DefaultNlsTimestampTzFormat = "YYYY-MM-DD HH24:MI:SS.FF TZH:TZM";

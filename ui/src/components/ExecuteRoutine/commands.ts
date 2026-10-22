@@ -1,5 +1,6 @@
 // Execute routine commands (auto-loaded by commands/index.ts). No shortcuts of their own: in an "Edit:" console of a
 // routine, Run (Ctrl+Enter / F5) opens Execute routine, and the explorer's context menu offers "Execute…".
+import { lazy } from 'react';
 import { runActive } from '../../app/actions';
 import { objectTargetOf } from '../../commands/core';
 import { registerCommands, type Command } from '../../commands/registry';
@@ -10,7 +11,13 @@ import { isRunning } from '../../store/resultsReducer';
 import { getActiveConsole } from '../../store/tabs';
 import { openExecuteForEdit, routineEditOf } from './intercept';
 import { EXECUTABLE_TYPES } from './routineSql';
+import { registerTabView } from '../layout/tabViews';
+import { disposeRunView } from './runInView';
+import { ROUTINE_RUN_VIEW } from './runModel';
 import { useExecuteRoutine } from './store';
+
+/** The full-page result of a run started from Execute routine (lazy: loaded on the first run). */
+const RoutineRunView = lazy(() => import('./RoutineRunView').then((m) => ({ default: m.RoutineRunView })));
 
 function executableTarget(t: ObjectTarget | null): ObjectTarget | null {
   if (!t) return null;
@@ -55,4 +62,5 @@ export const ROUTINE_COMMANDS: Command<never>[] = [
 
 export function registerRoutineCommands(): void {
   registerCommands(ROUTINE_COMMANDS);
+  registerTabView(ROUTINE_RUN_VIEW, { component: RoutineRunView, icon: 'Play', onClosed: disposeRunView });
 }

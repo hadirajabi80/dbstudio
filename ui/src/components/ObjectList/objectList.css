@@ -1,0 +1,390 @@
+/* Objects tab (WP3): toolbar, type groups, virtualized list / card grid, status line. Tokens only. */
+.ol-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  min-width: 0;
+}
+
+/* ---------- toolbar ---------- */
+.ol-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--toolbar-h);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.ol-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 2px;
+  background: var(--border-subtle);
+}
+.ol-execute:not(:disabled) {
+  color: var(--accent);
+}
+.ol-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(300px, 34vw);
+  height: var(--input-h-sm);
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.ol-search:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ol-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.ol-search-input::placeholder {
+  color: var(--text-muted);
+}
+.ol-layout {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+.ol-layout button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ol-layout button:hover {
+  color: var(--text);
+}
+.ol-layout button.on {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  box-shadow: var(--shadow-1);
+}
+.ol-layout button:focus-visible,
+.ol-group:focus-visible,
+.ol-head-cell:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ---------- type groups ---------- */
+.ol-groups {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.ol-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.ol-group:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.ol-group.on {
+  border-color: var(--accent-soft-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+.ol-group-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--weight-regular);
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ol-group.on .ol-group-count {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.ol-group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* Type tints (dots, card tiles): the object-type colours of the explorer icons. */
+.ol-tint-table { --ol-tint: var(--obj-table); }
+.ol-tint-view { --ol-tint: var(--obj-view); }
+.ol-tint-proc,
+.ol-tint-func { --ol-tint: var(--obj-routine); }
+.ol-tint-package { --ol-tint: var(--obj-package); }
+.ol-tint-trigger { --ol-tint: var(--obj-trigger); }
+.ol-tint-sequence,
+.ol-tint-synonym,
+.ol-tint-type { --ol-tint: var(--obj-other); }
+.ol-group-dot {
+  background: var(--ol-tint);
+}
+
+/* ---------- list ---------- */
+.ol-head,
+.ol-row {
+  display: grid;
+  align-items: center;
+  column-gap: 12px;
+  padding: 0 14px;
+}
+.ol-head {
+  height: 30px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+.ol-head-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--weight-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ol-head-cell:hover,
+.ol-head-cell.on {
+  color: var(--text);
+}
+.ol-head-cell.num {
+  justify-content: flex-end;
+}
+.ol-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+.ol-canvas {
+  position: relative;
+  min-height: 100%;
+}
+.ol-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: default;
+  user-select: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
+}
+.ol-row:hover {
+  background: var(--bg-hover);
+}
+.ol-row.selected {
+  background: var(--bg-selected-inactive);
+}
+.ol-body:focus .ol-row.selected,
+.ol-body:focus-within .ol-row.selected {
+  background: var(--bg-selected);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.ol-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ol-cell.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ol-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: var(--weight-strong);
+}
+.ol-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ol-muted {
+  color: var(--text-muted);
+}
+.ol-faint {
+  color: var(--text-muted);
+}
+.ol-comment {
+  color: var(--text-muted);
+}
+
+/* ---------- cards ---------- */
+.ol-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  cursor: default;
+  user-select: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.ol-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-1);
+}
+.ol-card.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--bg-panel));
+}
+.ol-body:focus .ol-card.selected {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ol-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ol-tint) 14%, transparent);
+  flex-shrink: 0;
+}
+.ol-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ol-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--fs);
+  font-weight: var(--weight-strong);
+}
+.ol-card-meta {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.ol-card-schema {
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+/* ---------- loading / status ---------- */
+.ol-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+}
+.ol-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+}
+.ol-skeleton-icon,
+.ol-skeleton-bar {
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-sunken), var(--bg-hover), var(--bg-sunken));
+  background-size: 200% 100%;
+  animation: ol-shimmer 1.4s var(--ease) infinite;
+}
+.ol-skeleton-icon {
+  width: 14px;
+  height: 14px;
+}
+@keyframes ol-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ol-skeleton-icon,
+  .ol-skeleton-bar {
+    animation: none;
+  }
+}
+.ol-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+  padding: 0 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ol-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning);
+}
+.ol-body .empty-state {
+  margin-top: 8vh;
+}

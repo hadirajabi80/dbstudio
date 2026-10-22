@@ -1,6 +1,6 @@
 import {
-  ChevronDown, CloudUpload, Code2, Copy, Download, Funnel, LoaderCircle, Lock, PanelRight, PencilLine, Plus, Redo2, RotateCcw, Rows3, Search,
-  Table2, TriangleAlert, Undo2, X,
+  ChevronDown, CloudUpload, Code2, Copy, Download, Funnel, LoaderCircle, Lock, Maximize2, Minimize2, PanelRight, PencilLine, Plus, Redo2, RotateCcw,
+  Rows3, Search, Table2, TriangleAlert, Undo2, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CellValue, Dialect, ExportFormat } from '../../api/types';
@@ -111,6 +111,7 @@ export function ResultsPane({ tabId, dialect, theme, onClose }: Props) {
         </button>
         <div className="flex-1" />
         <ExecStatus exec={exec} />
+        {onClose && <MaximizeToggle />}
         {onClose && (
           <button className="icon-btn sm" title={commandView('view.toggleResults', undefined, 'Hide results').tooltip} aria-label="Hide results" onClick={onClose}>
             <X size={14} />
@@ -154,9 +155,27 @@ function ExecStatus({ exec }: { exec: ExecutionState }) {
   );
 }
 
+/** Maximize / restore the results pane of a console (view.maximizeResults, Mod+Shift+R). */
+function MaximizeToggle() {
+  const maximized = useUi((s) => s.resultsMaximized);
+  const label = maximized ? 'Restore results' : 'Maximize results';
+  return (
+    <button
+      className={`icon-btn sm${maximized ? ' on' : ''}`}
+      title={commandView('view.maximizeResults', undefined, label).tooltip}
+      aria-label={label}
+      aria-pressed={maximized}
+      onClick={() => runCommand('view.maximizeResults')}
+    >
+      {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+    </button>
+  );
+}
+
 type SidePanel = 'viewer' | 'record' | null;
 
-function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs: ResultSetState; dialect: Dialect; theme: EffectiveTheme }) {
+/** One result set: toolbar, grid, side viewers and status line (also used by the routine result page). */
+export function ResultSetView({ exec, rs, dialect, theme }: { exec: ExecutionState; rs: ResultSetState; dialect: Dialect; theme: EffectiveTheme }) {
   const key = viewKey(exec.localId, rs.id);
   const view = useResults((s) => s.views[key]) ?? EMPTY_VIEW;
   const setGridView = useResults((s) => s.setGridView);

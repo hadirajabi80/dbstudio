@@ -1,0 +1,270 @@
+/* Dependencies section (WP3): summary strip, two columns (Uses / Used by), grouped rows. Tokens only. */
+.deps {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg-app);
+}
+.deps-loading {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  min-height: 160px;
+}
+
+/* ---------- summary ---------- */
+.deps-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-wrap: wrap;
+}
+.deps-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.deps-stat svg {
+  align-self: center;
+}
+.deps-stat.uses {
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+}
+.deps-stat.uses svg {
+  color: var(--info);
+}
+.deps-stat.used {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.deps-stat.used svg {
+  color: var(--success);
+}
+.deps-stat-n {
+  color: var(--text);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+.deps-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+  font-size: var(--fs-sm);
+}
+.deps-root-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-strong);
+}
+.deps-root-type {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.deps-chips {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.deps-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 14px 0;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- columns ---------- */
+.deps-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .deps-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.deps-col {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.deps-col-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.deps-col.uses .deps-col-head svg {
+  color: var(--info);
+}
+.deps-col.used .deps-col-head svg {
+  color: var(--success);
+}
+.deps-col-title {
+  font-weight: var(--weight-strong);
+}
+.deps-col-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.deps-col-sub {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.deps-col-empty {
+  padding: 18px 14px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.deps-group {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 6px 8px;
+}
+.deps-group + .deps-group {
+  border-top: 1px solid var(--border-subtle);
+}
+.deps-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--weight-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.deps-group-count {
+  color: var(--text-muted);
+  font-weight: var(--weight-regular);
+}
+
+/* ---------- rows ---------- */
+.deps-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.deps-row:hover {
+  background: var(--bg-hover);
+}
+.deps-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.deps-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--deps-tone) 13%, transparent);
+  flex-shrink: 0;
+}
+.deps-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.deps-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-strong);
+}
+.deps-schema {
+  color: var(--text-muted);
+  font-weight: var(--weight-regular);
+}
+.deps-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.deps-constraint {
+  color: var(--text-muted);
+}
+.deps-note {
+  color: var(--warning);
+}
+.deps-tag {
+  padding: 0 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+.deps-badge {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--deps-tone) 14%, transparent);
+  color: color-mix(in srgb, var(--deps-tone) 72%, var(--text));
+  font-size: var(--fs-xs);
+  font-weight: var(--weight-strong);
+  line-height: 18px;
+  white-space: nowrap;
+}
+.tone-fk { --deps-tone: var(--obj-fk); }
+.tone-table { --deps-tone: var(--obj-table); }
+.tone-view { --deps-tone: var(--obj-view); }
+.tone-routine { --deps-tone: var(--obj-routine); }
+.tone-trigger { --deps-tone: var(--obj-trigger); }
+.tone-other { --deps-tone: var(--obj-other); }
