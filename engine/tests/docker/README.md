@@ -170,3 +170,21 @@ The suites follow the M2 pattern: `DBSTUDIO_IT=0` skips them, the env vars point
 otherwise they start their own container (`Testcontainers.MySql`, `.MariaDb`, `.ClickHouse`, `.Elasticsearch`,
 `.Cassandra` 4.16.0). Snowflake has no container: its unit tests replay recorded fixtures and the live suite runs only
 when `DBSTUDIO_SF_ACCOUNT` is set.
+
+### Elasticsearch (WP-ES)
+
+`seed-elasticsearch.sh` (POSIX sh, run by the one-shot `elasticsearch-seed` service or by hand with
+`ES_URL=http://localhost:19200 sh engine/tests/docker/seed-elasticsearch.sh`) drops and recreates `shop-customers`
+(1 shard), `shop-products` (1 shard) and `shop-orders` (2 shards, alias `shop-sales`) with explicit mappings (the
+`put_index` blocks), then bulk-loads `seed-elasticsearch.ndjson`: the `seed-mongo.js` data from the same PRNG
+(200 customers incl. the Persian/RTL names, 50 products, 2,000 orders with `items` as `nested`; ids are the Mongo
+ObjectId hex strings). Mongo's mixed-type `rating` became `rating` (float, absent when unrated) + `ratingLabel`
+(keyword); `phone` is a keyword; `thumbnail` is `binary`. `_cat/indices` shows 6,860 Lucene docs for `shop-orders`
+(nested items count); the engine reports 2,000 (one `_msearch` of size-0 counts). Idempotent.
+
+Live suite (`DbStudio.Sources.Elasticsearch.Tests`, `ElasticsearchLiveTests`): `DBSTUDIO_ES_URL` points it at a running
+cluster (e.g. `http://localhost:19200`), otherwise it starts `docker.elastic.co/elasticsearch/elasticsearch:8.15.3`
+(security off, 512 MB heap, random port) and falls back to the identical Docker Hub image `elasticsearch:8.15.3` when
+docker.elastic.co is unreachable (`DBSTUDIO_ES_IMAGE` overrides). The tests seed the cluster themselves (the same
+mappings, read from the script, and the NDJSON). OpenSearch (`OpenSearchLiveTests`) runs only with `DBSTUDIO_OS_URL` or
+`DBSTUDIO_ES_OPENSEARCH=1` (container `opensearchproject/opensearch:2`, `DISABLE_SECURITY_PLUGIN=true`).

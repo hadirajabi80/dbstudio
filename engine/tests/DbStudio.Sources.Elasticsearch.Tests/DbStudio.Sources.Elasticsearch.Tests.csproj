@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- WP-ES tests (WP0 stub). Integration tests are gated by DBSTUDIO_IT (0 = unit only) and skip without Docker. -->
+  <!-- WP-ES tests: unit + endpoint tests over FakeEs; live tests gated by DBSTUDIO_IT (0 = unit only), skipped without Docker. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -15,6 +15,9 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- Endpoint tests over the in-memory FakeEs (no Docker). -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+    <!-- Live suite: docker.elastic.co/elasticsearch/elasticsearch:8.15.3 (security off); skipped without Docker / DBSTUDIO_IT=0. -->
     <PackageReference Include="Testcontainers.Elasticsearch" Version="4.16.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
