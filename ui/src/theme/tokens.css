@@ -102,6 +102,8 @@
   --logo-oracle: #ea1b22;
   --logo-redis: #d82c20;
   --logo-redis-side: #a41e11;
+  /* Elasticsearch's yellow band: a darker gold on light (brand #fec514 is 1.6:1 on white) */
+  --logo-es-yellow: #b58500;
 
   /* M2: log levels (Logs & activity view) */
   --log-debug: var(--fg-muted);
@@ -270,6 +272,7 @@
   --logo-oracle: #f23b3f;
   --logo-redis: #e8453a;
   --logo-redis-side: #b8301f;
+  --logo-es-yellow: #fec514;
 
   --log-debug: var(--fg-muted);
   --log-info: var(--info);

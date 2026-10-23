@@ -12,6 +12,10 @@ The provider logos in `logos.tsx` are taken from **devicon v2.16.0**, https://gi
 | Redis      | `redis/redis-original.svg`                     | reds painted from `--logo-redis` / `--logo-redis-side`    |
 | MongoDB    | `mongodb/mongodb-plain.svg`                    | recoloured to the `-original` variant's green (`#439934`) |
 | Kafka      | `apachekafka/apachekafka-original.svg`         | black painted from `--logo-ink`                           |
+| MySQL      | `mysql/mysql-original.svg`                     | painted from `--provider-mysql`; hairline outline at <= 24 px |
+| MariaDB    | `mariadb/mariadb-original.svg`                 | painted from `--provider-mariadb`                         |
+| Elasticsearch | `elasticsearch/elasticsearch-original.svg`  | dark band from `--logo-ink`, yellow from `--logo-es-yellow`, teal from `--provider-elasticsearch` |
+| Cassandra  | `cassandra/cassandra-original.svg`             | the two translucent lash shadows removed; iris from `--provider-cassandra`, lashes from `--logo-ink` |
 
 All files were trimmed by hand: metadata, ids and wrapper groups removed, path coordinates rounded to 0.01, viewBoxes
 cropped to the artwork. The token-painted parts keep the original colour in the light theme and use a lighter one in
@@ -44,5 +48,6 @@ SOFTWARE.
 ```
 
 The logos themselves are trademarks of their owners (Microsoft, Oracle, the PostgreSQL Global Development Group,
-SQLite, Redis Ltd., MongoDB Inc. and the Apache Software Foundation). They are used only to identify the product a
+SQLite, Redis Ltd., MongoDB Inc., Oracle (MySQL), the MariaDB Foundation, Elasticsearch B.V. and the Apache Software
+Foundation (Kafka, Cassandra)). They are used only to identify the product a
 connection points to.
