@@ -10,7 +10,8 @@ import { getPlatform } from '../platform';
 import { effectiveViewportHeight } from './zoom';
 import { dbKey, useCatalog } from '../store/catalog';
 import { getSourceModule } from '../lib/sources';
-import { dialectOf, getConnection, providerKind, useConnections } from '../store/connections';
+import { dialectOf, getConnection, providerKind, schemaIsDatabase, useConnections } from '../store/connections';
+import { ensureDialect } from '../intel/dialect/registry';
 import { useSourceClients } from '../store/sourceClients';
 import { useHistory } from '../store/history';
 import { useResults, viewKey } from '../store/results';
@@ -44,18 +45,19 @@ export function effectiveDatabase(connectionId: string | null, database: string 
   // M2: Redis/MongoDB/Kafka have no SQL database.
   if (c && providerKind(c.providerId) !== 'relational') return null;
   if (database) return database;
-  if (c?.providerId === 'oracle') return null;
+  if (schemaIsDatabase(c?.providerId)) return null;
   return useCatalog.getState().conns[connectionId]?.databases?.current ?? null;
 }
 
 /**
- * Catalog cache key for a tab's database. Oracle has no database level (the tab's "database" is the
- * session's current schema), so its catalog is always keyed by null.
+ * Catalog cache key for a tab's database. Oracle (and the Batch 3 single-level providers: MySQL/MariaDB, ClickHouse,
+ * Cassandra) have no database level (the tab's "database" is the session's current schema/database/keyspace), so
+ * their catalog is always keyed by null.
  */
 export function catalogDatabase(connectionId: string | null, database: string | null): string | null {
   if (!connectionId) return null;
   const c = getConnection(connectionId);
-  if (c?.providerId === 'oracle' || (c && providerKind(c.providerId) !== 'relational')) return null;
+  if (schemaIsDatabase(c?.providerId) || (c && providerKind(c.providerId) !== 'relational')) return null;
   return effectiveDatabase(connectionId, database);
 }
 
@@ -834,6 +836,8 @@ export function connectAndOpen(connectionId: string): string {
     useUi.getState().showDock('explorer');
     return '';
   }
+  // D7: start loading a lazy dialect spec (Batch 3) while the console opens; the editor waits for it.
+  void ensureDialect(dialectOf(connectionId));
   const id = newConsole(connectionId, null);
   useUi.getState().showDock('explorer');
   return id;

@@ -6,6 +6,7 @@ import type { SavedQueryTarget } from '../../commands/types';
 import type { DbCatalog } from '../../store/catalog';
 import type { SavedQueryBinding } from '../../store/tabs';
 import type { SelectOption } from '../common/selectModel';
+import { schemaIsDatabase } from '../../lib/providerLevels';
 
 /** Key of a (database, schema) pair (the save dialog's schema picker). */
 export const scopeKey = (s: Pick<SavedQueryScope, 'database' | 'schema'>) => `${s.database ?? ''}\u0001${s.schema ?? ''}`;
@@ -60,7 +61,7 @@ export function bindingOf(q: Pick<SavedQuery, 'id' | 'connectionId' | 'database'
  * SQLite has none to choose; elsewhere the query's database.
  */
 export function consoleDatabaseFor(providerId: ProviderId | undefined, q: Pick<SavedQuery, 'database' | 'schema'>): string | null {
-  if (providerId === 'oracle') return q.schema;
+  if (schemaIsDatabase(providerId)) return q.schema; // Oracle, MySQL/MariaDB, ClickHouse, Cassandra
   if (providerId === 'sqlite') return null;
   return q.database;
 }

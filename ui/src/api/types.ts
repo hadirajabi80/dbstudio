@@ -1,11 +1,17 @@
 // Wire contract between the UI and the .NET engine. Mirrors docs/PLAN.md section 3.
 // Frozen: change the plan (and the engine DTOs) before changing this file.
 
-export type Dialect = 'tsql' | 'plsql' | 'sqlite' | 'pgsql';
-/** M2: relational providers (sqlserver, oracle, sqlite, postgresql) and non-relational sources (redis, mongodb, kafka). */
-export type ProviderId = 'sqlserver' | 'oracle' | 'sqlite' | 'postgresql' | 'redis' | 'mongodb' | 'kafka';
-/** M2 (docs/PLAN-M2.md D1): provider family. Only `relational` providers have sessions, consoles and a SQL catalog. */
-export type SourceKind = 'relational' | 'keyvalue' | 'document' | 'stream';
+/** Batch 3: 'mysql' serves MySQL and MariaDB, 'cql' Cassandra/ScyllaDB. */
+export type Dialect = 'tsql' | 'plsql' | 'sqlite' | 'pgsql' | 'mysql' | 'clickhouse' | 'snowflake' | 'cql';
+/**
+ * M2: relational providers (sqlserver, oracle, sqlite, postgresql) and non-relational sources (redis, mongodb, kafka).
+ * Batch 3: relational mysql, mariadb, clickhouse, snowflake, cassandra; source elasticsearch (kind 'search').
+ */
+export type ProviderId =
+  | 'sqlserver' | 'oracle' | 'sqlite' | 'postgresql' | 'redis' | 'mongodb' | 'kafka'
+  | 'mysql' | 'mariadb' | 'clickhouse' | 'snowflake' | 'elasticsearch' | 'cassandra';
+/** M2 (docs/PLAN-M2.md D1): provider family. Only `relational` providers have sessions, consoles and a SQL catalog. Batch 3: `search` (Elasticsearch/OpenSearch). */
+export type SourceKind = 'relational' | 'keyvalue' | 'document' | 'stream' | 'search';
 
 export interface ApiErrorBody {
   error: { code: ApiErrorCode; message: string; detail?: unknown };

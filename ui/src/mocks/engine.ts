@@ -6,6 +6,7 @@ import type {
 } from '../api/types';
 import { DEFAULT_SETTINGS } from '../store/settings';
 import { catalogObject, columnInfos, EXTRA_OBJECTS, generateRows, initialConnections, pgShopTables, PROVIDERS, SHOP_TABLES, type FixtureTable } from './fixtures';
+import { MOCK_PACKS } from './packs';
 
 type Listener = (ev: WsEvent) => void;
 
@@ -142,7 +143,9 @@ export class MockEngine {
       make('public', pgShop(), EXTRA_OBJECTS.postgresql);
       make('sales', pgShop().filter((t) => t.name === 'orders' || t.name === 'order_lines'), []);
     } else {
-      make('main', SHOP_TABLES, EXTRA_OBJECTS.sqlite);
+      // Batch 3 providers (mocks/packs) get the SQLite shop plus their pack's catalog extras
+      const packExtra = MOCK_PACKS.map((p) => p.extraObjects[pid]).find((x) => x);
+      make('main', SHOP_TABLES, packExtra ?? EXTRA_OBJECTS.sqlite);
     }
     this.catalogs.set(cid, m);
     return m;

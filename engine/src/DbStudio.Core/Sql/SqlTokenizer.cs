@@ -57,6 +57,13 @@ public static class SqlTokenizer
                 continue;
             }
 
+            // # line comment (MySQL, ClickHouse)
+            if (c == '#' && DialectInfo.HashLineComments(dialect))
+            {
+                while (i < n && sql[i] != '\n') i++;
+                continue;
+            }
+
             // /* block comment */ (T-SQL allows nesting)
             if (c == '/' && i + 1 < n && sql[i + 1] == '*')
             {
@@ -86,7 +93,7 @@ public static class SqlTokenizer
 
             if (dialect == Dialect.PgSql)
             {
-                // PostgreSQL: E'..' (backslash escapes), U&'..', $$..$$ / $tag$..$tag$ dollar quoting (function bodies).
+                // PostgreSQL: E'..' (backslash escapes), U&'..'.
                 if (c is 'E' or 'e' && i + 1 < n && sql[i + 1] == '\'')
                 {
                     i++;
@@ -101,11 +108,13 @@ public static class SqlTokenizer
                     tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
                     continue;
                 }
-                if (c == '$' && TryDollarQuote(sql, ref i, ref line, ref lineStart))
-                {
-                    tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
-                    continue;
-                }
+            }
+
+            // $$..$$ / $tag$..$tag$ dollar quoting (PostgreSQL and Snowflake function bodies).
+            if (c == '$' && DialectInfo.DollarQuotedStrings(dialect) && TryDollarQuote(sql, ref i, ref line, ref lineStart))
+            {
+                tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
+                continue;
             }
 
             // N'..' (T-SQL/Oracle national), X'..' (SQLite blob / PostgreSQL hex bit string), B'..' (PostgreSQL bit string) prefixes
@@ -119,13 +128,15 @@ public static class SqlTokenizer
 
             if (c == '\'')
             {
-                ReadQuoted(sql, ref i, '\'', ref line, ref lineStart);
+                // MySQL, ClickHouse, Snowflake: a backslash escapes the next char ('' still doubles).
+                if (DialectInfo.BackslashStringEscapes(dialect)) ReadEscapeString(sql, ref i, ref line, ref lineStart);
+                else ReadQuoted(sql, ref i, '\'', ref line, ref lineStart);
                 tokens.Add(new SqlToken(SqlTokenKind.String, sql[start..i], start, i, tokLine, tokCol));
                 continue;
             }
 
             // [ is a quoted identifier in T-SQL/SQLite, an array subscript in PostgreSQL.
-            if (c == '"' || (c == '[' && dialect is Dialect.TSql or Dialect.Sqlite) || (c == '`' && dialect == Dialect.Sqlite))
+            if (c == '"' || (c == '[' && dialect is Dialect.TSql or Dialect.Sqlite) || (c == '`' && DialectInfo.BacktickIdentifiers(dialect)))
             {
                 var close = c == '[' ? ']' : c;
                 ReadQuoted(sql, ref i, close, ref line, ref lineStart);
@@ -306,6 +317,13 @@ public static class SqlTokenizer
                 else if (blockDepth > 0 && t.IsWord("CASE")) blockDepth++;
                 else if (blockDepth > 0 && t.IsWord("END")) blockDepth--;
             }
+            else if (dialect == Dialect.Cql)
+            {
+                // WP-CS begin (CQL: BEGIN [UNLOGGED|COUNTER] BATCH … APPLY BATCH is one statement)
+                if (t.IsWord("BEGIN") && k + 1 < tokens.Count && tokens[k + 1].Kind == SqlTokenKind.Word && tokens[k + 1].Upper is "BATCH" or "UNLOGGED" or "COUNTER") blockDepth++;
+                else if (blockDepth > 0 && t.IsWord("APPLY") && k + 1 < tokens.Count && tokens[k + 1].IsWord("BATCH")) blockDepth--;
+                // WP-CS end
+            }
             else if (isBlockStatement && t.Kind == SqlTokenKind.Word)
             {
                 var u = t.Upper;
@@ -342,6 +360,10 @@ public static class SqlTokenizer
         if (t.Kind != SqlTokenKind.Word || dialect == Dialect.PgSql) return false;
         var u = t.Upper;
         if (dialect == Dialect.PlSql && u is "BEGIN" or "DECLARE") return true;
+        // WP-MY begin (MySQL/MariaDB: BEGIN … END compound statements; CREATE PROCEDURE/FUNCTION/EVENT bodies, DEFINER=…)
+        // WP-MY end
+        // WP-SF begin (Snowflake Scripting: anonymous BEGIN … END / DECLARE blocks outside $$ bodies)
+        // WP-SF end
         if (u != "CREATE") return false;
         for (var j = k + 1; j < Math.Min(tokens.Count, k + 8); j++)
         {

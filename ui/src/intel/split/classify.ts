@@ -46,6 +46,8 @@ export function classifyTokens(tokens: Token[], spec: DialectSpec): StatementKin
   const u = toks[i].upper;
   const n1 = toks[i + 1]?.upper ?? '';
   const destructive = (k: StatementBaseKind): StatementKind => `${k}:destructive`;
+  const special = spec.classify?.(toks, i); // Batch 3 dialects (DialectSpec.classify)
+  if (special) return special;
   switch (u) {
     case 'SELECT': case 'VALUES': case 'TABLE': return 'select';
     case 'INSERT': return 'insert';

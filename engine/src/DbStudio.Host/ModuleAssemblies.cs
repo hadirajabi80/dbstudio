@@ -21,5 +21,11 @@ public static class ModuleAssemblies
         typeof(Providers.SqlServer.SqlServerProvider).Assembly,
         typeof(Providers.Oracle.OracleProvider).Assembly,
         typeof(Providers.Sqlite.SqliteProvider).Assembly,
+        // Batch 3 (plan-batch3 D6): one anchor per package; its module registers the provider, keyed features and endpoints.
+        typeof(Providers.MySql.MySqlModule).Assembly,                 // WP-MY (mysql, mariadb)
+        typeof(Providers.ClickHouse.ClickHouseModule).Assembly,       // WP-CH
+        typeof(Providers.Snowflake.SnowflakeModule).Assembly,         // WP-SF
+        typeof(Providers.Cassandra.CassandraModule).Assembly,         // WP-CS
+        typeof(Sources.Elasticsearch.ElasticsearchModule).Assembly,   // WP-ES
     ];
 }

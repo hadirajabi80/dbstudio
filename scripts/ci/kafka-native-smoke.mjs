@@ -4,7 +4,7 @@
 // fails the build before anything is packaged.
 //
 // Checks, per engine binary:
-//   1. GET  /api/v1/providers         -> the 7 providers with their kinds (M2-0).
+//   1. GET  /api/v1/providers         -> includes the 7 M2 providers with their kinds (a subset check since Batch 3).
 //   2. GET  /api/v1/kafka/library     -> librdkafka version string (forces the native load: Library.VersionString).
 //   3. POST /api/v1/connections/test  -> provider kafka against 127.0.0.1:1: must FAIL with a librdkafka error
 //      (error.detail "librdkafka <version>"; the message names the refused/timed-out connection). A packaging problem
@@ -64,7 +64,10 @@ async function smoke(engine, { launcher = null } = {}) {
     const providers = await api(info, 'GET', '/providers');
     if (providers.status !== 200 || !Array.isArray(providers.json)) fail(`GET /providers answered ${providers.status}`);
     const got = providers.json.map((p) => [p.id, p.kind]);
-    if (JSON.stringify(got) !== JSON.stringify(EXPECTED)) fail(`GET /providers: expected ${JSON.stringify(EXPECTED)}, got ${JSON.stringify(got)}`);
+    // Batch 3 (plan-batch3 WP0): a subset check, so the providers the Batch 3 packages add do not break the smoke test;
+    // every expected id must be listed with its kind.
+    const missing = EXPECTED.filter(([id, kind]) => !got.some(([gid, gkind]) => gid === id && gkind === kind));
+    if (missing.length) fail(`GET /providers: missing ${JSON.stringify(missing)}, got ${JSON.stringify(got)}`);
 
     const lib = await api(info, 'GET', '/kafka/library');
     if (lib.status !== 200 || !/^\d+\.\d+\.\d+/.test(lib.json?.version ?? '')) {

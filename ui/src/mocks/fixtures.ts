@@ -2,6 +2,7 @@
 import type {
   CatalogColumnTuple, CatalogObject, CellValue, ColumnInfo, ColumnKind, ConnectionProfile, ProviderInfo,
 } from '../api/types';
+import { MOCK_PACKS } from './packs';
 
 export const PROVIDERS: ProviderInfo[] = [
   {
@@ -148,6 +149,8 @@ export const PROVIDERS: ProviderInfo[] = [
       ],
     },
   },
+  // Batch 3 (plan-batch3): providers of the work packages' mock packs (mocks/packs/*.ts)
+  ...MOCK_PACKS.flatMap((p) => p.providers),
 ];
 
 const now = '2026-10-14T09:00:00Z';
@@ -169,6 +172,8 @@ export function initialConnections(): ConnectionProfile[] {
       hasPassword: true, savePassword: true, createdAt: now, lastUsedAt: null,
     },
     ...m2Connections(),
+    // Batch 3 (plan-batch3): the work packages' mock packs (mocks/packs/*.ts)
+    ...MOCK_PACKS.flatMap((p) => p.connections),
   ];
 }
 

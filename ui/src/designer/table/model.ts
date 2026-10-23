@@ -5,12 +5,44 @@ import type {
 } from '../../api/types';
 import { qualifiedName } from '../../lib/sql';
 
-export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = { tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'text' };
-export const DEFAULT_KEY_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER', pgsql: 'bigint' };
+export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = {
+  tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'text',
+  // WP-MY begin
+  mysql: 'varchar(100)',
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: 'String',
+  // WP-CH end
+  // WP-SF begin
+  snowflake: 'VARCHAR(100)',
+  // WP-SF end
+  // WP-CS begin
+  cql: 'text',
+  // WP-CS end
+};
+export const DEFAULT_KEY_TYPE: Record<Dialect, string> = {
+  tsql: 'int', plsql: 'NUMBER(10)', sqlite: 'INTEGER', pgsql: 'bigint',
+  // WP-MY begin
+  mysql: 'int',
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: 'UInt64',
+  // WP-CH end
+  // WP-SF begin
+  snowflake: 'NUMBER(38,0)',
+  // WP-SF end
+  // WP-CS begin
+  cql: 'int',
+  // WP-CS end
+};
 
-/** PostgreSQL folds unquoted names to lower case, so new names are lower case (no quoting needed). */
+/**
+ * PostgreSQL folds unquoted names to lower case, so new names are lower case (no quoting needed). Batch 3: Snowflake folds
+ * to upper case like Oracle; MySQL, ClickHouse and Cassandra conventionally use lower case.
+ */
 export function caseFor(dialect: Dialect, name: string): string {
-  return dialect === 'plsql' ? name.toUpperCase() : dialect === 'sqlite' || dialect === 'pgsql' ? name.toLowerCase() : name;
+  if (dialect === 'plsql' || dialect === 'snowflake') return name.toUpperCase();
+  return dialect === 'tsql' ? name : name.toLowerCase();
 }
 
 /** PostgreSQL truncates identifiers to 63 bytes (NAMEDATALEN - 1). */

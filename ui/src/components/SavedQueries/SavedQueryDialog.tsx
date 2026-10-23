@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { errorMessage } from '../../api/client';
 import { isDuplicateNameError, type SavedQueryScope } from '../../api/savedQueries';
 import { useCatalog } from '../../store/catalog';
-import { hasDatabaseLevel, useConnection } from '../../store/connections';
+import { hasDatabaseLevel, schemaIsDatabase, schemaLevelLabel, useConnection } from '../../store/connections';
 import { nameTaken, scopeLabel, useSavedQueries } from '../../store/savedQueries';
 import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { Dialog } from '../common/Dialog';
@@ -94,7 +94,8 @@ export function SavedQueryDialog({ request }: { request: SavedQueryDialogRequest
 
   const title = request.mode === 'save' ? 'Save query to schema' : request.mode === 'new' ? 'New query' : 'Rename query';
   const action = request.mode === 'rename' ? 'Rename' : request.mode === 'new' ? 'Create' : 'Save';
-  const dbLabel = conn?.providerId === 'oracle' ? 'Schema' : hasDatabaseLevel(conn?.providerId) ? 'Database › schema' : 'Schema';
+  const level = schemaLevelLabel(conn?.providerId);
+  const dbLabel = schemaIsDatabase(conn?.providerId) ? level[0].toUpperCase() + level.slice(1) : hasDatabaseLevel(conn?.providerId) ? 'Database › schema' : 'Schema';
 
   return (
     <Dialog

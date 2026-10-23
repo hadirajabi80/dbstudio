@@ -1,0 +1,333 @@
+{
+ "connectionId": "c_cql",
+ "dialect": "cql",
+ "database": "main",
+ "defaultSchema": "main",
+ "version": 1,
+ "databases": [
+  "main",
+  "archive"
+ ],
+ "schemas": [
+  {
+   "name": "main",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "customers",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "name",
+       "TEXT",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "email",
+       "TEXT",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "country_id",
+       "INTEGER",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "fk_customers_0",
+       "cols": [
+        "country_id"
+       ],
+       "rs": "main",
+       "rt": "countries",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "orders",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "customer_id",
+       "INTEGER",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_date",
+       "TEXT",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "REAL",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "fk_orders_0",
+       "cols": [
+        "customer_id"
+       ],
+       "rs": "main",
+       "rt": "customers",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "order_lines",
+     "c": [
+      [
+       "order_id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "product_id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "qty",
+       "INTEGER",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "order_id",
+      "product_id"
+     ],
+     "fk": [
+      {
+       "n": "fk_order_lines_0",
+       "cols": [
+        "order_id"
+       ],
+       "rs": "main",
+       "rt": "orders",
+       "rcols": [
+        "id"
+       ]
+      },
+      {
+       "n": "fk_order_lines_1",
+       "cols": [
+        "product_id"
+       ],
+       "rs": "main",
+       "rt": "products",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "products",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "name",
+       "TEXT",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "price",
+       "REAL",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "countries",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "name",
+       "TEXT",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "view",
+     "n": "customer_totals",
+     "c": [
+      [
+       "customer_id",
+       "INTEGER",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "REAL",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "trigger",
+     "n": "trg_orders_ai"
+    }
+   ]
+  },
+  {
+   "name": "archive",
+   "version": 1,
+   "objects": [
+    {
+     "t": "table",
+     "n": "orders_2020",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "customer_id",
+       "INTEGER",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "REAL",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customers_old",
+     "c": [
+      [
+       "id",
+       "INTEGER",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "name",
+       "TEXT",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    }
+   ]
+  }
+ ]
+}

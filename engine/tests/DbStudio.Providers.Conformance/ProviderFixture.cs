@@ -40,6 +40,15 @@ public abstract class ProviderFixture : IAsyncLifetime
     /// <summary>False when the container/db is already seeded externally (docker init scripts).</summary>
     protected virtual bool SeedOnInitialize => true;
 
+    /// <summary>Batch 3: false when the provider has no manual transactions (ClickHouse, Cassandra): the transaction tests skip.</summary>
+    public virtual bool SupportsTransactions => true;
+
+    /// <summary>Batch 3: false when manual transactions have no savepoints (Snowflake): the edit-savepoint tests skip.</summary>
+    public virtual bool SupportsSavepoints => true;
+
+    /// <summary>Batch 3: false when a running statement cannot be cancelled: the cancel tests skip.</summary>
+    public virtual bool SupportsCancel => true;
+
     /// <summary>A query that runs for at least ~30 s unless cancelled.</summary>
     /// <remarks>
     /// Oracle: a CPU-bound query (a 10^10-row cartesian count), not <c>DBMS_SESSION.SLEEP</c>. ODP.NET cancels with a

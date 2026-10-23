@@ -9,12 +9,21 @@ import tsqlShop from '../../intel/__tests__/fixtures/shop-tsql.json';
 import plsqlShop from '../../intel/__tests__/fixtures/shop-plsql.json';
 import sqliteShop from '../../intel/__tests__/fixtures/shop-sqlite.json';
 import pgsqlShop from '../../intel/__tests__/fixtures/shop-pgsql.json';
+import mysqlShop from '../../intel/__tests__/fixtures/shop-mysql.json';
+import clickhouseShop from '../../intel/__tests__/fixtures/shop-clickhouse.json';
+import snowflakeShop from '../../intel/__tests__/fixtures/shop-snowflake.json';
+import cqlShop from '../../intel/__tests__/fixtures/shop-cql.json';
 
 const CATALOGS: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
   pgsql: pgsqlShop as unknown as CatalogSnapshot,
+  // Batch 3 (the WPs replace the samples below with dialect showcases)
+  mysql: mysqlShop as unknown as CatalogSnapshot,
+  clickhouse: clickhouseShop as unknown as CatalogSnapshot,
+  snowflake: snowflakeShop as unknown as CatalogSnapshot,
+  cql: cqlShop as unknown as CatalogSnapshot,
 };
 
 const SAMPLES: Record<Dialect, string> = {
@@ -79,6 +88,26 @@ BEGIN
 END
 $$;
 `,
+  // WP-MY begin
+  mysql: `-- MySQL playground
+SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+`,
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: `-- ClickHouse playground
+SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+`,
+  // WP-CH end
+  // WP-SF begin
+  snowflake: `-- Snowflake playground
+SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+`,
+  // WP-SF end
+  // WP-CS begin
+  cql: `-- CQL playground
+SELECT * FROM customers WHERE id = 1;
+`,
+  // WP-CS end
 };
 
 const SETTINGS: Settings['editor'] = {
@@ -123,7 +152,10 @@ export function EditorPlayground() {
             size="sm"
             style={{ width: 'auto' }}
             value={dialect}
-            options={[{ value: 'tsql', label: 'SQL Server (T-SQL)' }, { value: 'plsql', label: 'Oracle (PL/SQL)' }, { value: 'sqlite', label: 'SQLite' }, { value: 'pgsql', label: 'PostgreSQL' }]}
+            options={[
+              { value: 'tsql', label: 'SQL Server (T-SQL)' }, { value: 'plsql', label: 'Oracle (PL/SQL)' }, { value: 'sqlite', label: 'SQLite' }, { value: 'pgsql', label: 'PostgreSQL' },
+              { value: 'mysql', label: 'MySQL / MariaDB' }, { value: 'clickhouse', label: 'ClickHouse' }, { value: 'snowflake', label: 'Snowflake' }, { value: 'cql', label: 'CQL (Cassandra)' },
+            ]}
             onChange={(d) => { setDialect(d); setTexts({ a: SAMPLES[d], b: 'SELECT * FROM ' }); }}
           />
         </label>

@@ -137,6 +137,16 @@ public static class StatementClassifier
 
         var u = head.Upper;
         var hasWhere = HasDepth0Word(t, i, "WHERE");
+        // Batch 3: dialect-specific heads first (null = fall through to the shared switch below).
+        var special = dialect switch
+        {
+            Dialect.MySql => ClassifyMySql(t, i, u, hasWhere, start),
+            Dialect.ClickHouse => ClassifyClickHouse(t, i, u, hasWhere, start),
+            Dialect.Snowflake => ClassifySnowflake(t, i, u, hasWhere, start),
+            Dialect.Cql => ClassifyCql(t, i, u, hasWhere, start),
+            _ => null,
+        };
+        if (special is not null) return special;
         switch (u)
         {
             case "SELECT":
@@ -240,6 +250,25 @@ public static class StatementClassifier
                 return new(StatementCategory.Other, u, hasWhere, null, start);
         }
     }
+
+    // Batch 3 per-dialect heads (t = statement tokens, i = index of the head word, u = its upper-case value). Return null
+    // to use the shared switch. Each WP edits only its own block.
+
+    // WP-MY begin (MySQL/MariaDB: SHOW, DESCRIBE/DESC, START TRANSACTION, CALL, HANDLER, LOCK/UNLOCK TABLES, …)
+    private static StatementClassification? ClassifyMySql(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    // WP-MY end
+
+    // WP-CH begin (ClickHouse: SHOW, DESCRIBE, EXISTS, OPTIMIZE, SYSTEM, KILL, ALTER … UPDATE/DELETE mutations, …)
+    private static StatementClassification? ClassifyClickHouse(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    // WP-CH end
+
+    // WP-SF begin (Snowflake: SHOW, DESCRIBE/DESC, LIST/LS, GET/PUT, COPY INTO, USE WAREHOUSE/ROLE, CALL, UNDROP, …)
+    private static StatementClassification? ClassifySnowflake(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    // WP-SF end
+
+    // WP-CS begin (CQL: BEGIN BATCH … APPLY BATCH = Dml, DESCRIBE/DESC, USE, LIST ROLES/USERS, GRANT/REVOKE, …)
+    private static StatementClassification? ClassifyCql(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    // WP-CS end
 
     private static StatementClassification ClassifyPragma(List<SqlToken> t, int i)
     {
@@ -437,7 +466,7 @@ public static class StatementClassifier
         {
             1 => (null, null, parts[0]),
             2 => (null, NullIfEmpty(parts[0]), parts[1]),
-            3 when dialect is Dialect.TSql or Dialect.PgSql => (NullIfEmpty(parts[0]), NullIfEmpty(parts[1]), parts[2]),
+            3 when DialectInfo.HasDatabases(dialect) => (NullIfEmpty(parts[0]), NullIfEmpty(parts[1]), parts[2]), // T-SQL, PostgreSQL, Snowflake
             _ => (null, NullIfEmpty(parts[^2]), parts[^1]),
         };
     }

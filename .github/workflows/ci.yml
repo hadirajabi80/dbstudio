@@ -7,7 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       integration:
-        description: 'Also run the Docker integration suites (PostgreSQL, Redis, MongoDB, Kafka) on ubuntu-latest'
+        description: 'Also run the Docker integration suites (PostgreSQL, Redis, MongoDB, Kafka, MySQL, MariaDB, ClickHouse, Elasticsearch, Cassandra) on ubuntu-latest'
+        type: boolean
+        default: false
+      integration-snowflake:
+        description: 'Also run the live Snowflake suite (needs the DBSTUDIO_SF_* repository secrets)'
         type: boolean
         default: false
 
@@ -238,16 +242,48 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Start services
-        run: docker compose -f engine/tests/docker/compose.yml --profile kafka up -d postgres redis mongo kafka schema-registry
+        run: >-
+          docker compose -f engine/tests/docker/compose.yml --profile kafka --profile search --profile cassandra up -d
+          postgres redis mongo kafka schema-registry mysql mariadb clickhouse elasticsearch elasticsearch-seed cassandra cassandra-seed
       - name: Engine tests (with Docker services)
         run: dotnet test engine/DbStudio.slnx -c Release --logger "trx;LogFilePrefix=engine-it" --results-directory TestResults
       - name: Stop services
         if: always()
-        run: docker compose -f engine/tests/docker/compose.yml --profile kafka down -v
+        run: docker compose -f engine/tests/docker/compose.yml --profile kafka --profile search --profile cassandra down -v
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-integration
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # Batch 3 (plan-batch3 D10): optional live Snowflake suite, gated by the dispatch input and the DBSTUDIO_SF_* secrets.
+  integration-snowflake:
+    name: Integration (Snowflake, optional)
+    if: github.event_name == 'workflow_dispatch' && inputs.integration-snowflake
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      DBSTUDIO_IT: "1"
+      DBSTUDIO_SF_ACCOUNT: ${{ secrets.DBSTUDIO_SF_ACCOUNT }}
+      DBSTUDIO_SF_USER: ${{ secrets.DBSTUDIO_SF_USER }}
+      DBSTUDIO_SF_PASSWORD: ${{ secrets.DBSTUDIO_SF_PASSWORD }}
+      DBSTUDIO_SF_WAREHOUSE: ${{ secrets.DBSTUDIO_SF_WAREHOUSE }}
+      DBSTUDIO_SF_DATABASE: ${{ secrets.DBSTUDIO_SF_DATABASE }}
+      DBSTUDIO_SF_ROLE: ${{ secrets.DBSTUDIO_SF_ROLE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Snowflake tests (live account)
+        run: dotnet test engine/tests/DbStudio.Providers.Snowflake.Tests -c Release --logger "trx;LogFilePrefix=snowflake-it" --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-integration-snowflake
           path: TestResults/
           if-no-files-found: ignore

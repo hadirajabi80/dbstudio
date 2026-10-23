@@ -289,6 +289,21 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'connections.orphan': [h('sessions.disconnect'), h('sessions.rollbackClose'), 'separator', c('sessions.closeOrphans')],
 };
 
+/**
+ * Batch 3 (plan-batch3): a package adds its own context menu ids (e.g. `explorer.es.index`, `explorer.clickhouse.table`)
+ * from its commands.ts instead of editing CONTEXT_MENUS. Returns an unregister function. Re-registering an id replaces
+ * its entries (HMR); ids the shell defines above cannot be replaced.
+ */
+export function registerContextMenu(id: string, entries: ContextEntry[]): () => void {
+  if (SHELL_MENU_IDS.has(id)) throw new Error(`Context menu '${id}' belongs to the shell (commands/menuModel.ts).`);
+  CONTEXT_MENUS[id] = entries;
+  return () => {
+    if (CONTEXT_MENUS[id] === entries) delete CONTEXT_MENUS[id];
+  };
+}
+
+const SHELL_MENU_IDS: ReadonlySet<string> = new Set(Object.keys(CONTEXT_MENUS));
+
 /** Console toolbar (left to right). */
 export const CONSOLE_TOOLBAR: ContextEntry[] = [
   c('run.statement'), c('run.script'), c('run.cancel'), c('run.multi'), 'separator',

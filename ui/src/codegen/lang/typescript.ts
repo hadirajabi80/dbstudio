@@ -128,6 +128,18 @@ const DRIVER: Record<Dialect, { module: string; conn: string; import: string }> 
   sqlite: { module: 'better-sqlite3', conn: 'Database', import: "import type { Database } from 'better-sqlite3';" },
   // node-postgres: a Pool, or a PoolClient checked out of it for a transaction.
   pgsql: { module: 'pg', conn: 'Pool | PoolClient', import: "import type { Pool, PoolClient } from 'pg';" },
+  // WP-MY begin
+  mysql: { module: 'mysql2/promise', conn: 'Pool | PoolConnection', import: "import type { Pool, PoolConnection } from 'mysql2/promise';" },
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: { module: '@clickhouse/client', conn: 'ClickHouseClient', import: "import type { ClickHouseClient } from '@clickhouse/client';" },
+  // WP-CH end
+  // WP-SF begin
+  snowflake: { module: 'snowflake-sdk', conn: 'snowflake.Connection', import: "import snowflake from 'snowflake-sdk';" },
+  // WP-SF end
+  // WP-CS begin
+  cql: { module: 'cassandra-driver', conn: 'Client', import: "import type { Client } from 'cassandra-driver';" },
+  // WP-CS end
 };
 
 const MSSQL_TYPE: Record<string, string> = {

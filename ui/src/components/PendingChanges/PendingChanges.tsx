@@ -14,7 +14,10 @@ import { verifyDefault } from './save';
 import { buildStatements, submitChanges, type EditContext } from './submit';
 import './pendingchanges.css';
 
-const DIALECT_NAME = { tsql: 'SQL Server', plsql: 'Oracle', sqlite: 'SQLite', pgsql: 'PostgreSQL' } as const;
+const DIALECT_NAME = {
+  tsql: 'SQL Server', plsql: 'Oracle', sqlite: 'SQLite', pgsql: 'PostgreSQL',
+  mysql: 'MySQL', clickhouse: 'ClickHouse', snowflake: 'Snowflake', cql: 'Cassandra',
+} as const;
 
 export { verifyDefault } from './save';
 

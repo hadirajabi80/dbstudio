@@ -1,0 +1,4 @@
+{
+  "$comment": "Snowflake built-in functions (plan-batch3 WP-SF). WP0 stub; same shape as sqlite-functions.json.",
+  "functions": []
+}

@@ -116,6 +116,12 @@ function shortVersion(v: string): string {
   return m ? m[1] : first.slice(0, 40);
 }
 
+/** Language of a provider's consoles (by provider id). Batch 3: MySQL/MariaDB share the mysql dialect, Cassandra speaks CQL. */
+const DIALECT_NAME: Record<string, string> = {
+  sqlserver: 'T-SQL', oracle: 'PL/SQL', sqlite: 'SQLite', postgresql: 'PostgreSQL',
+  mysql: 'MySQL', mariadb: 'MariaDB', clickhouse: 'ClickHouse', snowflake: 'Snowflake', cassandra: 'CQL',
+};
+
 function dialectName(p?: string): string {
-  return p === 'sqlserver' ? 'T-SQL' : p === 'oracle' ? 'PL/SQL' : p === 'sqlite' ? 'SQLite' : p === 'postgresql' ? 'PostgreSQL' : 'SQL';
+  return (p && DIALECT_NAME[p]) || 'SQL';
 }

@@ -1,0 +1,4 @@
+{
+  "$comment": "MySQL / MariaDB built-in functions (plan-batch3 WP-MY). WP0 stub; same shape as sqlite-functions.json.",
+  "functions": []
+}

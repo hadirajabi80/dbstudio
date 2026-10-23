@@ -24,7 +24,7 @@ import { Kbd } from '../Shortcuts/Kbd';
 import { commandIcon } from '../layout/commandMenu';
 import { collectEntries, DIAGRAM_PREFIX, parseObjectQuery, searchObjects, type IndexEntry, type SourceEntryType } from './objectIndex';
 
-const SOURCE_ENTRY_LABEL: Record<SourceEntryType, string> = { 'redis.key': 'Key', 'mongo.collection': 'Collection', 'kafka.topic': 'Topic' };
+const SOURCE_ENTRY_LABEL: Record<SourceEntryType, string> = { 'redis.key': 'Key', 'mongo.collection': 'Collection', 'kafka.topic': 'Topic', 'es.index': 'Index' };
 import { paletteMatch, rankPalette, type PaletteMatch } from './paletteScore';
 
 const MRU_KEY = 'dbstudio.palette.mru.v1';

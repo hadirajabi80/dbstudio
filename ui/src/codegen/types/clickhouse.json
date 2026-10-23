@@ -1,0 +1,3 @@
+{
+  "$comment": "ClickHouse type map for code generation (plan-batch3 WP-CH). WP0 stub: unknown types fall back to the wire column kind."
+}

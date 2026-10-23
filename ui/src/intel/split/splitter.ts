@@ -1,6 +1,6 @@
 // Statement and batch splitting (PLAN 4.4).
 import type { StatementInfo, Token } from '../types';
-import type { DialectSpec } from '../dialect/spec';
+import type { DialectSpec, SplitKit } from '../dialect/spec';
 import { wordSet } from '../dialect/spec';
 import { classifyTokens } from './classify';
 
@@ -45,11 +45,11 @@ const SQL_SET_TARGETS = wordSet('TRANSACTION ROLE CONSTRAINT CONSTRAINTS');
 function isSig(t: Token): boolean {
   return t.kind !== 'comment' && t.kind !== 'eof' && t.kind !== 'ws';
 }
-function isWordTok(t: Token | undefined): boolean {
+export function isWordTok(t: Token | undefined): boolean {
   return !!t && (t.kind === 'keyword' || t.kind === 'ident');
 }
 
-function hasBlankLine(text: string, from: number, to: number): boolean {
+export function hasBlankLine(text: string, from: number, to: number): boolean {
   let nl = 0;
   for (let i = from; i < to; i++) {
     const c = text.charCodeAt(i);
@@ -69,9 +69,21 @@ export function splitStatements(tokens: Token[], text: string, spec: DialectSpec
     case 'plsql': splitOracle(b, sig, opts); break;
     case 'sqlite': splitSqlite(b, sig, opts); break;
     case 'pgsql': splitPgsql(b, sig, opts); break;
+    // Batch 3 (D7/D8): the dialect's own splitter from its lazily loaded spec (MySQL DELIMITER, CQL batches…), else
+    // plain semicolons (also the generic spec used until the real one has loaded).
+    default:
+      if (spec.split) spec.split(b, sig, opts, SPLIT_KIT);
+      else splitSemicolon(b, sig, opts);
+      break;
   }
   return { statements: b.statements, batches: b.batches };
 }
+
+/** Statement/batch accumulator handed to a dialect splitter (DialectSpec.split). */
+export type SplitBuilder = Builder;
+
+/** Handed to DialectSplitter (lazy dialect chunks never import this module at run time, see intel/dialect/spec.ts). */
+const SPLIT_KIT: SplitKit = { splitSemicolon, isWordTok, hasBlankLine };
 
 class Builder {
   statements: SplitStatement[] = [];
@@ -379,6 +391,15 @@ function splitOracle(b: Builder, sig: number[], opts: SplitOptions): void {
 }
 
 // ---------------------------------------------------------------- SQLite
+
+/**
+ * Batch 3: the default splitter of dialects without their own (and of the generic stand-in spec): the SQLite rules,
+ * i.e. statements end at a `;` outside parentheses and CASE … END (CREATE TRIGGER … BEGIN … END stays whole); a blank
+ * line ends one when `blankLineSplitsStatements` is on. Dialect splitters get it through the SplitKit.
+ */
+export function splitSemicolon(b: Builder, sig: number[], opts: SplitOptions): void {
+  splitSqlite(b, sig, opts);
+}
 
 function splitSqlite(b: Builder, sig: number[], opts: SplitOptions): void {
   const toks = b.tokens;

@@ -5,17 +5,29 @@ import tsqlShop from './fixtures/shop-tsql.json';
 import plsqlShop from './fixtures/shop-plsql.json';
 import sqliteShop from './fixtures/shop-sqlite.json';
 import pgsqlShop from './fixtures/shop-pgsql.json';
+// Batch 3: per-WP shop fixtures (WP0 copies of the SQLite one; each WP owns its file)
+import mysqlShop from './fixtures/shop-mysql.json';
+import clickhouseShop from './fixtures/shop-clickhouse.json';
+import snowflakeShop from './fixtures/shop-snowflake.json';
+import cqlShop from './fixtures/shop-cql.json';
 
 export const fixtures: Record<Dialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,
   plsql: plsqlShop as unknown as CatalogSnapshot,
   sqlite: sqliteShop as unknown as CatalogSnapshot,
   pgsql: pgsqlShop as unknown as CatalogSnapshot,
+  mysql: mysqlShop as unknown as CatalogSnapshot,
+  clickhouse: clickhouseShop as unknown as CatalogSnapshot,
+  snowflake: snowflakeShop as unknown as CatalogSnapshot,
+  cql: cqlShop as unknown as CatalogSnapshot,
 };
 
 const cache = new Map<string, Intel>();
 
-/** Intel with the shop fixture loaded (shared per dialect; documents are per test uri). */
+/**
+ * Intel with the shop fixture loaded (shared per dialect; documents are per test uri). Batch 3 dialects load lazily:
+ * `await ensureDialect(d)` (intel/dialect/registry.ts) in a beforeAll first, or the generic spec is used.
+ */
 export function intelFor(dialect: Dialect, opts?: Partial<IntelOptions>): Intel {
   const key = dialect + JSON.stringify(opts ?? {});
   let i = cache.get(key);

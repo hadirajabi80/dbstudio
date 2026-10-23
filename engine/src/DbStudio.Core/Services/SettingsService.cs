@@ -192,7 +192,7 @@ public sealed class SettingsService
         }
     }
 
-    private static readonly string[] Dialects = ["tsql", "plsql", "sqlite", "pgsql"];
+    private static readonly string[] Dialects = ["tsql", "plsql", "sqlite", "pgsql", "mysql", "clickhouse", "snowflake", "cql"];
 
     /// <summary>M1.5 keys: format, snippets, grid, connections, editor.blankLineSplitsStatementsByDialect.</summary>
     private static void ValidateM15(JsonObject s, JsonObject editor)
@@ -228,7 +228,7 @@ public sealed class SettingsService
             if (dialects is not null)
             {
                 if (dialects is not JsonArray list || list.Any(d => d?.GetValueKind() != JsonValueKind.String || !Dialects.Contains(d.GetValue<string>())))
-                    throw EngineException.Validation($"{field}.dialects must be null or a list of tsql, plsql, sqlite, pgsql.", new { field = $"{field}.dialects" });
+                    throw EngineException.Validation($"{field}.dialects must be null or a list of tsql, plsql, sqlite, pgsql, mysql, clickhouse, snowflake, cql.", new { field = $"{field}.dialects" });
             }
         }
 

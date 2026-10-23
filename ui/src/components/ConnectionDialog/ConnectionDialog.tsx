@@ -74,9 +74,12 @@ function suggestName(p: ProviderInfo | undefined, v: Values): string {
     return user ? `${user}@${host}` : host;
   }
   if (p.id === 'kafka') return str('bootstrapServers').split(',').map((s) => s.trim()).filter(Boolean)[0] ?? '';
-  const host = str('server') || str('host') || str('tnsAlias');
-  const db = str('database') || str('serviceName') || str('sid');
-  const user = str('user');
+  // Batch 3: Elasticsearch the host of the first URL; Snowflake user@account/database; Cassandra contactPoints[0]/keyspace
+  const first = (k: string) => String(v[k] ?? '').split(',')[0].trim();
+  if (p.id === 'elasticsearch') return first('url').replace(/^\w+:\/\/([^@/]*@)?|[/?#].*$/g, '');
+  const host = str('server') || str('host') || str('tnsAlias') || str('account') || first('contactPoints');
+  const db = str('database') || str('serviceName') || str('sid') || str('keyspace');
+  const user = p.id === 'cassandra' ? '' : str('user');
   if (!host) return '';
   return [user && `${user}@`, host, db && `/${db}`].filter(Boolean).join('');
 }

@@ -1,5 +1,6 @@
 import catalog from './data/pgsql-functions.json';
-import { buildSpec, type FunctionCatalogJson } from './spec';
+import pgSystem from './data/pgsql-system.json';
+import { buildSpec, type FunctionCatalogJson, type SystemCatalogJson } from './spec';
 
 export const pgsqlSpec = buildSpec({
   id: 'pgsql',
@@ -41,6 +42,8 @@ export const pgsqlSpec = buildSpec({
     oid regclass regtype regproc int4range int8range numrange tsrange tstzrange daterange int4multirange int8multirange
     nummultirange tsmultirange tstzmultirange datemultirange hstore citext record void trigger anyelement anyarray`,
   catalog: catalog as FunctionCatalogJson,
+  // pg_catalog / information_schema views (catalog/index.ts builtin schemas)
+  systemCatalog: pgSystem as unknown as SystemCatalogJson,
   quote: ['"', '"'],
   caseFolding: 'lower',
   batchSeparator: null,

@@ -3,7 +3,6 @@ import type {
   CatalogObject, CatalogObjectType, CatalogPackageMember, CatalogParamTuple, CatalogSchema, CatalogSnapshot,
 } from '../../api/types';
 import type { DialectSpec, PackageDef } from '../dialect/spec';
-import pgSystem from '../dialect/data/pgsql-system.json';
 import type { ColumnDef } from '../parse/statement-model';
 
 export interface FkEdge {
@@ -117,7 +116,7 @@ export class CatalogIndex {
   private readonly all = new Map<string, ObjectEntry[]>();
   private colIndex: Map<string, ObjectEntry[]> | null = null;
   private readonly builtins = new Map<string, ObjectEntry>();
-  /** Built-in schemas (PostgreSQL pg_catalog / information_schema views), consulted after the loaded schemas. */
+  /** Built-in schemas (DialectSpec.systemCatalog: PostgreSQL pg_catalog / information_schema views…), consulted after the loaded schemas. */
   private readonly builtinSchemas = new Map<string, SchemaEntry>();
   /**
    * PostgreSQL search_path (snapshot.searchPath, else [defaultSchema]): unqualified names resolve in this order and
@@ -143,8 +142,9 @@ export class CatalogIndex {
       this.builtins.set('DUAL', new ObjectEntry('SYS', DUAL, (s) => s, true));
       for (const p of spec.packages) this.builtins.set(p.name.toUpperCase(), new ObjectEntry('SYS', packageToObject(p), (s) => s, true));
     }
-    if (spec.id === 'pgsql') {
-      for (const sc of (pgSystem as unknown as { schemas: CatalogSchema[] }).schemas) {
+    // PostgreSQL pg_catalog / information_schema; Batch 3 dialects declare theirs in their spec (D8).
+    if (spec.systemCatalog) {
+      for (const sc of spec.systemCatalog.schemas) {
         this.builtinSchemas.set(this.keyOfCatalog(sc.name), this.buildSchema({ ...sc, version: 0 }, true));
       }
     }

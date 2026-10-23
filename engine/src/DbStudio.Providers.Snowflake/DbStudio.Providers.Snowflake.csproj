@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Snowflake provider (plan-batch3 WP-SF). Snowflake.Data 4.x; heavy transitive graph (D11): WP-SF trims and reports the publish delta.
+       WP0 committed the compiling stub; WP-SF owns this project. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbStudio.Core\DbStudio.Core.csproj" />
+    <ProjectReference Include="..\DbStudio.Logs\DbStudio.Logs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Snowflake.Data" Version="4.8.0" />
+    <!-- NuGetAudit: Snowflake.Data 4.x depends on log4net 2.0.12 (GHSA-4f7c-pmjv-c25w, fixed in 3.3.0); pin a patched
+         version. WP-SF verifies the driver logs/loads with it (or moves to Snowflake.Data 6.x, which dropped log4net). -->
+    <PackageReference Include="log4net" Version="3.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbStudio.Providers.Snowflake.Tests" />
+  </ItemGroup>
+
+</Project>

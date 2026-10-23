@@ -17,6 +17,20 @@ const ORACLE: CSSProperties = { fill: 'var(--logo-oracle)' };
 const REDIS: CSSProperties = { fill: 'var(--logo-redis)' };
 const REDIS_SIDE: CSSProperties = { fill: 'var(--logo-redis-side)' };
 
+/**
+ * Batch 3 placeholder (plan-batch3 WP0): a database cylinder in the provider's token colour, until WP-UI vendors the real
+ * artwork (devicon mysql/mariadb/elasticsearch/cassandra, simple-icons ClickHouse/Snowflake).
+ */
+function placeholder(label: string, token: string): BrandLogo {
+  const style: CSSProperties = { fill: `var(${token})` };
+  return {
+    label,
+    viewBox: '0 0 24 24',
+    paint: () => <path style={style} d="M3 5c0-3 18-3 18 0v14c0 3-18 3-18 0Z" />,
+    shape: [token],
+  };
+}
+
 export interface BrandLogo {
   /** Product name, used as the accessible name when the logo stands alone. */
   label: string;
@@ -109,4 +123,11 @@ export const BRAND_LOGOS: Record<ProviderId, BrandLogo> = {
     bold: { stroke: 'var(--logo-ink)', width: 2.5 },
     shape: ['--logo-ink'],
   },
+  // Batch 3 placeholders (WP-UI replaces them with the vendored artwork)
+  mysql: placeholder('MySQL', '--provider-mysql'),
+  mariadb: placeholder('MariaDB', '--provider-mariadb'),
+  clickhouse: placeholder('ClickHouse', '--provider-clickhouse'),
+  snowflake: placeholder('Snowflake', '--provider-snowflake'),
+  elasticsearch: placeholder('Elasticsearch', '--provider-elasticsearch'),
+  cassandra: placeholder('Cassandra', '--provider-cassandra'),
 };

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- MySQL + MariaDB provider (docs/wp-notes, plan-batch3 WP-MY). Dialect.MySql for both ids.
+       WP0 committed the compiling stub; WP-MY owns this project. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbStudio.Core\DbStudio.Core.csproj" />
+    <ProjectReference Include="..\DbStudio.Logs\DbStudio.Logs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbStudio.Providers.MySql.Tests" />
+  </ItemGroup>
+
+</Project>

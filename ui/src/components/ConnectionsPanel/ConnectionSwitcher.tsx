@@ -4,7 +4,7 @@ import type { ConnectionProfile } from '../../api/types';
 import { effectiveDatabase, switchConnection, switchDatabase } from '../../app/actions';
 import { fuzzyMatch } from '../../lib/fuzzy';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { providerKind, useConnections } from '../../store/connections';
+import { providerKind, schemaIsDatabase, schemaLevelLabel, useConnections } from '../../store/connections';
 import { useTabSession } from '../../store/sessions';
 import { useTabs } from '../../store/tabs';
 import { useUi } from '../../store/ui';
@@ -39,7 +39,10 @@ function Switcher() {
   const session = useTabSession(sw.tabId);
   const conn = connections.find((c) => c.id === tab?.connectionId);
   const connCat = useCatalog((s) => (conn ? s.conns[conn.id] : undefined));
-  const oracleSchemas = useCatalog((s) => (conn?.providerId === 'oracle' ? s.dbs[dbKey(conn.id, null)]?.schemasResp : undefined));
+  // Oracle and the Batch 3 single-level providers switch schemas (MySQL/ClickHouse databases, Cassandra keyspaces).
+  const singleLevel = schemaIsDatabase(conn?.providerId);
+  const levelLabel = schemaLevelLabel(conn?.providerId);
+  const oracleSchemas = useCatalog((s) => (conn && singleLevel ? s.dbs[dbKey(conn.id, null)]?.schemasResp : undefined));
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +54,7 @@ function Switcher() {
   useEffect(() => {
     inputRef.current?.focus();
     if (sw.mode === 'database' && conn) {
-      if (conn.providerId === 'oracle') void useCatalog.getState().loadSchemas(conn.id, null);
+      if (schemaIsDatabase(conn.providerId)) void useCatalog.getState().loadSchemas(conn.id, null);
       else void useCatalog.getState().loadDatabases(conn.id);
     }
   }, [sw.mode, conn]);
@@ -73,7 +76,7 @@ function Switcher() {
       if (!conn) return [];
       let list: string[] = [];
       let current: string | null = null;
-      if (conn.providerId === 'oracle') {
+      if (singleLevel) {
         list = (oracleSchemas?.schemas ?? []).map((s) => s.name);
         current = tab.database ?? session?.database ?? oracleSchemas?.defaultSchema ?? null;
       } else {
@@ -84,7 +87,7 @@ function Switcher() {
       for (const d of list) {
         const m = fuzzyMatch(p, d);
         if (!m) continue;
-        out.push({ key: d, label: d, group: conn.providerId === 'oracle' ? 'Schemas' : 'Databases', current: d === current, positions: m.positions, run: () => void switchDatabase(tab.id, d) });
+        out.push({ key: d, label: d, group: levelLabel === 'schema' ? 'Schemas' : levelLabel === 'keyspace' ? 'Keyspaces' : 'Databases', current: d === current, positions: m.positions, run: () => void switchDatabase(tab.id, d) });
       }
       if (p) out.sort((a, b) => (fuzzyMatch(p, b.label)?.score ?? 0) - (fuzzyMatch(p, a.label)?.score ?? 0));
       return out;
@@ -112,7 +115,7 @@ function Switcher() {
     const out: Row[] = scored;
     out.push({ key: '__new', label: 'New connection…', group: '', current: false, positions: [], run: () => useUi.getState().openConnectionDialog({ mode: 'new', connectAfter: false }) });
     return out;
-  }, [q, sw.mode, tab, conn, connections, connCat, oracleSchemas, session]);
+  }, [q, sw.mode, tab, conn, connections, connCat, oracleSchemas, session, singleLevel, levelLabel]);
 
   useEffect(() => {
     const i = rows.findIndex((r) => r.current);
@@ -153,7 +156,7 @@ function Switcher() {
           <input
             ref={inputRef}
             className="input borderless"
-            placeholder={sw.mode === 'database' ? (conn?.providerId === 'oracle' ? 'Switch schema…' : 'Switch database…') : 'Switch connection…'}
+            placeholder={sw.mode === 'database' ? `Switch ${levelLabel}…` : 'Switch connection…'}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search"

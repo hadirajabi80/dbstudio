@@ -1,0 +1,4 @@
+{
+  "$comment": "CQL (Cassandra / ScyllaDB) built-in functions (plan-batch3 WP-CS). WP0 stub; same shape as sqlite-functions.json.",
+  "functions": []
+}

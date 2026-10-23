@@ -14,13 +14,8 @@ import { getSpec } from '../intel/dialect';
 import { tokenize } from '../intel/lexer/lexer';
 import { splitStatements } from '../intel/split/splitter';
 import { countNewlines, prepareTokens } from './comments';
-import { Layout } from './layout';
+import { Layout, rulesFor } from './layout';
 import { applyCase, resolveFormatOptions, type FormatOptions } from './options';
-import type { FormatRules } from './rules/common';
-import { plsqlRules } from './rules/plsql';
-import { sqliteRules } from './rules/sqlite';
-import { pgsqlRules } from './rules/pgsql';
-import { tsqlRules } from './rules/tsql';
 
 export { DEFAULT_FORMAT_OPTIONS, resolveFormatOptions, applyCase } from './options';
 export type { FormatOptions, CaseStyle } from './options';
@@ -110,7 +105,6 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
   return chunks;
 }
 
-const STATEMENT_RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: pgsqlRules };
 
 /**
  * Tokens in the order the safety check compares them: `eof` dropped and every `;` moved before the comments right in
@@ -239,7 +233,7 @@ function tokenContext(tokens: Token[], c: Chunk, dialect: Dialect): { nested: bo
  * index of the cut, or null.
  */
 function resyncPoint(tokens: Token[], text: string, c: Chunk, dialect: Dialect): number | null {
-  const starts = STATEMENT_RULES[dialect].statementStarts;
+  const starts = rulesFor(getSpec(dialect)).statementStarts;
   const isStart = (t: Token | undefined) => !!t && (t.kind === 'keyword' || t.kind === 'ident') && starts.has(t.upper);
   const ctx = tokenContext(tokens, c, dialect);
   for (let j = c.a + 1; j < c.b; j++) {

@@ -3,10 +3,11 @@
 //
 // Multi-instance safety: every keybinding is a per-editor action (addAction), global Monaco registrations happen
 // once (ensureMonacoSetup), and providers find this editor's intel through the model URI (registry.ts).
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as monaco from './monaco';
 import type { ExplainMode, RunLabel, ServerDiagnostic } from '../api/types';
 import { createIntel, type Intel } from '../intel';
+import { ensureDialect, isDialectReady } from '../intel/dialect/registry';
 import { intelOptionsFromSettings } from './settings';
 import type { RunTargetOptions, SqlEditorHandle, SqlEditorProps } from './SqlEditor.types';
 import { ensureMonacoSetup, LANGUAGE_IDS, THEME_IDS } from './monaco-setup';
@@ -42,6 +43,17 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   const intelRef = useRef<Intel | null>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
+  // Batch 3 (D7): a lazily loaded dialect spec must be in place before the model and its intel are created; the four
+  // original dialects are always ready, so their editors mount exactly as before.
+  const [loadedDialect, setLoadedDialect] = useState<string | null>(null);
+  const dialectReady = isDialectReady(props.dialect) || loadedDialect === props.dialect;
+  useEffect(() => {
+    if (isDialectReady(props.dialect)) return;
+    let live = true;
+    const d = props.dialect;
+    void ensureDialect(d).then(() => { if (live) setLoadedDialect(d); });
+    return () => { live = false; };
+  }, [props.dialect]);
   const uriRef = useRef<string>('');
   const externalEdit = useRef(false);
   const lastUsage = useRef<Record<string, number> | undefined>(undefined);
@@ -194,7 +206,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   // ------------------------------------------------------------ mount / dialect change
 
   useEffect(() => {
-    if (!host.current) return;
+    if (!host.current || !dialectReady) return;
     ensureMonacoSetup();
     const p = propsRef.current;
     const dialect = p.dialect;
@@ -354,8 +366,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       edRef.current = null;
       intelRef.current = null;
     };
-    // remount when the tab identity or dialect changes
-  }, [props.tabId, props.dialect]);
+    // remount when the tab identity or dialect changes (or a lazily loaded dialect becomes ready)
+  }, [props.tabId, props.dialect, dialectReady]);
 
   // ------------------------------------------------------------ prop sync
 

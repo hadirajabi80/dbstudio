@@ -149,3 +149,24 @@ dotnet test engine/tests/DbStudio.Sources.Kafka.Tests
 
 Without Docker the suite runs against `KafkaFake` (in-memory broker model) and `FakeSchemaRegistry` (HttpMessageHandler);
 the `KafkaIntegrationTests` are skipped.
+
+## Batch 3 services (plan-batch3: MySQL, MariaDB, ClickHouse, Snowflake, Elasticsearch, Cassandra)
+
+WP0 wrote every service block in `compose.yml` and committed the seed files as placeholders; each work package owns its
+seed file(s) and appends its own section below this table ("MySQL / MariaDB (WP-MY)", "ClickHouse (WP-CH)",
+"Snowflake (WP-SF)", "Elasticsearch (WP-ES)", "Cassandra (WP-CS)"). Elasticsearch and Cassandra are behind profiles:
+`docker compose -f engine/tests/docker/compose.yml --profile search --profile cassandra up -d`.
+
+| Service | Image | Address (host) | Credentials | Seed (owner) | Env vars for the test backends |
+|---|---|---|---|---|---|
+| `mysql` | `mysql:8.4` | `localhost:13306`, db `shop` | `shop` / `shop` (`MYSQL_PASSWORD`; also root's) | `seed-mysql.sql` (WP-MY) | `DBSTUDIO_MYSQL_HOST`, `DBSTUDIO_MYSQL_PORT`, `DBSTUDIO_MYSQL_USER`, `DBSTUDIO_MYSQL_PASSWORD` |
+| `mariadb` | `mariadb:11` | `localhost:13307`, db `shop` | `shop` / `shop` (`MARIADB_PASSWORD`) | `seed-mysql.sql` + `seed-mariadb.sql` (WP-MY) | `DBSTUDIO_MARIADB_HOST`, `DBSTUDIO_MARIADB_PORT`, `DBSTUDIO_MARIADB_USER`, `DBSTUDIO_MARIADB_PASSWORD` |
+| `clickhouse` | `clickhouse/clickhouse-server:24.8` | `http://localhost:18123` (native `19000`), db `shop` | `shop` / `shop` (`CLICKHOUSE_PASSWORD`) | `seed-clickhouse.sql` (WP-CH) | `DBSTUDIO_CH_HOST`, `DBSTUDIO_CH_PORT`, `DBSTUDIO_CH_USER`, `DBSTUDIO_CH_PASSWORD` |
+| `elasticsearch`, profile `search` | `docker.elastic.co/elasticsearch/elasticsearch:8.15.3` | `http://localhost:19200` | none (security off) | `seed-elasticsearch.sh` + `.ndjson` via one-shot `elasticsearch-seed` (WP-ES) | `DBSTUDIO_ES_URL` |
+| `cassandra`, profile `cassandra` | `cassandra:5` | `localhost:19042`, keyspace `shop` | none | `seed-cassandra.cql` via one-shot `cassandra-seed` (WP-CS) | `DBSTUDIO_CASSANDRA_HOST`, `DBSTUDIO_CASSANDRA_PORT` |
+| — (Snowflake is a cloud service) | — | your test account | password or key pair | `seed-snowflake.sql`, manual or `DBSTUDIO_SF_SEED=1` (WP-SF) | `DBSTUDIO_SF_ACCOUNT`, `DBSTUDIO_SF_USER`, `DBSTUDIO_SF_PASSWORD`, `DBSTUDIO_SF_PRIVATE_KEY_PATH`, `DBSTUDIO_SF_WAREHOUSE`, `DBSTUDIO_SF_DATABASE`, `DBSTUDIO_SF_ROLE` |
+
+The suites follow the M2 pattern: `DBSTUDIO_IT=0` skips them, the env vars point them at these long-running servers,
+otherwise they start their own container (`Testcontainers.MySql`, `.MariaDb`, `.ClickHouse`, `.Elasticsearch`,
+`.Cassandra` 4.16.0). Snowflake has no container: its unit tests replay recorded fixtures and the live suite runs only
+when `DBSTUDIO_SF_ACCOUNT` is set.

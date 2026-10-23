@@ -7,7 +7,7 @@ import { getEditor } from '../../app/editors';
 import { displayShortcut } from '../../commands/keys';
 import { isContainerTarget, isObjectTarget, isSavedQueryTarget, type CommandTarget, type SavedQueryTarget } from '../../commands/types';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { getConnection, providerKind } from '../../store/connections';
+import { getConnection, providerKind, schemaIsDatabase } from '../../store/connections';
 import { findSavedQuery, freeQueryName, scopeLabel, useSavedQueries } from '../../store/savedQueries';
 import { savedQueryTitle, useTabs, type ConsoleTab } from '../../store/tabs';
 import { toast, useUi } from '../../store/ui';
@@ -65,7 +65,7 @@ export function scopeOfTarget(t: CommandTarget | null | undefined): SavedQuerySc
 export function consoleScope(tab: ConsoleTab): SavedQueryScope | null {
   const cid = tab.connectionId;
   if (!isRelational(cid)) return null;
-  const oracle = getConnection(cid)?.providerId === 'oracle';
+  const oracle = schemaIsDatabase(getConnection(cid)?.providerId); // Oracle and the Batch 3 single-level providers
   const database = catalogDatabase(cid, tab.database);
   let schema = oracle ? tab.database ?? defaultSchemaOf(cid, database) : defaultSchemaOf(cid, database);
   const sel = scopeOfTarget(useExplorer.getState().selectedTarget);

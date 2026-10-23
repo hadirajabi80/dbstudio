@@ -19,6 +19,18 @@ const ACTIONS: Record<Dialect, { del: ReferentialAction[]; upd: ReferentialActio
   plsql: { del: ['NO ACTION', 'CASCADE', 'SET NULL'], upd: ['NO ACTION'] },
   pgsql: { del: ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'], upd: ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'] },
   sqlite: { del: ['NO ACTION'], upd: ['NO ACTION'] },
+  // WP-MY begin
+  mysql: { del: ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL'], upd: ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL'] },
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: { del: ['NO ACTION'], upd: ['NO ACTION'] },
+  // WP-CH end
+  // WP-SF begin
+  snowflake: { del: ['NO ACTION'], upd: ['NO ACTION'] },
+  // WP-SF end
+  // WP-CS begin
+  cql: { del: ['NO ACTION'], upd: ['NO ACTION'] },
+  // WP-CS end
 };
 
 /** First pair guess: the dragged columns, else a column named like the referenced table's key, else the first column. */

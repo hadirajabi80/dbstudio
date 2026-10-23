@@ -36,7 +36,8 @@ export interface SourceTreeInput {
 export interface PaletteSourceEntry {
   /** Display name searched by the palette (e.g. the key, `shop.orders`, the topic). */
   name: string;
-  type: 'redis.key' | 'mongo.collection' | 'kafka.topic';
+  /** Batch 3: 'es.index' (Elasticsearch / OpenSearch indices, WP-ES). */
+  type: 'redis.key' | 'mongo.collection' | 'kafka.topic' | 'es.index';
   connectionId: string;
   /** Short context shown next to the name (database, "db 0", cluster name...). */
   detail?: string;

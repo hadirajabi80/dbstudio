@@ -33,13 +33,13 @@ export interface SearchHit {
 }
 
 /**
- * Type prefixes: `t:` tables (and Kafka topics), `v:` views, `p:` procedures, `f:` functions, `c:` columns,
+ * Type prefixes: `t:` tables (and Kafka topics, Elasticsearch indices), `v:` views, `p:` procedures, `f:` functions, `c:` columns,
  * M2: `k:` Redis keys, `coll:` Mongo collections, `er:` tables and views opened as an ER diagram of their related
  * tables (`er.openRelated`, DIAGRAM_PREFIX), `q:` saved queries.
  */
 export const TYPE_PREFIXES: Record<string, (t: IndexEntry['type']) => boolean> = {
   q: (t) => t === 'query',
-  t: (t) => t === 'table' || t === 'kafka.topic',
+  t: (t) => t === 'table' || t === 'kafka.topic' || t === 'es.index', // Batch 3: Elasticsearch indices
   v: (t) => t === 'view' || t === 'mview',
   p: (t) => t === 'proc' || t === 'package',
   f: (t) => t === 'func' || t === 'tablefunc',

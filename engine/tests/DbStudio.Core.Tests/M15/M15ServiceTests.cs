@@ -488,8 +488,8 @@ public sealed class SettingsM15Tests : IDisposable
         Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "format": { "commaStyle": "middle" } }""")!.AsObject()));
         Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "grid": { "pageSize": 0 } }""")!.AsObject()));
         Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "snippets": [ { "id": "a", "name": "", "prefix": "p", "body": "" } ] }""")!.AsObject()));
-        Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "snippets": [ { "id": "a", "name": "n", "prefix": "p", "body": "", "dialects": ["mysql"] } ] }""")!.AsObject()));
-        Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "editor": { "blankLineSplitsStatementsByDialect": { "mysql": true } } }""")!.AsObject()));
+        Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "snippets": [ { "id": "a", "name": "n", "prefix": "p", "body": "", "dialects": ["db2"] } ] }""")!.AsObject()));
+        Assert.Throws<EngineException>(() => svc.Update(JsonNode.Parse("""{ "editor": { "blankLineSplitsStatementsByDialect": { "db2": true } } }""")!.AsObject()));
         // The failed updates left the stored settings untouched.
         Assert.Equal(2, svc.Get()["connections"]!["maxSessionsPerProfile"]!.GetValue<int>());
     }

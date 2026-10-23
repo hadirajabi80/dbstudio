@@ -233,7 +233,7 @@ public sealed partial class SqlInsertResultWriter : IResultWriter
         if (SimpleIdentifier().IsMatch(name) && !CommonReserved.Contains(name)
             && !(_dialect == Dialect.PlSql && name != name.ToUpperInvariant()))
             return name;
-        return _dialect == Dialect.TSql ? "[" + name.Replace("]", "]]") + "]" : "\"" + name.Replace("\"", "\"\"") + "\"";
+        return DialectInfo.QuoteIdentifier(_dialect, name);
     }
 
     internal string Literal(object? v, ColumnInfo? column)
@@ -241,13 +241,20 @@ public sealed partial class SqlInsertResultWriter : IResultWriter
         switch (v)
         {
             case null or CursorValue: return "NULL";
-            case bool b: return b ? "1" : "0";
+            case bool b: return _dialect == Dialect.Cql ? (b ? "true" : "false") : b ? "1" : "0";
             case int or long or short or byte or sbyte or ushort: return Convert.ToString(v, CultureInfo.InvariantCulture)!;
             case double d: return d.ToString("R", CultureInfo.InvariantCulture);
             case float f: return f.ToString("R", CultureInfo.InvariantCulture);
             case BinaryValue bin:
                 var hex = Convert.ToHexString(bin.Full);
-                return _dialect switch { Dialect.TSql => "0x" + hex, Dialect.PlSql => $"HEXTORAW('{hex}')", _ => $"X'{hex}'" };
+                return _dialect switch
+                {
+                    Dialect.TSql or Dialect.MySql or Dialect.Cql => "0x" + hex,
+                    Dialect.PlSql => $"HEXTORAW('{hex}')",
+                    Dialect.ClickHouse => $"unhex('{hex}')",
+                    Dialect.Snowflake => $"TO_BINARY('{hex}', 'HEX')",
+                    _ => $"X'{hex}'",
+                };
         }
 
         var text = ExportFormats.FullText(v) ?? "";
@@ -260,6 +267,7 @@ public sealed partial class SqlInsertResultWriter : IResultWriter
                 return $"TIMESTAMP '{text.Replace('T', ' ')}'";
         }
         var escaped = text.Replace("'", "''");
+        if (DialectInfo.BackslashStringEscapes(_dialect)) escaped = escaped.Replace("\\", "\\\\");
         return _dialect == Dialect.TSql && kind is ColumnKinds.String or ColumnKinds.Json or ColumnKinds.Xml or ColumnKinds.Other or null
             ? $"N'{escaped}'"
             : $"'{escaped}'";

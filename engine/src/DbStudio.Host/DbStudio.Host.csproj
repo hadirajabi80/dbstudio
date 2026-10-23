@@ -27,6 +27,12 @@
     <ProjectReference Include="..\DbStudio.Sources.Mongo\DbStudio.Sources.Mongo.csproj" />
     <ProjectReference Include="..\DbStudio.Sources.Kafka\DbStudio.Sources.Kafka.csproj" />
     <ProjectReference Include="..\DbStudio.Logs\DbStudio.Logs.csproj" />
+    <!-- Batch 3 (plan-batch3 D6): WP0 stubs; each package registers itself from its own IEngineModule. -->
+    <ProjectReference Include="..\DbStudio.Providers.MySql\DbStudio.Providers.MySql.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.ClickHouse\DbStudio.Providers.ClickHouse.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.Snowflake\DbStudio.Providers.Snowflake.csproj" />
+    <ProjectReference Include="..\DbStudio.Providers.Cassandra\DbStudio.Providers.Cassandra.csproj" />
+    <ProjectReference Include="..\DbStudio.Sources.Elasticsearch\DbStudio.Sources.Elasticsearch.csproj" />
   </ItemGroup>
 
   <ItemGroup>

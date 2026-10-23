@@ -57,6 +57,18 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
     'smallint', 'integer', 'bigint', 'numeric(12,2)', 'real', 'double precision', 'boolean', 'text', 'varchar(100)', 'char(10)', 'uuid', 'date',
     'timestamp(3)', 'timestamptz(3)', 'time', 'timetz', 'interval', 'bytea', 'json', 'jsonb', 'xml', 'inet', 'cidr', 'macaddr', 'money',
   ],
+  // WP-MY begin
+  mysql: ['int', 'bigint', 'smallint', 'tinyint', 'decimal(12,2)', 'double', 'float', 'varchar(100)', 'char(10)', 'text', 'longtext', 'date', 'datetime', 'timestamp', 'time', 'year', 'json', 'blob', 'boolean'],
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: ['UInt8', 'UInt32', 'UInt64', 'Int32', 'Int64', 'Float64', 'Decimal(12, 2)', 'String', 'LowCardinality(String)', 'Date', 'DateTime', 'DateTime64(3)', 'UUID', 'Bool', 'Array(String)', 'Nullable(String)'],
+  // WP-CH end
+  // WP-SF begin
+  snowflake: ['NUMBER(38,0)', 'NUMBER(12,2)', 'FLOAT', 'VARCHAR(100)', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIME', 'TIMESTAMP_NTZ', 'TIMESTAMP_LTZ', 'TIMESTAMP_TZ', 'VARIANT', 'OBJECT', 'ARRAY', 'BINARY'],
+  // WP-SF end
+  // WP-CS begin
+  cql: ['int', 'bigint', 'smallint', 'varint', 'decimal', 'double', 'float', 'text', 'ascii', 'boolean', 'date', 'time', 'timestamp', 'uuid', 'timeuuid', 'inet', 'blob', 'counter', 'list<text>', 'set<text>', 'map<text, text>'],
+  // WP-CS end
 };
 
 function fallbackTypes(dialect: Dialect): DesignerType[] {

@@ -6,6 +6,32 @@ import type { Token, TokenKind } from '../types';
 import type { DialectSpec } from '../dialect/spec';
 
 /**
+ * Batch 3 (plan-batch3 D7/D8): the part of the lexer a dialect's lexer hook (DialectSpec.lexHook) may use. The hook runs
+ * after the comment checks and before everything else; it returns a token (advancing `pos`, setting `endState` for a
+ * construct left open at the end of the text) or null to fall through. lexer/traits.ts builds one from LexTraits.
+ */
+export interface LexKit {
+  readonly text: string;
+  pos: number;
+  endState: LexState;
+  make(kind: TokenKind, start: number, end: number, upper?: string, unterminated?: boolean): Token;
+  /** A token that may span lines (sets pos to `end`). */
+  multi(kind: TokenKind, start: number, end: number, unterminated?: boolean): Token;
+  /** Body of a quoted string after the opening quote q (doubled q escapes). Resume state 's'. */
+  scanString(p: number, q: number): [number, boolean];
+  /** Body after the opening quote with backslash escapes (and ''). Resume state 'e'. */
+  scanEString(p: number): [number, boolean];
+  /** Body after an opening $tag$, through the closing one. Resume state 'd' + tag. */
+  scanDollar(p: number, tag: string): [number, boolean];
+  scanQuotedIdent(p: number, close: number, doubled: boolean): [number, boolean];
+  isIdentStart(c: number): boolean;
+  isIdentPart(c: number): boolean;
+}
+
+/** Batch 3: dialect lexer hook (see LexKit); `c`/`c1` are the char codes at `start` and `start + 1` (0 past the end). */
+export type LexHook = (lx: LexKit, start: number, c: number, c1: number) => Token | null;
+
+/**
  * Lexer state between lines ('' = normal). Encoded as a string so Monaco can compare states cheaply.
  * `c<depth>` block comment, `s` single-quoted string, `q<closer>` Oracle q-quote, `e` PostgreSQL E-string,
  * `d<tag>` PostgreSQL dollar-quoted body (`d` alone for `$$`).
@@ -31,14 +57,14 @@ const Q_CLOSERS: Record<string, string> = { '[': ']', '{': '}', '<': '>', '(': '
 
 const ORACLE_ATTRS = new Set(['TYPE', 'ROWTYPE', 'FOUND', 'NOTFOUND', 'ROWCOUNT', 'ISOPEN', 'BULK_ROWCOUNT', 'BULK_EXCEPTIONS']);
 
-const OPS3: Record<string, string[]> = {
+const OPS3: Partial<Record<string, string[]>> = {
   tsql: [],
   plsql: [],
   sqlite: ['->>'],
   pgsql: ['->>', '#>>', '!~*', '||/', '<->', '<<=', '>>=', '-|-', '@@@'],
 };
 const OPS2_COMMON = ['<>', '!=', '<=', '>=', '||', '::'];
-const OPS2: Record<string, string[]> = {
+const OPS2: Partial<Record<string, string[]>> = {
   tsql: [...OPS2_COMMON, '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '!<', '!>', '<<', '>>'],
   plsql: [...OPS2_COMMON, ':=', '=>', '**', '..', '<<', '>>'],
   sqlite: [...OPS2_COMMON, '->', '==', '<<', '>>'],
@@ -48,8 +74,8 @@ const OPS2: Record<string, string[]> = {
 /** Dollar-quote tag characters (`$tag$`): letters, digits (not first) and `_`; never `$`. */
 const DOLLAR_TAG = /\$([\p{L}_][\p{L}\p{N}_]*)?\$/uy;
 
-export class Lexer {
-  private readonly text: string;
+export class Lexer implements LexKit {
+  readonly text: string;
   private readonly spec: DialectSpec;
   private readonly isTsql: boolean;
   private readonly isOracle: boolean;
@@ -57,6 +83,7 @@ export class Lexer {
   private readonly isPg: boolean;
   private readonly ops2: string[];
   private readonly ops3: string[];
+  private readonly hook: LexHook | undefined;
   pos: number;
   line: number;
   lineStart: number;
@@ -72,20 +99,22 @@ export class Lexer {
     this.isOracle = spec.id === 'plsql';
     this.isSqlite = spec.id === 'sqlite';
     this.isPg = spec.id === 'pgsql';
-    this.ops2 = OPS2[spec.id];
-    this.ops3 = OPS3[spec.id];
+    // Batch 3: a dialect's own operators (DialectSpec.ops2/ops3), else the tables above, else the common set
+    this.ops2 = spec.ops2 ?? OPS2[spec.id] ?? OPS2_COMMON;
+    this.ops3 = spec.ops3 ?? OPS3[spec.id] ?? [];
+    this.hook = spec.lexHook;
     this.pos = pos;
     this.line = line;
     this.lineStart = lineStart;
     this.atLineStart = atLineStart;
   }
 
-  private isIdentStart(c: number): boolean {
+  isIdentStart(c: number): boolean {
     if (isAsciiLetter(c) || c === 95) return true;
     if (!(c >= 128)) return false; // also NaN (past the end)
     return UNI_IDENT_START.test(String.fromCodePoint(c));
   }
-  private isIdentPart(c: number): boolean {
+  isIdentPart(c: number): boolean {
     if (isAsciiLetter(c) || isDigit(c) || c === 95) return true;
     if (Number.isNaN(c)) return false;
     if (c < 128) return this.spec.identExtra.indexOf(String.fromCharCode(c)) >= 0;
@@ -111,7 +140,7 @@ export class Lexer {
     this.pos = p;
   }
 
-  private make(kind: TokenKind, start: number, end: number, upper?: string, unterminated?: boolean): Token {
+  make(kind: TokenKind, start: number, end: number, upper?: string, unterminated?: boolean): Token {
     const text = this.text.slice(start, end);
     const tok: Token = {
       kind, text, start, end, line: this.line, col: start - this.lineStart + 1,
@@ -133,7 +162,7 @@ export class Lexer {
   }
 
   /** Emit a token that may span lines: line/col are computed for its start, then counters advance. */
-  private multi(kind: TokenKind, start: number, end: number, unterminated?: boolean): Token {
+  multi(kind: TokenKind, start: number, end: number, unterminated?: boolean): Token {
     const tok = this.make(kind, start, end, undefined, unterminated);
     this.countLines(start, end);
     this.pos = end;
@@ -160,7 +189,7 @@ export class Lexer {
   }
 
   /** Scan a quoted string body after the opening quote. Returns [end, terminated]. */
-  private scanString(p: number, q: number): [number, boolean] {
+  scanString(p: number, q: number): [number, boolean] {
     const t = this.text;
     const n = t.length;
     while (p < n) {
@@ -175,7 +204,7 @@ export class Lexer {
   }
 
   /** PostgreSQL E'…' body after the quote: a backslash escapes the next character, `''` is a quote. */
-  private scanEString(p: number): [number, boolean] {
+  scanEString(p: number): [number, boolean] {
     const t = this.text;
     const n = t.length;
     while (p < n) {
@@ -191,7 +220,7 @@ export class Lexer {
   }
 
   /** PostgreSQL dollar-quoted body after the opening `$tag$`: ends after the matching `$tag$`. */
-  private scanDollar(p: number, tag: string): [number, boolean] {
+  scanDollar(p: number, tag: string): [number, boolean] {
     const closer = '$' + tag + '$';
     const i = this.text.indexOf(closer, p);
     return i < 0 ? [this.text.length, false] : [i + closer.length, true];
@@ -209,7 +238,7 @@ export class Lexer {
   }
 
   /** Quoted identifier: never spans lines (an unterminated one ends at end of line). */
-  private scanQuotedIdent(p: number, close: number, doubled: boolean): [number, boolean] {
+  scanQuotedIdent(p: number, close: number, doubled: boolean): [number, boolean] {
     const t = this.text;
     const n = t.length;
     while (p < n) {
@@ -378,6 +407,11 @@ export class Lexer {
       const [end, depth] = this.scanBlockComment(start + 2, 1);
       this.endState = depth > 0 ? 'c' + depth : '';
       return this.multi('comment', start, end, depth > 0);
+    }
+    // Batch 3: the dialect's lexer traits (DialectSpec.lexHook, lexer/traits.ts)
+    if (this.hook) {
+      const tok = this.hook(this, start, c, c1);
+      if (tok) return tok;
     }
     // Oracle: `/` alone on a line → batch separator
     if (this.isOracle && c === 47 && wasLineStart) {

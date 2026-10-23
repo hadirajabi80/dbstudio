@@ -353,7 +353,7 @@ public sealed class CatalogService
                 {
                     var schema = t.Schema ?? dialect switch
                     {
-                        Dialect.PlSql => sessionDatabase ?? db.DefaultSchema,
+                        _ when DialectInfo.SchemaIsDatabase(dialect) => sessionDatabase ?? db.DefaultSchema, // Oracle, MySQL, ClickHouse, Cassandra
                         Dialect.Sqlite => "main",
                         _ => db.DefaultSchema ?? DialectInfo.DefaultSchemaFallback(dialect),
                     };

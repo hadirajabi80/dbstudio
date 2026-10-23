@@ -69,12 +69,19 @@ export function getProvider(providerId: string | undefined): ProviderInfo | unde
   return useConnections.getState().providers.find((p) => p.id === providerId);
 }
 
-const FALLBACK_DIALECT: Record<string, Dialect> = { sqlserver: 'tsql', oracle: 'plsql', sqlite: 'sqlite', postgresql: 'pgsql' };
+const FALLBACK_DIALECT: Record<string, Dialect> = {
+  sqlserver: 'tsql', oracle: 'plsql', sqlite: 'sqlite', postgresql: 'pgsql',
+  // Batch 3
+  mysql: 'mysql', mariadb: 'mysql', clickhouse: 'clickhouse', snowflake: 'snowflake', cassandra: 'cql',
+};
 
 /** M2: provider kinds when the engine's provider list is not loaded yet (or an older engine omits `kind`). */
 const FALLBACK_KIND: Record<string, SourceKind> = {
   sqlserver: 'relational', oracle: 'relational', sqlite: 'relational', postgresql: 'relational',
   redis: 'keyvalue', mongodb: 'document', kafka: 'stream',
+  // Batch 3
+  mysql: 'relational', mariadb: 'relational', clickhouse: 'relational', snowflake: 'relational', cassandra: 'relational',
+  elasticsearch: 'search',
 };
 
 /** M2 (docs/PLAN-M2.md D1): kind of a provider id; unknown ids count as relational (M1 behaviour). */
@@ -92,10 +99,13 @@ export function isRelational(connectionId: string | null | undefined): boolean {
   return kindOf(connectionId) === 'relational';
 }
 
-/** M2: providers with a database level above schemas that a console can switch (SQL Server, PostgreSQL). */
+/** M2: providers with a database level above schemas that a console can switch (SQL Server, PostgreSQL, Snowflake). */
 export function hasDatabaseLevel(providerId: ProviderId | string | null | undefined): boolean {
-  return providerId === 'sqlserver' || providerId === 'postgresql';
+  return providerId === 'sqlserver' || providerId === 'postgresql' || providerId === 'snowflake';
 }
+
+// Batch 3: schemaIsDatabase / schemaLevelLabel live in lib/providerLevels.ts (pure, importable from models).
+export { schemaIsDatabase, schemaLevelLabel } from '../lib/providerLevels';
 
 /**
  * SQL dialect of a connection. Unknown connections and non-relational sources fall back to 'sqlite' so SQL-only code

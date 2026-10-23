@@ -24,6 +24,15 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
 
     protected void RequireAvailable() => Skip.IfNot(Fixture.IsAvailable, Fixture.SkipReason ?? "Provider backend not available.");
 
+    /// <summary>Batch 3: skips when the provider has no manual transactions (ClickHouse, Cassandra).</summary>
+    protected void RequireTransactions() => Skip.IfNot(Fixture.SupportsTransactions, $"{Fixture.Provider.Id} has no manual transactions.");
+
+    /// <summary>Batch 3: skips when the provider has no savepoints (Snowflake) or no transactions.</summary>
+    protected void RequireSavepoints() => Skip.IfNot(Fixture.SupportsTransactions && Fixture.SupportsSavepoints, $"{Fixture.Provider.Id} has no savepoints.");
+
+    /// <summary>Batch 3: skips when the provider cannot cancel a running statement.</summary>
+    protected void RequireCancel() => Skip.IfNot(Fixture.SupportsCancel, $"{Fixture.Provider.Id} cannot cancel a running statement.");
+
     protected string N(string logical) => Fixture.N(logical);
 
     protected string Q(string logical) => $"{Fixture.ShopSchemaQualifier}{N(logical)}";
@@ -275,6 +284,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task Execute_WhileBusy_Throws()
     {
         RequireAvailable();
+        RequireCancel();
         await using var session = await Fixture.OpenSessionAsync();
         var sink = new RecordingSink();
         var running = session.ExecuteAsync(Request(Fixture.LongRunningQuery), sink, CancellationToken.None);
@@ -294,6 +304,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task Cancel_LongRunningQuery_ReturnsQuicklyAndSessionStaysUsable()
     {
         RequireAvailable();
+        RequireCancel();
         await using var session = await Fixture.OpenSessionAsync();
         var sink = new RecordingSink();
         var running = session.ExecuteAsync(Request(Fixture.LongRunningQuery), sink, CancellationToken.None);
@@ -332,6 +343,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task ManualTransaction_Commit_Persists()
     {
         RequireAvailable();
+        RequireTransactions();
         var table = NewScratchName();
         await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table)]);
         try
@@ -362,6 +374,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task ManualTransaction_Rollback_Discards()
     {
         RequireAvailable();
+        RequireTransactions();
         var table = NewScratchName();
         await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table), Fixture.InsertScratchRowsSql(table, 1, 1)]);
         try
@@ -419,6 +432,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task ManualTransaction_EditSavepoint_WithNothingOpen_KeepsTheChangePending()
     {
         RequireAvailable();
+        RequireSavepoints();
         var table = NewScratchName();
         await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table), Fixture.InsertScratchRowsSql(table, 1, 1)]);
         try
@@ -453,6 +467,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task ManualTransaction_EditSavepoint_RollbackTo_LeavesACleanOpenTransaction()
     {
         RequireAvailable();
+        RequireSavepoints();
         var table = NewScratchName();
         await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table), Fixture.InsertScratchRowsSql(table, 1, 1)]);
         try
@@ -488,6 +503,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task SwitchToAuto_WithOpenTransaction_Throws()
     {
         RequireAvailable();
+        RequireTransactions();
         var table = NewScratchName();
         await Fixture.RunBatchesAsync([Fixture.CreateScratchTableSql(table)]);
         try

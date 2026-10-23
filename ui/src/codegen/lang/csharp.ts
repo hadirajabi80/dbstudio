@@ -37,6 +37,18 @@ const PROVIDER: Record<Dialect, { ns: string; conn: string; param: string; prefi
   sqlite: { ns: 'Microsoft.Data.Sqlite', conn: 'SqliteConnection', param: 'SqliteParameter', prefix: '@' },
   // Npgsql binds `@name` placeholders to parameters named without the prefix.
   pgsql: { ns: 'Npgsql', conn: 'NpgsqlConnection', param: 'NpgsqlParameter', prefix: '' },
+  // WP-MY begin
+  mysql: { ns: 'MySqlConnector', conn: 'MySqlConnection', param: 'MySqlParameter', prefix: '@' },
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: { ns: 'ClickHouse.Driver.ADO', conn: 'ClickHouseConnection', param: 'ClickHouseDbParameter', prefix: '' },
+  // WP-CH end
+  // WP-SF begin
+  snowflake: { ns: 'Snowflake.Data.Client', conn: 'SnowflakeDbConnection', param: 'SnowflakeDbParameter', prefix: '' },
+  // WP-SF end
+  // WP-CS begin
+  cql: { ns: 'Cassandra', conn: 'ISession', param: 'object', prefix: '' },
+  // WP-CS end
 };
 
 /** C# method base name of a routine (overloads with the same C# signature get a numeric suffix). */

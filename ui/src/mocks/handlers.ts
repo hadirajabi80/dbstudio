@@ -15,6 +15,7 @@ import { createRedisHandlers } from './m2/redis';
 import { createObjectsHandlers } from './objects';
 import { createSavedQueriesHandlers } from './savedQueries';
 import { createSearchHandlers } from './search';
+import { MOCK_PACKS } from './packs';
 
 const P = '*/api/v1';
 
@@ -247,5 +248,7 @@ function m2Handlers(engine: MockEngine, ok: Parameters<typeof createM2Context>[1
     ...createLogsHandlers(ctx),
     ...createErHandlers(ctx),
     ...createSearchHandlers(ctx), // Find in database (db.search stream)
+    // Batch 3 (plan-batch3): the work packages' module routes (mocks/packs/*.ts)
+    ...MOCK_PACKS.flatMap((p) => p.handlers(ctx)),
   ];
 }

@@ -20,9 +20,19 @@ export const LANGUAGE_IDS: Record<Dialect, string> = {
   plsql: 'dbstudio-plsql',
   sqlite: 'dbstudio-sqlite',
   pgsql: 'dbstudio-pgsql',
+  // Batch 3: registered up front; the dialect spec itself loads on demand (intel/dialect/registry.ts)
+  mysql: 'dbstudio-mysql',
+  clickhouse: 'dbstudio-clickhouse',
+  snowflake: 'dbstudio-snowflake',
+  cql: 'dbstudio-cql',
 };
 
-const LANGUAGE_ALIASES: Record<Dialect, string> = { tsql: 'T-SQL', plsql: 'PL/SQL', sqlite: 'SQLite', pgsql: 'PostgreSQL' };
+const LANGUAGE_ALIASES: Record<Dialect, string> = {
+  tsql: 'T-SQL', plsql: 'PL/SQL', sqlite: 'SQLite', pgsql: 'PostgreSQL', mysql: 'MySQL', clickhouse: 'ClickHouse', snowflake: 'Snowflake', cql: 'CQL',
+};
+
+/** Batch 3: dialects quoting identifiers with backticks (auto-closed like brackets) and with `#` line comments. */
+const BACKTICK_DIALECTS: readonly Dialect[] = ['sqlite', 'mysql', 'clickhouse'];
 
 export const THEME_IDS = { light: 'dbstudio-light', dark: 'dbstudio-dark' } as const;
 
@@ -83,7 +93,6 @@ function defineThemes(): void {
 
 function registerLanguage(dialect: Dialect): void {
   const id = LANGUAGE_IDS[dialect];
-  const spec = getSpec(dialect);
   monaco.languages.register({ id, extensions: [], aliases: [LANGUAGE_ALIASES[dialect]] });
   const brackets: monaco.languages.CharacterPair[] = [['(', ')']];
   const autoClosing: monaco.languages.IAutoClosingPairConditional[] = [
@@ -92,7 +101,7 @@ function registerLanguage(dialect: Dialect): void {
     { open: '"', close: '"', notIn: ['string', 'comment'] },
   ];
   if (dialect === 'tsql') autoClosing.push({ open: '[', close: ']', notIn: ['string', 'comment'] });
-  if (dialect === 'sqlite') autoClosing.push({ open: '`', close: '`', notIn: ['string', 'comment'] });
+  if (BACKTICK_DIALECTS.includes(dialect)) autoClosing.push({ open: '`', close: '`', notIn: ['string', 'comment'] });
   monaco.languages.setLanguageConfiguration(id, {
     comments: { lineComment: '--', blockComment: ['/*', '*/'] },
     brackets,
@@ -109,7 +118,8 @@ function registerLanguage(dialect: Dialect): void {
     getInitialState: () => new LineState(''),
     tokenize: (line: string, state: monaco.languages.IState) => {
       const s = state instanceof LineState ? state.s : '';
-      const r = tokenizeLine(line, spec, s);
+      // getSpec per line: a Batch 3 dialect answers with its generic spec until its chunk has loaded (D7)
+      const r = tokenizeLine(line, getSpec(dialect), s);
       return { tokens: r.tokens, endState: new LineState(r.endState) };
     },
   });
@@ -288,7 +298,7 @@ export function ensureMonacoSetup(): void {
   g.MonacoEnvironment = { getWorker: () => new EditorWorker() };
   installStyles();
   defineThemes();
-  (['tsql', 'plsql', 'sqlite', 'pgsql'] as Dialect[]).forEach(registerLanguage);
+  (Object.keys(LANGUAGE_IDS) as Dialect[]).forEach(registerLanguage);
 
   monaco.editor.registerCommand(ACCEPT_COMMAND, (_accessor: unknown, uri: string, usageKey: string, follow: string) => {
     const b = bindingByUri(uri);

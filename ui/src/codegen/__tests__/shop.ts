@@ -8,7 +8,8 @@ import { attachUserTypes, fromCatalogObject, queryObject, userTypesOf } from '..
 import type { CgColumn, CgInput, CgObject } from '../model';
 import { PG_SHOP } from './shop-pgsql';
 
-export type ShopDialect = Dialect;
+/** The dialects with a codegen shop fixture (Batch 3 work packages add theirs here when they need snapshots). */
+export type ShopDialect = Extract<Dialect, 'tsql' | 'plsql' | 'sqlite' | 'pgsql'>;
 
 const SNAPSHOTS: Record<ShopDialect, CatalogSnapshot> = {
   tsql: tsqlShop as unknown as CatalogSnapshot,

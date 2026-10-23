@@ -26,14 +26,27 @@ public static class SearchSql
     /// </summary>
     public static string LikePattern(Dialect dialect, string literal)
     {
+        var escape = EscapeOf(dialect);
         var sb = new StringBuilder(literal.Length + 8).Append('%');
         foreach (var ch in literal)
         {
-            if (ch is '%' or '_' or Escape || (ch == '[' && dialect == Dialect.TSql)) sb.Append(Escape);
+            if (ch is '%' or '_' || ch == escape || (ch == '[' && dialect == Dialect.TSql)) sb.Append(escape);
             sb.Append(ch);
         }
         return sb.Append('%').ToString();
     }
+
+    /// <summary>
+    /// LIKE escape character of a dialect: <see cref="Escape"/>, except ClickHouse, whose LIKE has no ESCAPE clause and
+    /// always escapes with a backslash (the pattern is a bound value, so the backslash is not a string-literal escape).
+    /// </summary>
+    public static char EscapeOf(Dialect dialect) => dialect switch
+    {
+        // WP-CH begin
+        Dialect.ClickHouse => '\\',
+        // WP-CH end
+        _ => Escape,
+    };
 
     /// <summary>
     /// Bound parameter reference: <c>:name</c> on Oracle, positional <c>$1</c> on PostgreSQL (generated queries bind one
@@ -43,6 +56,18 @@ public static class SearchSql
     {
         Dialect.PlSql => ":" + name,
         Dialect.PgSql => "$1",
+        // WP-MY begin
+        Dialect.MySql => "@" + name,
+        // WP-MY end
+        // WP-CH begin
+        Dialect.ClickHouse => "{" + name + ":String}",
+        // WP-CH end
+        // WP-SF begin
+        Dialect.Snowflake => ":" + name,
+        // WP-SF end
+        // WP-CS begin (CQL: data search is names/columns only, see TextExpression)
+        Dialect.Cql => ":" + name,
+        // WP-CS end
         _ => "@" + name,
     };
 
@@ -58,6 +83,18 @@ public static class SearchSql
         {
             Dialect.PgSql => $"{expr} {(matchCase ? "LIKE" : "ILIKE")} {param}{esc}",
             Dialect.Sqlite => $"{expr} LIKE {param}{esc}",
+            // WP-MY begin
+            Dialect.MySql => matchCase ? $"{expr} LIKE {param}{esc}" : $"UPPER({expr}) LIKE UPPER({param}){esc}",
+            // WP-MY end
+            // WP-CH begin (no ESCAPE clause: backslash, see EscapeOf)
+            Dialect.ClickHouse => $"{expr} {(matchCase ? "like" : "ilike")} {param}",
+            // WP-CH end
+            // WP-SF begin
+            Dialect.Snowflake => $"{expr} {(matchCase ? "LIKE" : "ILIKE")} {param}{esc}",
+            // WP-SF end
+            // WP-CS begin
+            Dialect.Cql => $"{expr} LIKE {param}",
+            // WP-CS end
             _ => matchCase ? $"{expr} LIKE {param}{esc}" : $"UPPER({expr}) LIKE UPPER({param}){esc}",
         };
     }
@@ -71,16 +108,46 @@ public static class SearchSql
         Dialect.PgSql => $"{expr} {(matchCase ? "~" : "~*")} {param}",
         Dialect.PlSql => $"REGEXP_LIKE({expr}, {param}, '{(matchCase ? "c" : "i")}')",
         Dialect.Sqlite => $"{expr} REGEXP {param}",
+        // WP-MY begin (REGEXP_LIKE is MySQL 8.0+; MariaDB has only REGEXP / RLIKE)
+        Dialect.MySql => $"REGEXP_LIKE({expr}, {param}, '{(matchCase ? "c" : "i")}')",
+        // WP-MY end
+        // WP-CH begin (re2; case-insensitivity goes into the pattern, see RegexParameter)
+        Dialect.ClickHouse => $"match({expr}, {param})",
+        // WP-CH end
+        // WP-SF begin
+        Dialect.Snowflake => $"REGEXP_LIKE({expr}, {param}, '{(matchCase ? "c" : "i")}')",
+        // WP-SF end
+        // WP-CS begin
+        Dialect.Cql => null,
+        // WP-CS end
         _ => null,
     };
 
-    /// <summary>The regex parameter value: SQLite's REGEXP function is .NET's, so case-insensitivity goes into the pattern.</summary>
-    public static string RegexParameter(Dialect dialect, string pattern, bool matchCase) =>
-        dialect == Dialect.Sqlite && !matchCase ? "(?i)" + pattern : pattern;
+    /// <summary>The regex parameter value: SQLite's REGEXP function is .NET's (and ClickHouse's match is re2), so case-insensitivity goes into the pattern.</summary>
+    public static string RegexParameter(Dialect dialect, string pattern, bool matchCase) => dialect switch
+    {
+        Dialect.Sqlite when !matchCase => "(?i)" + pattern,
+        // WP-CH begin
+        Dialect.ClickHouse when !matchCase => "(?i)" + pattern,
+        // WP-CH end
+        _ => pattern,
+    };
 
     public static string Quote(Dialect dialect, string identifier) => dialect switch
     {
         Dialect.TSql => "[" + identifier.Replace("]", "]]") + "]",
+        // WP-MY begin
+        Dialect.MySql => DialectInfo.QuoteIdentifier(dialect, identifier),
+        // WP-MY end
+        // WP-CH begin
+        Dialect.ClickHouse => DialectInfo.QuoteIdentifier(dialect, identifier),
+        // WP-CH end
+        // WP-SF begin
+        Dialect.Snowflake => "\"" + identifier.Replace("\"", "\"\"") + "\"",
+        // WP-SF end
+        // WP-CS begin
+        Dialect.Cql => "\"" + identifier.Replace("\"", "\"\"") + "\"",
+        // WP-CS end
         _ => "\"" + identifier.Replace("\"", "\"\"") + "\"",
     };
 
@@ -140,6 +207,37 @@ public static class SearchSql
                     || t.Contains("text", StringComparison.Ordinal))
                     return quotedColumn;
                 return t is "json" or "jsonb" or "uuid" or "guid" or "xml" or "string" ? quotedColumn : null;
+            // WP-MY begin
+            case Dialect.MySql:
+                return t switch
+                {
+                    "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext" or "enum" or "set" => quotedColumn,
+                    "json" => $"CAST({quotedColumn} AS CHAR)",
+                    _ => null,
+                };
+            // WP-MY end
+            // WP-CH begin
+            case Dialect.ClickHouse:
+                return t switch
+                {
+                    "string" or "fixedstring" => quotedColumn,
+                    "lowcardinality" or "nullable" or "uuid" or "enum8" or "enum16" or "json" => $"toString({quotedColumn})",
+                    _ => null,
+                };
+            // WP-CH end
+            // WP-SF begin
+            case Dialect.Snowflake:
+                return t switch
+                {
+                    "varchar" or "string" or "text" or "char" or "character" or "nvarchar" or "nchar" => quotedColumn,
+                    "variant" or "object" or "array" => $"TO_VARCHAR({quotedColumn})",
+                    _ => null,
+                };
+            // WP-SF end
+            // WP-CS begin (CQL cannot filter a non-key column without an index: find in database covers names/columns only)
+            case Dialect.Cql:
+                return null;
+            // WP-CS end
             default:
                 return null;
         }
@@ -187,6 +285,18 @@ public static class SearchSql
             Dialect.TSql => $"SELECT TOP ({n}) {select} FROM {from} WHERE {where}",
             // ROWNUM works on every version (FETCH FIRST needs 12c).
             Dialect.PlSql => $"SELECT {select} FROM {from} WHERE {where} AND ROWNUM <= {n}",
+            // WP-MY begin
+            Dialect.MySql => $"SELECT {select} FROM {from} WHERE {where} LIMIT {n}",
+            // WP-MY end
+            // WP-CH begin
+            Dialect.ClickHouse => $"SELECT {select} FROM {from} WHERE {where} LIMIT {n}",
+            // WP-CH end
+            // WP-SF begin
+            Dialect.Snowflake => $"SELECT {select} FROM {from} WHERE {where} LIMIT {n}",
+            // WP-SF end
+            // WP-CS begin
+            Dialect.Cql => $"SELECT {select} FROM {from} WHERE {where} LIMIT {n} ALLOW FILTERING",
+            // WP-CS end
             _ => $"SELECT {select} FROM {from} WHERE {where} LIMIT {n}",
         };
         return new DataSearchQuery(sql, [(TermParameter, value)], keys, text.Select(t => t.Name).ToList());

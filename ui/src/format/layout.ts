@@ -8,12 +8,12 @@
 // - decisions depend only on the token sequence, comment placement (own line / same line) and blank-line counts,
 //   so formatting the output again yields the same text (idempotency).
 import type { Dialect } from '../intel/types';
-import type { DialectSpec } from '../intel/dialect/spec';
+import type { DialectSpec, FormatKit } from '../intel/dialect/spec';
 import type { FormatOptions } from './options';
 import { applyCase } from './options';
 import { Out } from './out';
 import type { FTok } from './comments';
-import { JOIN_WORDS, NAME_PAREN_KEYWORDS, SET_OPERATORS, set, type FormatRules } from './rules/common';
+import { CONDITION_CLAUSES, JOIN_WORDS, NAME_PAREN_KEYWORDS, OPERAND_KEYWORDS_COMMON, SET_OPERATORS, set, type FormatRules } from './rules/common';
 import { tsqlRules, TSQL_NOT_BLOCK_BEGIN, TSQL_OBJECT_KINDS, TSQL_ROUTINES } from './rules/tsql';
 import { plsqlRules, PL_CREATE_MODIFIERS, PL_SUBPROGRAM_PREFIX, PL_TRIGGER_LINES, SQLPLUS, SQL_SET_TARGETS } from './rules/plsql';
 import { sqliteRules, SQLITE_TRIGGER_LINES } from './rules/sqlite';
@@ -22,7 +22,27 @@ import { pgsqlRules, PG_ROUTINE_ATTRS, PG_ROUTINE_WORDS, PG_STATEMENT_WORDS, PG_
 type Stop = (k: number) => boolean;
 const NEVER: Stop = () => false;
 
-const RULES: Record<Dialect, FormatRules> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: pgsqlRules };
+const RULES: Partial<Record<Dialect, FormatRules>> = { tsql: tsqlRules, plsql: plsqlRules, sqlite: sqliteRules, pgsql: pgsqlRules };
+/** Handed to a lazy dialect's formatter-rules factory (DialectSpec.formatRules); see intel/dialect/spec.ts. */
+const FORMAT_KIT: FormatKit = { sqliteRules, set, CONDITION_CLAUSES, OPERAND_KEYWORDS_COMMON };
+/** Rules built for a Batch 3 spec (the generic one before its chunk loaded, then the real one). */
+const BUILT_RULES = new WeakMap<DialectSpec, FormatRules>();
+
+/**
+ * Formatter rules of a dialect: the static tables of the original four, a Batch 3 dialect's own (DialectSpec.formatRules,
+ * from its lazily loaded spec: format/rules/<id>.ts), else the SQLite tables under the dialect's id (semicolon-ended
+ * statements, no procedural blocks).
+ */
+export function rulesFor(spec: DialectSpec): FormatRules {
+  const r = RULES[spec.id];
+  if (r) return r;
+  let g = BUILT_RULES.get(spec);
+  if (!g) {
+    g = spec.formatRules?.(FORMAT_KIT) ?? { ...sqliteRules, dialect: spec.id };
+    BUILT_RULES.set(spec, g);
+  }
+  return g;
+}
 
 const LIST_CLAUSES = set('select set groupBy orderBy values');
 const SELECT_MODIFIERS = set('DISTINCT ALL UNIQUE');
@@ -115,7 +135,7 @@ export class Layout {
     this.toks = toks;
     this.spec = spec;
     this.d = spec.id;
-    this.rules = RULES[spec.id];
+    this.rules = rulesFor(spec);
     this.o = o;
     this.out = new Out({ indentSize: o.indent, useTabs: o.useTabs, eol });
     for (let i = 0; i < toks.length; i++) if (toks[i].kind !== 'comment') this.sig.push(i);

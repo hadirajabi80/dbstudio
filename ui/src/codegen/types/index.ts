@@ -4,6 +4,11 @@ import pgsql from './pgsql.json';
 import plsql from './plsql.json';
 import sqlite from './sqlite.json';
 import tsql from './tsql.json';
+// Batch 3: one type map per work package (WP0 stubs)
+import mysql from './mysql.json';
+import clickhouse from './clickhouse.json';
+import snowflake from './snowflake.json';
+import cql from './cql.json';
 
 export type Logical =
   | 'bool' | 'uint8' | 'int16' | 'int32' | 'int64' | 'decimal' | 'float32' | 'float64' | 'string' | 'date' | 'datetime'
@@ -26,7 +31,10 @@ function table(json: Record<string, unknown>): Table {
   return out;
 }
 
-export const TYPE_TABLES: Record<Dialect, Table> = { tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite), pgsql: table(pgsql) };
+export const TYPE_TABLES: Record<Dialect, Table> = {
+  tsql: table(tsql), plsql: table(plsql), sqlite: table(sqlite), pgsql: table(pgsql),
+  mysql: table(mysql), clickhouse: table(clickhouse), snowflake: table(snowflake), cql: table(cql),
+};
 
 export interface ResolvedType extends TypeRow {
   /** Normalized base type used for the lookup (`nvarchar`, `number#decimal`). */

@@ -18,10 +18,34 @@ public static class DesignerCases
     {
         Dialect.TSql => new("int", "date", "nvarchar(20)", "decimal(12,2)", "nvarchar(200)", "dbo"),
         Dialect.PlSql => new("NUMBER(10)", "DATE", "VARCHAR2(20)", "NUMBER(12,2)", "VARCHAR2(200)", "SHOP"),
+        // WP-MY begin
+        Dialect.MySql => new("int", "date", "varchar(20)", "decimal(12,2)", "varchar(200)", "shop"),
+        // WP-MY end
+        // WP-CH begin
+        Dialect.ClickHouse => new("Int32", "Date", "String", "Decimal(12, 2)", "String", "shop"),
+        // WP-CH end
+        // WP-SF begin
+        Dialect.Snowflake => new("NUMBER(38,0)", "DATE", "VARCHAR(20)", "NUMBER(12,2)", "VARCHAR(200)", "PUBLIC"),
+        // WP-SF end
+        // WP-CS begin
+        Dialect.Cql => new("int", "date", "text", "decimal", "text", "shop"),
+        // WP-CS end
         _ => new("INTEGER", "DATE", "TEXT", "NUMERIC(12,2)", "TEXT", "main"),
     };
 
-    private static string N(Dialect d, string pascal) => d == Dialect.PlSql ? ShopSchema.ToSnake(pascal).ToUpperInvariant() : pascal;
+    private static string N(Dialect d, string pascal) => d switch
+    {
+        Dialect.PlSql => ShopSchema.ToSnake(pascal).ToUpperInvariant(),
+        // WP-MY begin
+        // WP-MY end
+        // WP-CH begin
+        // WP-CH end
+        // WP-SF begin
+        // WP-SF end
+        // WP-CS begin
+        // WP-CS end
+        _ => pascal,
+    };
 
     private static TableColumnModel Col(Dialect d, string name, string type, bool nullable = true, string? def = null) =>
         new() { Id = N(d, name), Name = N(d, name), Type = type, Nullable = nullable, Default = def };

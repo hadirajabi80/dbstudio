@@ -87,6 +87,13 @@
   --provider-redis: #b91c1c;
   --provider-mongodb: #15803d;
   --provider-kafka: #374151;
+  /* Batch 3 (plan-batch3) */
+  --provider-mysql: #00618a;
+  --provider-mariadb: #003545;
+  --provider-clickhouse: #b58500;
+  --provider-snowflake: #1f8ac7;
+  --provider-elasticsearch: #008c6f;
+  --provider-cassandra: #1287b1;
   --provider-fg: #ffffff;
   /* parts of the provider logos (theme/brand) that are black or very dark in the artwork */
   --logo-ink: #231f20;
@@ -251,6 +258,12 @@
   --provider-redis: #f07878;
   --provider-mongodb: #4fca7d;
   --provider-kafka: #a3abb8;
+  --provider-mysql: #5fb0dc;
+  --provider-mariadb: #6cc3d6;
+  --provider-clickhouse: #f2c94c;
+  --provider-snowflake: #63bdf0;
+  --provider-elasticsearch: #3fcfac;
+  --provider-cassandra: #67c1e6;
   --provider-fg: #0b1220;
   --logo-ink: #e6e8eb;
   --logo-sqlite-feather: #d4ecfb;

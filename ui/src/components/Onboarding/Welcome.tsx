@@ -10,7 +10,7 @@ import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { RowlitMark } from '../../theme/brand/RowlitMark';
 import { Kbd } from '../Shortcuts/Kbd';
 
-const PROVIDERS: { id: ProviderId; blurb: string }[] = [
+const PROVIDERS: { id: ProviderId; blurb: string; whenListed?: boolean }[] = [
   { id: 'sqlserver', blurb: 'SQL Server 2012+ and Azure SQL' },
   { id: 'oracle', blurb: 'Oracle 11g+ via service name, SID or TNS' },
   // M2 (docs/PLAN-M2.md 1.3)
@@ -19,12 +19,22 @@ const PROVIDERS: { id: ProviderId; blurb: string }[] = [
   { id: 'redis', blurb: 'Standalone, Cluster, Sentinel; Redis Stack' },
   { id: 'mongodb', blurb: 'mongodb:// and mongodb+srv://, Atlas' },
   { id: 'kafka', blurb: 'Brokers, topics, consumer groups; Schema Registry' },
+  // Batch 3 (plan-batch3): shown only once the engine lists the provider (GET /providers), so a build whose engine
+  // package has not landed yet shows no dead card.
+  { id: 'mysql', blurb: 'MySQL 5.7+, 8.x, Aurora, PlanetScale', whenListed: true },
+  { id: 'mariadb', blurb: 'MariaDB 10.4+', whenListed: true },
+  { id: 'clickhouse', blurb: 'ClickHouse Cloud and self-hosted', whenListed: true },
+  { id: 'snowflake', blurb: 'Snowflake: password, key pair, SSO', whenListed: true },
+  { id: 'elasticsearch', blurb: 'Elasticsearch 7/8, OpenSearch', whenListed: true },
+  { id: 'cassandra', blurb: 'Cassandra 4/5, ScyllaDB', whenListed: true },
 ];
 
 /** First launch / no tabs: welcome screen in the centre area (no modal). */
 export function Welcome({ ready }: { ready: boolean }) {
   const connections = useConnections((s) => s.connections);
   const loaded = useConnections((s) => s.loaded);
+  const listed = useConnections((s) => s.providers);
+  const cards = PROVIDERS.filter((p) => !p.whenListed || listed.some((x) => x.id === p.id));
   const openDialog = useUi((s) => s.openConnectionDialog);
   const recent = [...connections].sort((a, b) => (b.lastUsedAt ?? '').localeCompare(a.lastUsedAt ?? '') || a.name.localeCompare(b.name)).slice(0, 6);
   const first = loaded && connections.length === 0;
@@ -71,7 +81,7 @@ export function Welcome({ ready }: { ready: boolean }) {
         <section className="welcome-section" aria-label="New connection">
           {!first && <h2>New connection</h2>}
           <div className="provider-cards">
-            {PROVIDERS.map((p) => (
+            {cards.map((p) => (
               <button key={p.id} className="provider-card" onClick={() => openDialog({ mode: 'new', providerId: p.id, connectAfter: true })} disabled={!ready && !loaded}>
                 <ProviderLogo providerId={p.id} size={32} />
                 <span className="provider-card-name">{PROVIDER_LABEL[p.id]}</span>

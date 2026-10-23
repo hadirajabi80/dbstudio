@@ -7,7 +7,10 @@ import { BRAND_LOGOS } from './logos';
 import { ProviderLogo } from './ProviderLogo';
 
 // Typed as a Record so a new ProviderId fails to compile until it is listed here (and then needs a logo below).
-const ALL: Record<ProviderId, true> = { sqlserver: true, oracle: true, sqlite: true, postgresql: true, redis: true, mongodb: true, kafka: true };
+const ALL: Record<ProviderId, true> = {
+  sqlserver: true, oracle: true, sqlite: true, postgresql: true, redis: true, mongodb: true, kafka: true,
+  mysql: true, mariadb: true, clickhouse: true, snowflake: true, elasticsearch: true, cassandra: true,
+};
 const IDS = Object.keys(ALL) as ProviderId[];
 
 const nodeFs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync(p: string, enc: 'utf8'): string };

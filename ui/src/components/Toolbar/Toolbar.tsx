@@ -14,7 +14,7 @@ import { getCommand, hasCommand, runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { formatCount, formatDuration } from '../../lib/format';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { hasDatabaseLevel, useConnection } from '../../store/connections';
+import { hasDatabaseLevel, schemaIsDatabase, schemaLevelLabel, useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
 import { useTabSession } from '../../store/sessions';
@@ -95,7 +95,9 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const defaultMax = useSettings((s) => s.settings.results.maxRows);
   const setMaxRows = useTabs((s) => s.setMaxRows);
   const connCat = useCatalog((s) => (tab.connectionId ? s.conns[tab.connectionId] : undefined));
-  const oracleSchemas = useCatalog((s) => (tab.connectionId && conn?.providerId === 'oracle' ? s.dbs[dbKey(tab.connectionId, null)]?.schemasResp : undefined));
+  // Oracle and the Batch 3 single-level providers (MySQL/MariaDB, ClickHouse, Cassandra): the console switches the schema.
+  const singleLevel = schemaIsDatabase(conn?.providerId);
+  const oracleSchemas = useCatalog((s) => (tab.connectionId && singleLevel ? s.dbs[dbKey(tab.connectionId, null)]?.schemasResp : undefined));
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!running) return;
@@ -110,7 +112,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
 
   let current: string | null = null;
   if (hasDatabaseLevel(conn?.providerId)) current = effectiveDatabase(conn!.id, tab.database) ?? session?.database ?? connCat?.databases?.current ?? null;
-  else if (conn?.providerId === 'oracle') current = tab.database ?? session?.database ?? oracleSchemas?.defaultSchema ?? null;
+  else if (singleLevel) current = tab.database ?? session?.database ?? oracleSchemas?.defaultSchema ?? null;
 
   const openSwitcher = (mode: 'connection' | 'database', el: HTMLElement) => {
     const r = el.getBoundingClientRect();
@@ -129,7 +131,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   // then go nowhere). Format focuses the editor itself; Explain focuses the plan tab it opens.
   const refocus = () => getEditor(tab.id)?.focus();
   const maxRowsOptions = [...new Set([...MAX_ROWS_OPTIONS, maxRows])].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b));
-  const dbLabel = conn?.providerId === 'oracle' ? 'schema' : 'database';
+  const dbLabel = schemaLevelLabel(conn?.providerId);
   // Explain and Format look like every other enabled toolbar button; they are dimmed only when they truly cannot
   // act, and then say why (user-01).
   const empty = !tab.text.trim();
@@ -295,8 +297,8 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
         <button
           className="db-pill"
           onClick={(e) => openSwitcher('database', e.currentTarget)}
-          title={`${conn.providerId === 'oracle' ? 'Current schema' : 'Database'} — change with ${displayShortcut('Mod+Shift+D')}`}
-          aria-label={`${conn.providerId === 'oracle' ? 'Schema' : 'Database'} ${current ?? ''}, change`}
+          title={`${singleLevel ? `Current ${dbLabel}` : 'Database'} — change with ${displayShortcut('Mod+Shift+D')}`}
+          aria-label={`${singleLevel ? dbLabel[0].toUpperCase() + dbLabel.slice(1) : 'Database'} ${current ?? ''}, change`}
           aria-haspopup="dialog"
           aria-keyshortcuts={ariaKeyShortcuts('Mod+Shift+D')}
         >

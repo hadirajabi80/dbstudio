@@ -1,0 +1,3 @@
+{
+  "$comment": "Snowflake type map for code generation (plan-batch3 WP-SF). WP0 stub: unknown types fall back to the wire column kind."
+}

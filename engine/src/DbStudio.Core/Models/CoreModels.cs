@@ -4,13 +4,19 @@ namespace DbStudio.Core.Models;
 
 // Enums serialize as camelCase strings (the Host registers JsonStringEnumConverter with camelCase naming).
 
-public enum Dialect { TSql, PlSql, Sqlite, PgSql }
+/// <summary>
+/// SQL dialect of a relational provider; wire tokens tsql | plsql | sqlite | pgsql | mysql | clickhouse | snowflake | cql
+/// (<see cref="Services.DialectJsonConverter"/>). Batch 3: <see cref="MySql"/> serves MySQL and MariaDB, <see cref="Cql"/>
+/// Cassandra/ScyllaDB. Per-dialect traits live in <see cref="DialectInfo"/>.
+/// </summary>
+public enum Dialect { TSql, PlSql, Sqlite, PgSql, MySql, ClickHouse, Snowflake, Cql }
 
 /// <summary>
-/// M2 (docs/PLAN-M2.md D1): provider family. Wire tokens relational | keyvalue | document | stream
+/// M2 (docs/PLAN-M2.md D1): provider family. Wire tokens relational | keyvalue | document | stream | search
 /// (<see cref="Services.SourceKindJsonConverter"/>). Only relational providers have sessions and a SQL catalog.
+/// Batch 3: <see cref="Search"/> is Elasticsearch/OpenSearch.
 /// </summary>
-public enum SourceKind { Relational, KeyValue, Document, Stream }
+public enum SourceKind { Relational, KeyValue, Document, Stream, Search }
 public enum SessionState { Idle, Executing, Broken, Closed }
 public enum TransactionMode { Auto, Manual }
 public enum MessageSeverity { Info, Warning, Error }
@@ -23,7 +29,7 @@ public sealed class ConnectionProfile
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
-    /// <summary>"sqlserver" | "oracle" | "sqlite" | "postgresql" | "redis" | "mongodb" | "kafka".</summary>
+    /// <summary>"sqlserver" | "oracle" | "sqlite" | "postgresql" | "mysql" | "mariadb" | "clickhouse" | "snowflake" | "cassandra" | "redis" | "mongodb" | "kafka" | "elasticsearch".</summary>
     public string ProviderId { get; set; } = "";
     public string? Color { get; set; }
     public string? Folder { get; set; }

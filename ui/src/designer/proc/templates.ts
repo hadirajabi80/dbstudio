@@ -50,8 +50,36 @@ export function defaultTiming(dialect: Dialect, onView: boolean): TriggerTiming 
   return onView ? 'INSTEAD OF' : dialect === 'plsql' ? 'BEFORE' : 'AFTER';
 }
 
-export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
-export const DEFAULT_RETURN_TYPE: Record<Dialect, string> = { tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer' };
+export const DEFAULT_PARAM_TYPE: Record<Dialect, string> = {
+  tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer',
+  // WP-MY begin
+  mysql: 'int',
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: 'Int32',
+  // WP-CH end
+  // WP-SF begin
+  snowflake: 'NUMBER',
+  // WP-SF end
+  // WP-CS begin
+  cql: 'int',
+  // WP-CS end
+};
+export const DEFAULT_RETURN_TYPE: Record<Dialect, string> = {
+  tsql: 'int', plsql: 'NUMBER', sqlite: 'INTEGER', pgsql: 'integer',
+  // WP-MY begin
+  mysql: 'int',
+  // WP-MY end
+  // WP-CH begin
+  clickhouse: 'Int32',
+  // WP-CH end
+  // WP-SF begin
+  snowflake: 'NUMBER',
+  // WP-SF end
+  // WP-CS begin
+  cql: 'int',
+  // WP-CS end
+};
 
 /** Escape literal text for a snippet. */
 function lit(s: string): string {

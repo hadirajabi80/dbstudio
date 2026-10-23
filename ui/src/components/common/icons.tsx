@@ -6,6 +6,9 @@ import type { CatalogObjectType } from '../../api/types';
 
 export const PROVIDER_LABEL: Record<string, string> = {
   sqlserver: 'SQL Server', oracle: 'Oracle', sqlite: 'SQLite', postgresql: 'PostgreSQL', redis: 'Redis', mongodb: 'MongoDB', kafka: 'Kafka',
+  // Batch 3
+  mysql: 'MySQL', mariadb: 'MariaDB', clickhouse: 'ClickHouse', snowflake: 'Snowflake', elasticsearch: 'Elasticsearch',
+  cassandra: 'Cassandra',
 };
 
 const OBJ_ICONS: Record<CatalogObjectType, typeof Table2> = {

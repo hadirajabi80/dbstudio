@@ -9,6 +9,13 @@
 # MongoDB:    mongodb://localhost:27018/?directConnection=true (single-node replica set rs0, for change streams)
 # Kafka (profile "kafka"): localhost:19092 (KRaft, PLAINTEXT); Schema Registry http://localhost:18081
 #   docker compose -f engine/tests/docker/compose.yml --profile kafka --profile cluster up -d
+# Batch 3 (plan-batch3; WP0 owns the service blocks, the WPs their seed files):
+# MySQL 8.4:   localhost:13306, db "shop" (shop / $MYSQL_PASSWORD; root / same)
+# MariaDB 11:  localhost:13307, db "shop" (shop / $MARIADB_PASSWORD)
+# ClickHouse:  http://localhost:18123 (native 19000), db "shop" (shop / $CLICKHOUSE_PASSWORD)
+# Elasticsearch (profile "search"): http://localhost:19200 (security off)
+# Cassandra (profile "cassandra"): localhost:19042, keyspace "shop"
+#   docker compose -f engine/tests/docker/compose.yml --profile search --profile cassandra up -d
 name: dbstudio-it
 
 services:
@@ -200,3 +207,127 @@ services:
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     ports:
       - "${SCHEMA_REGISTRY_PORT:-18081}:8081"
+
+  # ---- Batch 3 (plan-batch3 WP0 owns every service block; each WP fills only its seed files) --------------------
+  # MySQL 8.4 (WP-MY): seed-mysql.sql runs once, when the data directory is first created.
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_PASSWORD:-shop}"
+      MYSQL_DATABASE: shop
+      MYSQL_USER: shop
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-shop}"
+    ports:
+      - "${MYSQL_PORT:-13306}:3306"
+    volumes:
+      - ./seed-mysql.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # MariaDB 11 (WP-MY): the shared MySQL seed, then the MariaDB extras (sequences, ...).
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: "${MARIADB_PASSWORD:-shop}"
+      MARIADB_DATABASE: shop
+      MARIADB_USER: shop
+      MARIADB_PASSWORD: "${MARIADB_PASSWORD:-shop}"
+    ports:
+      - "${MARIADB_PORT:-13307}:3306"
+    volumes:
+      - ./seed-mysql.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+      - ./seed-mariadb.sql:/docker-entrypoint-initdb.d/20-seed-mariadb.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # ClickHouse 24.8 LTS (WP-CH): HTTP 18123, native 19000; seed-clickhouse.sql runs once on first start.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: shop
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-shop}"
+      CLICKHOUSE_DB: shop
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-18123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-19000}:9000"
+    volumes:
+      - ./seed-clickhouse.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # Elasticsearch 8.15 (profile "search", WP-ES): single node, security off, 512 MB heap.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    profiles: ["search"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${ES_PORT:-19200}:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  # One-shot (profile "search"): seed-elasticsearch.sh bulk-loads seed-elasticsearch.ndjson (owned by WP-ES).
+  elasticsearch-seed:
+    image: curlimages/curl:8.10.1
+    profiles: ["search"]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ES_URL: http://elasticsearch:9200
+    volumes:
+      - ./seed-elasticsearch.sh:/seed/seed-elasticsearch.sh:ro
+      - ./seed-elasticsearch.ndjson:/seed/seed-elasticsearch.ndjson:ro
+    entrypoint: ["/bin/sh", "/seed/seed-elasticsearch.sh"]
+    restart: "no"
+
+  # Apache Cassandra 5 (profile "cassandra", WP-CS): CQL on 19042; the first start takes about a minute.
+  cassandra:
+    image: cassandra:5
+    profiles: ["cassandra"]
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    ports:
+      - "${CASSANDRA_PORT:-19042}:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster' > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  # One-shot (profile "cassandra"): cqlsh runs seed-cassandra.cql (owned by WP-CS) once Cassandra is healthy.
+  cassandra-seed:
+    image: cassandra:5
+    profiles: ["cassandra"]
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    volumes:
+      - ./seed-cassandra.cql:/seed/seed-cassandra.cql:ro
+    entrypoint: ["/bin/sh", "-c", "cqlsh cassandra 9042 -f /seed/seed-cassandra.cql"]
+    restart: "no"

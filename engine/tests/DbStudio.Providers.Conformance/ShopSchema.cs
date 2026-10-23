@@ -32,6 +32,9 @@ public static class ShopSchema
         Dialect.TSql => logical,
         Dialect.PlSql => ToSnake(logical).ToUpperInvariant(),
         Dialect.Sqlite or Dialect.PgSql => ToSnake(logical).ToLowerInvariant(),
+        // Batch 3: MySQL/MariaDB, ClickHouse and Cassandra use lower_snake, Snowflake UPPER_SNAKE (its unquoted case).
+        Dialect.MySql or Dialect.ClickHouse or Dialect.Cql => ToSnake(logical).ToLowerInvariant(),
+        Dialect.Snowflake => ToSnake(logical).ToUpperInvariant(),
         _ => logical,
     };
 
@@ -54,15 +57,34 @@ public static class ShopSchema
         Dialect.TSql => "dbo",
         Dialect.PlSql => "SHOP",
         Dialect.PgSql => "public",
+        // Batch 3: the shop database / keyspace (single-level dialects), Snowflake's default schema.
+        Dialect.MySql or Dialect.ClickHouse or Dialect.Cql => "shop",
+        Dialect.Snowflake => "PUBLIC",
         _ => "main",
     };
 
-    /// <summary>Seed batches (each one executed as its own batch; idempotent: drops existing objects first).</summary>
+    /// <summary>
+    /// Seed batches (each one executed as its own batch; idempotent: drops existing objects first). Batch 3: each WP
+    /// replaces its placeholder (<c>SqliteSeed</c>) with its dialect's seed inside its labelled block, or seeds through the
+    /// docker init scripts (<c>engine/tests/docker/seed-*.sql</c>) and overrides <c>ProviderFixture.SeedOnInitialize</c>.
+    /// </summary>
     public static IReadOnlyList<string> Seed(Dialect dialect) => dialect switch
     {
         Dialect.TSql => TSqlSeed,
         Dialect.PlSql => PlSqlSeed,
         Dialect.Sqlite => SqliteSeed,
+        // WP-MY begin
+        Dialect.MySql => SqliteSeed,
+        // WP-MY end
+        // WP-CH begin
+        Dialect.ClickHouse => SqliteSeed,
+        // WP-CH end
+        // WP-SF begin
+        Dialect.Snowflake => SqliteSeed,
+        // WP-SF end
+        // WP-CS begin
+        Dialect.Cql => SqliteSeed,
+        // WP-CS end
         _ => throw new ArgumentOutOfRangeException(nameof(dialect)),
     };
 

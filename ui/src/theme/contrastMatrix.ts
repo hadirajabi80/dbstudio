@@ -50,7 +50,8 @@ export const CONTRAST_MATRIX: Pair[] = [
   ...['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'grey'].flatMap((c) => ['--bg-panel', '--bg-app'].map((bg) => pair(`--conn-${c}`, bg, UI, 'connection colour dots/bars'))),
   ...['table', 'view', 'routine', 'package', 'trigger', 'key', 'fk', 'db', 'other'].flatMap((o) => ['--bg-panel', '--bg-selected'].map((bg) => pair(`--obj-${o}`, bg, UI, 'object-type icons'))),
   pair('--fg-muted', '--bg-selected', UI, 'icons on a selected row'),
-  ...['sqlserver', 'oracle', 'sqlite', 'postgresql', 'redis', 'mongodb', 'kafka'].map((p) => pair('--provider-fg', `--provider-${p}`, UI, 'provider tile glyph')),
+  ...['sqlserver', 'oracle', 'sqlite', 'postgresql', 'redis', 'mongodb', 'kafka', 'mysql', 'mariadb', 'clickhouse', 'snowflake', 'elasticsearch', 'cassandra']
+    .map((p) => pair('--provider-fg', `--provider-${p}`, UI, 'provider tile glyph')),
   // M2: log level text in the Logs view (rows on panel / alternating rows, selected row)
   ...['debug', 'info', 'warn', 'error'].flatMap((l) => ['--bg-panel', '--bg-grid-alt'].map((bg) => pair(`--log-${l}`, bg, TEXT, 'log level text'))),
   ...['debug', 'info', 'warn', 'error'].map((l) => pair(`--log-${l}`, '--bg-selected', UI, 'log level glyph on a selected row')),

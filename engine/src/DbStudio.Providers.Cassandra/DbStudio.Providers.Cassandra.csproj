@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Cassandra / ScyllaDB provider (plan-batch3 WP-CS): a relational IDbProvider over CassandraCSharpDriver, Dialect.Cql.
+       WP0 committed the compiling stub; WP-CS owns this project. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbStudio.Core\DbStudio.Core.csproj" />
+    <ProjectReference Include="..\DbStudio.Logs\DbStudio.Logs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CassandraCSharpDriver" Version="3.22.1" />
+    <!-- NuGetAudit: the driver depends on Newtonsoft.Json 9.0.1 (GHSA-5crp-9r3c-p9vr); pin the patched version (as Kafka does). -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DbStudio.Providers.Cassandra.Tests" />
+  </ItemGroup>
+
+</Project>

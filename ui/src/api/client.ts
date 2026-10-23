@@ -16,6 +16,7 @@ import type {
 import type { SourceClientInfo, StreamInfo, StreamOpenRequest, StreamOpenResponse } from './types';
 import { CLIENT_ID_HEADER, uiClientId } from './clientId';
 import { createM2Namespaces } from './client.m2';
+import { createM3Namespaces } from './client.m3';
 
 export const API_PREFIX = '/api/v1';
 
@@ -165,6 +166,8 @@ export interface M2Http {
 export type M2Query = Query;
 
 const m2 = createM2Namespaces({ json, send, enc, filenameFrom });
+/** Batch 3 (plan-batch3): api.mysql / clickhouse / snowflake / cassandra / es, owned per work package (./m3/*.ts). */
+const m3 = createM3Namespaces({ json, send, enc, filenameFrom });
 
 export const api = {
   // 3.1 Meta
@@ -303,6 +306,7 @@ export const api = {
   kafka: m2.kafka,
   logs: m2.logs,
   er: m2.er,
+  ...m3,
 };
 
 
