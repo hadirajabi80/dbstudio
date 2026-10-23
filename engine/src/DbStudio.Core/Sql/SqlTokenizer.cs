@@ -363,6 +363,9 @@ public static class SqlTokenizer
         // WP-MY begin (MySQL/MariaDB: BEGIN … END compound statements; CREATE PROCEDURE/FUNCTION/EVENT bodies, DEFINER=…)
         // WP-MY end
         // WP-SF begin (Snowflake Scripting: anonymous BEGIN … END / DECLARE blocks outside $$ bodies)
+        if (dialect == Dialect.Snowflake && (u == "DECLARE" || (u == "BEGIN" && k + 1 < tokens.Count
+            && !(tokens[k + 1].IsPunct(';') || (tokens[k + 1].Kind == SqlTokenKind.Word && tokens[k + 1].Upper is "TRANSACTION" or "WORK" or "NAME")))))
+            return true;
         // WP-SF end
         if (u != "CREATE") return false;
         for (var j = k + 1; j < Math.Min(tokens.Count, k + 8); j++)

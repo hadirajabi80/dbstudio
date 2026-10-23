@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Snowflake provider (plan-batch3 WP-SF). Snowflake.Data 4.x; heavy transitive graph (D11): WP-SF trims and reports the publish delta.
-       WP0 committed the compiling stub; WP-SF owns this project. -->
+  <!-- Snowflake provider (plan-batch3 WP-SF). Snowflake.Data 6.x (no log4net since 5.0; net10.0 build): its AWS / Azure / Google
+       storage SDKs serve PUT/GET stage transfers. Natives: sf_mini_core (all RIDs) and Mono.Unix (linux/osx), next to the
+       macOS apphost like librdkafka (docs/wp-notes/WP-SF.md). Publish delta ~5.9 MiB. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -18,10 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Snowflake.Data" Version="4.8.0" />
-    <!-- NuGetAudit: Snowflake.Data 4.x depends on log4net 2.0.12 (GHSA-4f7c-pmjv-c25w, fixed in 3.3.0); pin a patched
-         version. WP-SF verifies the driver logs/loads with it (or moves to Snowflake.Data 6.x, which dropped log4net). -->
-    <PackageReference Include="log4net" Version="3.3.2" />
+    <PackageReference Include="Snowflake.Data" Version="6.4.0" />
   </ItemGroup>
 
   <ItemGroup>

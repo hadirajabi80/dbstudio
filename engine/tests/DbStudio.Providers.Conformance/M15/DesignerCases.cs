@@ -41,6 +41,7 @@ public static class DesignerCases
         // WP-CH begin
         // WP-CH end
         // WP-SF begin
+        Dialect.Snowflake => ShopSchema.ToSnake(pascal).ToUpperInvariant(),
         // WP-SF end
         // WP-CS begin
         // WP-CS end

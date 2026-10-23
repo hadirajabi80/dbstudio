@@ -1,0 +1,66 @@
+{
+  "$comment": "Log and activity sources: probe, INFORMATION_SCHEMA.QUERY_HISTORY / WAREHOUSE_LOAD_HISTORY / LOGIN_HISTORY_BY_USER, SHOW TRANSACTIONS / LOCKS. Entries with 'match' are regular expressions (the SQL carries time windows).",
+  "entries": [
+    {
+      "sql": "SELECT CURRENT_USER() AS USER_NAME, CURRENT_ROLE() AS ROLE_NAME, CURRENT_WAREHOUSE() AS WAREHOUSE_NAME, CURRENT_DATABASE() AS DATABASE_NAME",
+      "columns": ["USER_NAME", "ROLE_NAME", "WAREHOUSE_NAME", "DATABASE_NAME"],
+      "rows": [["SHOP", "SYSADMIN", "COMPUTE_WH", "SHOP"]]
+    },
+    {
+      "match": "WHERE EXECUTION_STATUS IN \\('RUNNING'",
+      "columns": ["QUERY_ID", "QUERY_TEXT", "DATABASE_NAME", "SCHEMA_NAME", "QUERY_TYPE", "SESSION_ID", "USER_NAME", "ROLE_NAME", "WAREHOUSE_NAME", "WAREHOUSE_SIZE", "QUERY_TAG", "EXECUTION_STATUS", "ERROR_CODE", "ERROR_MESSAGE", "START_TIME", "END_TIME", "TOTAL_ELAPSED_TIME", "BYTES_SCANNED", "ROWS_PRODUCED", "COMPILATION_TIME", "EXECUTION_TIME", "QUEUED_OVERLOAD_TIME"],
+      "rows": [
+        ["01b7c2d4-0306-8a21-0000-00041c2b9f01", "SELECT SYSTEM$WAIT(120)", "SHOP", "PUBLIC", "SELECT", 17592186044422, "SHOP", "SYSADMIN", "COMPUTE_WH", "X-Small", "Rowlit", "RUNNING", null, null, "2026-10-23T14:58:01.120Z", "1970-01-01T00:00:00.000Z", 45210, 0, 0, 61, 45000, 0],
+        ["01b7c2d4-0306-8a21-0000-00041c2b9f02", "COPY INTO EVENTS_RAW FROM @EVENTS_STAGE", "SHOP", "PUBLIC", "COPY", 17592186044430, "ETL", "SYSADMIN", "ETL_WH", "Small", "", "QUEUED", null, null, "2026-10-23T14:58:40.000Z", "1970-01-01T00:00:00.000Z", 6000, 0, 0, 40, 0, 5900]
+      ]
+    },
+    {
+      "match": "FROM TABLE\\(INFORMATION_SCHEMA\\.QUERY_HISTORY\\(",
+      "columns": ["QUERY_ID", "QUERY_TEXT", "DATABASE_NAME", "SCHEMA_NAME", "QUERY_TYPE", "SESSION_ID", "USER_NAME", "ROLE_NAME", "WAREHOUSE_NAME", "WAREHOUSE_SIZE", "QUERY_TAG", "EXECUTION_STATUS", "ERROR_CODE", "ERROR_MESSAGE", "START_TIME", "END_TIME", "TOTAL_ELAPSED_TIME", "BYTES_SCANNED", "ROWS_PRODUCED", "COMPILATION_TIME", "EXECUTION_TIME", "QUEUED_OVERLOAD_TIME"],
+      "rows": [
+        ["01b7c2d4-0306-8a21-0000-00041c2b9e5f", "SELEC * FROM ORDERS", "SHOP", "PUBLIC", "UNKNOWN", 17592186044422, "SHOP", "SYSADMIN", null, null, "Rowlit", "FAILED_WITH_ERROR", "1003", "SQL compilation error:\nsyntax error line 1 at position 0 unexpected 'SELEC'.", "2026-10-23T14:55:10.004Z", "2026-10-23T14:55:10.051Z", 47, 0, 0, 40, 0, 0],
+        ["01b7c2d4-0306-8a21-0000-00041c2b9e5d", "SELECT c.NAME, SUM(o.TOTAL) AS TOTAL\nFROM CUSTOMERS c JOIN ORDERS o ON o.CUSTOMER_ID = c.ID\nGROUP BY c.NAME", "SHOP", "PUBLIC", "SELECT", 17592186044422, "SHOP", "SYSADMIN", "COMPUTE_WH", "X-Small", "Rowlit", "SUCCESS", null, null, "2026-10-23T14:54:01.210Z", "2026-10-23T14:54:02.415Z", 1205, 5632, 4, 110, 900, 0],
+        ["01b7c2d4-0306-8a21-0000-00041c2b9e5a", "USE WAREHOUSE COMPUTE_WH", null, null, "USE", 17592186044422, "SHOP", "SYSADMIN", null, null, "Rowlit", "SUCCESS", null, null, "2026-10-23T14:53:59.000Z", "2026-10-23T14:53:59.030Z", 30, 0, 0, 20, 0, 0]
+      ]
+    },
+    {
+      "match": "WAREHOUSE_LOAD_HISTORY",
+      "columns": ["START_TIME", "END_TIME", "WAREHOUSE_NAME", "AVG_RUNNING", "AVG_QUEUED_LOAD", "AVG_QUEUED_PROVISIONING", "AVG_BLOCKED"],
+      "rows": [
+        ["2026-10-23T14:55:00.000Z", "2026-10-23T15:00:00.000Z", "ETL_WH", 1.8, 0.4, 0.0, 0.0],
+        ["2026-10-23T14:50:00.000Z", "2026-10-23T14:55:00.000Z", "COMPUTE_WH", 0.12, 0.0, 0.0, 0.0]
+      ]
+    },
+    {
+      "match": "LOGIN_HISTORY_BY_USER",
+      "columns": ["EVENT_ID", "EVENT_TIMESTAMP", "EVENT_TYPE", "USER_NAME", "CLIENT_IP", "REPORTED_CLIENT_TYPE", "REPORTED_CLIENT_VERSION", "FIRST_AUTHENTICATION_FACTOR", "SECOND_AUTHENTICATION_FACTOR", "IS_SUCCESS", "ERROR_CODE", "ERROR_MESSAGE"],
+      "rows": [
+        [4503599627370500, "2026-10-23T14:53:58.100Z", "LOGIN", "SHOP", "203.0.113.7", "DOTNET_DRIVER", "6.4.0", "PASSWORD", null, "YES", null, null],
+        [4503599627370497, "2026-10-23T14:50:11.900Z", "LOGIN", "SHOP", "203.0.113.7", "DOTNET_DRIVER", "6.4.0", "PASSWORD", null, "NO", 390100, "INCORRECT_USERNAME_PASSWORD"]
+      ]
+    },
+    {
+      "sql": "SHOW TRANSACTIONS",
+      "columns": ["id", "user", "session", "name", "started_on", "state", "scope"],
+      "rows": [[1729695481203000000, "SHOP", 17592186044422, "7c1d0f4e-55d1-4b6c-9f43-0d1c2a4e9b12", "2026-10-23T14:58:01.203Z", "running", 0]]
+    },
+    {
+      "sql": "SHOW LOCKS",
+      "columns": ["resource", "type", "transaction", "transaction_name", "session", "status", "acquired_on", "query_id"],
+      "rows": [
+        ["SHOP.PUBLIC.ORDERS", "PARTITIONS", 1729695481203000000, "7c1d0f4e-55d1-4b6c-9f43-0d1c2a4e9b12", 17592186044422, "HOLDING", "2026-10-23 07:58:01.300 -0700", "01b7c2d4-0306-8a21-0000-00041c2b9f01"],
+        ["SHOP.PUBLIC.ORDERS", "PARTITIONS", 1729695481999000000, "a5c40b10-0000-0000-0000-000000000000", 17592186044430, "WAITING", null, "01b7c2d4-0306-8a21-0000-00041c2b9f03"]
+      ]
+    },
+    {
+      "match": "SYSTEM\\$CANCEL_QUERY",
+      "columns": ["RESULT"],
+      "rows": [["query [01b7c2d4-0306-8a21-0000-00041c2b9f01] terminated."]]
+    },
+    {
+      "match": "SYSTEM\\$ABORT_TRANSACTION",
+      "columns": ["RESULT"],
+      "rows": [["Aborted transaction 1729695481203000000."]]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$comment": "EXPLAIN USING JSON (one 'content' cell) and GET_QUERY_OPERATOR_STATS rows of the query below, recorded shape.",
+  "entries": [
+    {
+      "sql": "EXPLAIN USING JSON\nSELECT c.NAME, SUM(o.TOTAL) AS TOTAL FROM CUSTOMERS c JOIN ORDERS o ON o.CUSTOMER_ID = c.ID WHERE o.ORDER_DATE >= '2026-02-01' GROUP BY c.NAME",
+      "columns": ["content"],
+      "rows": [["{\"GlobalStats\":{\"partitionsTotal\":2,\"partitionsAssigned\":2,\"bytesAssigned\":5632},\"Operations\":[[{\"id\":0,\"operation\":\"Result\",\"expressions\":[\"C.NAME\",\"SUM(O.TOTAL)\"]},{\"id\":1,\"parent\":0,\"operation\":\"Aggregate\",\"expressions\":[\"aggExprs: [SUM(O.TOTAL)]\",\"groupKeys: [C.NAME]\"]},{\"id\":2,\"parent\":1,\"operation\":\"InnerJoin\",\"expressions\":[\"joinKey: (C.ID = O.CUSTOMER_ID)\"]},{\"id\":3,\"parent\":2,\"operation\":\"Filter\",\"expressions\":[\"O.ORDER_DATE >= '2026-02-01 00:00:00.000000000'\"]},{\"id\":4,\"parent\":3,\"operation\":\"TableScan\",\"objects\":[\"SHOP.PUBLIC.ORDERS\"],\"expressions\":[\"CUSTOMER_ID\",\"ORDER_DATE\",\"TOTAL\"],\"partitionsAssigned\":1,\"partitionsTotal\":1,\"bytesAssigned\":3072},{\"id\":5,\"parent\":2,\"operation\":\"TableScan\",\"objects\":[\"SHOP.PUBLIC.CUSTOMERS\"],\"expressions\":[\"ID\",\"NAME\"],\"partitionsAssigned\":1,\"partitionsTotal\":1,\"bytesAssigned\":2560}]]}"]]
+    },
+    {
+      "sql": "SELECT STEP_ID, OPERATOR_ID, PARENT_OPERATORS, OPERATOR_TYPE, OPERATOR_STATISTICS, EXECUTION_TIME_BREAKDOWN, OPERATOR_ATTRIBUTES FROM TABLE(GET_QUERY_OPERATOR_STATS('01b7c2d4-0306-8a21-0000-00041c2b9e5d')) ORDER BY STEP_ID, OPERATOR_ID",
+      "columns": ["STEP_ID", "OPERATOR_ID", "PARENT_OPERATORS", "OPERATOR_TYPE", "OPERATOR_STATISTICS", "EXECUTION_TIME_BREAKDOWN", "OPERATOR_ATTRIBUTES"],
+      "rows": [
+        [1, 0, null, "Result", "{\"input_rows\":4,\"output_rows\":4}", "{\"overall_percentage\":0.05,\"processing\":1.0}", "{\"expressions\":[\"C.NAME\",\"SUM(O.TOTAL)\"]}"],
+        [1, 1, "[0]", "Aggregate", "{\"input_rows\":5,\"output_rows\":4}", "{\"overall_percentage\":0.10,\"processing\":1.0}", "{\"functions\":[\"SUM(O.TOTAL)\"],\"grouping_keys\":[\"C.NAME\"]}"],
+        [1, 2, "[1]", "Join", "{\"input_rows\":10,\"output_rows\":5}", "{\"overall_percentage\":0.15,\"processing\":0.9,\"synchronization\":0.1}", "{\"equality_join_condition\":\"(C.ID = O.CUSTOMER_ID)\",\"join_type\":\"INNER\"}"],
+        [1, 3, "[2]", "Filter", "{\"input_rows\":6,\"output_rows\":5}", "{\"overall_percentage\":0.05,\"processing\":1.0}", "{\"filter_condition\":\"O.ORDER_DATE >= '2026-02-01 00:00:00.000000000'\"}"],
+        [1, 4, "[3]", "TableScan", "{\"input_rows\":0,\"output_rows\":6,\"io\":{\"bytes_scanned\":3072,\"percentage_scanned_from_cache\":0.0},\"pruning\":{\"partitions_scanned\":4,\"partitions_total\":4},\"spilling\":{\"bytes_spilled_local_storage\":104857600}}", "{\"overall_percentage\":0.40,\"local_disk_io\":0.2,\"remote_disk_io\":0.8}", "{\"table_name\":\"SHOP.PUBLIC.ORDERS\",\"columns\":[\"CUSTOMER_ID\",\"ORDER_DATE\",\"TOTAL\"]}"],
+        [1, 5, "[2]", "TableScan", "{\"input_rows\":0,\"output_rows\":5,\"io\":{\"bytes_scanned\":2560,\"percentage_scanned_from_cache\":1.0},\"pruning\":{\"partitions_scanned\":1,\"partitions_total\":1}}", "{\"overall_percentage\":0.25,\"remote_disk_io\":1.0}", "{\"table_name\":\"SHOP.PUBLIC.CUSTOMERS\",\"columns\":[\"ID\",\"NAME\"]}"]
+      ]
+    }
+  ]
+}

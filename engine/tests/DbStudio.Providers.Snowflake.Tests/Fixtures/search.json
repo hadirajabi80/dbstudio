@@ -1,0 +1,26 @@
+{
+  "$comment": "Dependency and search extras: ACCOUNT_USAGE.OBJECT_DEPENDENCIES (granted in this recording), INFORMATION_SCHEMA routine bodies, a data query.",
+  "entries": [
+    {
+      "match": "FROM SNOWFLAKE\\.ACCOUNT_USAGE\\.OBJECT_DEPENDENCIES",
+      "columns": ["REFERENCED_DATABASE", "REFERENCED_SCHEMA", "REFERENCED_OBJECT_NAME", "REFERENCED_OBJECT_DOMAIN", "REFERENCING_DATABASE", "REFERENCING_SCHEMA", "REFERENCING_OBJECT_NAME", "REFERENCING_OBJECT_DOMAIN", "DEPENDENCY_TYPE"],
+      "rows": [
+        ["SHOP", "PUBLIC", "ORDERS", "TABLE", "ANALYTICS", "MART", "REVENUE_BY_MONTH", "VIEW", "BY_NAME"],
+        ["SHOP", "PUBLIC", "ORDERS", "TABLE", "SHOP", "PUBLIC", "ORDER_TOTALS_MV", "MATERIALIZED VIEW", "BY_ID"]
+      ]
+    },
+    {
+      "match": "INFORMATION_SCHEMA\\.PROCEDURES",
+      "columns": ["NAME", "TYPE", "BODY"],
+      "rows": [
+        ["REFRESH_TOTALS", "proc", "BEGIN\n  UPDATE ORDERS SET TOTAL = TOTAL;\n  RETURN 'ok';\nEND"],
+        ["ORDER_TAX", "func", "AMOUNT * 0.19"]
+      ]
+    },
+    {
+      "match": "^SELECT \"ID\", \"NAME\", \"EMAIL\" FROM \"SHOP\"\\.\"PUBLIC\"\\.\"CUSTOMERS\" WHERE",
+      "columns": ["ID", "NAME", "EMAIL"],
+      "rows": [[1, "Alice", "alice@example.com"]]
+    }
+  ]
+}

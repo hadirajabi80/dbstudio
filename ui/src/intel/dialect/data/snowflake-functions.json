@@ -1,4 +1,4157 @@
 {
-  "$comment": "Snowflake built-in functions (plan-batch3 WP-SF). WP0 stub; same shape as sqlite-functions.json.",
-  "functions": []
+ "$comment": "Snowflake built-in functions (plan-batch3 WP-SF): the common scalar, semi-structured, date, aggregate, window, table, context and SYSTEM$ functions. Same shape as sqlite-functions.json; generated, edit freely.",
+ "functions": [
+  {
+   "name": "ABS",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Absolute value of X."
+  },
+  {
+   "name": "CEIL",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "X NUMBER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Rounds X up to the given scale (default 0)."
+  },
+  {
+   "name": "FLOOR",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "X NUMBER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Rounds X down to the given scale (default 0)."
+  },
+  {
+   "name": "ROUND",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "X NUMBER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "X NUMBER",
+      "SCALE INTEGER",
+      "ROUNDING_MODE VARCHAR"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Rounds X to SCALE decimals ('HALF_AWAY_FROM_ZERO' or 'HALF_TO_EVEN')."
+  },
+  {
+   "name": "TRUNC",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": ""
+    },
+    {
+     "params": [
+      "X NUMBER",
+      "SCALE INTEGER"
+     ],
+     "returns": ""
+    }
+   ],
+   "returns": "",
+   "doc": " D DATE_OR_TIME, PART VARCHAR"
+  },
+  {
+   "name": "MOD",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER",
+      "Y NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Remainder of X / Y."
+  },
+  {
+   "name": "POWER",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X FLOAT",
+      "Y FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "X raised to the power Y."
+  },
+  {
+   "name": "SQRT",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Square root."
+  },
+  {
+   "name": "LN",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Natural logarithm."
+  },
+  {
+   "name": "LOG",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "BASE FLOAT",
+      "X FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Logarithm of X to BASE."
+  },
+  {
+   "name": "EXP",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "e raised to X."
+  },
+  {
+   "name": "SIGN",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "-1, 0 or 1."
+  },
+  {
+   "name": "DIV0",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "DIVIDEND NUMBER",
+      "DIVISOR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Division that returns 0 instead of an error when the divisor is 0."
+  },
+  {
+   "name": "DIV0NULL",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "DIVIDEND NUMBER",
+      "DIVISOR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Division that returns 0 when the divisor is 0 or NULL."
+  },
+  {
+   "name": "RANDOM",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SEED INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Pseudo-random 64-bit integer."
+  },
+  {
+   "name": "UNIFORM",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "MIN NUMBER",
+      "MAX NUMBER",
+      "GEN NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Uniformly distributed number in [MIN, MAX] (GEN: RANDOM() for random values)."
+  },
+  {
+   "name": "UUID_STRING",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "UUID VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "UUID VARCHAR",
+      "NAME VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "A random (v4) or name-based (v5) UUID string."
+  },
+  {
+   "name": "HASH",
+   "category": "numeric",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Signed 64-bit hash of the arguments."
+  },
+  {
+   "name": "GREATEST",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Largest argument (NULL if any is NULL)."
+  },
+  {
+   "name": "LEAST",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Smallest argument (NULL if any is NULL)."
+  },
+  {
+   "name": "COALESCE",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "First non-NULL argument."
+  },
+  {
+   "name": "NVL",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "REPLACEMENT ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "REPLACEMENT when EXPR is NULL."
+  },
+  {
+   "name": "NVL2",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "NOT_NULL_VALUE ANY",
+      "NULL_VALUE ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "NOT_NULL_VALUE when EXPR is not NULL, else NULL_VALUE."
+  },
+  {
+   "name": "NULLIF",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A ANY",
+      "B ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "NULL when A = B, else A."
+  },
+  {
+   "name": "NULLIFZERO",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "NULL when X is 0."
+  },
+  {
+   "name": "ZEROIFNULL",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "X NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "0 when X is NULL."
+  },
+  {
+   "name": "IFF",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "CONDITION BOOLEAN",
+      "THEN_VALUE ANY",
+      "ELSE_VALUE ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Single-level IF: THEN_VALUE when CONDITION is true, else ELSE_VALUE."
+  },
+  {
+   "name": "DECODE",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "SEARCH ANY",
+      "RESULT ANY",
+      "... ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Compares EXPR to each SEARCH and returns the matching RESULT (NULL matches NULL)."
+  },
+  {
+   "name": "EQUAL_NULL",
+   "category": "conditional",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A ANY",
+      "B ANY"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "NULL-safe equality."
+  },
+  {
+   "name": "CONCAT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "... VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Concatenates the arguments (NULL if any is NULL); also the "
+  },
+  {
+   "name": "CONCAT_WS",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SEPARATOR VARCHAR",
+      "EXPR VARCHAR",
+      "... VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Concatenates with a separator."
+  },
+  {
+   "name": "LENGTH",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Length in characters (bytes for BINARY)."
+  },
+  {
+   "name": "LEN",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Synonym of LENGTH."
+  },
+  {
+   "name": "LOWER",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Lower case."
+  },
+  {
+   "name": "UPPER",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Upper case."
+  },
+  {
+   "name": "INITCAP",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "DELIMITERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Capitalises the first letter of each word."
+  },
+  {
+   "name": "TRIM",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "CHARACTERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Removes leading and trailing characters (default blanks)."
+  },
+  {
+   "name": "LTRIM",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "CHARACTERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Removes leading characters."
+  },
+  {
+   "name": "RTRIM",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "CHARACTERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Removes trailing characters."
+  },
+  {
+   "name": "LPAD",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LEN INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LEN INTEGER",
+      "PAD VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Left-pads to LEN characters."
+  },
+  {
+   "name": "RPAD",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LEN INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LEN INTEGER",
+      "PAD VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Right-pads to LEN characters."
+  },
+  {
+   "name": "SUBSTR",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "START INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "START INTEGER",
+      "LENGTH INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Substring from START (1-based)."
+  },
+  {
+   "name": "SUBSTRING",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "START INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "START INTEGER",
+      "LENGTH INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Synonym of SUBSTR."
+  },
+  {
+   "name": "LEFT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LENGTH INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Leftmost LENGTH characters."
+  },
+  {
+   "name": "RIGHT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "LENGTH INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Rightmost LENGTH characters."
+  },
+  {
+   "name": "REPLACE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "REPLACEMENT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Replaces every occurrence of PATTERN."
+  },
+  {
+   "name": "TRANSLATE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "SOURCE_ALPHABET VARCHAR",
+      "TARGET_ALPHABET VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Replaces characters one by one."
+  },
+  {
+   "name": "REVERSE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Reverses the string."
+  },
+  {
+   "name": "REPEAT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "N INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "EXPR repeated N times."
+  },
+  {
+   "name": "SPLIT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "STRING VARCHAR",
+      "SEPARATOR VARCHAR"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Splits into an ARRAY."
+  },
+  {
+   "name": "SPLIT_PART",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "STRING VARCHAR",
+      "DELIMITER VARCHAR",
+      "PART INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "The PART-th piece (negative counts from the end)."
+  },
+  {
+   "name": "STRTOK",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "STRING VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "STRING VARCHAR",
+      "DELIMITERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "STRING VARCHAR",
+      "DELIMITERS VARCHAR",
+      "PART INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Tokenises and returns one token."
+  },
+  {
+   "name": "POSITION",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBSTR VARCHAR",
+      "STRING VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBSTR VARCHAR",
+      "STRING VARCHAR",
+      "START INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "1-based position of SUBSTR (0 when absent); also POSITION(a IN b)."
+  },
+  {
+   "name": "CHARINDEX",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBSTR VARCHAR",
+      "STRING VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBSTR VARCHAR",
+      "STRING VARCHAR",
+      "START INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Synonym of POSITION."
+  },
+  {
+   "name": "CONTAINS",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "SUBSTR VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when EXPR contains SUBSTR."
+  },
+  {
+   "name": "STARTSWITH",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "PREFIX VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when EXPR starts with PREFIX."
+  },
+  {
+   "name": "ENDSWITH",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "SUFFIX VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when EXPR ends with SUFFIX."
+  },
+  {
+   "name": "ILIKE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "ESCAPE VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "Case-insensitive LIKE."
+  },
+  {
+   "name": "RLIKE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "Regular-expression match of the whole subject."
+  },
+  {
+   "name": "REGEXP_LIKE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when the whole SUBJECT matches PATTERN ('c' case-sensitive, 'i' insensitive, 'm', 's')."
+  },
+  {
+   "name": "REGEXP_SUBSTR",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER",
+      "PARAMETERS VARCHAR",
+      "GROUP_NUM INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Substring matching PATTERN."
+  },
+  {
+   "name": "REGEXP_REPLACE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "REPLACEMENT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "REPLACEMENT VARCHAR",
+      "POSITION INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "REPLACEMENT VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "REPLACEMENT VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Replaces matches of PATTERN."
+  },
+  {
+   "name": "REGEXP_COUNT",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Number of matches."
+  },
+  {
+   "name": "REGEXP_INSTR",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER",
+      "OPTION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "SUBJECT VARCHAR",
+      "PATTERN VARCHAR",
+      "POSITION INTEGER",
+      "OCCURRENCE INTEGER",
+      "OPTION INTEGER",
+      "PARAMETERS VARCHAR"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Position of a match."
+  },
+  {
+   "name": "EDITDISTANCE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A VARCHAR",
+      "B VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "A VARCHAR",
+      "B VARCHAR",
+      "MAX INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Levenshtein distance."
+  },
+  {
+   "name": "SOUNDEX",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Phonetic code."
+  },
+  {
+   "name": "MD5",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "MD5 hash as 32 hex digits."
+  },
+  {
+   "name": "SHA2",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "DIGEST_SIZE INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "SHA-2 hash (224, 256, 384, 512) as hex."
+  },
+  {
+   "name": "BASE64_ENCODE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "INPUT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Base64 text."
+  },
+  {
+   "name": "BASE64_DECODE_STRING",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "INPUT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Decodes Base64 text."
+  },
+  {
+   "name": "HEX_ENCODE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "INPUT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Hex text."
+  },
+  {
+   "name": "COLLATE",
+   "category": "string",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "COLLATION VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "EXPR with another collation ('en-ci', 'utf8')."
+  },
+  {
+   "name": "TO_VARCHAR",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Converts to text (with an optional format)."
+  },
+  {
+   "name": "TO_CHAR",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Synonym of TO_VARCHAR."
+  },
+  {
+   "name": "TO_NUMBER",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Converts to NUMBER."
+  },
+  {
+   "name": "TO_DECIMAL",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Synonym of TO_NUMBER."
+  },
+  {
+   "name": "TRY_TO_NUMBER",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER"
+     ],
+     "returns": "NUMBER"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR",
+      "PRECISION INTEGER",
+      "SCALE INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "TO_NUMBER that returns NULL instead of an error."
+  },
+  {
+   "name": "TO_DOUBLE",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "FLOAT"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Converts to FLOAT."
+  },
+  {
+   "name": "TO_BOOLEAN",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "Converts 'true'/'false', 'yes'/'no', 1/0 to BOOLEAN."
+  },
+  {
+   "name": "TO_DATE",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "DATE"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "Converts to DATE."
+  },
+  {
+   "name": "TRY_TO_DATE",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "DATE"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "TO_DATE that returns NULL instead of an error."
+  },
+  {
+   "name": "TO_TIME",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "TIME"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "TIME"
+    }
+   ],
+   "returns": "TIME",
+   "doc": "Converts to TIME."
+  },
+  {
+   "name": "TO_TIMESTAMP",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": ""
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": ""
+    }
+   ],
+   "returns": "",
+   "doc": " EPOCH NUMBER, SCALE INTEGER"
+  },
+  {
+   "name": "TO_TIMESTAMP_NTZ",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "TIMESTAMP_NTZ"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "TIMESTAMP_NTZ"
+    }
+   ],
+   "returns": "TIMESTAMP_NTZ",
+   "doc": "Converts to TIMESTAMP_NTZ."
+  },
+  {
+   "name": "TO_TIMESTAMP_LTZ",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "TIMESTAMP_LTZ"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "TIMESTAMP_LTZ"
+    }
+   ],
+   "returns": "TIMESTAMP_LTZ",
+   "doc": "Converts to TIMESTAMP_LTZ."
+  },
+  {
+   "name": "TO_TIMESTAMP_TZ",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "TIMESTAMP_TZ"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "TIMESTAMP_TZ"
+    }
+   ],
+   "returns": "TIMESTAMP_TZ",
+   "doc": "Converts to TIMESTAMP_TZ."
+  },
+  {
+   "name": "TRY_TO_TIMESTAMP",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "TIMESTAMP"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "TIMESTAMP"
+    }
+   ],
+   "returns": "TIMESTAMP",
+   "doc": "TO_TIMESTAMP that returns NULL instead of an error."
+  },
+  {
+   "name": "TO_BINARY",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "BINARY"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "FORMAT VARCHAR"
+     ],
+     "returns": "BINARY"
+    }
+   ],
+   "returns": "BINARY",
+   "doc": "Converts text to BINARY ('HEX', 'BASE64', 'UTF-8')."
+  },
+  {
+   "name": "TRY_CAST",
+   "category": "conversion",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "TYPE TYPE"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "CAST(… AS type) that returns NULL instead of an error."
+  },
+  {
+   "name": "TO_VARIANT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "Converts any value to VARIANT."
+  },
+  {
+   "name": "TO_OBJECT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Converts a VARIANT holding an object to OBJECT."
+  },
+  {
+   "name": "TO_ARRAY",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Wraps a value in an ARRAY (an ARRAY stays as is)."
+  },
+  {
+   "name": "TO_JSON",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "JSON text of a VARIANT."
+  },
+  {
+   "name": "PARSE_JSON",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARIANT"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "PARAMETER VARCHAR"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "Parses JSON text into a VARIANT."
+  },
+  {
+   "name": "TRY_PARSE_JSON",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "PARSE_JSON that returns NULL instead of an error."
+  },
+  {
+   "name": "PARSE_XML",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "OBJECT"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "DISABLE_AUTO_CONVERT BOOLEAN"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Parses XML into an OBJECT."
+  },
+  {
+   "name": "CHECK_JSON",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "NULL when EXPR is valid JSON, else the error."
+  },
+  {
+   "name": "OBJECT_CONSTRUCT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "KEY VARCHAR",
+      "VALUE ANY",
+      "... ANY"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Builds an OBJECT from key/value pairs (OBJECT_CONSTRUCT(*) from a row); NULL values are left out."
+  },
+  {
+   "name": "OBJECT_CONSTRUCT_KEEP_NULL",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "KEY VARCHAR",
+      "VALUE ANY",
+      "... ANY"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "OBJECT_CONSTRUCT keeping NULL values."
+  },
+  {
+   "name": "OBJECT_INSERT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJ OBJECT",
+      "KEY VARCHAR",
+      "VALUE ANY"
+     ],
+     "returns": "OBJECT"
+    },
+    {
+     "params": [
+      "OBJ OBJECT",
+      "KEY VARCHAR",
+      "VALUE ANY",
+      "UPDATE_FLAG BOOLEAN"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Adds (or replaces) a key."
+  },
+  {
+   "name": "OBJECT_DELETE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJ OBJECT",
+      "KEY VARCHAR",
+      "... VARCHAR"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Removes keys."
+  },
+  {
+   "name": "OBJECT_PICK",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJ OBJECT",
+      "KEY VARCHAR",
+      "... VARCHAR"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Keeps only the given keys."
+  },
+  {
+   "name": "OBJECT_KEYS",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJ OBJECT"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Keys of an OBJECT."
+  },
+  {
+   "name": "ARRAY_CONSTRUCT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "VALUE ANY",
+      "... ANY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Builds an ARRAY."
+  },
+  {
+   "name": "ARRAY_SIZE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Number of elements."
+  },
+  {
+   "name": "ARRAY_CONTAINS",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "VALUE VARIANT",
+      "ARRAY ARRAY"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when the ARRAY contains VALUE."
+  },
+  {
+   "name": "ARRAY_APPEND",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY",
+      "VALUE ANY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Appends an element."
+  },
+  {
+   "name": "ARRAY_CAT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A ARRAY",
+      "B ARRAY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Concatenates two ARRAYs."
+  },
+  {
+   "name": "ARRAY_SLICE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY",
+      "FROM INTEGER",
+      "TO INTEGER"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Elements FROM (inclusive) to TO (exclusive), 0-based."
+  },
+  {
+   "name": "ARRAY_TO_STRING",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY",
+      "SEPARATOR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Joins elements into text."
+  },
+  {
+   "name": "ARRAY_DISTINCT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Removes duplicate elements."
+  },
+  {
+   "name": "ARRAY_FLATTEN",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Flattens an ARRAY of ARRAYs."
+  },
+  {
+   "name": "ARRAY_SORT",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ARRAY ARRAY"
+     ],
+     "returns": "ARRAY"
+    },
+    {
+     "params": [
+      "ARRAY ARRAY",
+      "ASC BOOLEAN"
+     ],
+     "returns": "ARRAY"
+    },
+    {
+     "params": [
+      "ARRAY ARRAY",
+      "ASC BOOLEAN",
+      "NULLS_FIRST BOOLEAN"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Sorted ARRAY."
+  },
+  {
+   "name": "ARRAYS_OVERLAP",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A ARRAY",
+      "B ARRAY"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when the ARRAYs share an element."
+  },
+  {
+   "name": "GET",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT",
+      "INDEX_OR_KEY ANY"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "Element of an ARRAY by index or of an OBJECT by key (also v[0], v:key)."
+  },
+  {
+   "name": "GET_PATH",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT",
+      "PATH VARCHAR"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "Value at a path ('a.b[0].c'); also the : operator."
+  },
+  {
+   "name": "GET_IGNORE_CASE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJ OBJECT",
+      "KEY VARCHAR"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "Case-insensitive key lookup."
+  },
+  {
+   "name": "IS_NULL_VALUE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True for a JSON null (not SQL NULL)."
+  },
+  {
+   "name": "TYPEOF",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Type of a VARIANT value ('OBJECT', 'ARRAY', 'INTEGER', …)."
+  },
+  {
+   "name": "STRIP_NULL_VALUE",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "VARIANT"
+    }
+   ],
+   "returns": "VARIANT",
+   "doc": "SQL NULL for a JSON null."
+  },
+  {
+   "name": "AS_VARCHAR",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "The VARIANT as VARCHAR (NULL when it is not a string)."
+  },
+  {
+   "name": "AS_NUMBER",
+   "category": "semi-structured",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARIANT"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "The VARIANT as NUMBER (NULL when it is not a number)."
+  },
+  {
+   "name": "CURRENT_DATE",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "Current date (session time zone)."
+  },
+  {
+   "name": "CURRENT_TIME",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "TIME"
+    }
+   ],
+   "returns": "TIME",
+   "doc": "Current time."
+  },
+  {
+   "name": "CURRENT_TIMESTAMP",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "TIMESTAMP_LTZ"
+    }
+   ],
+   "returns": "TIMESTAMP_LTZ",
+   "doc": "Current timestamp."
+  },
+  {
+   "name": "SYSDATE",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "TIMESTAMP_NTZ"
+    }
+   ],
+   "returns": "TIMESTAMP_NTZ",
+   "doc": "Current UTC timestamp."
+  },
+  {
+   "name": "LOCALTIMESTAMP",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "TIMESTAMP_LTZ"
+    }
+   ],
+   "returns": "TIMESTAMP_LTZ",
+   "doc": "Current timestamp."
+  },
+  {
+   "name": "CURRENT_USER",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Login name of the session."
+  },
+  {
+   "name": "CURRENT_ROLE",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Primary role of the session."
+  },
+  {
+   "name": "CURRENT_SECONDARY_ROLES",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Secondary roles (JSON)."
+  },
+  {
+   "name": "CURRENT_AVAILABLE_ROLES",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Roles the user may use (JSON array)."
+  },
+  {
+   "name": "CURRENT_WAREHOUSE",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Warehouse of the session (NULL when none)."
+  },
+  {
+   "name": "CURRENT_DATABASE",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Current database."
+  },
+  {
+   "name": "CURRENT_SCHEMA",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Current schema."
+  },
+  {
+   "name": "CURRENT_SCHEMAS",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Search path schemas (JSON)."
+  },
+  {
+   "name": "CURRENT_ACCOUNT",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Account locator."
+  },
+  {
+   "name": "CURRENT_ACCOUNT_NAME",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Account name (orgname-accountname without the org)."
+  },
+  {
+   "name": "CURRENT_ORGANIZATION_NAME",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Organisation name."
+  },
+  {
+   "name": "CURRENT_REGION",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Region of the account."
+  },
+  {
+   "name": "CURRENT_SESSION",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Session id."
+  },
+  {
+   "name": "CURRENT_STATEMENT",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Text of the running statement."
+  },
+  {
+   "name": "CURRENT_TRANSACTION",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Id of the open transaction (NULL when none)."
+  },
+  {
+   "name": "CURRENT_VERSION",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Snowflake version."
+  },
+  {
+   "name": "CURRENT_CLIENT",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Client and version."
+  },
+  {
+   "name": "LAST_QUERY_ID",
+   "category": "context",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "NUM INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Query id of a previous statement of the session (-1 = the last one, 1 = the first)."
+  },
+  {
+   "name": "LAST_TRANSACTION",
+   "category": "context",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Id of the last transaction committed or rolled back."
+  },
+  {
+   "name": "IS_ROLE_IN_SESSION",
+   "category": "context",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "ROLE VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when the role is active in the session (row access policies)."
+  },
+  {
+   "name": "DATEADD",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "VALUE INTEGER",
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "DATE_OR_TIME"
+    }
+   ],
+   "returns": "DATE_OR_TIME",
+   "doc": "Adds VALUE units of PART (year, month, day, hour, …)."
+  },
+  {
+   "name": "DATEDIFF",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "START DATE_OR_TIME",
+      "END DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Number of PART boundaries between START and END."
+  },
+  {
+   "name": "TIMEADD",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "VALUE INTEGER",
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "DATE_OR_TIME"
+    }
+   ],
+   "returns": "DATE_OR_TIME",
+   "doc": "Synonym of DATEADD."
+  },
+  {
+   "name": "TIMESTAMPDIFF",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "START DATE_OR_TIME",
+      "END DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Synonym of DATEDIFF."
+  },
+  {
+   "name": "DATE_TRUNC",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "DATE_OR_TIME"
+    }
+   ],
+   "returns": "DATE_OR_TIME",
+   "doc": "Truncates to the start of PART."
+  },
+  {
+   "name": "DATE_PART",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Extracts PART (also EXTRACT(part FROM expr))."
+  },
+  {
+   "name": "EXTRACT",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PART VARCHAR",
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "EXTRACT(part FROM expr)."
+  },
+  {
+   "name": "YEAR",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Year."
+  },
+  {
+   "name": "MONTH",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Month (1–12)."
+  },
+  {
+   "name": "DAY",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Day of month."
+  },
+  {
+   "name": "DAYOFWEEK",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Day of week (WEEK_START parameter)."
+  },
+  {
+   "name": "WEEK",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Week of year."
+  },
+  {
+   "name": "QUARTER",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE_OR_TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Quarter."
+  },
+  {
+   "name": "HOUR",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Hour."
+  },
+  {
+   "name": "MINUTE",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Minute."
+  },
+  {
+   "name": "SECOND",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR TIME"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Second."
+  },
+  {
+   "name": "LAST_DAY",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE"
+     ],
+     "returns": "DATE"
+    },
+    {
+     "params": [
+      "EXPR DATE",
+      "PART VARCHAR"
+     ],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "Last day of the month (or PART)."
+  },
+  {
+   "name": "NEXT_DAY",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR DATE",
+      "DOW VARCHAR"
+     ],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "Next given weekday."
+  },
+  {
+   "name": "DATE_FROM_PARTS",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "YEAR INTEGER",
+      "MONTH INTEGER",
+      "DAY INTEGER"
+     ],
+     "returns": "DATE"
+    }
+   ],
+   "returns": "DATE",
+   "doc": "Builds a DATE."
+  },
+  {
+   "name": "TIMESTAMP_FROM_PARTS",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "YEAR INTEGER",
+      "MONTH INTEGER",
+      "DAY INTEGER",
+      "HOUR INTEGER",
+      "MINUTE INTEGER",
+      "SECOND INTEGER"
+     ],
+     "returns": "TIMESTAMP"
+    }
+   ],
+   "returns": "TIMESTAMP",
+   "doc": "Builds a TIMESTAMP."
+  },
+  {
+   "name": "CONVERT_TIMEZONE",
+   "category": "date",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "TARGET_TZ VARCHAR",
+      "EXPR TIMESTAMP"
+     ],
+     "returns": ""
+    }
+   ],
+   "returns": "",
+   "doc": " SOURCE_TZ VARCHAR, TARGET_TZ VARCHAR, EXPR TIMESTAMP_NTZ"
+  },
+  {
+   "name": "COUNT",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Number of non-NULL values (COUNT(*) counts rows)."
+  },
+  {
+   "name": "COUNT_IF",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "CONDITION BOOLEAN"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Number of rows where CONDITION is true."
+  },
+  {
+   "name": "SUM",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Sum."
+  },
+  {
+   "name": "AVG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Average."
+  },
+  {
+   "name": "MIN",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Minimum."
+  },
+  {
+   "name": "MAX",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Maximum."
+  },
+  {
+   "name": "MEDIAN",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Median."
+  },
+  {
+   "name": "MODE",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Most frequent value."
+  },
+  {
+   "name": "STDDEV",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Sample standard deviation."
+  },
+  {
+   "name": "VARIANCE",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Sample variance."
+  },
+  {
+   "name": "ANY_VALUE",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Some value of the group."
+  },
+  {
+   "name": "BOOLAND_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR BOOLEAN"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when every value is true."
+  },
+  {
+   "name": "BOOLOR_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR BOOLEAN"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when any value is true."
+  },
+  {
+   "name": "APPROX_COUNT_DISTINCT",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "HyperLogLog distinct count."
+  },
+  {
+   "name": "APPROX_PERCENTILE",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER",
+      "PERCENTILE FLOAT"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Approximate percentile (t-digest)."
+  },
+  {
+   "name": "PERCENTILE_CONT",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "PERCENTILE FLOAT"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY expr)."
+  },
+  {
+   "name": "PERCENTILE_DISC",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "PERCENTILE FLOAT"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "PERCENTILE_DISC(p) WITHIN GROUP (ORDER BY expr)."
+  },
+  {
+   "name": "LISTAGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "EXPR VARCHAR",
+      "DELIMITER VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Concatenates the group's values; LISTAGG(x, ',') WITHIN GROUP (ORDER BY y)."
+  },
+  {
+   "name": "ARRAY_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Collects values into an ARRAY; ARRAY_AGG(x) WITHIN GROUP (ORDER BY y)."
+  },
+  {
+   "name": "ARRAY_UNIQUE_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ARRAY"
+    }
+   ],
+   "returns": "ARRAY",
+   "doc": "Distinct values as an ARRAY."
+  },
+  {
+   "name": "OBJECT_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "KEY VARCHAR",
+      "VALUE VARIANT"
+     ],
+     "returns": "OBJECT"
+    }
+   ],
+   "returns": "OBJECT",
+   "doc": "Builds one OBJECT from key/value rows."
+  },
+  {
+   "name": "HASH_AGG",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "... ANY"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Order-independent hash of the group."
+  },
+  {
+   "name": "MAX_BY",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "BY ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "EXPR of the row with the largest BY."
+  },
+  {
+   "name": "MIN_BY",
+   "category": "aggregate",
+   "kind": "aggregate",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "BY ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "EXPR of the row with the smallest BY."
+  },
+  {
+   "name": "ROW_NUMBER",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Row number within the window partition (often with QUALIFY)."
+  },
+  {
+   "name": "RANK",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Rank with gaps."
+  },
+  {
+   "name": "DENSE_RANK",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Rank without gaps."
+  },
+  {
+   "name": "PERCENT_RANK",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Relative rank."
+  },
+  {
+   "name": "CUME_DIST",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Cumulative distribution."
+  },
+  {
+   "name": "NTILE",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "BUCKETS INTEGER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Bucket number."
+  },
+  {
+   "name": "LAG",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "OFFSET INTEGER"
+     ],
+     "returns": "ANY"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "OFFSET INTEGER",
+      "DEFAULT ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Value of a previous row."
+  },
+  {
+   "name": "LEAD",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "OFFSET INTEGER"
+     ],
+     "returns": "ANY"
+    },
+    {
+     "params": [
+      "EXPR ANY",
+      "OFFSET INTEGER",
+      "DEFAULT ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Value of a following row."
+  },
+  {
+   "name": "FIRST_VALUE",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "First value of the window frame."
+  },
+  {
+   "name": "LAST_VALUE",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "Last value of the window frame."
+  },
+  {
+   "name": "NTH_VALUE",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY",
+      "N INTEGER"
+     ],
+     "returns": "ANY"
+    }
+   ],
+   "returns": "ANY",
+   "doc": "N-th value of the window frame."
+  },
+  {
+   "name": "CONDITIONAL_TRUE_EVENT",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "CONDITION BOOLEAN"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Window counter that increments when CONDITION is true (sessionisation)."
+  },
+  {
+   "name": "RATIO_TO_REPORT",
+   "category": "window",
+   "kind": "window",
+   "signatures": [
+    {
+     "params": [
+      "EXPR NUMBER"
+     ],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "EXPR / SUM(EXPR) over the window."
+  },
+  {
+   "name": "FLATTEN",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "INPUT => VARIANT"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "INPUT => VARIANT",
+      "PATH => VARCHAR"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "INPUT => VARIANT",
+      "PATH => VARCHAR",
+      "OUTER => BOOLEAN"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "INPUT => VARIANT",
+      "PATH => VARCHAR",
+      "OUTER => BOOLEAN",
+      "RECURSIVE => BOOLEAN"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "INPUT => VARIANT",
+      "PATH => VARCHAR",
+      "OUTER => BOOLEAN",
+      "RECURSIVE => BOOLEAN",
+      "MODE => VARCHAR"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "Explodes an ARRAY/OBJECT into rows: SELECT f.value FROM t, LATERAL FLATTEN(input => t.v) f."
+  },
+  {
+   "name": "SPLIT_TO_TABLE",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "STRING VARCHAR",
+      "DELIMITER VARCHAR"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "One row per piece of the string (SEQ, INDEX, VALUE)."
+  },
+  {
+   "name": "GENERATOR",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "ROWCOUNT => INTEGER"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "ROWCOUNT => INTEGER",
+      "TIMELIMIT => INTEGER"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "Generates rows: SELECT SEQ4() FROM TABLE(GENERATOR(ROWCOUNT => 10))."
+  },
+  {
+   "name": "RESULT_SCAN",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "QUERY_ID VARCHAR"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "Result of an earlier query: TABLE(RESULT_SCAN(LAST_QUERY_ID()))."
+  },
+  {
+   "name": "GET_QUERY_OPERATOR_STATS",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [
+      "QUERY_ID VARCHAR"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "Operator statistics of a completed query of the last 14 days."
+  },
+  {
+   "name": "QUERY_HISTORY",
+   "category": "table",
+   "kind": "table",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "END_TIME_RANGE_START => TIMESTAMP_LTZ"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "END_TIME_RANGE_START => TIMESTAMP_LTZ",
+      "END_TIME_RANGE_END => TIMESTAMP_LTZ"
+     ],
+     "returns": "TABLE"
+    },
+    {
+     "params": [
+      "END_TIME_RANGE_START => TIMESTAMP_LTZ",
+      "END_TIME_RANGE_END => TIMESTAMP_LTZ",
+      "RESULT_LIMIT => INTEGER"
+     ],
+     "returns": "TABLE"
+    }
+   ],
+   "returns": "TABLE",
+   "doc": "INFORMATION_SCHEMA.QUERY_HISTORY: queries of the last 7 days (needs a warehouse)."
+  },
+  {
+   "name": "SEQ4",
+   "category": "numeric",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Sequence of 4-byte integers (with GENERATOR)."
+  },
+  {
+   "name": "SEQ8",
+   "category": "numeric",
+   "kind": "niladic",
+   "signatures": [
+    {
+     "params": [],
+     "returns": "NUMBER"
+    }
+   ],
+   "returns": "NUMBER",
+   "doc": "Sequence of 8-byte integers (with GENERATOR)."
+  },
+  {
+   "name": "GET_DDL",
+   "category": "metadata",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "OBJECT_TYPE VARCHAR",
+      "OBJECT_NAME VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "OBJECT_TYPE VARCHAR",
+      "OBJECT_NAME VARCHAR",
+      "USE_FULLY_QUALIFIED_NAMES BOOLEAN"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "DDL of an object ('TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE' with argument types, 'SCHEMA', 'DATABASE', …)."
+  },
+  {
+   "name": "SYSTEM$CANCEL_QUERY",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "QUERY_ID VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Cancels a running statement."
+  },
+  {
+   "name": "SYSTEM$ABORT_TRANSACTION",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "TRANSACTION_ID INTEGER"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Aborts a transaction (SHOW TRANSACTIONS)."
+  },
+  {
+   "name": "SYSTEM$CLUSTERING_INFORMATION",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "TABLE_NAME VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "TABLE_NAME VARCHAR",
+      "COLUMNS VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Clustering depth and overlap of a table (JSON)."
+  },
+  {
+   "name": "SYSTEM$WAIT",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "AMOUNT INTEGER"
+     ],
+     "returns": "VARCHAR"
+    },
+    {
+     "params": [
+      "AMOUNT INTEGER",
+      "UNIT VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Waits AMOUNT seconds (or 'MINUTES', 'MILLISECONDS')."
+  },
+  {
+   "name": "SYSTEM$TYPEOF",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR ANY"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "SQL type of an expression."
+  },
+  {
+   "name": "SYSTEM$EXPLAIN_PLAN_JSON",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "SQL VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "EXPLAIN plan of a statement as JSON."
+  },
+  {
+   "name": "SYSTEM$STREAM_HAS_DATA",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "STREAM_NAME VARCHAR"
+     ],
+     "returns": "BOOLEAN"
+    }
+   ],
+   "returns": "BOOLEAN",
+   "doc": "True when a stream has change records (task WHEN conditions)."
+  },
+  {
+   "name": "SYSTEM$PIPE_STATUS",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "PIPE_NAME VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Status of a pipe (JSON)."
+  },
+  {
+   "name": "SYSTEM$TASK_DEPENDENTS_ENABLE",
+   "category": "system",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "TASK_NAME VARCHAR"
+     ],
+     "returns": "VARCHAR"
+    }
+   ],
+   "returns": "VARCHAR",
+   "doc": "Resumes a task and all its dependents."
+  },
+  {
+   "name": "ST_DISTANCE",
+   "category": "geospatial",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A GEOGRAPHY",
+      "B GEOGRAPHY"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Distance in metres."
+  },
+  {
+   "name": "ST_MAKEPOINT",
+   "category": "geospatial",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "LON FLOAT",
+      "LAT FLOAT"
+     ],
+     "returns": "GEOGRAPHY"
+    }
+   ],
+   "returns": "GEOGRAPHY",
+   "doc": "A point."
+  },
+  {
+   "name": "TO_GEOGRAPHY",
+   "category": "geospatial",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "EXPR VARCHAR"
+     ],
+     "returns": "GEOGRAPHY"
+    }
+   ],
+   "returns": "GEOGRAPHY",
+   "doc": "GEOGRAPHY from WKT, WKB or GeoJSON."
+  },
+  {
+   "name": "VECTOR_COSINE_SIMILARITY",
+   "category": "vector",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A VECTOR",
+      "B VECTOR"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Cosine similarity of two vectors."
+  },
+  {
+   "name": "VECTOR_L2_DISTANCE",
+   "category": "vector",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A VECTOR",
+      "B VECTOR"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Euclidean distance."
+  },
+  {
+   "name": "VECTOR_INNER_PRODUCT",
+   "category": "vector",
+   "kind": "scalar",
+   "signatures": [
+    {
+     "params": [
+      "A VECTOR",
+      "B VECTOR"
+     ],
+     "returns": "FLOAT"
+    }
+   ],
+   "returns": "FLOAT",
+   "doc": "Inner product."
+  }
+ ],
+ "operators": [
+  {
+   "op": ":",
+   "doc": "VARIANT path: v:customer.name, v:items[0]"
+  },
+  {
+   "op": "::",
+   "doc": "Cast: expr::NUMBER(10,2)"
+  },
+  {
+   "op": "||",
+   "doc": "String concatenation"
+  },
+  {
+   "op": "=>",
+   "doc": "Named argument: FLATTEN(input => v)"
+  },
+  {
+   "op": "->",
+   "doc": "Lambda in higher-order functions: FILTER(arr, x -> x > 0)"
+  },
+  {
+   "op": ":=",
+   "doc": "Snowflake Scripting assignment"
+  }
+ ]
 }

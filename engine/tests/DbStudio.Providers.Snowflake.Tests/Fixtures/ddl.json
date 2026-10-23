@@ -1,0 +1,93 @@
+{
+  "$comment": "GET_DDL outputs (fully qualified, third argument TRUE) and module SHOW outputs.",
+  "entries": [
+    {
+      "sql": "SELECT GET_DDL('TABLE', '\"SHOP\".\"PUBLIC\".\"ORDERS\"', TRUE) AS DDL",
+      "columns": ["DDL"],
+      "rows": [["create or replace TABLE SHOP.PUBLIC.ORDERS cluster by (ORDER_DATE, TO_DATE(ORDER_DATE)) (\n\tID NUMBER(38,0) NOT NULL,\n\tCUSTOMER_ID NUMBER(38,0) NOT NULL,\n\tORDER_DATE TIMESTAMP_NTZ(9) NOT NULL,\n\tTOTAL NUMBER(12,2) NOT NULL DEFAULT 0 COMMENT 'Order total incl. tax',\n\tconstraint PK_ORDERS primary key (ID),\n\tconstraint FK_ORDERS_CUSTOMERS foreign key (CUSTOMER_ID) references SHOP.PUBLIC.CUSTOMERS(ID)\n);"]]
+    },
+    {
+      "sql": "SELECT GET_DDL('VIEW', '\"SHOP\".\"PUBLIC\".\"CUSTOMER_ORDERS\"', TRUE) AS DDL",
+      "columns": ["DDL"],
+      "rows": [["create or replace view SHOP.PUBLIC.CUSTOMER_ORDERS(\n\tCUSTOMER_ID,\n\tNAME,\n\tORDER_ID,\n\tTOTAL\n) COMMENT='Orders per customer'\n as\nSELECT c.ID AS CUSTOMER_ID, c.NAME, o.ID AS ORDER_ID, o.TOTAL\nFROM CUSTOMERS c JOIN ORDERS o ON o.CUSTOMER_ID = c.ID;"]]
+    },
+    {
+      "sql": "SELECT GET_DDL('FUNCTION', '\"SHOP\".\"PUBLIC\".\"ORDER_TAX\"(NUMBER)', TRUE) AS DDL",
+      "columns": ["DDL"],
+      "rows": [["CREATE OR REPLACE FUNCTION SHOP.PUBLIC.ORDER_TAX(\"AMOUNT\" NUMBER(38,0))\nRETURNS NUMBER(38,2)\nLANGUAGE SQL\nAS '\n  AMOUNT * 0.19\n';"]]
+    },
+    {
+      "sql": "SELECT GET_DDL('FUNCTION', '\"SHOP\".\"PUBLIC\".\"ORDER_TAX\"(NUMBER, VARCHAR)', TRUE) AS DDL",
+      "columns": ["DDL"],
+      "rows": [["CREATE OR REPLACE FUNCTION SHOP.PUBLIC.ORDER_TAX(\"AMOUNT\" NUMBER(38,0), \"COUNTRY\" VARCHAR)\nRETURNS NUMBER(38,2)\nLANGUAGE SQL\nAS '\n  IFF(COUNTRY = ''DE'', AMOUNT * 0.19, AMOUNT * 0.2)\n';"]]
+    },
+    {
+      "sql": "SELECT GET_DDL('TABLE', '\"SHOP\".\"PUBLIC\".\"CUSTOMERS\"', TRUE) AS DDL",
+      "error": { "code": 3001, "sqlState": "42501", "message": "SQL access control error:\nInsufficient privileges to operate on table 'CUSTOMERS'" }
+    },
+    {
+      "sql": "SHOW WAREHOUSES",
+      "columns": ["name", "state", "type", "size", "min_cluster_count", "max_cluster_count", "started_clusters", "running", "queued", "is_default", "is_current", "auto_suspend", "auto_resume", "available", "provisioning", "quiescing", "other", "created_on", "resumed_on", "updated_on", "owner", "comment", "enable_query_acceleration", "query_acceleration_max_scale_factor", "resource_monitor", "scaling_policy", "owner_role_type", "budget"],
+      "rows": [
+        ["COMPUTE_WH", "SUSPENDED", "STANDARD", "X-Small", 1, 1, 0, 0, 0, "Y", "Y", 600, "true", "", "", "", "", "2026-09-30 07:58:45.010 -0700", "2026-10-22 16:01:12.000 -0700", "2026-10-22 16:11:15.000 -0700", "ACCOUNTADMIN", "", "false", 8, "null", "STANDARD", "ROLE", null],
+        ["ETL_WH", "STARTED", "STANDARD", "Small", 1, 3, 1, 2, 1, "N", "N", 60, "true", "100", "0", "0", "0", "2026-10-01 10:00:00.000 -0700", "2026-10-23 07:45:00.000 -0700", "2026-10-23 07:45:00.000 -0700", "SYSADMIN", "Nightly loads", "false", 8, "null", "ECONOMY", "ROLE", null]
+      ]
+    },
+    {
+      "sql": "SELECT CURRENT_AVAILABLE_ROLES() AS ROLES, CURRENT_ROLE() AS ROLE_NAME",
+      "columns": ["ROLES", "ROLE_NAME"],
+      "rows": [["[\"PUBLIC\",\"SYSADMIN\",\"ANALYST\"]", "SYSADMIN"]]
+    },
+    {
+      "sql": "SHOW ROLES",
+      "columns": ["created_on", "name", "is_default", "is_current", "is_inherited", "assigned_to_users", "granted_to_roles", "granted_roles", "owner", "comment", "owner_role_type"],
+      "rows": [
+        ["2026-09-30 07:58:44.000 -0700", "ACCOUNTADMIN", "N", "N", "N", 1, 0, 2, "", "Account administrator can manage all aspects of the account.", ""],
+        ["2026-09-30 07:58:44.000 -0700", "PUBLIC", "N", "N", "Y", 0, 0, 0, "", "Public role is automatically available to every user in the account.", ""],
+        ["2026-09-30 07:58:44.000 -0700", "SYSADMIN", "Y", "Y", "N", 1, 1, 1, "", "System administrator can create and manage databases and warehouses.", ""],
+        ["2026-10-02 12:00:00.000 -0700", "ANALYST", "N", "N", "N", 3, 0, 0, "SECURITYADMIN", "Read-only analysts", "ROLE"]
+      ]
+    },
+    {
+      "sql": "SHOW TASKS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "id", "database_name", "schema_name", "owner", "comment", "warehouse", "schedule", "predecessors", "state", "definition", "condition", "allow_overlapping_execution", "error_integration", "last_committed_on", "last_suspended_on", "owner_role_type", "config", "budget", "task_relations", "last_suspended_reason"],
+      "rows": [
+        ["2026-10-03 13:00:00.000 -0700", "NIGHTLY_TOTALS", "01b7c2d4-0000-0000-0000-000000000011", "SHOP", "PUBLIC", "SYSADMIN", "Runs REFRESH_TOTALS", "ETL_WH", "USING CRON 0 2 * * * UTC", "[]", "started", "CALL REFRESH_TOTALS(1)", "", "false", "null", null, null, "ROLE", null, null, "{\"Predecessors\":[]}", null]
+      ]
+    },
+    {
+      "sql": "SHOW STAGES IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "database_name", "schema_name", "url", "has_credentials", "has_encryption_key", "owner", "comment", "region", "type", "cloud", "notification_channel", "storage_integration", "endpoint", "owner_role_type", "directory_enabled"],
+      "rows": [
+        ["2026-10-01 10:00:00.000 -0700", "EVENTS_STAGE", "SHOP", "PUBLIC", "s3://rowlit-demo/events/", "N", "N", "SYSADMIN", "", "eu-central-1", "EXTERNAL", "AWS", null, "S3_INT", null, "ROLE", "N"],
+        ["2026-10-01 10:05:00.000 -0700", "UPLOADS", "SHOP", "PUBLIC", "", "N", "N", "SYSADMIN", "Internal stage for PUT", null, "INTERNAL", null, null, null, null, "ROLE", "Y"]
+      ]
+    },
+    {
+      "sql": "SHOW STREAMS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "database_name", "schema_name", "owner", "comment", "table_name", "source_type", "base_tables", "type", "stale", "mode", "stale_after", "invalid_reason", "owner_role_type"],
+      "rows": [
+        ["2026-10-02 09:00:00.000 -0700", "ORDERS_CHANGES", "SHOP", "PUBLIC", "SYSADMIN", "", "SHOP.PUBLIC.ORDERS", "Table", "SHOP.PUBLIC.ORDERS", "DELTA", "false", "DEFAULT", "2026-10-16 09:00:00.000 -0700", "N/A", "ROLE"]
+      ]
+    },
+    {
+      "sql": "SELECT GET_DDL('TASK', '\"SHOP\".\"PUBLIC\".\"NIGHTLY_TOTALS\"', TRUE) AS DDL",
+      "columns": ["DDL"],
+      "rows": [["create or replace task SHOP.PUBLIC.NIGHTLY_TOTALS\n\twarehouse=ETL_WH\n\tschedule='USING CRON 0 2 * * * UTC'\n\tCOMMENT='Runs REFRESH_TOTALS'\n\tas CALL REFRESH_TOTALS(1);"]]
+    },
+    {
+      "sql": "DESCRIBE STAGE \"SHOP\".\"PUBLIC\".\"UPLOADS\"",
+      "columns": ["parent_property", "property", "property_type", "property_value", "property_default"],
+      "rows": [
+        ["STAGE_FILE_FORMAT", "TYPE", "String", "CSV", "CSV"],
+        ["STAGE_FILE_FORMAT", "FIELD_DELIMITER", "String", "|", ","],
+        ["STAGE_COPY_OPTIONS", "ON_ERROR", "String", "CONTINUE", "ABORT_STATEMENT"],
+        ["DIRECTORY", "ENABLE", "Boolean", "true", "false"]
+      ]
+    },
+    {
+      "sql": "SHOW PIPES IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "error": { "code": 3001, "sqlState": "42501", "message": "SQL access control error:\nInsufficient privileges to operate on schema 'PUBLIC'" }
+    }
+  ]
+}

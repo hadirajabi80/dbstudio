@@ -170,3 +170,14 @@ The suites follow the M2 pattern: `DBSTUDIO_IT=0` skips them, the env vars point
 otherwise they start their own container (`Testcontainers.MySql`, `.MariaDb`, `.ClickHouse`, `.Elasticsearch`,
 `.Cassandra` 4.16.0). Snowflake has no container: its unit tests replay recorded fixtures and the live suite runs only
 when `DBSTUDIO_SF_ACCOUNT` is set.
+
+### Snowflake (WP-SF)
+
+No container: `DbStudio.Providers.Snowflake.Tests` replays recorded answers (`Fixtures/*.json`, one entry per SQL text or
+regex) through `SnowflakeGatewayFake` / `FixtureSqlRunner`. The live suite (shared conformance + `SnowflakeLiveTests`)
+runs only with `DBSTUDIO_SF_ACCOUNT` and `DBSTUDIO_SF_DATABASE` set (plus `DBSTUDIO_SF_USER` and `DBSTUDIO_SF_PASSWORD`
+or `DBSTUDIO_SF_PRIVATE_KEY_PATH` [+ `DBSTUDIO_SF_PRIVATE_KEY_PASSPHRASE`], `DBSTUDIO_SF_WAREHOUSE`, `DBSTUDIO_SF_ROLE`).
+`DBSTUDIO_SF_SEED=1` (re)creates the shop in the database's PUBLIC schema (`seed-snowflake.sql`, the same statements as
+`ShopSchema.Seed(Snowflake)`); `DBSTUDIO_UPDATE_GOLDEN=1` writes the live answers of the catalog commands to
+`Fixtures/recorded/live.json.txt` to refresh the handwritten fixtures. A free trial account is enough
+(`docs/qa/snowflake-walkthrough.md`).

@@ -1,0 +1,133 @@
+{
+  "$comment": "DESCRIBE / SHOW … IN TABLE / SHOW … LIKE outputs used by object details, the designer and dependencies.",
+  "entries": [
+    {
+      "sql": "DESCRIBE TABLE \"SHOP\".\"PUBLIC\".\"ORDERS\"",
+      "columns": ["name", "type", "kind", "null?", "default", "primary key", "unique key", "check", "expression", "comment", "policy name", "privacy domain"],
+      "rows": [
+        ["ID", "NUMBER(38,0)", "COLUMN", "N", null, "Y", "N", null, null, null, null, null],
+        ["CUSTOMER_ID", "NUMBER(38,0)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["ORDER_DATE", "TIMESTAMP_NTZ(9)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["TOTAL", "NUMBER(12,2)", "COLUMN", "N", "0", "N", "N", null, null, "Order total incl. tax", null, null]
+      ]
+    },
+    {
+      "sql": "DESCRIBE TABLE \"SHOP\".\"PUBLIC\".\"CUSTOMERS\"",
+      "columns": ["name", "type", "kind", "null?", "default", "primary key", "unique key", "check", "expression", "comment", "policy name", "privacy domain"],
+      "rows": [
+        ["ID", "NUMBER(38,0)", "COLUMN", "N", "IDENTITY START 1 INCREMENT 1 ORDER", "Y", "N", null, null, null, null, null],
+        ["NAME", "VARCHAR(100)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["EMAIL", "VARCHAR(200) COLLATE 'en-ci'", "COLUMN", "Y", null, "N", "Y", null, null, "Contact address", null, null],
+        ["COUNTRY_ID", "NUMBER(38,0)", "COLUMN", "Y", null, "N", "N", null, null, null, null, null],
+        ["PROFILE", "VARIANT", "COLUMN", "Y", null, "N", "N", null, null, null, null, null]
+      ]
+    },
+    {
+      "sql": "SHOW TABLES LIKE 'ORDERS' IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "database_name", "schema_name", "kind", "comment", "cluster_by", "rows", "bytes", "owner", "retention_time", "automatic_clustering", "change_tracking"],
+      "rows": [
+        ["2026-09-30 08:16:03.204 -0700", "ORDERS", "SHOP", "PUBLIC", "TABLE", "", "LINEAR(ORDER_DATE, TO_DATE(ORDER_DATE))", 6, 3072, "SYSADMIN", "1", "ON", "OFF"]
+      ]
+    },
+    {
+      "sql": "SHOW TABLES LIKE 'CUSTOMERS' IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "database_name", "schema_name", "kind", "comment", "cluster_by", "rows", "bytes", "owner", "retention_time", "automatic_clustering", "change_tracking"],
+      "rows": [
+        ["2026-09-30 08:16:02.733 -0700", "CUSTOMERS", "SHOP", "PUBLIC", "TABLE", "Shop customers", "", 5, 2560, "SYSADMIN", "1", "OFF", "ON"]
+      ]
+    },
+    {
+      "sql": "SHOW PRIMARY KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"ORDERS\"",
+      "columns": ["created_on", "database_name", "schema_name", "table_name", "column_name", "key_sequence", "constraint_name", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:03.204 -0700", "SHOP", "PUBLIC", "ORDERS", "ID", 1, "PK_ORDERS", "false", null]]
+    },
+    {
+      "sql": "SHOW PRIMARY KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"CUSTOMERS\"",
+      "columns": ["created_on", "database_name", "schema_name", "table_name", "column_name", "key_sequence", "constraint_name", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:02.733 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "ID", 1, "PK_CUSTOMERS", "false", null]]
+    },
+    {
+      "sql": "SHOW UNIQUE KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"ORDERS\"",
+      "columns": ["created_on", "database_name", "schema_name", "table_name", "column_name", "key_sequence", "constraint_name", "rely", "comment"],
+      "rows": []
+    },
+    {
+      "sql": "SHOW UNIQUE KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"CUSTOMERS\"",
+      "columns": ["created_on", "database_name", "schema_name", "table_name", "column_name", "key_sequence", "constraint_name", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:02.733 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "EMAIL", 1, "UQ_CUSTOMERS_EMAIL", "false", null]]
+    },
+    {
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"ORDERS\"",
+      "columns": ["created_on", "pk_database_name", "pk_schema_name", "pk_table_name", "pk_column_name", "fk_database_name", "fk_schema_name", "fk_table_name", "fk_column_name", "key_sequence", "update_rule", "delete_rule", "fk_name", "pk_name", "deferrability", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:03.204 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "ID", "SHOP", "PUBLIC", "ORDERS", "CUSTOMER_ID", 1, "NO ACTION", "NO ACTION", "FK_ORDERS_CUSTOMERS", "PK_CUSTOMERS", "NOT DEFERRABLE", "false", null]]
+    },
+    {
+      "sql": "SHOW IMPORTED KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"CUSTOMERS\"",
+      "columns": ["created_on", "pk_database_name", "pk_schema_name", "pk_table_name", "pk_column_name", "fk_database_name", "fk_schema_name", "fk_table_name", "fk_column_name", "key_sequence", "update_rule", "delete_rule", "fk_name", "pk_name", "deferrability", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:02.733 -0700", "SHOP", "PUBLIC", "COUNTRIES", "ID", "SHOP", "PUBLIC", "CUSTOMERS", "COUNTRY_ID", 1, "NO ACTION", "SET NULL", "FK_CUSTOMERS_COUNTRIES", "PK_COUNTRIES", "NOT DEFERRABLE", "false", null]]
+    },
+    {
+      "sql": "SHOW EXPORTED KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"ORDERS\"",
+      "columns": ["created_on", "pk_database_name", "pk_schema_name", "pk_table_name", "pk_column_name", "fk_database_name", "fk_schema_name", "fk_table_name", "fk_column_name", "key_sequence", "update_rule", "delete_rule", "fk_name", "pk_name", "deferrability", "rely", "comment"],
+      "rows": [
+        ["2026-09-30 08:16:03.570 -0700", "SHOP", "PUBLIC", "ORDERS", "ID", "SHOP", "PUBLIC", "ORDER_LINES", "ORDER_ID", 1, "NO ACTION", "CASCADE", "FK_ORDER_LINES_ORDERS", "PK_ORDERS", "NOT DEFERRABLE", "false", null],
+        ["2026-09-30 08:15:40.000 -0700", "SHOP", "PUBLIC", "ORDERS", "ID", "SHOP", "SALES", "INVOICES", "ORDER_ID", 1, "NO ACTION", "NO ACTION", "FK_INVOICES_ORDERS", "PK_ORDERS", "NOT DEFERRABLE", "false", null]
+      ]
+    },
+    {
+      "sql": "SHOW EXPORTED KEYS IN TABLE \"SHOP\".\"PUBLIC\".\"CUSTOMERS\"",
+      "columns": ["created_on", "pk_database_name", "pk_schema_name", "pk_table_name", "pk_column_name", "fk_database_name", "fk_schema_name", "fk_table_name", "fk_column_name", "key_sequence", "update_rule", "delete_rule", "fk_name", "pk_name", "deferrability", "rely", "comment"],
+      "rows": [["2026-09-30 08:16:03.204 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "ID", "SHOP", "PUBLIC", "ORDERS", "CUSTOMER_ID", 1, "NO ACTION", "NO ACTION", "FK_ORDERS_CUSTOMERS", "PK_CUSTOMERS", "NOT DEFERRABLE", "false", null]]
+    },
+    {
+      "sql": "DESCRIBE VIEW \"SHOP\".\"PUBLIC\".\"CUSTOMER_ORDERS\"",
+      "columns": ["name", "type", "kind", "null?", "default", "primary key", "unique key", "check", "expression", "comment", "policy name", "privacy domain"],
+      "rows": [
+        ["CUSTOMER_ID", "NUMBER(38,0)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["NAME", "VARCHAR(100)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["ORDER_ID", "NUMBER(38,0)", "COLUMN", "N", null, "N", "N", null, null, null, null, null],
+        ["TOTAL", "NUMBER(12,2)", "COLUMN", "N", null, "N", "N", null, null, null, null, null]
+      ]
+    },
+    {
+      "sql": "SHOW VIEWS LIKE 'CUSTOMER\\\\_ORDERS' IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "reserved", "database_name", "schema_name", "owner", "comment", "text", "is_secure", "is_materialized"],
+      "rows": [["2026-09-30 08:16:05.002 -0700", "CUSTOMER_ORDERS", "", "SHOP", "PUBLIC", "SYSADMIN", "Orders per customer", "CREATE OR REPLACE VIEW CUSTOMER_ORDERS AS SELECT 1", "false", "false"]]
+    },
+    {
+      "sql": "SHOW USER FUNCTIONS LIKE 'ORDER\\\\_TAX' IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "schema_name", "is_builtin", "is_aggregate", "is_ansi", "min_num_arguments", "max_num_arguments", "arguments", "description", "catalog_name", "is_table_function", "valid_for_clustering", "is_secure", "secrets", "external_access_integrations", "is_external_function", "language", "is_memoizable", "is_data_metric"],
+      "rows": [
+        ["2026-10-01 09:01:44.002 -0700", "ORDER_TAX", "PUBLIC", "N", "N", "N", 1, 1, "ORDER_TAX(NUMBER) RETURN NUMBER", "user-defined function", "SHOP", "N", "N", "N", null, null, "N", "SQL", "N", "N"],
+        ["2026-10-01 09:01:44.551 -0700", "ORDER_TAX", "PUBLIC", "N", "N", "N", 2, 2, "ORDER_TAX(NUMBER, VARCHAR) RETURN NUMBER", "user-defined function", "SHOP", "N", "N", "N", null, null, "N", "SQL", "N", "N"]
+      ]
+    },
+    {
+      "sql": "DESCRIBE FUNCTION \"SHOP\".\"PUBLIC\".\"ORDER_TAX\"(NUMBER)",
+      "columns": ["property", "value"],
+      "rows": [
+        ["signature", "(AMOUNT NUMBER)"],
+        ["returns", "NUMBER(38,2)"],
+        ["language", "SQL"],
+        ["body", "AMOUNT * 0.19"]
+      ]
+    },
+    {
+      "sql": "SHOW USER PROCEDURES LIKE 'REFRESH\\\\_TOTALS' IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "schema_name", "is_builtin", "is_aggregate", "is_ansi", "min_num_arguments", "max_num_arguments", "arguments", "description", "catalog_name", "is_table_function", "valid_for_clustering", "is_secure", "secrets", "external_access_integrations"],
+      "rows": [["2026-10-01 09:00:12.774 -0700", "REFRESH_TOTALS", "PUBLIC", "N", "N", "N", 1, 1, "REFRESH_TOTALS(NUMBER) RETURN VARCHAR", "Recomputes ORDERS.TOTAL", "SHOP", "N", "N", "N", null, null]]
+    },
+    {
+      "sql": "DESCRIBE PROCEDURE \"SHOP\".\"PUBLIC\".\"REFRESH_TOTALS\"(NUMBER)",
+      "columns": ["property", "value"],
+      "rows": [
+        ["signature", "(DAYS NUMBER)"],
+        ["returns", "VARCHAR(16777216)"],
+        ["language", "SQL"],
+        ["null handling", "CALLED ON NULL INPUT"],
+        ["execute as", "OWNER"],
+        ["body", "BEGIN\n  UPDATE ORDERS SET TOTAL = TOTAL WHERE ORDER_DATE > DATEADD(day, -:DAYS, CURRENT_DATE());\n  RETURN 'ok';\nEND"]
+      ]
+    }
+  ]
+}
