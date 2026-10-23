@@ -1,0 +1,98 @@
+/* Saved queries: the save / new / rename dialog and the Objects tab's Queries group (which reuses the ol-* list and
+   card styles of components/ObjectList, laid out in normal flow instead of virtualized). Tokens only. */
+
+/* ---------- dialog ---------- */
+.sq-form {
+  grid-template-columns: 112px 1fr;
+}
+.sq-conn,
+.sq-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--input-h, 28px);
+  color: var(--text);
+  font-weight: var(--weight-strong);
+}
+.sq-conn-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sq-scope {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-regular);
+}
+.sq-description {
+  min-height: 56px;
+  resize: vertical;
+  font-family: inherit;
+}
+.sq-form .form-error {
+  margin: 4px 0 0;
+}
+
+/* ---------- Objects tab: Queries group ---------- */
+.ol-tint-queries { --ol-tint: var(--accent); }
+.ol-group-dot.ol-tint-queries {
+  background: var(--ol-tint);
+}
+.sq-rows .ol-row {
+  position: relative;
+  height: 32px;
+}
+.sq-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+.sq-cards .ol-card {
+  position: relative;
+  height: 72px;
+}
+.sq-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+  gap: 4px;
+  padding: 10px;
+}
+.sq-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  cursor: default;
+  user-select: none;
+}
+.sq-mini:hover {
+  background: var(--bg-hover);
+}
+.sq-mini.selected {
+  border-color: var(--accent-soft-strong);
+  background: var(--bg-selected-inactive);
+}
+.ol-body:focus .sq-mini.selected {
+  background: var(--bg-selected);
+  border-color: var(--accent);
+}
+.sq-mini-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sq-mini-schema {
+  color: var(--text-muted);
+}
+.sq-card-sql {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}

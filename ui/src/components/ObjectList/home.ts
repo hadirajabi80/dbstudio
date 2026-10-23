@@ -20,7 +20,7 @@ import { getConnection, providerKind } from '../../store/connections';
 import { showObjectsTab, useSettings } from '../../store/settings';
 import { isPinnedTab, useTabs, type ViewTab } from '../../store/tabs';
 import { useExplorer } from '../Explorer/explorerStore';
-import { DEFAULT_SORT, groupOf, type GroupFilter, type SortSpec } from './model';
+import { DEFAULT_SORT, groupOf, QUERIES_GROUP, type GroupFilter, type SortSpec } from './model';
 import type { ObjectsLayout } from './open';
 
 export const OBJECTS_HOME_VIEW = 'objectsHome';
@@ -110,8 +110,13 @@ export function followTarget(state: ObjectsHomeState, target: CommandTarget | nu
   else if (target.kind === 'connection') next = { target: { kind: 'connection', connectionId: target.connectionId }, highlight: null, groups: state.groups };
   else if (target.kind === 'container') {
     const scope = { kind: 'scope' as const, connectionId: target.connectionId, database: target.database ?? null, schema: target.schema ?? null };
-    const groups = target.objectType ? withGroup(state.groups, homeScopeKey(scope), groupOf(target.objectType)) : state.groups;
+    const group = target.queries ? QUERIES_GROUP : target.objectType ? groupOf(target.objectType) : null;
+    const groups = group ? withGroup(state.groups, homeScopeKey(scope), group) : state.groups;
     next = { target: scope, highlight: null, groups };
+  } else if (target.kind === 'savedQuery') {
+    // A saved query (components/SavedQueries): its schema's list on the Queries group.
+    const scope = { kind: 'scope' as const, connectionId: target.connectionId, database: target.database, schema: target.schema };
+    next = { target: scope, highlight: null, groups: withGroup(state.groups, homeScopeKey(scope), QUERIES_GROUP) };
   } else if (target.kind === 'object') {
     const scope = { kind: 'scope' as const, connectionId: target.connectionId, database: target.database ?? null, schema: target.ref.schema ?? null };
     const key = homeScopeKey(scope);

@@ -1,9 +1,9 @@
-import { Command as CommandIcon, Database, LoaderCircle, Search, SquareChevronRight } from 'lucide-react';
+import { Command as CommandIcon, Database, FileCode2, LoaderCircle, Search, SquareChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { activateObject, insertIntoActiveEditor, openObject, preloadCatalog, selectTop } from '../../app/actions';
 import { isMac } from '../../commands/keys';
 import { advertisedShortcuts, getCommand, hasCommand, isEnabled, listCommands, runCommand } from '../../commands/registry';
-import type { ObjectTarget } from '../../commands/types';
+import type { ObjectTarget, SavedQueryTarget } from '../../commands/types';
 import { useCommandsVersion } from '../../commands/useCommands';
 import type { CatalogObjectType } from '../../api/types';
 import type { FuzzyResult } from '../../lib/fuzzy';
@@ -18,6 +18,8 @@ import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { ColorDot } from '../common/ConnectionBadge';
 import { useRestoreFocus } from '../common/focus';
 import { useExplorer } from '../Explorer/explorerStore';
+import { nodeId } from '../Explorer/tree';
+import { useSavedQueries } from '../../store/savedQueries';
 import { Kbd } from '../Shortcuts/Kbd';
 import { commandIcon } from '../layout/commandMenu';
 import { collectEntries, DIAGRAM_PREFIX, parseObjectQuery, searchObjects, type IndexEntry, type SourceEntryType } from './objectIndex';
@@ -91,6 +93,23 @@ function targetOf(e: IndexEntry): ObjectTarget {
 
 /** Run an object hit: Enter opens, Mod+Enter data, Shift+Enter inserts the name, Alt+Enter reveals in the explorer. */
 export function runObjectHit(e: IndexEntry, how: 'open' | 'data' | 'insert' | 'reveal'): void {
+  if (e.query) {
+    // A saved query: open its console (Enter / Mod+Enter), insert its text, or show it in the explorer.
+    const q = e.query;
+    const t: SavedQueryTarget = { kind: 'savedQuery', connectionId: q.connectionId, database: q.database, schema: q.schema, id: q.id, name: q.name };
+    if (how === 'insert') {
+      if (getActiveConsole()) insertIntoActiveEditor(q.sql);
+      else toast('info', 'Open a console to insert the query');
+    } else if (how === 'reveal') {
+      const s = q.schema ?? '';
+      useUi.getState().showDock('explorer');
+      useExplorer.getState().setFilter('');
+      useExplorer.getState().selectNode(nodeId.savedQuery(q.connectionId, q.id), t,
+        [nodeId.conn(q.connectionId), nodeId.db(q.connectionId, q.database), nodeId.schema(q.connectionId, q.database, s), nodeId.queries(q.connectionId, q.database, s)]);
+      useExplorer.getState().focusTree();
+    } else runCommand('queries.open', t);
+    return;
+  }
   if (e.source) {
     // M2: Redis keys / Mongo collections / Kafka topics open through their source module.
     if (how === 'insert') {
@@ -155,11 +174,17 @@ export function CommandPalette() {
   const text = objectMode ? (q.startsWith('@') ? q.slice(1) : q) : q.startsWith('>') ? q.slice(1) : q;
   const parsed = parseObjectQuery(text);
   const sourceVersion = useSourceModules((s) => s.version);
+  const savedQueries = useSavedQueries((s) => s.byConn);
+  // Saved queries can be searched without a loaded catalog: load every SQL connection's list once.
+  useEffect(() => {
+    if (!open || !objectMode) return;
+    for (const c of connections) if (providerKind(c.providerId) === 'relational') void useSavedQueries.getState().ensure(c.id);
+  }, [open, objectMode, connections]);
   const groups = useMemo(
-    () => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c') : []),
+    () => (open && objectMode ? collectEntries(dbs, parsed.prefix === 'c', true, savedQueries) : []),
     // sourceVersion: source modules (lib/sources.ts) changed their palette entries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open, objectMode, dbs, parsed.prefix, sourceVersion],
+    [open, objectMode, dbs, parsed.prefix, sourceVersion, savedQueries],
   );
   const connName = useMemo(() => new Map(connections.map((c) => [c.id, c])), [connections]);
   const loadedCount = useMemo(() => groups.reduce((n, g) => n + g.length, 0), [groups]);
@@ -230,7 +255,7 @@ export function CommandPalette() {
     } else {
       const how = e?.altKey ? 'reveal' : e?.shiftKey ? 'insert' : e?.ctrlKey || e?.metaKey ? 'data' : 'open';
       // er: (M2-ER) Enter opens the diagram of the table and its FK neighbours.
-      if (how === 'open' && parsed.prefix === DIAGRAM_PREFIX && !it.entry.source && hasCommand('er.openRelated') && runCommand('er.openRelated', targetOf(it.entry))) return;
+      if (how === 'open' && parsed.prefix === DIAGRAM_PREFIX && !it.entry.source && !it.entry.query && hasCommand('er.openRelated') && runCommand('er.openRelated', targetOf(it.entry))) return;
       runObjectHit(it.entry, how);
     }
   };
@@ -246,7 +271,7 @@ export function CommandPalette() {
 
   const noCatalog = objectMode && loadedCount === 0 && unloaded.length === 0;
   const placeholder = objectMode
-    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · k: keys · coll: collections · er: ER diagram · > commands'
+    ? 'Go to object…  t: tables · v: views · p: procedures · f: functions · c: columns · q: queries · k: keys · coll: collections · er: ER diagram · > commands'
     : 'Type a command…  @ to go to an object';
 
   return (
@@ -388,10 +413,12 @@ function ObjectRow({ it, i, sel, setSel, choose, connName }: {
         ev.preventDefault();
         choose(i, ev);
       }}
-      title={`${e.source ? SOURCE_ENTRY_LABEL[e.source.type] : e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type as CatalogObjectType]} ${e.name} — ${conn?.name ?? ''}`}
+      title={`${e.source ? SOURCE_ENTRY_LABEL[e.source.type] : e.query ? 'Saved query' : e.type === 'column' ? 'Column' : OBJECT_TYPE_SINGULAR[e.type as CatalogObjectType]} ${e.name} — ${conn?.name ?? ''}`}
     >
       <span className="palette-icon">
-        {e.source ? <ProviderLogo providerId={conn?.providerId ?? ''} size={16} /> : e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type as CatalogObjectType} />}
+        {e.source ? <ProviderLogo providerId={conn?.providerId ?? ''} size={16} />
+          : e.query ? <FileCode2 size={16} strokeWidth={1.5} className="obj-icon obj-query" aria-hidden="true" />
+            : e.type === 'column' ? <ColumnIcon /> : <ObjectIcon type={e.type as CatalogObjectType} />}
       </span>
       <span className="palette-label">
         <Hl text={e.name} positions={it.match.positions} />

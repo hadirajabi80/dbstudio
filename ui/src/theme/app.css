@@ -747,6 +747,10 @@ body.resizing-row .splitter-horizontal {
 .obj-folder {
   color: var(--text-muted);
 }
+/* a query saved into a schema (explorer "Queries" folders, the Objects tab, Ctrl+P) */
+.obj-query {
+  color: var(--accent);
+}
 .obj-db {
   color: var(--obj-db);
 }

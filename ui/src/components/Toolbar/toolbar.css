@@ -23,3 +23,16 @@
   border-bottom-left-radius: 0;
   border-left: 1px solid color-mix(in srgb, var(--success-fg) 35%, transparent);
 }
+/* Save of a console bound to a saved query: Save + a caret with the other ways to save. */
+.tb-query-save .btn.split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tb-query-save .btn.split-caret-save {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent);
+}

@@ -29,6 +29,9 @@ import {
   type GroupFilter, type SortKey,
 } from './model';
 import type { ObjectsState } from './open';
+import { SavedQueryList } from '../SavedQueries/SavedQueryList';
+import { queriesIn, useSavedQueries } from '../../store/savedQueries';
+import { QUERIES_GROUP } from './model';
 import './objectList.css';
 
 const ROW_H = 32;
@@ -59,6 +62,8 @@ const NEW_ENTRIES: ContextEntry[] = [
   { command: 'designer.newFunction', optional: true, hideDisabled: true },
   { command: 'designer.newPackage', optional: true, hideDisabled: true },
   { command: 'designer.newTrigger', optional: true, hideDisabled: true },
+  'separator',
+  { command: 'queries.new', optional: true, hideDisabled: true },
 ];
 
 /** Tracks the size of an element (the virtualized list and grid render only what is visible). */
@@ -125,6 +130,11 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
   const bodyRef = useRef<HTMLDivElement>(null);
   const size = useSize(bodyRef);
   const [scrollTop, setScrollTop] = useState(0);
+  // Saved queries of the scope (the Queries group, components/SavedQueries).
+  const queryCount = useSavedQueries((s) => queriesIn(s.byConn[cid]?.items, catDb, schema).length);
+  useEffect(() => {
+    void useSavedQueries.getState().ensure(cid);
+  }, [cid]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -260,6 +270,58 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
   const anySize = inGroup.some((it) => it.sizeBytes !== null);
   const anyModified = inGroup.some((it) => it.modified !== null);
   const anyComment = inGroup.some((it) => !!it.comment);
+
+  // ---------------------------------------------------------------- type groups (+ the scope's saved queries)
+  const groupTabs = (
+    <div className="ol-groups" role="tablist" aria-label="Object types">
+      {(['all', ...GROUPS.map((g) => g.id)] as GroupFilter[])
+        .filter((g) => g === 'all' || counts[g] > 0 || g === group)
+        .map((g) => (
+          <button
+            key={g}
+            role="tab"
+            aria-selected={group === g}
+            className={`ol-group${group === g ? ' on' : ''}`}
+            onClick={() => { patch({ group: g }); setSelected(null); }}
+          >
+            {g !== 'all' && <span className={`ol-group-dot ol-tint-${g}`} aria-hidden="true" />}
+            {g === 'all' ? 'All' : GROUPS.find((x) => x.id === g)!.label}
+            <span className="ol-group-count">{source ? counts[g].toLocaleString('en-US') : '…'}</span>
+          </button>
+        ))}
+      <button
+        role="tab"
+        aria-selected={group === QUERIES_GROUP}
+        className={`ol-group${group === QUERIES_GROUP ? ' on' : ''}`}
+        onClick={() => { patch({ group: QUERIES_GROUP }); setSelected(null); }}
+        title="Queries saved into this schema"
+      >
+        <span className="ol-group-dot ol-tint-queries" aria-hidden="true" />
+        Queries
+        <span className="ol-group-count">{queryCount.toLocaleString('en-US')}</span>
+      </button>
+    </div>
+  );
+  if (group === QUERIES_GROUP) {
+    return (
+      <SavedQueryList
+        connectionId={cid}
+        database={catDb}
+        schema={schema}
+        layout={layout}
+        onLayout={(l) => patch({ layout: l as ObjectsState['layout'] })}
+        sort={state.sort}
+        onSort={(s) => patch({ sort: s as ObjectsState['sort'] })}
+        visible={visible}
+        header={header}
+        groupTabs={groupTabs}
+        onNewMenu={(el) => {
+          const entries = commandMenuItems(NEW_ENTRIES, { ...container, queries: true });
+          if (entries.length) showMenuBelow(el, entries);
+        }}
+      />
+    );
+  }
   const columns: Column[] = [
     {
       key: 'name', label: 'Name', width: 'minmax(200px, 2.2fr)',
@@ -504,23 +566,7 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
         </button>
       </div>
 
-      <div className="ol-groups" role="tablist" aria-label="Object types">
-        {(['all', ...GROUPS.map((g) => g.id)] as GroupFilter[])
-          .filter((g) => g === 'all' || counts[g] > 0 || g === group)
-          .map((g) => (
-            <button
-              key={g}
-              role="tab"
-              aria-selected={group === g}
-              className={`ol-group${group === g ? ' on' : ''}`}
-              onClick={() => { patch({ group: g }); setSelected(null); }}
-            >
-              {g !== 'all' && <span className={`ol-group-dot ol-tint-${g}`} aria-hidden="true" />}
-              {g === 'all' ? 'All' : GROUPS.find((x) => x.id === g)!.label}
-              <span className="ol-group-count">{source ? counts[g].toLocaleString('en-US') : '…'}</span>
-            </button>
-          ))}
-      </div>
+      {groupTabs}
 
       {layout === 'list' && source && shown.length > 0 && (
         <div className="ol-head" role="row" style={{ gridTemplateColumns: template }}>

@@ -50,6 +50,24 @@ function executeEntries(noun: string, name: string): ContextEntry[] {
   ];
 }
 
+/** Save menu of an ordinary console: the .sql file, or a query saved into a schema. */
+const SAVE_ENTRIES: ContextEntry[] = [
+  { command: 'file.save', label: 'Save to a .sql file' },
+  { command: 'file.saveAs', label: 'Save as…' },
+  'separator',
+  { command: 'queries.saveToSchema', optional: true },
+];
+
+/** Save menu of a console bound to a saved query. */
+function boundSaveEntries(name: string): ContextEntry[] {
+  return [
+    { command: 'file.save', label: `Save query ${name}` },
+    { command: 'queries.saveToSchema', optional: true, label: 'Save as a new query…' },
+    'separator',
+    { command: 'file.saveAs', label: 'Save as a .sql file…' },
+  ];
+}
+
 export function maxRowsLabel(n: number) {
   return n === 0 ? 'No limit' : formatCount(n);
 }
@@ -103,6 +121,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const noun = edit ? OBJECT_NOUN[edit.ref.type] ?? edit.ref.type : '';
   const save = edit ? commandView('file.save', undefined, `Save ${noun} ${edit.ref.name} to the database`) : null;
   const dirty = !!edit && isEditDirty(edit, tab.text);
+  const queryDirty = !!tab.savedQuery && tab.text !== tab.savedText;
   const explain = getCommand('explain.estimated');
   const codeItems: MenuItem[] = commandMenuItems(CODE_ENTRIES);
   const compare = commandView('designer.compareWithServer');
@@ -182,6 +201,51 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
         >
           <Save size={14} strokeWidth={1.75} /> <span className="btn-text">Save</span>
           {dirty && <span className="tb-dirty-dot" aria-hidden="true" />}
+        </button>
+      ),
+    }] : []),
+    // A console bound to a saved query ("Query: name"): Save (Ctrl+S) writes the query back, a dot while unsaved; its
+    // menu saves a copy to a schema or a .sql file. Other consoles get a quiet Save menu (file, schema).
+    ...(!edit && tab.savedQuery ? [{
+      id: 'save',
+      node: (
+        <span className="split-btn tb-query-save">
+          <button
+            className={`btn btn-primary tb-save split-main${queryDirty ? ' dirty' : ''}`}
+            onClick={() => {
+              runCommand('file.save');
+              refocus();
+            }}
+            title={tooltipWithShortcut(`Save the query ${tab.savedQuery.name}`, displayShortcut('Mod+S')) + (queryDirty ? ' — unsaved changes' : '')}
+            aria-label={queryDirty ? 'Save query, unsaved changes' : 'Save query'}
+            aria-keyshortcuts={ariaKeyShortcuts('Mod+S')}
+            data-command="file.save"
+            data-dirty={queryDirty || undefined}
+          >
+            <Save size={14} strokeWidth={1.75} /> <span className="btn-text">Save</span>
+            {queryDirty && <span className="tb-dirty-dot" aria-hidden="true" />}
+          </button>
+          <button
+            className="btn btn-primary split-caret-save"
+            aria-label="More save options"
+            aria-haspopup="menu"
+            title="Save options: the query, a copy in a schema, a .sql file"
+            onClick={(e) => showMenuBelow(e.currentTarget, commandMenuItems(boundSaveEntries(tab.savedQuery!.name)))}
+          >
+            <ChevronDown size={14} />
+          </button>
+        </span>
+      ),
+    }] : !edit && conn && hasCommand('queries.saveToSchema') ? [{
+      id: 'save', priority: 1, menu: () => commandMenuItems(SAVE_ENTRIES),
+      node: (
+        <button
+          className="btn btn-ghost tb-text-btn"
+          aria-haspopup="menu"
+          title="Save the query: to a schema (saved queries) or to a .sql file"
+          onClick={(e) => showMenuBelow(e.currentTarget, commandMenuItems(SAVE_ENTRIES))}
+        >
+          <Save size={16} strokeWidth={1.5} /> <span className="btn-text">Save</span> <ChevronDown size={14} />
         </button>
       ),
     }] : []),

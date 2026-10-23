@@ -1,11 +1,11 @@
 // Opening the Objects tab (WP3): one tab per connection, database and schema (re-opening activates it and switches to
 // the requested type group). A null schema lists every schema of the database.
 import { catalogDatabase } from '../../app/actions';
-import { isConnectionTarget, isContainerTarget, isObjectTarget, type CommandTarget } from '../../commands/types';
+import { isConnectionTarget, isContainerTarget, isObjectTarget, isSavedQueryTarget, type CommandTarget } from '../../commands/types';
 import { dbKey, useCatalog } from '../../store/catalog';
 import { getConnection, providerKind } from '../../store/connections';
 import { useTabs, type ViewTab } from '../../store/tabs';
-import { DEFAULT_SORT, groupForType, OBJECTS_VIEW, objectsTitle, type GroupFilter, type SortSpec } from './model';
+import { DEFAULT_SORT, groupForType, OBJECTS_VIEW, objectsTitle, QUERIES_GROUP, type GroupFilter, type SortSpec } from './model';
 
 export interface ObjectsState {
   connectionId: string;
@@ -33,7 +33,8 @@ export function scopeOf(t: CommandTarget | null | undefined): ObjectsScope | nul
   if (!t || !('connectionId' in t)) return null;
   const conn = getConnection(t.connectionId);
   if (!conn || providerKind(conn.providerId) !== 'relational') return null;
-  if (isContainerTarget(t)) return { connectionId: t.connectionId, database: t.database, schema: t.schema, group: groupForType(t.objectType) };
+  if (isContainerTarget(t)) return { connectionId: t.connectionId, database: t.database, schema: t.schema, group: t.queries ? QUERIES_GROUP : groupForType(t.objectType) };
+  if (isSavedQueryTarget(t)) return { connectionId: t.connectionId, database: t.database, schema: t.schema, group: QUERIES_GROUP };
   if (isObjectTarget(t)) return { connectionId: t.connectionId, database: t.database, schema: t.ref.schema, group: groupForType(t.ref.type) };
   if (isConnectionTarget(t)) {
     // A connection: its default schema when it has a single one (SQLite main), else every schema of the current database.

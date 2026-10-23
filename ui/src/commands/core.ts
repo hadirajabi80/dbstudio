@@ -105,11 +105,13 @@ export const CORE_COMMANDS: Command<never>[] = [
   { id: 'file.sampleDb', title: 'Open the sample database', category: 'File', keywords: 'try demo shop', icon: 'Sparkles', run: () => void openSampleDatabase() },
   {
     // In an F4 "Edit:" console (procedure, function, view, trigger…) Save writes the object to the database, like
-    // SSMS / Navicat / DataGrip; elsewhere it saves the .sql file. Save as… always writes a file.
+    // SSMS / Navicat / DataGrip; in a console bound to a saved query ("Query: name") it writes the query back
+    // (components/SavedQueries); elsewhere it saves the .sql file. Save as… always writes a file.
     id: 'file.save', title: 'Save', category: 'File', icon: 'Save', shortcut: 'Mod+S', when: () => !!getActiveConsole(),
     run: () => {
       const t = getActiveConsole();
       if (t && peekEditSession(t.id)) void saveEditToDatabase(t.id);
+      else if (t?.savedQuery && runCommand('queries.save', { kind: 'tab', tabId: t.id })) return;
       else void saveActiveFile(false);
     },
   },

@@ -208,6 +208,9 @@ function TabItem({ tab, groupId, active, showConn, dropSide }: {
     tab.title,
     conn ? `${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''}${conn.readOnly ? ' · read-only' : ''}` : null,
     tab.kind === 'console' && tab.filePath ? tab.filePath : null,
+    tab.kind === 'console' && tab.savedQuery
+      ? `Saved query in ${[tab.savedQuery.database, tab.savedQuery.schema].filter((x, i, a) => x && a.indexOf(x) === i).join('.') || 'the connection'}`
+      : null,
     txOpen ? 'Uncommitted transaction' : null,
   ].filter(Boolean).join('\n');
 

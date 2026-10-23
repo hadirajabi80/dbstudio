@@ -57,6 +57,7 @@ export const MENUS: MenuDef[] = [
       sep,
       cmd('file.save', 'Save', 'Mod+S'),
       cmd('file.saveAs', 'Save as…', 'Mod+Shift+S'),
+      cmd('queries.saveToSchema', 'Save query to schema…', 'Mod+Alt+S', { optional: true }),
       sep,
       cmd('tab.close', 'Close tab', 'Mod+W'),
       cmd('tab.reopenClosed', 'Reopen closed tab', 'Mod+Shift+T'),
@@ -195,8 +196,18 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.container': [
     c('objects.open', true), c('search.findInDatabase', true), c('connections.openConsole'), 'separator',
     n('designer.newTable'), n('designer.newView'), n('designer.newProcedure'), n('designer.newFunction'), n('designer.newPackage'),
-    n('designer.newTrigger'), 'separator',
+    n('designer.newTrigger'), n('queries.new'), 'separator',
     c('connections.refreshCatalog'), c('er.open', true), c('explorer.copyName'),
+  ],
+  /** A schema's "Queries" folder (components/SavedQueries). */
+  'explorer.queries': [
+    c('queries.new', true), 'separator', c('objects.open', true), c('connections.openConsole'), 'separator', c('queries.refresh', true),
+  ],
+  /** A query saved into a schema. */
+  'explorer.savedQuery': [
+    { command: 'queries.open', optional: true, label: 'Open' }, 'separator',
+    c('queries.rename', true), c('queries.duplicate', true), c('queries.copySql', true), 'separator',
+    c('queries.delete', true),
   ],
   'explorer.table': [
     c('data.open', true), c('explorer.selectTop'), GENERATE_SQL, 'separator',
@@ -261,6 +272,7 @@ export const CONTEXT_MENUS: Record<string, ContextEntry[]> = {
   'explorer.kafka.group': [c('kafka.openGroup', true), c('kafka.resetOffsets', true), 'separator', c('kafka.deleteGroup', true)],
   tab: [
     c('tab.close'), c('tab.closeOthers'), 'separator', c('tab.rename'), c('tab.duplicate'),
+    { command: 'queries.saveToSchema', optional: true, hideDisabled: true },
     { command: 'designer.compareWithServer', optional: true, hideDisabled: true }, 'separator', c('tab.reopenClosed'),
     // Editor groups and windows (components/EditorGroups/commands.ts)
     'separator', c('view.splitRight', true), c('view.splitDown', true),

@@ -20,6 +20,18 @@ export interface ContainerTarget {
   schema: string | null;
   /** Folder type when invoked on a "Tables"/"Views"/... folder. */
   objectType?: CatalogObjectType;
+  /** The schema's "Queries" folder (saved queries). */
+  queries?: boolean;
+}
+
+/** A query saved into a schema (the explorer's "Queries" folder, the Objects tab's Queries group, Ctrl+P). */
+export interface SavedQueryTarget {
+  kind: 'savedQuery';
+  connectionId: string;
+  database: string | null;
+  schema: string | null;
+  id: string;
+  name: string;
 }
 
 export interface ConnectionTarget {
@@ -46,7 +58,7 @@ export interface SourceTarget {
   meta?: unknown;
 }
 
-export type CommandTarget = ObjectTarget | ContainerTarget | ConnectionTarget | TabTarget | SourceTarget;
+export type CommandTarget = ObjectTarget | ContainerTarget | ConnectionTarget | TabTarget | SourceTarget | SavedQueryTarget;
 
 export function isObjectTarget(a: unknown): a is ObjectTarget {
   return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'object';
@@ -62,4 +74,7 @@ export function isTabTarget(a: unknown): a is TabTarget {
 }
 export function isSourceTarget(a: unknown): a is SourceTarget {
   return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'source';
+}
+export function isSavedQueryTarget(a: unknown): a is SavedQueryTarget {
+  return !!a && typeof a === 'object' && (a as { kind?: unknown }).kind === 'savedQuery' && typeof (a as { id?: unknown }).id === 'string';
 }

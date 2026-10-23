@@ -5,6 +5,7 @@ import type { CatalogObjectType, CatalogSchema, ObjectRef } from '../../api/type
 import { fuzzyMatchLower, type FuzzyResult } from '../../lib/fuzzy';
 import { listSourceModules, type PaletteSourceEntry } from '../../lib/sources';
 import type { DbCatalog } from '../../store/catalog';
+import type { ConnQueries, SavedQuery } from '../../store/savedQueries';
 
 /** M2: source module entries (Redis keys, Mongo collections, Kafka topics) next to the SQL catalog types. */
 export type SourceEntryType = PaletteSourceEntry['type'];
@@ -13,7 +14,9 @@ export interface IndexEntry {
   /** Object name (or "Table.Column" for column entries). */
   name: string;
   lower: string;
-  type: CatalogObjectType | 'column' | SourceEntryType;
+  type: CatalogObjectType | 'column' | SourceEntryType | 'query';
+  /** A query saved into a schema (type 'query'); `ref` is then only a placeholder. */
+  query?: SavedQuery;
   /** M2: set for source module entries; `open` goes through the module (`ref` is then only a placeholder). */
   source?: PaletteSourceEntry;
   connectionId: string;
@@ -32,9 +35,10 @@ export interface SearchHit {
 /**
  * Type prefixes: `t:` tables (and Kafka topics), `v:` views, `p:` procedures, `f:` functions, `c:` columns,
  * M2: `k:` Redis keys, `coll:` Mongo collections, `er:` tables and views opened as an ER diagram of their related
- * tables (`er.openRelated`, DIAGRAM_PREFIX).
+ * tables (`er.openRelated`, DIAGRAM_PREFIX), `q:` saved queries.
  */
 export const TYPE_PREFIXES: Record<string, (t: IndexEntry['type']) => boolean> = {
+  q: (t) => t === 'query',
   t: (t) => t === 'table' || t === 'kafka.topic',
   v: (t) => t === 'view' || t === 'mview',
   p: (t) => t === 'proc' || t === 'package',
@@ -101,9 +105,27 @@ export function sourceEntries(): IndexEntry[] {
   return out;
 }
 
-/** Flattened entry arrays (one per loaded schema, plus one for the source modules). Cheap: only cached arrays are collected. */
-export function collectEntries(dbs: Record<string, DbCatalog>, withColumns: boolean, withSources = true): IndexEntry[][] {
+const queryCache = new WeakMap<SavedQuery[], IndexEntry[]>();
+
+/** Ctrl+P entries of the saved queries (per connection list identity). */
+export function queryEntries(items: SavedQuery[]): IndexEntry[] {
+  let list = queryCache.get(items);
+  if (list) return list;
+  list = items.map((q) => ({
+    name: q.name, lower: q.name.toLowerCase(), type: 'query' as const, query: q, connectionId: q.connectionId, database: q.database,
+    schema: q.schema ?? '', ref: { database: q.database, schema: q.schema, name: q.name, type: 'table' as const },
+  }));
+  queryCache.set(items, list);
+  return list;
+}
+
+/**
+ * Flattened entry arrays (one per loaded schema, plus one for the source modules and one per connection's saved
+ * queries). Cheap: only cached arrays are collected.
+ */
+export function collectEntries(dbs: Record<string, DbCatalog>, withColumns: boolean, withSources = true, queries?: Record<string, ConnQueries | undefined>): IndexEntry[][] {
   const out: IndexEntry[][] = [];
+  for (const c of Object.values(queries ?? {})) if (c?.items.length) out.push(queryEntries(c.items));
   for (const d of Object.values(dbs)) {
     for (const s of Object.values(d.loaded)) {
       out.push(schemaEntries(d, s));
@@ -123,7 +145,7 @@ export interface ParsedQuery {
 }
 
 export function parseObjectQuery(q: string): ParsedQuery {
-  const m = /^\s*(coll|er|[tvpfck]):\s*(.*)$/i.exec(q);
+  const m = /^\s*(coll|er|[tvpfckq]):\s*(.*)$/i.exec(q);
   if (m) return { prefix: m[1].toLowerCase(), pattern: m[2].trim() };
   return { prefix: null, pattern: q.trim() };
 }

@@ -6,7 +6,9 @@ import type { ObjectListItem } from '../../api/types.objects';
 export const OBJECTS_VIEW = 'objects';
 
 export type GroupId = 'table' | 'view' | 'proc' | 'func' | 'package' | 'trigger' | 'sequence' | 'synonym' | 'type';
-export type GroupFilter = GroupId | 'all';
+/** The saved queries of the scope (components/SavedQueries): a group of its own, not catalog objects. */
+export const QUERIES_GROUP = 'queries';
+export type GroupFilter = GroupId | 'all' | typeof QUERIES_GROUP;
 
 export const GROUPS: readonly { id: GroupId; label: string; singular: string; types: readonly CatalogObjectType[] }[] = [
   { id: 'table', label: 'Tables', singular: 'table', types: ['table'] },

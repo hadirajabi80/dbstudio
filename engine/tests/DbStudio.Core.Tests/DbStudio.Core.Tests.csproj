@@ -14,6 +14,8 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <!-- M1.5 FormatterParity: the renderer formatter must not change the T-SQL parse tree. -->
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
+    <!-- Saved queries: the module's endpoints over an in-memory TestServer. -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>
