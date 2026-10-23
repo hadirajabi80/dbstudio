@@ -26,7 +26,8 @@ const ACTIONS: Record<Dialect, { del: ReferentialAction[]; upd: ReferentialActio
   clickhouse: { del: ['NO ACTION'], upd: ['NO ACTION'] },
   // WP-CH end
   // WP-SF begin
-  snowflake: { del: ['NO ACTION'], upd: ['NO ACTION'] },
+  // Snowflake records the actions but enforces no foreign key (informational constraints).
+  snowflake: { del: ['NO ACTION', 'CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT'], upd: ['NO ACTION', 'CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT'] },
   // WP-SF end
   // WP-CS begin
   cql: { del: ['NO ACTION'], upd: ['NO ACTION'] },

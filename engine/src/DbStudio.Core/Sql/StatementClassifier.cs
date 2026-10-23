@@ -263,7 +263,76 @@ public static class StatementClassifier
     // WP-CH end
 
     // WP-SF begin (Snowflake: SHOW, DESCRIBE/DESC, LIST/LS, GET/PUT, COPY INTO, USE WAREHOUSE/ROLE, CALL, UNDROP, …)
-    private static StatementClassification? ClassifySnowflake(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    private static readonly HashSet<string> SnowflakeDdlModifiers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TRANSIENT", "SECURE", "DYNAMIC", "EXTERNAL", "HYBRID", "ICEBERG", "RECURSIVE", "VOLATILE", "EVENT",
+    };
+
+    private static StatementClassification? ClassifySnowflake(List<SqlToken> t, int i, string u, bool hasWhere, int start)
+    {
+        string? Word(int k) => k < t.Count && t[k].Kind == SqlTokenKind.Word ? t[k].Upper : null;
+        switch (u)
+        {
+            case "SHOW":
+            case "DESCRIBE":
+            case "DESC":
+            case "LIST":
+            case "LS":
+            case "GET":
+                return new(StatementCategory.Query, u switch { "DESC" => "DESCRIBE", "LS" => "LIST", _ => u }, false, null, start);
+            case "USE":
+            case "UNSET":
+                return new(StatementCategory.Session, u, false, null, start);
+            case "ALTER" when Word(i + 1) == "SESSION":
+                return new(StatementCategory.Session, "ALTER SESSION", false, null, start);
+            case "PUT":
+                return new(StatementCategory.Dml, "PUT", false, null, start);
+            case "COPY":
+                return new(StatementCategory.Dml, "COPY", hasWhere, null, start);
+            case "REMOVE":
+            case "RM":
+                return new(StatementCategory.Dml, "REMOVE", false, null, start);
+            case "CALL":
+                return new(StatementCategory.Other, "CALL", false, null, start);
+            case "EXECUTE" when Word(i + 1) == "IMMEDIATE":
+                return new(StatementCategory.Block, "EXECUTE IMMEDIATE", hasWhere, null, start);
+            case "EXECUTE" when Word(i + 1) == "TASK":
+                return new(StatementCategory.Other, "EXECUTE TASK", false, null, start);
+            case "BEGIN":
+            {
+                var tx = i + 1 >= t.Count || t[i + 1].IsPunct(';') || Word(i + 1) is "TRANSACTION" or "WORK" or "NAME";
+                return tx ? new(StatementCategory.Transaction, "BEGIN", false, null, start) : new(StatementCategory.Block, "BEGIN", hasWhere, null, start);
+            }
+            case "START" when Word(i + 1) == "TRANSACTION":
+                return new(StatementCategory.Transaction, "BEGIN", false, null, start);
+            case "DECLARE":
+                return new(StatementCategory.Block, "DECLARE", hasWhere, null, start);
+            case "UNDROP":
+                return ClassifyDdl(t, i, "UNDROP", Dialect.Snowflake, start);
+            case "CREATE":
+            case "ALTER":
+            case "DROP":
+            {
+                // CREATE [OR REPLACE] [TRANSIENT | SECURE | DYNAMIC | EXTERNAL | HYBRID | …] TABLE/VIEW …: drop the Snowflake
+                // modifiers before the type word so the shared DDL rules see TABLE / VIEW / FUNCTION.
+                var k = i + 1;
+                var removed = false;
+                var filtered = new List<SqlToken>(t.Count);
+                filtered.AddRange(t.Take(i + 1));
+                for (; k < t.Count && t[k].Kind == SqlTokenKind.Word; k++)
+                {
+                    var w = t[k].Upper;
+                    if (SnowflakeDdlModifiers.Contains(w)) { removed = true; continue; }
+                    if (w is "OR" or "REPLACE" or "TEMP" or "TEMPORARY" or "LOCAL" or "GLOBAL") { filtered.Add(t[k]); continue; }
+                    break;
+                }
+                if (!removed) return null;
+                filtered.AddRange(t.Skip(k));
+                return ClassifyDdl(filtered, i, u, Dialect.Snowflake, start);
+            }
+        }
+        return null;
+    }
     // WP-SF end
 
     // WP-CS begin (CQL: BEGIN BATCH … APPLY BATCH = Dml, DESCRIBE/DESC, USE, LIST ROLES/USERS, GRANT/REVOKE, …)

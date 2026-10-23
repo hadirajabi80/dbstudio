@@ -99,8 +99,17 @@ SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
 `,
   // WP-CH end
   // WP-SF begin
-  snowflake: `-- Snowflake playground
-SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+  snowflake: `-- Snowflake playground: VARIANT paths, QUALIFY, LATERAL FLATTEN, $$ bodies
+USE WAREHOUSE COMPUTE_WH;
+SELECT c.NAME, c.PROFILE:address.city::STRING AS CITY, f.value:sku::STRING AS SKU
+FROM CUSTOMERS c, LATERAL FLATTEN(input => c.PROFILE:orders) f
+WHERE c.COUNTRY_ID = :country
+QUALIFY ROW_NUMBER() OVER (PARTITION BY c.ID ORDER BY f.index DESC) = 1;
+EXECUTE IMMEDIATE $$
+BEGIN
+  RETURN 'ok';
+END;
+$$;
 `,
   // WP-SF end
   // WP-CS begin

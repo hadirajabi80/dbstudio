@@ -25,6 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Recorded Snowflake answers replayed by SnowflakeGatewayFake (plan-batch3 D10). -->
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\DbStudio.Providers.Snowflake\DbStudio.Providers.Snowflake.csproj" />
     <ProjectReference Include="..\DbStudio.Providers.Conformance\DbStudio.Providers.Conformance.Tests.csproj" />
   </ItemGroup>

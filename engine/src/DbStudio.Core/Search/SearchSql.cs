@@ -63,7 +63,8 @@ public static class SearchSql
         Dialect.ClickHouse => "{" + name + ":String}",
         // WP-CH end
         // WP-SF begin
-        Dialect.Snowflake => ":" + name,
+        // numeric bind: the one value (the term) is referenced once per searched column, and :1 may repeat
+        Dialect.Snowflake => ":1",
         // WP-SF end
         // WP-CS begin (CQL: data search is names/columns only, see TextExpression)
         Dialect.Cql => ":" + name,

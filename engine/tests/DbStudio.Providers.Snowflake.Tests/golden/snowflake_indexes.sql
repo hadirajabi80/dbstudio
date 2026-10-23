@@ -1,0 +1,2 @@
+-- rebuildRequired: false, transactional: false
+-- warning: Snowflake standard tables have no indexes (micro-partitions are pruned automatically); only a clustered index becomes the clustering key.

@@ -1,0 +1,135 @@
+{
+  "$comment": "Recorded shape of Snowflake SHOW outputs for the SHOP sample (handwritten from a trial account, values anonymised). Each entry: the exact SQL the engine sends, the result columns as the server names them, the rows.",
+  "entries": [
+    {
+      "sql": "SHOW DATABASES",
+      "columns": ["created_on", "name", "is_default", "is_current", "origin", "owner", "comment", "options", "retention_time", "kind", "budget", "owner_role_type"],
+      "rows": [
+        ["2026-09-30 08:12:01.442 -0700", "SHOP", "N", "Y", "", "SYSADMIN", "Rowlit sample shop", "", "1", "STANDARD", null, "ROLE"],
+        ["2026-09-30 07:58:44.103 -0700", "SNOWFLAKE", "N", "N", "SNOWFLAKE.ACCOUNT_USAGE", "", "", "", "0", "APPLICATION", null, ""],
+        ["2026-09-30 07:58:44.981 -0700", "SNOWFLAKE_SAMPLE_DATA", "N", "N", "SFSALESSHARED.SFC_SAMPLES_AWS_EU_CENTRAL_1.SAMPLE_DATA", "ACCOUNTADMIN", "Provided by Snowflake during account provisioning", "", "0", "IMPORTED DATABASE", null, "ROLE"],
+        ["2026-10-02 11:40:19.004 -0700", "ANALYTICS", "N", "N", "", "SYSADMIN", "", "TRANSIENT", "0", "STANDARD", null, "ROLE"]
+      ]
+    },
+    {
+      "sql": "SHOW SCHEMAS IN DATABASE \"SHOP\"",
+      "columns": ["created_on", "name", "is_default", "is_current", "database_name", "owner", "comment", "options", "retention_time", "owner_role_type", "budget"],
+      "rows": [
+        ["2026-10-14 03:21:55.012 -0700", "INFORMATION_SCHEMA", "N", "N", "SHOP", "", "Views describing the contents of schemas in this database", "", "1", "", null],
+        ["2026-09-30 08:12:01.442 -0700", "PUBLIC", "N", "Y", "SHOP", "SYSADMIN", "", "", "1", "ROLE", null],
+        ["2026-09-30 08:15:12.820 -0700", "SALES", "N", "N", "SHOP", "SYSADMIN", "Invoices", "", "1", "ROLE", null]
+      ]
+    },
+    {
+      "sql": "SELECT CURRENT_DATABASE() AS DATABASE_NAME",
+      "columns": ["DATABASE_NAME"],
+      "rows": [["SHOP"]]
+    },
+    {
+      "sql": "SHOW TABLES IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "database_name", "schema_name", "kind", "comment", "cluster_by", "rows", "bytes", "owner", "retention_time", "automatic_clustering", "change_tracking", "search_optimization", "search_optimization_progress", "search_optimization_bytes", "is_external", "enable_schema_evolution", "owner_role_type", "is_event", "budget", "is_hybrid", "is_iceberg", "is_dynamic", "is_immutable"],
+      "rows": [
+        ["2026-09-30 08:16:02.111 -0700", "COUNTRIES", "SHOP", "PUBLIC", "TABLE", "", "", 3, 1536, "SYSADMIN", "1", "OFF", "OFF", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-09-30 08:16:02.733 -0700", "CUSTOMERS", "SHOP", "PUBLIC", "TABLE", "Shop customers", "", 5, 2560, "SYSADMIN", "1", "OFF", "ON", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-09-30 08:16:03.204 -0700", "ORDERS", "SHOP", "PUBLIC", "TABLE", "", "LINEAR(ORDER_DATE)", 6, 3072, "SYSADMIN", "1", "ON", "OFF", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-09-30 08:16:03.570 -0700", "ORDER_LINES", "SHOP", "PUBLIC", "TABLE", "", "", 7, 2048, "SYSADMIN", "1", "OFF", "OFF", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-09-30 08:16:03.911 -0700", "PRODUCTS", "SHOP", "PUBLIC", "TABLE", "", "", 4, 2048, "SYSADMIN", "1", "OFF", "OFF", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-10-01 10:02:48.455 -0700", "EVENTS_RAW", "SHOP", "PUBLIC", "TRANSIENT", "Landing table for the PIPE", "", 1250, 65536, "SYSADMIN", "0", "OFF", "OFF", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "N", "N"],
+        ["2026-10-03 13:30:00.000 -0700", "DAILY_REVENUE", "SHOP", "PUBLIC", "TABLE", "Dynamic table: revenue per day", "", 31, 4096, "SYSADMIN", "1", "OFF", "ON", "OFF", null, null, "N", "N", "ROLE", "N", null, "N", "N", "Y", "N"]
+      ]
+    },
+    {
+      "sql": "SHOW VIEWS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "reserved", "database_name", "schema_name", "owner", "comment", "text", "is_secure", "is_materialized", "owner_role_type", "change_tracking"],
+      "rows": [
+        ["2026-09-30 08:16:05.002 -0700", "CUSTOMER_ORDERS", "", "SHOP", "PUBLIC", "SYSADMIN", "Orders per customer", "CREATE OR REPLACE VIEW CUSTOMER_ORDERS AS\nSELECT c.ID AS CUSTOMER_ID, c.NAME, o.ID AS ORDER_ID, o.TOTAL\nFROM CUSTOMERS c JOIN ORDERS o ON o.CUSTOMER_ID = c.ID;", "false", "false", "ROLE", "OFF"],
+        ["2026-09-30 08:16:05.860 -0700", "ORDER_TOTALS_MV", "", "SHOP", "PUBLIC", "SYSADMIN", "", "CREATE OR REPLACE MATERIALIZED VIEW ORDER_TOTALS_MV AS SELECT CUSTOMER_ID, SUM(TOTAL) AS TOTAL FROM ORDERS GROUP BY CUSTOMER_ID;", "false", "true", "ROLE", "OFF"]
+      ]
+    },
+    {
+      "sql": "SHOW COLUMNS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["table_name", "schema_name", "column_name", "data_type", "null?", "default", "kind", "expression", "comment", "database_name", "autoincrement", "schema_evolution_record"],
+      "rows": [
+        ["COUNTRIES", "PUBLIC", "ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["COUNTRIES", "PUBLIC", "NAME", "{\"type\":\"TEXT\",\"length\":100,\"byteLength\":400,\"nullable\":false,\"fixed\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMERS", "PUBLIC", "ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "IDENTITY START 1 INCREMENT 1 ORDER", null],
+        ["CUSTOMERS", "PUBLIC", "NAME", "{\"type\":\"TEXT\",\"length\":100,\"byteLength\":400,\"nullable\":false,\"fixed\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMERS", "PUBLIC", "EMAIL", "{\"type\":\"TEXT\",\"length\":200,\"byteLength\":800,\"nullable\":true,\"fixed\":false}", "true", "", "COLUMN", "", "Contact address", "SHOP", "", null],
+        ["CUSTOMERS", "PUBLIC", "COUNTRY_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMERS", "PUBLIC", "PROFILE", "{\"type\":\"VARIANT\",\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDERS", "PUBLIC", "ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDERS", "PUBLIC", "CUSTOMER_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDERS", "PUBLIC", "ORDER_DATE", "{\"type\":\"TIMESTAMP_NTZ\",\"precision\":0,\"scale\":9,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDERS", "PUBLIC", "TOTAL", "{\"type\":\"FIXED\",\"precision\":12,\"scale\":2,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDER_LINES", "PUBLIC", "ORDER_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDER_LINES", "PUBLIC", "PRODUCT_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDER_LINES", "PUBLIC", "QTY", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "1", "COLUMN", "", "", "SHOP", "", null],
+        ["PRODUCTS", "PUBLIC", "ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["PRODUCTS", "PUBLIC", "NAME", "{\"type\":\"TEXT\",\"length\":16777216,\"byteLength\":16777216,\"nullable\":false,\"fixed\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["PRODUCTS", "PUBLIC", "PRICE", "{\"type\":\"FIXED\",\"precision\":10,\"scale\":2,\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["PRODUCTS", "PUBLIC", "TAGS", "{\"type\":\"ARRAY\",\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["PRODUCTS", "PUBLIC", "EMBEDDING", "{\"type\":\"VECTOR\",\"vectorElementType\":\"FLOAT\",\"dimension\":3,\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["EVENTS_RAW", "PUBLIC", "PAYLOAD", "{\"type\":\"VARIANT\",\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["EVENTS_RAW", "PUBLIC", "LOADED_AT", "{\"type\":\"TIMESTAMP_LTZ\",\"precision\":0,\"scale\":9,\"nullable\":true}", "true", "CURRENT_TIMESTAMP()", "COLUMN", "", "", "SHOP", "", null],
+        ["DAILY_REVENUE", "PUBLIC", "DAY", "{\"type\":\"DATE\",\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["DAILY_REVENUE", "PUBLIC", "REVENUE", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":2,\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMER_ORDERS", "PUBLIC", "CUSTOMER_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMER_ORDERS", "PUBLIC", "NAME", "{\"type\":\"TEXT\",\"length\":100,\"byteLength\":400,\"nullable\":false,\"fixed\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMER_ORDERS", "PUBLIC", "ORDER_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["CUSTOMER_ORDERS", "PUBLIC", "TOTAL", "{\"type\":\"FIXED\",\"precision\":12,\"scale\":2,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDER_TOTALS_MV", "PUBLIC", "CUSTOMER_ID", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":0,\"nullable\":false}", "NOT_NULL", "", "COLUMN", "", "", "SHOP", "", null],
+        ["ORDER_TOTALS_MV", "PUBLIC", "TOTAL", "{\"type\":\"FIXED\",\"precision\":38,\"scale\":2,\"nullable\":true}", "true", "", "COLUMN", "", "", "SHOP", "", null]
+      ]
+    },
+    {
+      "sql": "SHOW PRIMARY KEYS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "database_name", "schema_name", "table_name", "column_name", "key_sequence", "constraint_name", "rely", "comment"],
+      "rows": [
+        ["2026-09-30 08:16:02.111 -0700", "SHOP", "PUBLIC", "COUNTRIES", "ID", 1, "PK_COUNTRIES", "false", null],
+        ["2026-09-30 08:16:02.733 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "ID", 1, "PK_CUSTOMERS", "false", null],
+        ["2026-09-30 08:16:03.204 -0700", "SHOP", "PUBLIC", "ORDERS", "ID", 1, "PK_ORDERS", "false", null],
+        ["2026-09-30 08:16:03.570 -0700", "SHOP", "PUBLIC", "ORDER_LINES", "PRODUCT_ID", 2, "PK_ORDER_LINES", "false", null],
+        ["2026-09-30 08:16:03.570 -0700", "SHOP", "PUBLIC", "ORDER_LINES", "ORDER_ID", 1, "PK_ORDER_LINES", "false", null],
+        ["2026-09-30 08:16:03.911 -0700", "SHOP", "PUBLIC", "PRODUCTS", "ID", 1, "SYS_CONSTRAINT_7c1d0f4e-55d1-4b6c-9f43-0d1c2a4e9b11", "false", null]
+      ]
+    },
+    {
+      "sql": "SHOW IMPORTED KEYS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "pk_database_name", "pk_schema_name", "pk_table_name", "pk_column_name", "fk_database_name", "fk_schema_name", "fk_table_name", "fk_column_name", "key_sequence", "update_rule", "delete_rule", "fk_name", "pk_name", "deferrability", "rely", "comment"],
+      "rows": [
+        ["2026-09-30 08:16:02.733 -0700", "SHOP", "PUBLIC", "COUNTRIES", "ID", "SHOP", "PUBLIC", "CUSTOMERS", "COUNTRY_ID", 1, "NO ACTION", "NO ACTION", "FK_CUSTOMERS_COUNTRIES", "PK_COUNTRIES", "NOT DEFERRABLE", "false", null],
+        ["2026-09-30 08:16:03.204 -0700", "SHOP", "PUBLIC", "CUSTOMERS", "ID", "SHOP", "PUBLIC", "ORDERS", "CUSTOMER_ID", 1, "NO ACTION", "NO ACTION", "FK_ORDERS_CUSTOMERS", "PK_CUSTOMERS", "NOT DEFERRABLE", "false", null],
+        ["2026-09-30 08:16:03.570 -0700", "SHOP", "PUBLIC", "ORDERS", "ID", "SHOP", "PUBLIC", "ORDER_LINES", "ORDER_ID", 1, "NO ACTION", "CASCADE", "FK_ORDER_LINES_ORDERS", "PK_ORDERS", "NOT DEFERRABLE", "false", null],
+        ["2026-09-30 08:16:03.570 -0700", "SHOP", "PUBLIC", "PRODUCTS", "ID", "SHOP", "PUBLIC", "ORDER_LINES", "PRODUCT_ID", 1, "NO ACTION", "NO ACTION", "FK_ORDER_LINES_PRODUCTS", "SYS_CONSTRAINT_7c1d0f4e-55d1-4b6c-9f43-0d1c2a4e9b11", "NOT DEFERRABLE", "false", null]
+      ]
+    },
+    {
+      "sql": "SHOW USER PROCEDURES IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "schema_name", "is_builtin", "is_aggregate", "is_ansi", "min_num_arguments", "max_num_arguments", "arguments", "description", "catalog_name", "is_table_function", "valid_for_clustering", "is_secure", "secrets", "external_access_integrations"],
+      "rows": [
+        ["2026-10-01 09:00:12.774 -0700", "REFRESH_TOTALS", "PUBLIC", "N", "N", "N", 1, 1, "REFRESH_TOTALS(NUMBER) RETURN VARCHAR", "Recomputes ORDERS.TOTAL", "SHOP", "N", "N", "N", null, null],
+        ["2026-10-01 09:00:30.118 -0700", "ARCHIVE_ORDERS", "PUBLIC", "N", "N", "N", 1, 2, "ARCHIVE_ORDERS(DATE, [BOOLEAN]) RETURN NUMBER(38,0)", "user-defined procedure", "SHOP", "N", "N", "N", null, null]
+      ]
+    },
+    {
+      "sql": "SHOW USER FUNCTIONS IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "schema_name", "is_builtin", "is_aggregate", "is_ansi", "min_num_arguments", "max_num_arguments", "arguments", "description", "catalog_name", "is_table_function", "valid_for_clustering", "is_secure", "secrets", "external_access_integrations", "is_external_function", "language", "is_memoizable", "is_data_metric"],
+      "rows": [
+        ["2026-10-01 09:01:44.002 -0700", "ORDER_TAX", "PUBLIC", "N", "N", "N", 1, 1, "ORDER_TAX(NUMBER) RETURN NUMBER", "user-defined function", "SHOP", "N", "N", "N", null, null, "N", "SQL", "N", "N"],
+        ["2026-10-01 09:01:44.551 -0700", "ORDER_TAX", "PUBLIC", "N", "N", "N", 2, 2, "ORDER_TAX(NUMBER, VARCHAR) RETURN NUMBER", "user-defined function", "SHOP", "N", "N", "N", null, null, "N", "SQL", "N", "N"],
+        ["2026-10-01 09:02:10.320 -0700", "ORDERS_OF", "PUBLIC", "N", "N", "N", 1, 1, "ORDERS_OF(NUMBER) RETURN TABLE (ORDER_ID NUMBER, TOTAL NUMBER)", "Orders of one customer", "SHOP", "Y", "N", "N", null, null, "N", "SQL", "N", "N"]
+      ]
+    },
+    {
+      "sql": "SHOW SEQUENCES IN SCHEMA \"SHOP\".\"PUBLIC\"",
+      "columns": ["created_on", "name", "schema_name", "database_name", "next_value", "interval", "owner", "comment", "ordered", "owner_role_type"],
+      "rows": [
+        ["2026-09-30 08:16:01.004 -0700", "ORDERS_SEQ", "PUBLIC", "SHOP", 7, 1, "SYSADMIN", "Order numbers", "Y", "ROLE"]
+      ]
+    },
+    {
+      "sql": "SHOW TABLES IN SCHEMA \"SHOP\".\"MISSING\"",
+      "error": { "code": 2003, "sqlState": "02000", "message": "SQL compilation error:\nSchema 'SHOP.MISSING' does not exist or not authorized." }
+    }
+  ]
+}

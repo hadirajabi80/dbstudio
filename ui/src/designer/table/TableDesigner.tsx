@@ -64,7 +64,7 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
   clickhouse: ['UInt8', 'UInt32', 'UInt64', 'Int32', 'Int64', 'Float64', 'Decimal(12, 2)', 'String', 'LowCardinality(String)', 'Date', 'DateTime', 'DateTime64(3)', 'UUID', 'Bool', 'Array(String)', 'Nullable(String)'],
   // WP-CH end
   // WP-SF begin
-  snowflake: ['NUMBER(38,0)', 'NUMBER(12,2)', 'FLOAT', 'VARCHAR(100)', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIME', 'TIMESTAMP_NTZ', 'TIMESTAMP_LTZ', 'TIMESTAMP_TZ', 'VARIANT', 'OBJECT', 'ARRAY', 'BINARY'],
+  snowflake: ['NUMBER(38,0)', 'NUMBER(12,2)', 'FLOAT', 'DECFLOAT', 'VARCHAR(100)', 'VARCHAR', 'CHAR(10)', 'BOOLEAN', 'DATE', 'TIME(9)', 'TIMESTAMP_NTZ(9)', 'TIMESTAMP_LTZ(9)', 'TIMESTAMP_TZ(9)', 'VARIANT', 'OBJECT', 'ARRAY', 'BINARY', 'GEOGRAPHY', 'GEOMETRY', 'VECTOR(FLOAT, 768)'],
   // WP-SF end
   // WP-CS begin
   cql: ['int', 'bigint', 'smallint', 'varint', 'decimal', 'double', 'float', 'text', 'ascii', 'boolean', 'date', 'time', 'timestamp', 'uuid', 'timeuuid', 'inet', 'blob', 'counter', 'list<text>', 'set<text>', 'map<text, text>'],
