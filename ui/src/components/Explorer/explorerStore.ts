@@ -6,14 +6,17 @@ import type { CommandTarget, ObjectTarget } from '../../commands/types';
 const EXPANDED_KEY = 'dbstudio.explorer.expanded.v1';
 const CHIPS_KEY = 'dbstudio.explorer.chips.v2';
 
-/** Explorer type chips (1.1.2). "other" = sequences, synonyms, packages, types, triggers, table functions. */
+/**
+ * Explorer type chips (1.1.2). "other" = sequences, synonyms, packages, types, triggers, table functions, and the
+ * schemas' saved queries (their "Queries" folders).
+ */
 export type TypeChip = 'tables' | 'views' | 'procs' | 'funcs' | 'other';
-export const TYPE_CHIPS: { id: TypeChip; label: string }[] = [
+export const TYPE_CHIPS: { id: TypeChip; label: string; title?: string }[] = [
   { id: 'tables', label: 'Tables' },
   { id: 'views', label: 'Views' },
   { id: 'procs', label: 'Procs' },
   { id: 'funcs', label: 'Funcs' },
-  { id: 'other', label: 'Other' },
+  { id: 'other', label: 'Other', title: 'Sequences, synonyms, types, triggers and saved queries' },
 ];
 
 /** The global scope of the type chips. */

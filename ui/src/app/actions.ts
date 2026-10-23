@@ -352,6 +352,15 @@ export async function closeTab(tabId: string): Promise<void> {
       danger: true,
     });
     if (!ok) return;
+  } else if (tab.kind === 'console' && tab.savedQuery && tab.text !== tab.savedText) {
+    // A console bound to a saved query (components/SavedQueries): Ctrl+S writes it back.
+    const ok = await useUi.getState().askConfirm({
+      title: 'Unsaved changes',
+      message: `“${tab.title}” has changes that are not saved to the query ${tab.savedQuery.name}.`,
+      confirmLabel: 'Close without saving',
+      danger: true,
+    });
+    if (!ok) return;
   } else if (tab.kind === 'view') {
     const def = getTabView(tab.view);
     if (def?.beforeClose) {

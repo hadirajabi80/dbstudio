@@ -4,10 +4,13 @@ import { getSourceModule, sourceNodeId } from '../../lib/sources';
 import { hasDatabaseLevel, providerKind } from '../../store/connections';
 import { isTabular, OBJECT_TYPE_LABELS, OBJECT_TYPE_ORDER } from '../../lib/sql';
 import { dbKey, type ConnCatalog, type DbCatalog } from '../../store/catalog';
+import type { ConnQueries, SavedQuery } from '../../store/savedQueries';
 import type { TypeChip } from './explorerStore';
 
 /** M2: `source` rows belong to a source module (Redis/MongoDB/Kafka, see lib/sources.ts). */
-export type NodeKind = 'cfolder' | 'connection' | 'database' | 'schema' | 'folder' | 'object' | 'column' | 'status' | 'source';
+export type NodeKind = 'cfolder' | 'connection' | 'database' | 'schema' | 'folder' | 'object' | 'column' | 'status' | 'source'
+  /** A schema's "Queries" folder and the queries saved into it (components/SavedQueries). */
+  | 'qfolder' | 'query';
 
 export interface TreeRow {
   id: string;
@@ -33,6 +36,8 @@ export interface TreeRow {
   loadSchema?: string;
   /** M2: rows of a source module (kind 'source'): node type ('db', 'key', 'collection', 'topic'...), path from the connection. */
   source?: { providerId: ProviderId; nodeType: string; path: string[]; meta?: unknown };
+  /** kind 'query': the saved query. */
+  savedQuery?: SavedQuery;
 }
 
 export const nodeId = {
@@ -44,6 +49,9 @@ export const nodeId = {
   object: (cid: string, db: string | null, s: string, t: CatalogObjectType, n: string) => `o:${cid}:${db ?? ''}:${s}:${t}:${n}`,
   /** M2: source module rows (lib/sources.ts sourceNodeId). */
   source: sourceNodeId,
+  /** A schema's "Queries" folder. */
+  queries: (cid: string, db: string | null, s: string) => `q:${cid}:${db ?? ''}:${s}`,
+  savedQuery: (cid: string, id: string) => `sq:${cid}:${id}`,
 };
 
 /** M2: whether a connection is rendered by a source module instead of the SQL catalog. */
@@ -74,6 +82,11 @@ export const CHIP_TYPES: Record<TypeChip, CatalogObjectType[]> = {
   other: ['synonym', 'sequence', 'type', 'trigger'],
 };
 
+/** Whether the chips show the "Queries" folders (saved queries): no chip (every type), or the Other chip. */
+export function queriesShown(chips: readonly TypeChip[]): boolean {
+  return !chips.length || chips.includes('other');
+}
+
 export function typesOfChips(chips: readonly TypeChip[]): Set<CatalogObjectType> | null {
   if (!chips.length) return null;
   return new Set(chips.flatMap((c) => CHIP_TYPES[c]));
@@ -91,6 +104,13 @@ export interface TreeInput {
   typesFor?: (connectionId: string) => Set<CatalogObjectType> | null;
   /** Also match column names ("Customers · Email"). */
   searchColumns?: boolean;
+  /**
+   * Saved queries per connection: when given, every schema gets a "Queries" folder (and the filter matches query
+   * names). Absent = no Queries folders.
+   */
+  savedQueries?: Record<string, ConnQueries | undefined>;
+  /** Whether the type chips show the Queries folders of a connection (default: yes). */
+  queriesFor?: (connectionId: string) => boolean;
 }
 
 /**
@@ -235,7 +255,8 @@ function addFolders(rows: TreeRow[], input: TreeInput, cid: string, db: string |
   }
   const types = input.typesFor?.(cid) ?? null;
   const groups = groupObjects(loaded.objects, types);
-  if (groups.size === 0) return status(rows, parent, depth, 'empty', types ? 'No objects of the selected types' : 'No objects');
+  const withQueries = !!input.savedQueries && (input.queriesFor?.(cid) ?? true);
+  if (groups.size === 0 && !withQueries) return status(rows, parent, depth, 'empty', types ? 'No objects of the selected types' : 'No objects');
   for (const t of OBJECT_TYPE_ORDER) {
     const objs = groups.get(t);
     if (!objs) continue;
@@ -248,6 +269,33 @@ function addFolders(rows: TreeRow[], input: TreeInput, cid: string, db: string |
     if (!open) continue;
     for (const o of objs) addObject(rows, input, cid, db, schema, o, depth + 1);
   }
+  if (withQueries) addQueries(rows, input, cid, db, schema, depth);
+}
+
+/** The schema's "Queries" folder (Navicat): the queries saved into it, by name. */
+function addQueries(rows: TreeRow[], input: TreeInput, cid: string, db: string | null, schema: string, depth: number) {
+  const cq = input.savedQueries?.[cid];
+  const list = cq ? cq.items.filter((q) => (q.database ?? '') === (db ?? '') && (q.schema ?? '') === schema) : [];
+  const fid = nodeId.queries(cid, db, schema);
+  const open = input.expanded.has(fid);
+  rows.push({
+    id: fid, kind: 'qfolder', depth, label: 'Queries', expandable: true, expanded: open, connectionId: cid, database: db, schema,
+    count: list.length || undefined,
+  });
+  if (!open) return;
+  if (!list.length) {
+    if (!cq || cq.status === 'loading') return status(rows, fid, depth + 1, 'loading', 'Loading queries…');
+    if (cq.status === 'error') return status(rows, fid, depth + 1, 'error', cq.error ?? 'Failed to load the saved queries');
+    return status(rows, fid, depth + 1, 'empty', 'No saved queries');
+  }
+  for (const q of list) rows.push(queryRow(cid, db, schema, q, depth + 1));
+}
+
+function queryRow(cid: string, db: string | null, schema: string, q: SavedQuery, depth: number, match?: number[]): TreeRow {
+  return {
+    id: nodeId.savedQuery(cid, q.id), kind: 'query', depth, label: q.name, expandable: false, expanded: false, connectionId: cid, database: db,
+    schema, savedQuery: q, match,
+  };
 }
 
 function fkColumns(o: CatalogObject): Set<string> {
@@ -289,6 +337,14 @@ interface Hit {
   m: number[] | undefined;
   score: number;
   cols?: Map<string, number[]>;
+}
+
+interface QueryHit {
+  db: string | null;
+  schema: string;
+  q: SavedQuery;
+  m: number[];
+  score: number;
 }
 
 const MAX_HITS_PER_CONNECTION = 500;
@@ -344,31 +400,44 @@ function buildFiltered(input: TreeInput): TreeRow[] {
         }
       }
     }
+    // Saved queries match by name too (shown after the objects of their schema).
+    const qhits: QueryHit[] = [];
+    if (input.savedQueries && (input.queriesFor?.(c.id) ?? true)) {
+      for (const q of input.savedQueries[c.id]?.items ?? []) {
+        const m = fuzzyMatchLower(pattern, q.name, q.name.toLowerCase());
+        if (m && m.score > 0) qhits.push({ db: q.database, schema: q.schema ?? '', q, m: m.positions, score: m.score });
+      }
+    }
+    const total = hits.length + qhits.length;
     const hintsNeeded = unloaded.length > 0 && !!input.conns[c.id];
-    if (!connMatch && hits.length === 0 && !hintsNeeded) continue;
-    if (!connMatch && hits.length === 0 && hintsNeeded && !input.expanded.has(nodeId.conn(c.id))) continue;
+    if (!connMatch && total === 0 && !hintsNeeded) continue;
+    if (!connMatch && total === 0 && hintsNeeded && !input.expanded.has(nodeId.conn(c.id))) continue;
     rows.push({
-      id: nodeId.conn(c.id), kind: 'connection', depth: 0, label: c.name, expandable: true, expanded: hits.length > 0 || hintsNeeded,
-      connectionId: c.id, match: connMatch?.positions, busy: isBusy(input, c.id), count: hits.length || undefined,
+      id: nodeId.conn(c.id), kind: 'connection', depth: 0, label: c.name, expandable: true, expanded: total > 0 || hintsNeeded,
+      connectionId: c.id, match: connMatch?.positions, busy: isBusy(input, c.id), count: total || undefined,
     });
     hits.sort((a, b) => b.score - a.score || a.o.n.localeCompare(b.o.n));
-    const groups = new Map<string, Hit[]>();
-    for (const h of hits.slice(0, MAX_HITS_PER_CONNECTION)) {
-      const k = `${h.db ?? ''}\u0001${h.schema}`;
+    qhits.sort((a, b) => b.score - a.score || a.q.name.localeCompare(b.q.name));
+    const groups = new Map<string, { db: string | null; schema: string; objects: Hit[]; queries: QueryHit[] }>();
+    const groupOf = (db: string | null, schema: string) => {
+      const k = `${db ?? ''}\u0001${schema}`;
       let g = groups.get(k);
-      if (!g) groups.set(k, (g = []));
-      g.push(h);
-    }
+      if (!g) groups.set(k, (g = { db, schema, objects: [], queries: [] }));
+      return g;
+    };
+    for (const h of hits.slice(0, MAX_HITS_PER_CONNECTION)) groupOf(h.db, h.schema).objects.push(h);
+    for (const h of qhits.slice(0, MAX_HITS_PER_CONNECTION)) groupOf(h.db, h.schema).queries.push(h);
     for (const g of groups.values()) {
-      const { db, schema } = g[0];
+      const { db, schema } = g;
       const sid = nodeId.schema(c.id, db, schema);
       rows.push({
-        id: sid, kind: 'schema', depth: 1, label: db && db !== schema ? `${db} · ${schema}` : schema, expandable: true, expanded: true,
-        connectionId: c.id, database: db, schema, count: g.length,
+        id: sid, kind: 'schema', depth: 1, label: db && db !== schema ? (schema ? `${db} · ${schema}` : db) : schema, expandable: true, expanded: true,
+        connectionId: c.id, database: db, schema, count: g.objects.length + g.queries.length,
       });
-      for (const h of g) {
+      for (const h of g.objects) {
         addObject(rows, input, c.id, db, schema, h.o, 2, h.m, h.cols ? { forceOpen: true, onlyColumns: h.cols } : {});
       }
+      for (const h of g.queries) rows.push(queryRow(c.id, db, schema, h.q, 2, h.m));
     }
     if (hits.length > MAX_HITS_PER_CONNECTION) {
       status(rows, nodeId.conn(c.id), 1, 'hint', `${(hits.length - MAX_HITS_PER_CONNECTION).toLocaleString()} more — refine the filter`);

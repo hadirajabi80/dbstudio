@@ -13,6 +13,7 @@ import { createLogsHandlers } from './m2/logs';
 import { createMongoHandlers } from './m2/mongo';
 import { createRedisHandlers } from './m2/redis';
 import { createObjectsHandlers } from './objects';
+import { createSavedQueriesHandlers } from './savedQueries';
 import { createSearchHandlers } from './search';
 
 const P = '*/api/v1';
@@ -228,6 +229,7 @@ export function createHandlers(engine: MockEngine) {
 
     // M1.5: explain, describe, designer, query export
     ...createObjectsHandlers(engine, ok), // WP3 object browser
+    ...createSavedQueriesHandlers(engine, ok), // queries saved into schemas
     ...createM15Handlers(engine),
 
     // M2 (docs/PLAN-M2.md): streams/sources/jobs framework, then the feature mocks (mocks/m2/*.ts, owned per package)

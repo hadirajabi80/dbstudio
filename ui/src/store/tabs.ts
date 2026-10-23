@@ -36,6 +36,20 @@ export interface ConsoleTab {
   maxRows: number | null;
   /** Set for F4 "Edit:" consoles (designer/open.ts openEditScript). */
   edit?: ConsoleEdit | null;
+  /**
+   * The saved query this console edits ("Query: name"): Ctrl+S writes the text back to it instead of a .sql file.
+   * `savedText` is then the query's text as last loaded or saved.
+   */
+  savedQuery?: SavedQueryBinding | null;
+}
+
+/** A console bound to a saved query (components/SavedQueries). */
+export interface SavedQueryBinding {
+  id: string;
+  connectionId: string;
+  database: string | null;
+  schema: string | null;
+  name: string;
 }
 
 export interface ObjectTab {
@@ -145,6 +159,11 @@ interface TabsState extends GroupsState {
   rename(id: string, title: string): void;
   /** Mark a console as the "Edit:" script of an object (null: an ordinary console again). */
   setEdit(id: string, edit: ConsoleEdit | null): void;
+  /**
+   * Bind a console to a saved query (null: an ordinary console again). `savedText` (default: the current text) is the
+   * "unsaved changes" baseline; `title` defaults to "Query: name".
+   */
+  bindSavedQuery(id: string, binding: SavedQueryBinding | null, opts?: { savedText?: string; title?: string }): void;
   restore(data: WorkspaceData, opts?: RestoreOptions): void;
   serialize(): WorkspaceData;
 
@@ -435,7 +454,8 @@ export const useTabs = create<TabsState>((set, get) => {
 
     markSaved(id, filePath, title) {
       const t = get().tabs.find((x) => x.id === id);
-      if (t?.kind === 'console') patch(id, { savedText: t.text, filePath, ...(title ? { title } : {}) });
+      // Saved to a file (Save as…): the console is the file's from now on, no longer a saved query's.
+      if (t?.kind === 'console') patch(id, { savedText: t.text, filePath, ...(title ? { title } : {}), ...(filePath && t.savedQuery ? { savedQuery: null } : {}) });
     },
 
     setConnection(id, connectionId, database = null) {
@@ -461,6 +481,16 @@ export const useTabs = create<TabsState>((set, get) => {
     setEdit(id, edit) {
       const t = get().tabs.find((x) => x.id === id);
       if (t?.kind === 'console') patch(id, { edit });
+    },
+
+    bindSavedQuery(id, binding, opts = {}) {
+      const t = get().tabs.find((x) => x.id === id);
+      if (t?.kind !== 'console') return;
+      if (!binding) {
+        patch(id, { savedQuery: null, savedText: t.filePath ? t.savedText : '' });
+        return;
+      }
+      patch(id, { savedQuery: binding, savedText: opts.savedText ?? t.text, title: opts.title ?? savedQueryTitle(binding.name), filePath: null });
     },
 
     restore(data, opts = {}) {
@@ -645,9 +675,14 @@ useTabs.subscribe((s) => {
 });
 
 export function isDirty(t: Tab): boolean {
-  // Consoles are persisted in the workspace automatically; only file-backed tabs can be "unsaved".
+  // Consoles are persisted in the workspace automatically; only file-backed tabs (and saved queries) can be "unsaved".
   if (t.kind === 'view') return !!t.dirty;
-  return t.kind === 'console' && t.filePath !== null && t.text !== t.savedText;
+  return t.kind === 'console' && (t.filePath !== null || !!t.savedQuery) && t.text !== t.savedText;
+}
+
+/** Title of a console bound to a saved query. */
+export function savedQueryTitle(name: string): string {
+  return `Query: ${name}`;
 }
 
 export function useActiveTab(): Tab | undefined {

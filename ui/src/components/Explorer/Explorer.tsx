@@ -1,5 +1,5 @@
 import {
-  ChevronDown, ChevronRight, ChevronsDownUp, Circle, Columns3, Database, Folder, LoaderCircle, Lock, PanelsTopLeft, Plus, RefreshCw,
+  ChevronDown, ChevronRight, ChevronsDownUp, Circle, Columns3, Database, FileCode2, Folder, LoaderCircle, Lock, PanelsTopLeft, Plus, RefreshCw,
   Search, SquareTerminal, Unplug, X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
@@ -13,6 +13,7 @@ import { isTabular, qualifiedName } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
 import { getSourceModule, useSourceModules } from '../../lib/sources';
 import { dialectOf, kindOf, providerKind, useConnections } from '../../store/connections';
+import { useSavedQueries } from '../../store/savedQueries';
 import { useSourceClients } from '../../store/sourceClients';
 import { connectionActivity, useSessions, type ConnectionActivity } from '../../store/sessions';
 import { connColorCss, connColorName } from '../../theme/connColors';
@@ -22,8 +23,9 @@ import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { activityTitle } from '../common/text';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { contextMenu } from '../layout/commandMenu';
+import { savedQueryTooltip } from '../SavedQueries/model';
 import { activeChips, ALL_CONNECTIONS, chipsFor, TYPE_CHIPS, useExplorer } from './explorerStore';
-import { buildTree, databasesOf, isSourceConnection, nodeId, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
+import { buildTree, databasesOf, isSourceConnection, nodeId, queriesShown, refOf, singleSchema, typesOfChips, type TreeRow } from './tree';
 
 export { useExplorer } from './explorerStore';
 
@@ -56,6 +58,8 @@ function useLazyLoads(connections: ConnectionProfile[]) {
         modules[c.providerId]?.ensureLoaded?.(c, expanded);
         continue;
       }
+      // The schemas' "Queries" folders: the connection's saved queries (one request per connection).
+      void useSavedQueries.getState().ensure(c.id);
       const cc = conns[c.id];
       if (!cc || cc.status === 'idle') {
         void cat.loadDatabases(c.id);
@@ -108,6 +112,11 @@ export function targetOfRow(r: TreeRow): CommandTarget | null {
   if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') {
     return { kind: 'container', connectionId: r.connectionId, database: r.database ?? null, schema: r.schema ?? null, objectType: r.kind === 'folder' ? r.objectType : undefined };
   }
+  if (r.kind === 'qfolder') return { kind: 'container', connectionId: r.connectionId, database: r.database ?? null, schema: r.schema ?? null, queries: true };
+  if (r.kind === 'query' && r.savedQuery) {
+    const q = r.savedQuery;
+    return { kind: 'savedQuery', connectionId: q.connectionId, database: q.database, schema: q.schema, id: q.id, name: q.name };
+  }
   return null;
 }
 
@@ -118,6 +127,8 @@ export function contextMenuIdOf(r: TreeRow): string | null {
   if (r.kind === 'connection') return r.connectionId && kindOf(r.connectionId) !== 'relational' ? 'explorer.sourceConnection' : 'explorer.connection';
   if (r.kind === 'source') return r.source ? getSourceModule(r.source.providerId)?.contextMenuId(r) ?? null : null;
   if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') return 'explorer.container';
+  if (r.kind === 'qfolder') return 'explorer.queries';
+  if (r.kind === 'query') return 'explorer.savedQuery';
   if (r.kind === 'object' || r.kind === 'column') {
     const t = r.objectType;
     if (t === 'table') return 'explorer.table';
@@ -144,12 +155,16 @@ function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
     else toggle(r);
     return;
   }
+  if (r.kind === 'query') {
+    runCommand('queries.open', targetOfRow(r));
+    return;
+  }
   if (r.kind === 'object' || r.kind === 'column') {
     const t = targetOfRow(r);
     if (!t || t.kind !== 'object') return;
     if (r.kind === 'object' && isTabular(t.ref.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
     activateObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
-  } else if ((r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') && hasCommand('objects.open') && runCommand('objects.open', targetOfRow(r))) {
+  } else if ((r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder' || r.kind === 'qfolder') && hasCommand('objects.open') && runCommand('objects.open', targetOfRow(r))) {
     if (!r.expanded) toggle(r, true); // WP3: Enter / double-click shows the Objects tab of the node (and expands it)
   } else toggle(r);
 }
@@ -173,6 +188,7 @@ export function Explorer() {
   const sessions = useSessions((s) => s.sessions);
   const sourceVersion = useSourceModules((s) => s.version);
   const sourceClients = useSourceClients((s) => s.clients);
+  const savedQueries = useSavedQueries((s) => s.byConn);
   useLazyLoads(connections);
 
   const chips = activeChips({ chips: chipsMap, chipScope });
@@ -183,12 +199,13 @@ export function Explorer() {
       return cache.get(cid)!;
     };
   }, [chipsMap, chipScope]);
+  const queriesFor = useMemo(() => (cid: string) => queriesShown(chipsFor({ chips: chipsMap, chipScope }, cid)), [chipsMap, chipScope]);
 
   const rows = useMemo(
-    () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns }),
+    () => buildTree({ connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns, savedQueries, queriesFor }),
     // sourceVersion: source modules re-render their subtrees through notifySourceTreeChanged().
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns, sourceVersion],
+    [connections, conns, dbs, expanded, collapsedFolders, filter, typesFor, searchColumns, sourceVersion, savedQueries, queriesFor],
   );
   // One definition of "connected" (shared with the status bar): an open session or a loaded catalog.
   const activityOf = useMemo(() => {
@@ -287,6 +304,10 @@ export function Explorer() {
       // Drop… asks first (statement preview, Cancel focused).
       e.preventDefault();
       runCommand('explorer.drop', targetOfRow(r));
+    } else if (e.key === 'Delete' && r && r.kind === 'query') {
+      // Delete query… asks first.
+      e.preventDefault();
+      runCommand('queries.delete', targetOfRow(r));
     }
     else if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && r) {
       e.preventDefault();
@@ -363,7 +384,7 @@ export function Explorer() {
                   else listRef.current?.focus();
                 } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
                   e.preventDefault();
-                  const r = rows.find((x) => x.kind === 'object') ?? rows[0];
+                  const r = rows.find((x) => x.kind === 'object' || x.kind === 'query') ?? rows[0];
                   select(r);
                   listRef.current?.focus();
                   if (e.key === 'Enter' && r) activateRow(r, toggleRow);
@@ -387,7 +408,7 @@ export function Explorer() {
           </div>
           <div className="chip-row" role="group" aria-label={`Object types${scopedName ? ` in ${scopedName}` : ' in every connection'}`}>
             {TYPE_CHIPS.map((c) => (
-              <button key={c.id} className={`chip${chips.includes(c.id) ? ' on' : ''}`} aria-pressed={chips.includes(c.id)} onClick={() => ex().toggleChip(c.id)}>
+              <button key={c.id} className={`chip${chips.includes(c.id) ? ' on' : ''}`} aria-pressed={chips.includes(c.id)} title={c.title} onClick={() => ex().toggleChip(c.id)}>
                 {c.label}
               </button>
             ))}
@@ -488,13 +509,14 @@ interface RowProps {
 function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onActivate, onMenu }: RowProps) {
   const active = !!activity;
   const conn = useConnections((s) => (r.kind === 'connection' ? s.connections.find((c) => c.id === r.connectionId) : undefined));
-  const draggable = r.kind === 'object' || r.kind === 'column';
+  const draggable = r.kind === 'object' || r.kind === 'column' || r.kind === 'query';
   let icon: ReactNode = null;
   if (r.kind === 'connection' && conn) icon = <ProviderLogo providerId={conn.providerId} size={16} />;
   else if (r.kind === 'cfolder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
   else if (r.kind === 'database') icon = <DatabaseIcon />;
   else if (r.kind === 'schema') icon = <span className="schema-glyph" aria-hidden="true">S</span>;
-  else if (r.kind === 'folder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
+  else if (r.kind === 'folder' || r.kind === 'qfolder') icon = <Folder size={16} strokeWidth={1.5} className="obj-icon obj-folder" />;
+  else if (r.kind === 'query') icon = <FileCode2 size={16} strokeWidth={1.5} className="obj-icon obj-query" aria-hidden="true" />;
   else if (r.kind === 'object' && r.objectType) icon = <ObjectIcon type={r.objectType} />;
   else if (r.kind === 'column') icon = <ColumnIcon pk={r.column?.pk} fk={r.column?.fk} />;
   else if (r.kind === 'source') {
@@ -510,7 +532,8 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
   const title =
     r.kind === 'column' ? `${r.label} ${r.detail ?? ''}${r.column?.pk ? ' · primary key' : ''}${r.column?.fk ? ' · foreign key' : ''}`
       : r.kind === 'connection' && conn ? `${conn.name}${conn.color ? ` (${connColorName(conn.color)})` : ''}${conn.readOnly ? ' · read-only' : ''}`
-        : r.object?.cm ?? undefined;
+        : r.kind === 'query' && r.savedQuery ? savedQueryTooltip(r.savedQuery.name, r.savedQuery.description, r.savedQuery.sql)
+          : r.object?.cm ?? undefined;
 
   return (
     <div
@@ -526,6 +549,12 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
       draggable={draggable}
       onDragStart={(e) => {
         if (!r.connectionId) return;
+        if (r.kind === 'query' && r.savedQuery) {
+          // A saved query dropped into an editor inserts its text.
+          e.dataTransfer.setData('text/plain', r.savedQuery.sql);
+          e.dataTransfer.effectAllowed = 'copy';
+          return;
+        }
         const ref = refOf(r);
         let text = r.label;
         if (r.kind === 'object' && ref) {
@@ -539,13 +568,13 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
       onMouseDown={() => onSelect()}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('.tree-twisty, .tree-row-actions')) return;
-        if (r.kind === 'cfolder' || r.kind === 'folder' || r.kind === 'database' || r.kind === 'schema' || (r.kind === 'source' && r.expandable)) onToggle();
+        if (r.kind === 'cfolder' || r.kind === 'folder' || r.kind === 'qfolder' || r.kind === 'database' || r.kind === 'schema' || (r.kind === 'source' && r.expandable)) onToggle();
         if (r.kind === 'status' && r.status === 'load') onActivate();
       }}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest('.tree-row-actions')) return;
-        if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column' || (r.kind === 'source' && !r.expandable)) onActivate();
-        else if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder') onActivate(); // WP3: the Objects tab
+        if (r.kind === 'connection' || r.kind === 'object' || r.kind === 'column' || r.kind === 'query' || (r.kind === 'source' && !r.expandable)) onActivate();
+        else if (r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder' || r.kind === 'qfolder') onActivate(); // WP3: the Objects tab
       }}
       onContextMenu={onMenu}
       title={title}
@@ -575,7 +604,7 @@ function TreeRowView({ row: r, top, selected, activity, onSelect, onToggle, onAc
         />
       )}
       {r.detail && <span className="tree-detail">{r.detail}</span>}
-      {r.count !== undefined && r.kind !== 'object' && <span className="tree-count">{r.count.toLocaleString()}</span>}
+      {r.count !== undefined && r.kind !== 'object' && r.kind !== 'query' && <span className="tree-count">{r.count.toLocaleString()}</span>}
       {r.kind === 'connection' && r.connectionId && (
         <span className="tree-row-actions">
           {conn && providerKind(conn.providerId) !== 'relational' ? (
