@@ -331,6 +331,51 @@
   background: var(--bg-sunken);
 }
 
+/* ---------- compact tiles (small icons, many per row) ---------- */
+.ol-mini {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: default;
+  user-select: none;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.ol-mini:hover {
+  background: var(--bg-hover);
+}
+.ol-mini.selected {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+.ol-body:focus .ol-mini.selected {
+  border-color: var(--accent);
+}
+.ol-mini-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ol-tint) 14%, transparent);
+  flex-shrink: 0;
+}
+.ol-mini-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--fs);
+}
+.ol-mini-schema {
+  color: var(--text-muted);
+}
+
 /* ---------- loading / status ---------- */
 .ol-skeleton {
   display: flex;

@@ -2,7 +2,7 @@
 // counts, sizes and dates, a live filter, type groups with counts, a list (sortable, virtualized) and a card grid.
 // Enter / double-click opens an object like the explorer does; the context menu is the explorer's.
 import {
-  ArrowDown, ArrowUp, ChevronDown, Database, FolderOpen, LayoutGrid, List, LoaderCircle, PencilRuler, Play, Plus, RefreshCw, Search, SearchX,
+  ArrowDown, ArrowUp, ChevronDown, Database, FolderOpen, Grid3x3, LayoutGrid, List, LoaderCircle, PencilRuler, Play, Plus, RefreshCw, Search, SearchX,
   Trash2, TriangleAlert, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
@@ -35,6 +35,10 @@ const ROW_H = 32;
 const CARD_H = 72;
 const CARD_MIN_W = 228;
 const CARD_GAP = 10;
+// Compact layout: small icon + name tiles, as many per row as fit (Navicat's small-icons view).
+const TILE_H = 30;
+const TILE_MIN_W = 184;
+const TILE_GAP = 4;
 const OVERSCAN = 6;
 
 const ROUTINES = new Set<CatalogObjectType>(['proc', 'func', 'tablefunc', 'package']);
@@ -163,8 +167,12 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
   }, [cid, database, targetOf]);
 
   // ---------------------------------------------------------------- layout math (virtualization)
-  const cols = layout === 'grid' ? Math.max(1, Math.floor((size.width - 2 * 14 + CARD_GAP) / (CARD_MIN_W + CARD_GAP))) : 1;
-  const lineH = layout === 'grid' ? CARD_H + CARD_GAP : ROW_H;
+  const tiled = layout !== 'list';
+  const pad = layout === 'grid' ? 14 : layout === 'compact' ? 10 : 0;
+  const gap = layout === 'grid' ? CARD_GAP : TILE_GAP;
+  const minW = layout === 'grid' ? CARD_MIN_W : TILE_MIN_W;
+  const cols = tiled ? Math.max(1, Math.floor((size.width - 2 * pad + gap) / (minW + gap))) : 1;
+  const lineH = layout === 'grid' ? CARD_H + CARD_GAP : layout === 'compact' ? TILE_H + TILE_GAP : ROW_H;
   const lines = Math.ceil(shown.length / cols);
   const first = Math.max(0, Math.floor(scrollTop / lineH) - OVERSCAN);
   const last = Math.min(lines, Math.ceil((scrollTop + size.height) / lineH) + OVERSCAN);
@@ -172,7 +180,7 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
   const reveal = (index: number) => {
     const el = bodyRef.current;
     if (!el || index < 0) return;
-    const top = Math.floor(index / cols) * lineH + (layout === 'grid' ? 14 : 0);
+    const top = Math.floor(index / cols) * lineH + pad;
     if (top < el.scrollTop) el.scrollTop = top;
     else if (top + lineH > el.scrollTop + el.clientHeight) el.scrollTop = top + lineH - el.clientHeight;
   };
@@ -217,8 +225,8 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); move(i < 0 ? 0 : i + cols); break;
       case 'ArrowUp': e.preventDefault(); if (i <= 0 && layout === 'list') searchRef.current?.focus(); else move(i - cols); break;
-      case 'ArrowRight': if (layout === 'grid') { e.preventDefault(); move(i + 1); } break;
-      case 'ArrowLeft': if (layout === 'grid') { e.preventDefault(); move(i - 1); } break;
+      case 'ArrowRight': if (tiled) { e.preventDefault(); move(i + 1); } break;
+      case 'ArrowLeft': if (tiled) { e.preventDefault(); move(i - 1); } break;
       case 'Home': e.preventDefault(); move(0); break;
       case 'End': e.preventDefault(); move(shown.length - 1); break;
       case 'PageDown': e.preventDefault(); move(i + page); break;
@@ -331,6 +339,40 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
           secondary={group !== 'all' ? { label: 'Show all objects', onClick: () => patch({ group: 'all' }) } : undefined}
         />
       );
+    }
+    if (layout === 'compact') {
+      const tiles: ReactNode[] = [];
+      for (let i = first * cols; i < Math.min(shown.length, last * cols); i++) {
+        const it = shown[i];
+        const k = itemKey(it);
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const meta = [OBJECT_TYPE_SINGULAR[it.type], it.rowCount !== null ? `${formatRowsShort(it.rowCount)} rows` : null, it.sizeBytes !== null ? formatSize(it.sizeBytes) : null]
+          .filter(Boolean).join(' · ');
+        tiles.push(
+          <div
+            key={k}
+            data-key={k}
+            role="option"
+            aria-selected={k === selected}
+            className={`ol-mini${k === selected ? ' selected' : ''}`}
+            style={{ top: pad + row * lineH, left: `calc(${pad}px + ${col} * ((100% - ${2 * pad}px - ${(cols - 1) * gap}px) / ${cols} + ${gap}px))`, width: `calc((100% - ${2 * pad}px - ${(cols - 1) * gap}px) / ${cols})`, height: TILE_H }}
+            onMouseDown={() => setSelected(k)}
+            onDoubleClick={() => open(it)}
+            onContextMenu={(e) => menuAt(it, e)}
+            title={`${it.schema ? `${it.schema}.` : ''}${it.name}\n${meta}${it.comment ? `\n${it.comment}` : ''}`}
+          >
+            <span className={`ol-mini-icon ol-tint-${groupOf(it.type)}`}>
+              <ObjectIcon type={it.type} size={14} />
+            </span>
+            <span className="ol-mini-name">
+              {multiSchema && it.schema ? <span className="ol-mini-schema">{it.schema}.</span> : null}
+              {it.name}
+            </span>
+          </div>,
+        );
+      }
+      return <div className="ol-canvas" style={{ height: 2 * pad + lines * lineH - gap }}>{tiles}</div>;
     }
     if (layout === 'grid') {
       const cards: ReactNode[] = [];
@@ -452,6 +494,9 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
           </button>
           <button className={layout === 'grid' ? 'on' : ''} aria-pressed={layout === 'grid'} title="Cards" aria-label="Cards" onClick={() => patch({ layout: 'grid' })}>
             <LayoutGrid size={14} />
+          </button>
+          <button className={layout === 'compact' ? 'on' : ''} aria-pressed={layout === 'compact'} title="Small icons" aria-label="Small icons" onClick={() => patch({ layout: 'compact' })}>
+            <Grid3x3 size={14} />
           </button>
         </div>
         <button className="icon-btn sm" title="Refresh" aria-label="Refresh" onClick={() => setReload((n) => n + 1)}>

@@ -5,7 +5,7 @@ import { resolveParams } from '../components/ParamsDialog/ParamsDialog';
 import { findDestructive } from '../lib/classify';
 import { serializeRows, type CopyFormat } from '../lib/serialize';
 import { computeView } from '../lib/filter';
-import { selectTopSql } from '../lib/sql';
+import { qualifiedName, selectTopSql } from '../lib/sql';
 import { getPlatform } from '../platform';
 import { effectiveViewportHeight } from './zoom';
 import { dbKey, useCatalog } from '../store/catalog';
@@ -24,7 +24,8 @@ import { pluralize } from '../components/common/text';
 import { getTabView } from '../components/layout/tabViews';
 import { runEditTab } from '../designer/editRun';
 import { editSessionOf, peekEditSession, rememberEdit } from '../designer/editSession';
-import { EDIT_RUN_STOP_REASON, useDesignerUi } from '../designer/store';
+import { EDIT_RUN_STOP_REASON, useDesignerUi, type EditSession } from '../designer/store';
+import { existingObjectNamed, newObjectRef } from '../designer/newObject';
 import { getEditor } from './editors';
 import { interceptRoutineRun, routineEditOf } from '../components/ExecuteRoutine/intercept';
 import { runCommand } from '../commands/registry';
@@ -192,13 +193,32 @@ export function runActive(label: RunLabel, opts: { asScript?: boolean } = {}): v
     else interceptRoutineRun(tabId, label);
     return;
   }
-  if (peekEditSession(tabId)) {
-    void runEditTab(tabId).then((handled) => {
-      if (!handled) runTargetOf(tabId, label);
+  const edit = peekEditSession(tabId);
+  if (edit) {
+    void runEditTab(tabId).then(async (handled) => {
+      if (handled) return;
+      // A New procedure/function console holds CREATE OR ALTER / OR REPLACE: running it must not overwrite an
+      // existing object that has the same name (Save refuses it too).
+      if (edit.isNew && label !== 'selection' && (await newObjectNameTaken(tabId))) return;
+      runTargetOf(tabId, label);
     });
     return;
   }
   runTargetOf(tabId, label);
+}
+
+/** For a New-object console: true (and an error toast) when the script's object name is already taken. */
+async function newObjectNameTaken(tabId: string): Promise<boolean> {
+  const session = editSessionOf(tabId);
+  const tab = consoleTab(tabId);
+  if (!session?.isNew || !tab || tab.connectionId !== session.connectionId) return false;
+  const edit = { ...session, ref: newObjectRef(getEditor(tabId)?.getValue() ?? tab.text, session) };
+  rememberEdit(tabId, edit);
+  const taken = await existingObjectNamed(edit);
+  if (!taken) return false;
+  toast('error', `${qualifiedName(edit.ref, edit.dialect)} already exists`,
+    `A ${OBJECT_NOUN[taken] ?? taken} with this name is already in the database, so nothing was changed. Rename it in the script, or open the existing one with Edit (F4).`);
+  return true;
 }
 
 function runTargetOf(tabId: string, label: RunLabel): void {
@@ -524,10 +544,15 @@ export const OBJECT_NOUN: Record<string, string> = {
  * file stays on Save as (Ctrl+Shift+S).
  */
 export async function saveEditToDatabase(tabId: string): Promise<void> {
-  const edit = editSessionOf(tabId);
+  const session = editSessionOf(tabId);
   const tab = consoleTab(tabId);
-  if (!edit || !tab) return;
+  if (!session || !tab) return;
+  // A new object (wizard console): its name comes from the script, which the user may have changed.
+  const edit = session.isNew ? { ...session, ref: newObjectRef(getEditor(tabId)?.getValue() ?? tab.text, session) } : session;
+  if (session.isNew) rememberEdit(tabId, edit);
   const noun = OBJECT_NOUN[edit.ref.type] ?? edit.ref.type;
+  // CREATE OR ALTER / CREATE OR REPLACE would overwrite an object that already has this name: refuse instead.
+  if (edit.isNew && (await newObjectNameTaken(tabId))) return;
   if (tab.connectionId !== edit.connectionId) {
     toast('warning', `This console no longer points at ${edit.ref.name}'s connection`, 'Switch the connection back to save, or use Save as… to write a .sql file.');
     return;
@@ -548,13 +573,18 @@ export async function saveEditToDatabase(tabId: string): Promise<void> {
   const settle = (e: ExecutionState | undefined): boolean => {
     if (!e || isRunning(e)) return false;
     if (e.status === 'ok') {
-      toast('success', `Saved ${noun} ${edit.ref.name}`, 'The changes were applied to the database.');
+      if (edit.isNew) {
+        toast('success', `Created ${noun} ${edit.ref.name}`, `${displayShortcut('Mod+S')} saves further changes to the database.`);
+        promoteNewEdit(tabId, edit);
+      } else {
+        toast('success', `Saved ${noun} ${edit.ref.name}`, 'The changes were applied to the database.');
+      }
       // Only the object's schema, revalidated in place: the explorer keeps its rows (no full refresh, no flash).
       void useCatalog.getState().revalidate(edit.connectionId, catalogDatabase(edit.connectionId, edit.ref.database ?? edit.database), [edit.ref.schema]);
       // New "Compare with server" baseline.
       void api.ddl(edit.connectionId, edit.database, edit.ref)
-        .then((d) => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, serverDdl: d.ddl, savedText }); })
-        .catch(() => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, savedText }); });
+        .then((d) => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, isNew: false, serverDdl: d.ddl, savedText }); })
+        .catch(() => { if (peekEditSession(tabId)) rememberEdit(tabId, { ...edit, isNew: false, savedText }); });
     } else if (e.status === 'error') {
       toast('error', `${edit.ref.name} was not saved`, 'The database reported an error; see Messages for the line.');
     }
@@ -562,6 +592,13 @@ export async function saveEditToDatabase(tabId: string): Promise<void> {
   };
   if (settle(useResults.getState().executions[id])) return;
   const unsub = useResults.subscribe((s) => { if (settle(s.executions[id])) unsub(); });
+}
+
+/** After a new object was created: an ordinary "Edit:" console from now on (Run executes routines, Save alters). */
+export function promoteNewEdit(tabId: string, edit: EditSession): void {
+  rememberEdit(tabId, { ...edit, isNew: false });
+  const tab = consoleTab(tabId);
+  if (tab?.title.startsWith('New: ')) useTabs.getState().rename(tabId, `Edit: ${edit.ref.name}`);
 }
 
 export async function saveActiveFile(saveAs = false): Promise<void> {

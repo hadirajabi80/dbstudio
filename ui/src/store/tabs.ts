@@ -18,6 +18,11 @@ export interface ConsoleEdit {
   serverDdl?: string;
   /** Editor text as opened or last saved to the database (the toolbar Save button's "unsaved changes" baseline). */
   savedText?: string;
+  /**
+   * A New procedure / function / package / trigger console: the object does not exist yet. Save creates it (the name
+   * is read back from the script, see designer/newObject.ts) and turns the console into an ordinary "Edit:" console.
+   */
+  isNew?: boolean;
 }
 
 /** Each console tab is bound to its own connection and database (several connections can be open at once). */

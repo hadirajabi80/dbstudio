@@ -21,6 +21,7 @@ import { showObjectsTab, useSettings } from '../../store/settings';
 import { isPinnedTab, useTabs, type ViewTab } from '../../store/tabs';
 import { useExplorer } from '../Explorer/explorerStore';
 import { DEFAULT_SORT, groupOf, type GroupFilter, type SortSpec } from './model';
+import type { ObjectsLayout } from './open';
 
 export const OBJECTS_HOME_VIEW = 'objectsHome';
 export const OBJECTS_HOME_ID = 'objects-home';
@@ -51,7 +52,7 @@ export interface ObjectsHomeState {
   highlight: HomeHighlight | null;
   /** The type filter chosen per scope (homeScopeKey). */
   groups: Record<string, GroupFilter>;
-  layout: 'list' | 'grid';
+  layout: ObjectsLayout;
   sort: SortSpec;
 }
 
@@ -72,7 +73,7 @@ export function homeStateOf(tab: Pick<ViewTab, 'state'> | undefined | null): Obj
     target,
     highlight: s.highlight && typeof s.highlight === 'object' && typeof s.highlight.name === 'string' ? s.highlight : null,
     groups: s.groups && typeof s.groups === 'object' ? s.groups : {},
-    layout: s.layout === 'grid' ? 'grid' : 'list',
+    layout: s.layout === 'grid' || s.layout === 'compact' ? s.layout : 'list',
     sort: s.sort && typeof s.sort === 'object' && typeof s.sort.key === 'string' ? s.sort : DEFAULT_SORT,
   };
 }
@@ -155,7 +156,7 @@ export function showInObjectsHome(target: CommandTarget): string | null {
 }
 
 /** The list's type filter (remembered for the scope), layout and sort (shared by every scope). */
-export function setHomeListOptions(scopeKey: string, p: { group?: GroupFilter; layout?: 'list' | 'grid'; sort?: SortSpec }): void {
+export function setHomeListOptions(scopeKey: string, p: { group?: GroupFilter; layout?: ObjectsLayout; sort?: SortSpec }): void {
   patchHome((s) => ({
     ...s,
     ...(p.group ? { groups: withGroup(s.groups, scopeKey, p.group) } : {}),

@@ -12,9 +12,12 @@ export interface ObjectsState {
   database: string | null;
   schema: string | null;
   group: GroupFilter;
-  layout: 'list' | 'grid';
+  layout: ObjectsLayout;
   sort: SortSpec;
 }
+
+/** list = sortable table; grid = cards with stats; compact = small icon + name tiles, many per row. */
+export type ObjectsLayout = 'list' | 'grid' | 'compact';
 
 export interface ObjectsScope {
   connectionId: string;

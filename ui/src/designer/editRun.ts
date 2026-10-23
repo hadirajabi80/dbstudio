@@ -16,9 +16,12 @@ import { toast, useUi } from '../store/ui';
 import { pluralize } from '../components/common/text';
 import { splitForApply } from './ddl';
 import { editSessionOf, rememberEdit } from './editSession';
+import { existingObjectNamed, newObjectRef } from './newObject';
 import { useDesignerUi } from './store';
 
 let seq = 0;
+
+const quoteSqliteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /** Object types whose SQLite edit script is DROP + CREATE (and therefore needs the atomic apply). */
 const ATOMIC_TYPES = new Set(['view', 'trigger']);
@@ -36,11 +39,23 @@ function store(exec: ExecutionState): void {
  * an edit (the caller runs it normally), true when it was handled (applied, failed and rolled back, or nothing to do).
  */
 export async function runEditTab(tabId: string): Promise<boolean> {
-  const edit = editSessionOf(tabId);
-  if (!edit || edit.dialect !== 'sqlite' || !ATOMIC_TYPES.has(edit.ref.type)) return false;
+  const session = editSessionOf(tabId);
+  if (!session || session.dialect !== 'sqlite' || !ATOMIC_TYPES.has(session.ref.type)) return false;
   const tab = useTabs.getState().tabs.find((t) => t.id === tabId);
+  // A New trigger console (wizard): the trigger's name comes from the script.
+  const edit = session.isNew && tab?.kind === 'console'
+    ? { ...session, ref: newObjectRef(getEditor(tabId)?.getValue() ?? tab.text, session) } : session;
   // The user pointed the console at another connection: it is an ordinary script now.
   if (tab?.kind !== 'console' || tab.connectionId !== edit.connectionId) return false;
+  if (edit.isNew) {
+    rememberEdit(tabId, edit);
+    // A new trigger must not replace an existing one of the same name.
+    const taken = await existingObjectNamed(edit);
+    if (taken) {
+      toast('error', `${edit.ref.name} already exists`, `A ${taken} with this name is already in the database, so nothing was saved. Rename it in the script, or open the existing one with Edit (F4).`);
+      return true;
+    }
+  }
   const r = useResults.getState();
   if (isRunning(r.executions[r.byTab[tabId]])) {
     toast('warning', 'A query is already running in this console');
@@ -49,6 +64,11 @@ export async function runEditTab(tabId: string): Promise<boolean> {
 
   const text = getEditor(tabId)?.getValue() ?? tab.text;
   const statements = splitForApply(text, 'sqlite');
+  // Saving again after the wizard's CREATE succeeded: SQLite has no CREATE OR REPLACE, so drop the previous version
+  // first (in the same transaction) unless the script already does.
+  if (!edit.isNew && statements.length && !new RegExp(String.raw`\bDROP\s+${edit.ref.type}\b`, 'i').test(text)) {
+    statements.unshift({ sql: `DROP ${edit.ref.type.toUpperCase()} IF EXISTS ${quoteSqliteIdent(edit.ref.name)}`, line: statements[0].line });
+  }
   if (!statements.length) {
     toast('info', 'Nothing to run');
     return true;
@@ -70,13 +90,17 @@ export async function runEditTab(tabId: string): Promise<boolean> {
         text: `Applied ${pluralize(batches.length, 'statement')} to ${edit.ref.type} ${name} in one transaction.` }),
       event({ type: 'exec.done', executionId: localId, sessionId: '', status: 'ok', elapsedMs: elapsed, resultSets: 0, rowsAffected: 0, txOpen: false }),
     ]));
-    toast('success', `Saved ${edit.ref.type} ${name}`, 'The script ran in one transaction.');
+    toast('success', `${edit.isNew ? 'Created' : 'Saved'} ${edit.ref.type} ${name}`, 'The script ran in one transaction.');
+    if (edit.isNew) {
+      rememberEdit(tabId, { ...edit, isNew: false });
+      if (tab.title.startsWith('New: ')) useTabs.getState().rename(tabId, `Edit: ${name}`);
+    }
     useConnections.getState().touch(edit.connectionId);
     // The stored definition changed: revalidate the object's schema in place (explorer/IntelliSense, no full refresh
     // and no flash) and the "Compare with server" baseline.
     void useCatalog.getState().revalidate(edit.connectionId, edit.database ?? edit.ref.database ?? null, [edit.ref.schema]);
     void api.ddl(edit.connectionId, edit.database, edit.ref)
-      .then((d) => { if (useDesignerUi.getState().edits[tabId]) rememberEdit(tabId, { ...edit, serverDdl: d.ddl }); })
+      .then((d) => { if (useDesignerUi.getState().edits[tabId]) rememberEdit(tabId, { ...edit, isNew: false, serverDdl: d.ddl }); })
       .catch(() => undefined);
   } catch (e) {
     const detail = isApiError(e, 'DDL_FAILED') ? (e.detail as DdlFailedDetail | undefined) : undefined;

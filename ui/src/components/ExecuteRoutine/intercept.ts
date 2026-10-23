@@ -13,7 +13,8 @@ import { useExecuteRoutine } from './store';
 export function routineEditOf(tabId: string | null | undefined): EditSession | undefined {
   if (!tabId) return undefined;
   const edit = peekEditSession(tabId);
-  if (!edit || !EXECUTABLE_TYPES.has(edit.ref.type) || edit.dialect === 'sqlite') return undefined;
+  // A routine that was never saved does not exist yet: Run runs the script as typed.
+  if (!edit || edit.isNew || !EXECUTABLE_TYPES.has(edit.ref.type) || edit.dialect === 'sqlite') return undefined;
   const tab = useTabs.getState().tabs.find((t) => t.id === tabId);
   return tab?.kind === 'console' && tab.connectionId === edit.connectionId ? edit : undefined;
 }

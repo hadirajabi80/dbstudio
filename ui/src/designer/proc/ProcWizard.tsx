@@ -3,13 +3,16 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { catalogDatabase, newConsole } from '../../app/actions';
+import type { CatalogObjectType } from '../../api/types';
+import { catalogDatabase, newConsole, OBJECT_NOUN } from '../../app/actions';
 import { Dialog } from '../../components/common/Dialog';
 import { Select } from '../../components/common/Select';
 import { useCatalog } from '../../store/catalog';
 import { dbKey } from '../../store/catalog';
 import { useTabs } from '../../store/tabs';
 import { toast } from '../../store/ui';
+import { rememberEdit } from '../editSession';
+import { catalogObjectNamed, foldName } from '../newObject';
 import { useDesignerUi, type WizardRequest } from '../store';
 import { insertSnippetInTab } from '../snippet';
 import {
@@ -18,6 +21,7 @@ import {
 } from './templates';
 
 const KIND_LABEL: Record<RoutineKind, string> = { procedure: 'Procedure', function: 'Function', package: 'Package', trigger: 'Trigger' };
+const OBJECT_TYPE_OF: Record<RoutineKind, CatalogObjectType> = { procedure: 'proc', function: 'func', package: 'package', trigger: 'trigger' };
 
 export function ProcWizard({ req }: { req: WizardRequest }) {
   const close = useDesignerUi((s) => s.closeWizard);
@@ -66,8 +70,15 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
   const memberMode = req.dialect === 'plsql' && pkgMember && (kind === 'procedure' || kind === 'function');
   const isRoutine = kind === 'procedure' || kind === 'function' || kind === 'package';
 
+  // The name must not belong to an existing object: the template's CREATE OR ALTER / OR REPLACE would overwrite it.
+  const typedName = name.trim() || defaultName(kind, req.dialect);
+  const taken = memberMode ? null : catalogObjectNamed({
+    connectionId: req.connectionId, database: req.database, dialect: req.dialect,
+    ref: { database: req.database, schema: schema || null, name: foldName(typedName, req.dialect), type: OBJECT_TYPE_OF[kind] },
+  });
+
   const create = async () => {
-    if (busy) return;
+    if (busy || taken) return;
     setBusy(true);
     try {
       const spec: WizardSpec = {
@@ -88,6 +99,11 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
       const id = newConsole(req.connectionId, req.database, '');
       useTabs.getState().rename(id, `New: ${memberMode ? pkgName : spec.name}`);
       void insertSnippetInTab(id, snippet);
+      // Ctrl+S creates the object in the database (not a .sql file); a package member edits the existing package.
+      const objectRef = memberMode
+        ? { database: req.database, schema: schema || null, name: pkgName, type: 'package' as const }
+        : { database: req.database, schema: schema || null, name: spec.name, type: OBJECT_TYPE_OF[kind] };
+      rememberEdit(id, { connectionId: req.connectionId, database: req.database, ref: objectRef, dialect: req.dialect, isNew: !memberMode });
       close();
     } catch (e) {
       toast('error', 'Could not prepare the template', errorMessage(e));
@@ -111,7 +127,7 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
           <button type="button" className="btn" onClick={close}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void create()}>
+          <button type="button" className="btn btn-primary" disabled={busy || !!taken} onClick={() => void create()}>
             Create
           </button>
         </>
@@ -149,7 +165,13 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
           Name
         </label>
         <div className="form-control">
-          <input ref={nameRef} id="dz-w-name" className="input mono" data-autofocus value={name} placeholder={defaultName(kind, req.dialect)} onChange={(e) => setName(e.target.value)} />
+          <input ref={nameRef} id="dz-w-name" className="input mono" data-autofocus value={name} placeholder={defaultName(kind, req.dialect)} onChange={(e) => setName(e.target.value)}
+            aria-invalid={!!taken} aria-describedby={taken ? 'dz-w-name-error' : undefined} />
+          {taken && (
+            <div className="form-error" id="dz-w-name-error" role="alert">
+              A {OBJECT_NOUN[taken] ?? taken} named {typedName} already exists{schema ? ` in ${schema}` : ''}. Choose another name.
+            </div>
+          )}
         </div>
         {req.dialect === 'plsql' && (kind === 'procedure' || kind === 'function') && (
           <>

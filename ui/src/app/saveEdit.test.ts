@@ -1,5 +1,6 @@
 // Ctrl+S in an F4 "Edit:" console saves the object to the database (SSMS / Navicat / DataGrip), not to a .sql file.
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { initCommands } from '../commands';
 import { runCommand } from '../commands/registry';
 import { useDesignerUi } from '../designer/store';
@@ -144,6 +145,53 @@ describe('Ctrl+S (file.save) in an object edit console', () => {
       useCatalog.setState({ refresh: realRefresh });
       mock.server.events.removeListener('request:start', listener);
     }
+  });
+
+  describe('New procedure / function consoles (wizard)', () => {
+    async function newTab(text: string): Promise<string> {
+      const cat = useCatalog.getState();
+      await cat.loadDatabases('c_shop');
+      await cat.ensureDefault('c_shop', 'main');
+      await cat.loadSchemas('c_shop', 'main');
+      const id = useTabs.getState().newConsole({ connectionId: 'c_shop', text, title: 'New: NewProcedure' });
+      useDesignerUi.getState().registerEdit(id, {
+        connectionId: 'c_shop', database: null, ref: { ...ref, name: 'NewProcedure' }, dialect: 'sqlite', isNew: true,
+      });
+      registerEditor(id, fakeEditor(text));
+      useTabs.getState().activate(id);
+      return id;
+    }
+
+    it('refuses to save over an existing object with the same name (nothing runs)', async () => {
+      const executes: string[] = [];
+      const listener = ({ request }: { request: Request }) => {
+        if (request.method === 'POST' && /\/sessions\/[^/]+\/execute$/.test(request.url)) executes.push(request.url);
+      };
+      mock.server.events.on('request:start', listener);
+      try {
+        const id = await newTab('CREATE OR ALTER PROCEDURE customers AS SELECT 1');
+        await runCommand('file.save');
+        await until(() => useUi.getState().toasts.some((t) => /already exists/.test(t.text)));
+        expect(executes).toHaveLength(0);
+        expect(useResults.getState().byTab[id]).toBeUndefined();
+        expect(useDesignerUi.getState().edits[id]?.isNew).toBe(true);
+      } finally {
+        mock.server.events.removeListener('request:start', listener);
+      }
+    });
+
+    it('creates an object with a free name, under the name typed in the script, and becomes an Edit: console', async () => {
+      // Like the real engine: no definition (404) for an object that does not exist yet.
+      mock.server.use(http.get('*/catalog/ddl', ({ request }) => (new URL(request.url).searchParams.get('name') === 'usp_brand_new'
+        ? HttpResponse.json({ error: { code: 'NOT_FOUND', message: 'Object main.usp_brand_new was not found.' } }, { status: 404 })
+        : undefined)));
+      const id = await newTab('CREATE OR ALTER PROCEDURE usp_brand_new AS SELECT 1');
+      await runCommand('file.save');
+      await until(() => useUi.getState().toasts.some((t) => t.text === 'Created procedure usp_brand_new'));
+      await until(() => useDesignerUi.getState().edits[id]?.isNew === false);
+      expect(useDesignerUi.getState().edits[id]?.ref.name).toBe('usp_brand_new');
+      expect(useTabs.getState().tabs.find((t) => t.id === id)?.title).toBe('Edit: usp_brand_new');
+    });
   });
 
   it('refuses when the console was pointed at another connection, and says how to save a file instead', async () => {
