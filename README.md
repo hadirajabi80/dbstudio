@@ -62,8 +62,10 @@ engine runs as a local sidecar and the React UI talks to it over authenticated H
   match, ↑/↓ and Enter open them at the line, and *Open in tab* keeps them next to your other tabs.
 - **Objects tab**: a permanent first tab, like Navicat's, that follows the explorer selection: a connection's
   databases or schemas as cards, a schema's tables (or views, procedures, functions when you pick that folder) with
-  type filters, live search, counts and stats (rows, size, modified, comment), and a card view. It can be turned
-  off in Settings › General.
+  type filters, live search, counts and stats (rows, size, modified, comment), with list, card and small-icon views.
+  It can be turned off in Settings › General.
+- **Saved queries** per schema (Ctrl+Alt+S): a **Queries** folder under every schema and in the Objects tab; open a
+  saved query and Ctrl+S updates it in place; rename, duplicate, delete, and find them with Ctrl+P (`q:`).
 - **Dependencies** in every object tab: what it **uses** and what it is **used by**, with click-through and
   "Open in ER diagram".
 - **ER diagrams** per schema, per selection or around a table, smooth with 500+ tables, crow's-foot edges, PNG/SVG
