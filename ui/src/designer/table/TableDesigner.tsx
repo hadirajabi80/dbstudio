@@ -76,7 +76,7 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
   snowflake: ['NUMBER(38,0)', 'NUMBER(12,2)', 'FLOAT', 'DECFLOAT', 'VARCHAR(100)', 'VARCHAR', 'CHAR(10)', 'BOOLEAN', 'DATE', 'TIME(9)', 'TIMESTAMP_NTZ(9)', 'TIMESTAMP_LTZ(9)', 'TIMESTAMP_TZ(9)', 'VARIANT', 'OBJECT', 'ARRAY', 'BINARY', 'GEOGRAPHY', 'GEOMETRY', 'VECTOR(FLOAT, 768)'],
   // WP-SF end
   // WP-CS begin
-  cql: ['int', 'bigint', 'smallint', 'varint', 'decimal', 'double', 'float', 'text', 'ascii', 'boolean', 'date', 'time', 'timestamp', 'uuid', 'timeuuid', 'inet', 'blob', 'counter', 'list<text>', 'set<text>', 'map<text, text>'],
+  cql: ['int', 'bigint', 'smallint', 'tinyint', 'varint', 'decimal', 'double', 'float', 'text', 'ascii', 'boolean', 'date', 'time', 'timestamp', 'duration', 'uuid', 'timeuuid', 'inet', 'blob', 'counter', 'list<text>', 'set<text>', 'map<text, text>'],
   // WP-CS end
 };
 

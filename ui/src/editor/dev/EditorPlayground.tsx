@@ -147,8 +147,41 @@ $$;
 `,
   // WP-SF end
   // WP-CS begin
-  cql: `-- CQL playground
-SELECT * FROM customers WHERE id = 1;
+  cql: `-- CQL playground (keyspace shop)
+USE shop;
+CONSISTENCY LOCAL_QUORUM;
+
+SELECT id, name, email, tags, address.city FROM customers WHERE id = 1;
+
+SELECT order_date, order_id, status, total
+FROM orders_by_customer
+WHERE customer_id = 4 AND order_date >= '2026-03-01'
+ORDER BY order_date DESC
+LIMIT 10;
+
+SELECT kind, toTimestamp(event_time) AS at, payload FROM shop.events_by_day
+WHERE customer_id = 1 AND day = '2026-03-01' AND event_time > maxTimeuuid('2026-03-01 08:00+0000');
+
+INSERT INTO customers (id, name, email, country_id, tags, preferences, created_at, ext_id)
+VALUES (6, 'Farid', 'farid@example.com', 1, {'newsletter'}, {'language': 'fa'}, toTimestamp(now()), uuid())
+IF NOT EXISTS;
+
+UPDATE customers USING TTL 86400
+SET tags = tags + {'vip'}, phones = phones + ['+49 30 7654321']
+WHERE id = 6
+IF EXISTS;
+
+UPDATE product_views SET views = views + 1 WHERE product_id = 3;
+
+BEGIN BATCH
+  INSERT INTO orders (id, customer_id, customer_name, order_date, status, total) VALUES (7, 6, 'Farid', toTimestamp(now()), 'new', 19.50);
+  INSERT INTO orders_by_customer (customer_id, order_date, order_id, status, total) VALUES (6, toTimestamp(now()), 7, 'new', 19.50);
+  INSERT INTO order_lines (order_id, product_id, product_name, qty, unit_price) VALUES (7, 2, 'Mouse', 1, 19.50);
+APPLY BATCH;
+
+SELECT product_id, line_total(qty, unit_price) AS line FROM order_lines WHERE order_id = 1;
+
+DESCRIBE TABLE shop.orders_by_customer;
 `,
   // WP-CS end
 };
