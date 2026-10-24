@@ -21,8 +21,11 @@ function isDefinition(toks: Token[]): boolean {
   if (i < 0) return false;
   let j = i;
   if (toks[j]?.upper === 'OR') j += 2; // OR REPLACE / OR ALTER
+  // MySQL: CREATE DEFINER = user@host | CURRENT_USER[()] [AGGREGATE] …
+  if (toks[j]?.upper === 'DEFINER') while (j < toks.length && !/^(PROCEDURE|FUNCTION|TRIGGER|EVENT|VIEW|AGGREGATE)$/.test(toks[j].upper)) j++;
+  if (toks[j]?.upper === 'AGGREGATE') j++;
   const what = toks[j]?.upper;
-  return what === 'PROCEDURE' || what === 'PROC' || what === 'FUNCTION' || what === 'TRIGGER' || what === 'PACKAGE' || what === 'TYPE';
+  return what === 'PROCEDURE' || what === 'PROC' || what === 'FUNCTION' || what === 'TRIGGER' || what === 'PACKAGE' || what === 'TYPE' || what === 'EVENT';
 }
 
 export function detectParams(batches: readonly SqlBatch[], dialect: Dialect): DetectedParam[] {
@@ -71,6 +74,7 @@ export function detectParams(batches: readonly SqlBatch[], dialect: Dialect): De
           const name = text.slice(1).replace(/^"|"$/g, '');
           add(name, text);
         } else {
+          if (dialect === 'mysql' && text.startsWith('@')) continue; // @user_var / @@sysvar: variables, not binds
           if (text.startsWith('?')) {
             if (text.length > 1) add(text.slice(1), text, true);
             else add(String(++positional), '?', true, true);

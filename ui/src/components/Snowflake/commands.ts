@@ -4,8 +4,9 @@
 //   snowflake.objects     stages, streams, tasks, pipes, file formats, dynamic tables, alerts of a schema with their DDL;
 //   snowflake.history     INFORMATION_SCHEMA.QUERY_HISTORY with status, duration, bytes scanned; open in a console.
 // The views are one lazy chunk (./views). Commands act on the explorer's connection target or the active tab.
-// TODO(WPSF-shared): explorer connection-menu entries for these commands (R3-5 in docs/wp-notes/WP-SF.md); palette only meanwhile.
+// They are also entries of the explorer's connection menu (extendContextMenu, shown for Snowflake connections only).
 import { createElement, lazy, Suspense } from 'react';
+import { extendContextMenu } from '../../commands/menuModel';
 import { registerCommands, type Command } from '../../commands/registry';
 import { isConnectionTarget } from '../../commands/types';
 import { getConnection } from '../../store/connections';
@@ -126,5 +127,12 @@ const ICONS: Record<SfView, string> = {
 
 export function registerSnowflakeCommands(): void {
   registerCommands(SNOWFLAKE_COMMANDS);
+  // the connection menu of Snowflake connections (the commands' `when` needs a Snowflake connection target)
+  extendContextMenu('explorer.connection', [
+    { command: 'snowflake.session', optional: true, hideDisabled: true, label: 'Session (warehouse, role, database, schema)…' },
+    { command: 'snowflake.warehouses', optional: true, hideDisabled: true, label: 'Warehouses' },
+    { command: 'snowflake.objects', optional: true, hideDisabled: true, label: 'Stages, streams, tasks, pipes…' },
+    { command: 'snowflake.history', optional: true, hideDisabled: true, label: 'Query history' },
+  ]);
   for (const view of Object.values(SF_VIEWS)) registerTabView(view, { component: SnowflakeTab, icon: ICONS[view] });
 }

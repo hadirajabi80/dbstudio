@@ -41,7 +41,7 @@ export const elasticsearchProvider: ProviderInfo = {
 };
 
 const P = '*/api/v1/es/:cid';
-const TASKS_STREAM = 'es.tasks' as StreamKind;
+const TASKS_STREAM: StreamKind = 'es.tasks';
 
 class HttpError extends Error {
   readonly status: number;

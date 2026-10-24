@@ -18,6 +18,7 @@ const T: Dialect[] = ['tsql'];
 const O: Dialect[] = ['plsql'];
 const S: Dialect[] = ['sqlite'];
 const P: Dialect[] = ['pgsql'];
+const M: Dialect[] = ['mysql'];
 
 function def(prefix: string, name: string, dialects: Dialect[] | null, body: string): SnippetDef {
   return { id: `builtin:${prefix}:${dialects ? dialects.join('+') : 'all'}`, name, prefix, dialects, body, builtin: true };
@@ -84,4 +85,13 @@ export const BUILTIN_SNIPPETS: SnippetDef[] = [
   def('lock', 'SELECT … FOR UPDATE SKIP LOCKED', P, 'SELECT ${1:*}\nFROM ${2:table}\nWHERE ${3:condition}\nORDER BY ${4:id}\nLIMIT ${5:10}\nFOR UPDATE SKIP LOCKED;$0'),
   def('cpy', 'COPY … FROM STDIN (csv)', P, 'COPY ${1:table} (${2:columns}) FROM STDIN WITH (FORMAT csv, HEADER);$0'),
   def('explain', 'EXPLAIN (ANALYZE, BUFFERS)', P, 'EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)\n$0'),
+  // MySQL / MariaDB (plan-batch3 WP-MY; mirrored in intel/dialect/mysql.ts)
+  def('tbl', 'CREATE TABLE (InnoDB)', M, 'CREATE TABLE ${1:name} (\n\t${2:id} INT NOT NULL AUTO_INCREMENT,\n\t${3:name} VARCHAR(100) NOT NULL,\n\tPRIMARY KEY (${2:id})\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;$0'),
+  def('upsert', 'INSERT … ON DUPLICATE KEY UPDATE', M, 'INSERT INTO ${1:table} (${2:columns})\nVALUES (${3:values})\nON DUPLICATE KEY UPDATE ${4:column} = VALUES(${4:column})$0'),
+  def('proc', 'CREATE PROCEDURE', M, 'CREATE PROCEDURE ${1:name}(IN ${2:p_id} INT)\nBEGIN\n\t$0\nEND;'),
+  def('fn', 'CREATE FUNCTION', M, 'CREATE FUNCTION ${1:name}(${2:p_id} INT)\nRETURNS ${3:INT}\nDETERMINISTIC\nBEGIN\n\tDECLARE v_result ${3:INT};\n\t$0\n\tRETURN v_result;\nEND;'),
+  def('trg', 'CREATE TRIGGER', M, 'CREATE TRIGGER ${1:trg_name}\n${2:BEFORE} ${3:INSERT} ON ${4:table}\nFOR EACH ROW\nBEGIN\n\t$0\nEND;'),
+  def('evt', 'CREATE EVENT', M, 'CREATE EVENT ${1:ev_name}\nON SCHEDULE EVERY ${2:1} ${3:DAY}\nDO\nBEGIN\n\t$0\nEND;'),
+  def('delim', 'DELIMITER $$ … DELIMITER ;', M, 'DELIMITER \\$\\$\n\n$0\n\nDELIMITER ;'),
+  def('tx', 'Transaction', M, 'START TRANSACTION;\n$0\nCOMMIT;'),
 ];

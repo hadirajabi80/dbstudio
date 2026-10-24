@@ -22,7 +22,12 @@ interface SchemaState {
   tables: Map<string, FixtureTable>;
 }
 
-const DIALECT: Record<string, Dialect> = { sqlserver: 'tsql', oracle: 'plsql', sqlite: 'sqlite', postgresql: 'pgsql' };
+const DIALECT: Record<string, Dialect> = {
+  sqlserver: 'tsql', oracle: 'plsql', sqlite: 'sqlite', postgresql: 'pgsql',
+  // Batch 3 packs: the dialect of their providers
+  ...Object.fromEntries(MOCK_PACKS.flatMap((p) => p.providers).filter((p) => p.dialect).map((p) => [p.id, p.dialect as Dialect])),
+};
+const packShop = (pid: string | undefined) => (pid ? MOCK_PACKS.map((p) => p.shop?.[pid]).find((x) => x) : undefined);
 
 /** The PostgreSQL shop tables (built once: their rows are cached per table object). */
 let pgTables: FixtureTable[] | null = null;
@@ -117,6 +122,8 @@ export class MockEngine {
         serverName: String(props.host ?? 'localhost'), user: String(props.user ?? 'postgres'), database: String(props.database || 'postgres'),
       };
     }
+    const ps = packShop(providerId);
+    if (ps?.serverInfo) return { ...ps.serverInfo, serverName: String(props.host ?? 'localhost'), user: String(props.user ?? ''), database: String(props.database || ps.schema) };
     return { version: 'SQLite 3.46.1', productVersion: '3.46.1', serverName: null, user: null, database: 'main' };
   }
 
@@ -145,20 +152,31 @@ export class MockEngine {
     } else {
       // Batch 3 providers (mocks/packs) get the SQLite shop plus their pack's catalog extras
       const packExtra = MOCK_PACKS.map((p) => p.extraObjects[pid]).find((x) => x);
-      make('main', SHOP_TABLES, packExtra ?? EXTRA_OBJECTS.sqlite);
+      const ps = packShop(pid);
+      const tables = ps?.type
+        ? SHOP_TABLES.map((t) => ({ ...t, columns: t.columns.map((c) => ({ ...c, type: ps.type!(c.type) })) }))
+        : SHOP_TABLES;
+      make(ps?.schema ?? 'main', tables, packExtra ?? EXTRA_OBJECTS.sqlite, !!ps?.upperCase);
+      for (const extra of ps?.schemas ?? []) make(extra, [], [], !!ps?.upperCase);
     }
     this.catalogs.set(cid, m);
     return m;
   }
   defaultSchema(cid: string): string {
     const pid = this.conn(cid)?.providerId;
-    return pid === 'sqlserver' ? 'dbo' : pid === 'oracle' ? 'SHOP' : pid === 'postgresql' ? 'public' : 'main';
+    return pid === 'sqlserver' ? 'dbo' : pid === 'oracle' ? 'SHOP' : pid === 'postgresql' ? 'public' : packShop(pid)?.schema ?? 'main';
   }
   databases(cid: string): DatabasesResponse {
     const pid = this.conn(cid)?.providerId;
     if (pid === 'sqlserver') return { databases: ['master', 'Shop', 'Staging'], current: 'Shop' };
     if (pid === 'oracle') return { databases: [], current: 'SHOP' };
     if (pid === 'postgresql') return { databases: ['analytics', 'postgres', 'shop'], current: String(this.conn(cid)?.props.database || 'shop') };
+    const ps = packShop(pid);
+    if (ps) {
+      const list = ps.databases ?? [ps.schema];
+      const wanted = String(this.conn(cid)?.props.database ?? '');
+      return { databases: list, current: list.includes(wanted) ? wanted : list[0] };
+    }
     return { databases: ['main'], current: 'main' };
   }
   schemas(cid: string, database: string | null): SchemasResponse {

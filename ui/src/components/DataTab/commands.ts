@@ -7,6 +7,7 @@ import { aliasCommand, isEnabled, registerCommands, runCommand, type Command } f
 import type { ObjectTarget } from '../../commands/types';
 import type { CopyFormat } from '../../lib/serialize';
 import { isTabular } from '../../lib/sql';
+import { dialectOf } from '../../store/connections';
 import { useEdits } from '../../store/edits';
 import { useSessions } from '../../store/sessions';
 import { useTabs, type ViewTab } from '../../store/tabs';
@@ -190,7 +191,7 @@ export const DATA_COMMANDS: Command<never>[] = [
     id: 'data.open', title: 'Open table data', category: 'Database', shortcut: 'Mod+Alt+D', icon: 'Table2', keywords: 'browse edit rows',
     when: (args?: never) => {
       const t = objectTargetOf(args);
-      return !!t && isTabular(t.ref.type);
+      return !!t && isTabular(t.ref.type, dialectOf(t.connectionId));
     },
     run: (args?: never) => {
       const t = objectTargetOf(args) as ObjectTarget | null;

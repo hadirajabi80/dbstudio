@@ -303,8 +303,8 @@ export function complete(c: CursorContext, env: CompleteEnv): CompletionResult {
 
   if (c.qualifier) {
     isIncomplete = qualifierItems(items, c, env) || isIncomplete;
-  } else if (c.prefix.startsWith('@') && env.spec.id === 'tsql') {
-    variableItems(items, c, env, 9);
+  } else if (c.prefix.startsWith('@') && (env.spec.id === 'tsql' || env.spec.id === 'mysql')) {
+    if (env.spec.id === 'tsql') variableItems(items, c, env, 9);
     globalVarItems(items, c, env);
   } else if (c.atStatementStart) {
     statementStartItems(items, c, env);
@@ -416,7 +416,7 @@ function clauseItems(items: Items, c: CursorContext, env: CompleteEnv): boolean 
       if (c.clause === 'join') joinItems(items, c, env);
       tableItems(items, c, env, c.clause === 'join' ? 7 : 8);
       if (c.prefixText && spec.id === 'tsql') {
-        for (const f of spec.functions) if (f.kind === 'table') items.add({ label: kwCase(f.name, opts), kind: 'function', group: 3, insertText: kwCase(f.name, opts) + '($0)', isSnippet: true, command: 'signatureHelp', detail: funcSignatureText(f), documentation: functionDoc(f) });
+        for (const f of spec.functions) if (f.kind === 'table') items.add({ label: spec.preserveNameCase ? f.name : kwCase(f.name, opts), kind: 'function', group: 3, insertText: (spec.preserveNameCase ? f.name : kwCase(f.name, opts)) + '($0)', isSnippet: true, command: 'signatureHelp', detail: funcSignatureText(f), documentation: functionDoc(f) });
       }
       if (c.prefixText && (spec.id === 'sqlite' || spec.id === 'pgsql')) {
         // set-returning functions in FROM (generate_series, unnest, jsonb_each …)
@@ -1027,7 +1027,8 @@ function functionItems(items: Items, c: CursorContext, env: CompleteEnv, group: 
   for (const f of spec.functions) {
     if (f.kind === 'table' && !fromLike && spec.id !== 'pgsql') continue;
     if (f.kind === 'global') continue; // offered after '@'
-    const name = spec.id === 'sqlite' && opts.keywordCase === 'asIs' ? f.name : kwCase(f.name, opts);
+    // Case-sensitive dialects (ClickHouse `toYYYYMM`, `arrayJoin`) keep the spelling of the catalog
+    const name = (spec.id === 'sqlite' && opts.keywordCase === 'asIs') || spec.preserveNameCase ? f.name : kwCase(f.name, opts);
     const noParens = f.kind === 'niladic';
     items.add({
       label: name, kind: 'function', group, relevance: -1, insertText: noParens ? name : name + '($0)', isSnippet: !noParens,
@@ -1094,7 +1095,7 @@ function sequenceItems(items: Items, c: CursorContext, env: CompleteEnv, group: 
 function dataTypeItems(items: Items, c: CursorContext, env: CompleteEnv, group: number): void {
   const { spec, opts } = env;
   for (const t of spec.dataTypes) {
-    const label = (spec.id === 'tsql' || spec.id === 'pgsql') && opts.keywordCase !== 'upper' ? t : kwCase(t, opts);
+    const label = spec.preserveNameCase || ((spec.id === 'tsql' || spec.id === 'pgsql') && opts.keywordCase !== 'upper') ? t : kwCase(t, opts);
     items.add({ label, kind: 'type', group, insertText: label, detail: 'data type' });
   }
   void c;

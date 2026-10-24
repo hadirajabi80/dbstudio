@@ -245,10 +245,10 @@ function m2Handlers(engine: MockEngine, ok: Parameters<typeof createM2Context>[1
     ...createRedisHandlers(ctx),
     ...createMongoHandlers(ctx),
     ...createKafkaHandlers(ctx),
+    // Batch 3 packs first: a pack can answer /logs/{cid}/sources|query for its own provider
+    ...MOCK_PACKS.flatMap((p) => p.handlers(ctx)),
     ...createLogsHandlers(ctx),
     ...createErHandlers(ctx),
     ...createSearchHandlers(ctx), // Find in database (db.search stream)
-    // Batch 3 (plan-batch3): the work packages' module routes (mocks/packs/*.ts)
-    ...MOCK_PACKS.flatMap((p) => p.handlers(ctx)),
   ];
 }

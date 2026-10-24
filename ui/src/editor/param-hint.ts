@@ -51,6 +51,7 @@ export function statementParams(tokens: readonly Token[], a: number, b: number, 
     if (t.kind !== 'param') continue;
     const text = t.text;
     if (dialect === 'tsql' && (text.startsWith('@@') || declared.has(text.toUpperCase()))) continue;
+    if (dialect === 'mysql' && text.startsWith('@')) continue; // user / system variables are no binds
     if (dialect === 'plsql') {
       if (!text.startsWith(':')) continue;
       const n = text.slice(1).toUpperCase();

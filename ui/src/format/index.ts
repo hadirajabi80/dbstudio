@@ -67,13 +67,15 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
   const n = tokens.length - 1; // eof excluded
   const ends: number[] = []; // exclusive token index where a chunk ends (statements)
   for (const st of split.statements) ends.push(st.tokEnd);
+  const starts = split.statements.map((st) => st.tokStart);
   const chunks: Chunk[] = [];
   let a = 0;
   let si = 0;
   let i = 0;
   while (i < n) {
     const t = tokens[i];
-    if (t.kind === 'batchSep') {
+    // GO / `/` lines, and MySQL `DELIMITER xx` lines (meta tokens that are no statement): separator chunks
+    if (t.kind === 'batchSep' || (t.kind === 'meta' && dialect === 'mysql')) {
       if (i > a) chunks.push({ a, b: i, sep: false });
       chunks.push({ a: i, b: i + 1, sep: true });
       i++;
@@ -90,6 +92,9 @@ function chunksOf(tokens: Token[], text: string, dialect: Dialect): Chunk[] {
       let b = i + 1;
       for (;;) {
         while (b < n && tokens[b].kind === 'punct' && tokens[b].text === ';') b++;
+        // MySQL: a custom delimiter (`$$`, `//` …) or `\G` right after the statement, before the next one, stays with it
+        while (dialect === 'mysql' && b < n && tokens[b].kind !== 'comment' && tokens[b].kind !== 'meta' && (si + 1 >= starts.length || b < starts[si + 1])
+          && countNewlines(text, tokens[b - 1].end, tokens[b].start) === 0) b++;
         if (b < n && tokens[b].kind === 'comment' && countNewlines(text, tokens[b - 1].end, tokens[b].start) === 0) { b++; continue; }
         break;
       }
@@ -321,7 +326,9 @@ export function formatSql(text: string, dialect: Dialect, options?: Partial<Form
   };
   for (const c of chunks) {
     if (c.sep) {
-      emit(c, tokens.slice(c.a, c.b).map((t, i) => (i === 0 ? applyCase(t.text, opts.keywordCase) : ' ' + t.text)).join(''));
+      emit(c, tokens[c.a].kind === 'meta'
+        ? text.slice(tokens[c.a].start, tokens[c.b - 1].end) // DELIMITER lines verbatim (the delimiter is case-sensitive)
+        : tokens.slice(c.a, c.b).map((t, i) => (i === 0 ? applyCase(t.text, opts.keywordCase) : ' ' + t.text)).join(''));
       continue;
     }
     format(c);

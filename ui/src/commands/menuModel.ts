@@ -304,6 +304,34 @@ export function registerContextMenu(id: string, entries: ContextEntry[]): () => 
 
 const SHELL_MENU_IDS: ReadonlySet<string> = new Set(Object.keys(CONTEXT_MENUS));
 
+const MENU_EXTENSIONS = new Map<string, ContextEntry[][]>();
+
+/**
+ * Batch 3: a provider adds entries to a shell context menu (`explorer.table`, `explorer.connection`, …) from its
+ * commands.ts. Give each entry `optional: true, hideDisabled: true` and a `when` on the provider in the command, so it
+ * only shows for that provider's connections. The entries come before the menu's last group (the destructive one:
+ * Truncate / Drop), after a separator. Returns an unregister function.
+ */
+export function extendContextMenu(id: string, entries: ContextEntry[]): () => void {
+  const list = MENU_EXTENSIONS.get(id) ?? [];
+  list.push(entries);
+  MENU_EXTENSIONS.set(id, list);
+  return () => {
+    const i = list.indexOf(entries);
+    if (i >= 0) list.splice(i, 1);
+  };
+}
+
+/** The entries of a context menu: the shell's or the module's own, plus the provider extensions registered for it. */
+export function contextMenuEntries(id: string): ContextEntry[] {
+  const base = CONTEXT_MENUS[id] ?? [];
+  const ext = (MENU_EXTENSIONS.get(id) ?? []).flat();
+  if (!ext.length) return base;
+  const at = base.lastIndexOf('separator');
+  if (at <= 0) return [...base, 'separator', ...ext];
+  return [...base.slice(0, at), 'separator', ...ext, ...base.slice(at)];
+}
+
 /** Console toolbar (left to right). */
 export const CONSOLE_TOOLBAR: ContextEntry[] = [
   c('run.statement'), c('run.script'), c('run.cancel'), c('run.multi'), 'separator',

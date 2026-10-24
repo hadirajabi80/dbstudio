@@ -57,6 +57,8 @@ const DDL_WORDS = set(`
   DEFERRABLE INITIALLY DEFERRED IMMEDIATE STORAGE LOGGING NOLOGGING COMPRESS NOCOMPRESS PARALLEL NOPARALLEL
   ORGANIZATION VIRTUAL INVISIBLE VISIBLE ORDER NOORDER RESTRICT CLUSTERED NONCLUSTERED PERSISTED SPARSE ROWGUIDCOL
   AUTOINCREMENT STORED ONLINE FILLFACTOR PAD_INDEX DATA_COMPRESSION SORT_IN_TEMPDB DROP_EXISTING CHAR BYTE`);
+/** MySQL table / column options and ALTER words, upper-cased in CREATE / ALTER statements (never in a name position). */
+const MYSQL_DDL_WORDS = set('AUTO_INCREMENT ENGINE CHARSET CHARACTER COMMENT ROW_FORMAT ALGORITHM INVISIBLE VISIBLE FIRST AFTER MODIFY CHANGE');
 /** PL/SQL subprogram header modifiers. */
 const HEADER_WORDS = set('DETERMINISTIC PIPELINED PARALLEL_ENABLE RESULT_CACHE RELIES_ON AUTHID DEFINER CURRENT_USER ACCESSIBLE AGGREGATE SHARING METADATA');
 const OBJECT_WORDS = set('TYPE BODY PACKAGE SEQUENCE SYNONYM MATERIALIZED DIRECTORY CONTEXT LIBRARY EDITIONABLE NONEDITIONABLE FORCE NOFORCE');
@@ -342,7 +344,7 @@ export class Layout {
     }
     if (at === '::' || bt === '::' || at === '..' || bt === '..') return false;
     if (this.d !== 'pgsql' && (at === '->' || at === '->>' || bt === '->' || bt === '->>')) return false;
-    if (this.d === 'pgsql') {
+    if (this.d === 'pgsql' || this.d === 'snowflake') {
       if (b.kind === 'op' && (bt === '[' || bt === ']')) return false;
       if (a.kind === 'op' && (at === '[' || at === ':')) return false;
     }
@@ -373,6 +375,8 @@ export class Layout {
       if (kw.u === 'TYPE' || kw.u === 'BODY') return this.headerCtx > 0 || this.verbCtx === 'CREATE';
       return NAME_PAREN_KEYWORDS.has(kw.u);
     }
+    // MySQL: VALUES(col) inside ON DUPLICATE KEY UPDATE is a function, not a VALUES clause
+    if (this.d === 'mysql' && a.u === 'VALUES' && (this.S(k - 2)?.kind === 'op' || this.P(k - 2, '(') || this.P(k - 2, ','))) return false;
     if (a.kind === 'keyword') {
       if (a.u === 'TABLE') return true;
       return !(this.rules.functionKeywords.has(a.u) || this.spec.functionMap.has(a.u) || this.spec.dataTypeSet.has(a.u));
@@ -401,14 +405,16 @@ export class Layout {
     const next = this.S(k + 1);
     const call = !!next && next.kind === 'punct' && next.text === '(' && this.S(k - 1)?.text !== '.';
     if (t.kind === 'keyword' || t.kind === 'batchSep') {
-      if (t.kind === 'keyword' && this.isTypeAt(k)) return applyCase(t.text, this.o.datatypeCase);
+      if (t.kind === 'keyword' && this.isTypeAt(k)) return this.spec.preserveNameCase ? t.text : applyCase(t.text, this.o.datatypeCase);
       if (call && this.spec.functionMap.has(t.u)) return applyCase(t.text, this.o.functionCase);
       return applyCase(t.text, this.o.keywordCase);
     }
     if (t.kind === 'ident') {
-      if (call && this.spec.functionMap.has(t.u) && !this.spaceBeforeParen(k + 1)) return applyCase(t.text, this.o.functionCase);
-      if (!call && this.spec.functionMap.get(t.u)?.kind === 'niladic' && this.S(k - 1)?.text !== '.' && this.S(k + 1)?.text !== '.') return applyCase(t.text, this.o.functionCase);
-      if (this.isTypeAt(k) || (t.u === 'MAX' && this.P(k - 1, '(') && this.spec.dataTypeSet.has(this.U(k - 2)))) return applyCase(t.text, this.o.datatypeCase);
+      // Case-sensitive dialects (ClickHouse: toYYYYMM, arrayJoin, UInt32) keep the case of function and type names as typed
+      const keep = !!this.spec.preserveNameCase;
+      if (call && this.spec.functionMap.has(t.u) && !this.spaceBeforeParen(k + 1)) return keep ? t.text : applyCase(t.text, this.o.functionCase);
+      if (!call && this.spec.functionMap.get(t.u)?.kind === 'niladic' && this.S(k - 1)?.text !== '.' && this.S(k + 1)?.text !== '.') return keep ? t.text : applyCase(t.text, this.o.functionCase);
+      if (this.isTypeAt(k) || (t.u === 'MAX' && this.P(k - 1, '(') && this.spec.dataTypeSet.has(this.U(k - 2)))) return keep ? t.text : applyCase(t.text, this.o.datatypeCase);
       if (kw || this.kwIdents > 0) return applyCase(t.text, this.o.keywordCase);
       return applyCase(t.text, this.o.identifierCase);
     }
@@ -498,7 +504,33 @@ export class Layout {
     if (this.d === 'tsql') this.tsqlStatement(indent, outer);
     else if (this.d === 'plsql') this.plStatement(indent, outer);
     else if (this.d === 'pgsql') this.pgStatement(indent, outer);
+    else if (this.d === 'mysql') this.mysqlStatement(indent, outer);
     else this.sqliteStatement(indent, outer);
+  }
+
+  /**
+   * MySQL / MariaDB: DELIMITER lines as they are; routines (CREATE [DEFINER = …] … PROCEDURE | FUNCTION | TRIGGER |
+   * EVENT, ALTER EVENT) and top-level compound statements (BEGIN NOT ATOMIC, IF, CASE, LOOP, REPEAT, WHILE, `lbl:`)
+   * verbatim, like PostgreSQL dollar bodies; everything else takes the SQLite path.
+   */
+  private mysqlStatement(indent: number, outer: Stop): void {
+    const k = this.p;
+    if (this.S(k)!.kind === 'meta') { this.take(); return; }
+    const u = this.U(k);
+    let compound = ['IF', 'CASE', 'LOOP', 'REPEAT', 'WHILE'].includes(u) || (u === 'BEGIN' && this.W(k + 1, 'NOT'))
+      || (this.S(k)!.kind === 'ident' && this.U(k + 1) === ':');
+    if (u === 'CREATE' || u === 'ALTER') {
+      for (let j = k + 1; j < this.sig.length && j <= k + 24 && !this.P(j, ';'); j++) {
+        const w = this.U(j);
+        if (w === 'PROCEDURE' || w === 'FUNCTION' || w === 'TRIGGER' || w === 'EVENT') { compound = u === 'CREATE' || w === 'EVENT'; break; }
+        if (w === 'TABLE' || w === 'VIEW' || w === 'INDEX' || w === 'DATABASE' || w === 'SCHEMA' || w === 'USER') break;
+      }
+    }
+    if (!compound) return this.sqliteStatement(indent, outer);
+    let e = this.sig.length; // a MySQL chunk is one statement (plus its terminator)
+    while (e > k + 1 && this.P(e - 1, ';')) e--;
+    this.takeRaw(e, this.srcText);
+    while (this.P(this.p, ';')) this.take({ space: false });
   }
 
   // ------------------------------------------------------------------ T-SQL
@@ -1170,9 +1202,9 @@ export class Layout {
         return ['setop', this.W(k + 1, 'ALL') || this.W(k + 1, 'DISTINCT') ? 2 : 1];
       case 'INTO': return st.clause === 'select' ? ['into', 1] : null;
       case 'BULK': return st.clause === 'select' && this.W(k + 1, 'COLLECT') && this.W(k + 2, 'INTO') ? ['into', 3] : null;
-      case 'VALUES': return v.has('INSERT') && !this.W(k - 1, 'DEFAULT') ? ['values', 1] : null;
+      case 'VALUES': return v.has('INSERT') && !this.W(k - 1, 'DEFAULT') && !(this.d === 'mysql' && (this.S(k - 1)?.kind === 'op' || this.P(k - 1, '(') || this.P(k - 1, ','))) ? ['values', 1] : null;
       case 'EXEC': case 'EXECUTE': return this.d === 'tsql' && st.clause === 'insert' ? ['exec', 1] : null;
-      case 'SET': return v.has('UPDATE') && st.clause !== 'set' ? ['set', 1] : null;
+      case 'SET': return (v.has('UPDATE') || (this.d === 'mysql' && v.has('INSERT') && st.clause === 'insert')) && st.clause !== 'set' ? ['set', 1] : null;
       case 'OUTPUT': return this.d === 'tsql' && (v.has('INSERT') || v.has('UPDATE') || v.has('DELETE') || v.has('MERGE')) ? ['output', 1] : null;
       case 'OPTION': return this.d === 'tsql' && this.P(k + 1, '(') ? ['option', 1] : null;
       case 'FOR': {
@@ -1188,22 +1220,30 @@ export class Layout {
         if (this.d === 'pgsql' && v.has('DELETE') && !v.has('MERGE') && st.clause === 'from') return ['from', 1];
         return v.has('MERGE') && st.clause === 'merge' ? ['using', 1] : null;
       case 'WHEN': return v.has('MERGE') ? ['when', 1] : null;
-      case 'ON': return (this.d === 'sqlite' || this.d === 'pgsql') && this.W(k + 1, 'CONFLICT') && v.has('INSERT') ? ['conflict', 2] : null;
-      default: return null;
+      case 'ON':
+        if (this.d === 'mysql' && v.has('INSERT') && this.W(k + 1, 'DUPLICATE') && this.W(k + 2, 'KEY') && this.W(k + 3, 'UPDATE')) return ['set', 4];
+        return (this.d === 'sqlite' || this.d === 'pgsql') && this.W(k + 1, 'CONFLICT') && v.has('INSERT') ? ['conflict', 2] : null;
+      default: {
+        // dialect clauses (ClickHouse PREWHERE / SETTINGS / FORMAT); never a call, a qualified name or a list item
+        const extra = this.rules.extraClauses?.[u];
+        if (extra && !this.P(k + 1, '(') && !this.P(k + 1, '.') && !this.P(k - 1, '.') && !this.P(k - 1, ',') && !this.P(k - 1, '(')) return [extra, 1];
+        return null;
+      }
     }
   }
 
   /** JOIN phrase length at k (0 = none). */
   private joinAt(k: number, st: St): number {
     const t = this.S(k)!;
-    if (!t.word || !JOIN_WORDS.has(t.u) || !st.dml) return 0;
+    const extraJoin = this.rules.joinWords;
+    if (!t.word || !(JOIN_WORDS.has(t.u) || extraJoin?.has(t.u)) || !st.dml) return 0;
     if (!(st.clause === 'from' || st.clause === 'join' || st.clause === 'on')) return 0;
     if ((t.u === 'LEFT' || t.u === 'RIGHT') && this.P(k + 1, '(')) return 0;
     let j = k;
     while (j < this.sig.length && j < k + 5) {
       const u = this.U(j);
       if (u === 'JOIN' || u === 'APPLY' || u === 'STRAIGHT_JOIN') return j - k + 1;
-      if (!(JOIN_WORDS.has(u) || u === 'SEMI' || u === 'ANTI' || u === 'HASH' || u === 'LOOP' || u === 'MERGE' || u === 'REMOTE')) return 0;
+      if (!(JOIN_WORDS.has(u) || extraJoin?.has(u) || u === 'SEMI' || u === 'ANTI' || u === 'HASH' || u === 'LOOP' || u === 'MERGE' || u === 'REMOTE')) return 0;
       j++;
     }
     return 0;
@@ -1269,9 +1309,10 @@ export class Layout {
         else this.takeKw();
         return;
       case 'INSERT': case 'REPLACE': {
-        if (u === 'REPLACE' && this.d !== 'sqlite') { this.takeKw(); return; }
+        if (u === 'REPLACE' && this.d !== 'sqlite' && this.d !== 'mysql') { this.takeKw(); return; }
         this.enterDml(st, 'INSERT');
         this.takeKw();
+        while (this.d === 'mysql' && ['IGNORE', 'LOW_PRIORITY', 'DELAYED', 'HIGH_PRIORITY'].includes(this.U(this.p))) this.takeKw();
         if (this.W(this.p, 'OR')) this.takeKw(2);
         if (this.W(this.p, 'TOP') && this.P(this.p + 1, '(')) { this.takeKw(); this.paren('call'); }
         if (this.W(this.p, 'INTO')) this.takeKw();
@@ -1398,6 +1439,11 @@ export class Layout {
       if (!pt || (pt.kind === 'punct' && (pt.text === '(' || pt.text === ','))) return false;
       if (pt.word && (NAME_PAREN_KEYWORDS.has(pt.u) || pt.u === 'SEQUENCE' || pt.u === 'SYNONYM' || pt.u === 'COLUMN' || pt.u === 'CONSTRAINT')) return false;
       return true;
+    }
+    if (this.d === 'mysql' && (this.verbCtx === 'CREATE' || this.verbCtx === 'ALTER') && MYSQL_DDL_WORDS.has(t.u)) {
+      const pt = this.S(k - 1);
+      if (pt && pt.kind === 'punct' && pt.text === ',' && this.verbCtx === 'ALTER' && (t.u === 'MODIFY' || t.u === 'CHANGE')) return true; // ALTER TABLE …, MODIFY COLUMN …
+      return !!pt && !(pt.kind === 'punct' && (pt.text === '(' || pt.text === ',')) && !(pt.word && NAME_PAREN_KEYWORDS.has(pt.u));
     }
     if (p === 'PRAGMA') return true;
     if (this.d === 'tsql' && p === 'WAITFOR' && (t.u === 'DELAY' || t.u === 'TIME')) return true;

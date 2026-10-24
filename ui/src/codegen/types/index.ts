@@ -141,6 +141,18 @@ function arrayRow(e: TypeRow): TypeRow {
   return { logical: 'object', cs: `${e.cs}[]`, go: `[]${e.go}`, ts: /^[A-Za-z_.]+$/.test(e.ts) ? `${e.ts}[]` : `(${e.ts})[]`, java: `${java}[]`, py: `list[${e.py}]` };
 }
 
+/** `f, Int32` → `Int32`: the last argument that is not nested in parentheses. */
+function lastTopLevelArg(args: string): string {
+  let depth = 0;
+  let cut = -1;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '(') depth++;
+    else if (args[i] === ')') depth--;
+    else if (args[i] === ',' && depth === 0) cut = i;
+  }
+  return args.slice(cut + 1).trim();
+}
+
 /** PostgreSQL spellings normalised to the table keys: `timestamp(3) with time zone`, `character varying(20)`, `_int4`. */
 function pgBase(base: string): string {
   const b = base.replace(/^pg_catalog\./, '').replace(/^"(.*)"$/, '$1');
@@ -157,6 +169,17 @@ export function resolveType(dialect: Dialect, typeText: string, opts: TypeOption
     const arr = /^(.*?)(\s*\[\s*\d*\s*\])+$/.exec(t) ?? /^(.*?)\s+array$/i.exec(t) ?? (/^_[a-z]/i.test(t) && TYPE_TABLES.pgsql[t.slice(1)] ? [t, t.slice(1)] : null);
     if (arr) {
       const element = resolveType(dialect, arr[1], { ...opts, kind: undefined });
+      return { ...arrayRow(element), base: `${element.base}[]`, known: element.known, length: null, precision: null, scale: null, dbType: typeText, array: true, element };
+    }
+  }
+  if (dialect === 'clickhouse') {
+    // Nullable(T), LowCardinality(T), SimpleAggregateFunction(f, T) are T on the wire; Array(T) is a list of T.
+    const w = /^(Nullable|LowCardinality|SimpleAggregateFunction|Array)\s*\(([\s\S]*)\)$/i.exec(typeText.trim());
+    if (w) {
+      const kind = w[1].toLowerCase();
+      const inner = kind === 'simpleaggregatefunction' ? lastTopLevelArg(w[2]) : w[2].trim();
+      const element = resolveType(dialect, inner, { ...opts, kind: kind === 'array' ? undefined : opts.kind });
+      if (kind !== 'array') return { ...element, dbType: typeText };
       return { ...arrayRow(element), base: `${element.base}[]`, known: element.known, length: null, precision: null, scale: null, dbType: typeText, array: true, element };
     }
   }
@@ -190,6 +213,16 @@ export function resolveType(dialect: Dialect, typeText: string, opts: TypeOption
     precision = 18;
     scale = 0;
   }
+
+  // MySQL: UNSIGNED integers, TINYINT(1) / BIT(1) as bool and CHAR(36) as Guid (MySqlConnector defaults)
+  if (dialect === 'mysql') {
+    const unsigned = /\bunsigned\b/i.test(typeText) ? `${rawBase} unsigned` : '';
+    if (unsigned && tbl[unsigned]) base = unsigned;
+    else if ((rawBase === 'tinyint' && args[0] === '1') || (rawBase === 'bit' && (args.length === 0 || args[0] === '1'))) base = `${rawBase === 'bit' ? 'bit' : 'tinyint'}(1)`;
+    else if (rawBase === 'char' && args[0] === '36') base = 'char(36)';
+  }
+  // Snowflake: NUMBER / DECIMAL / NUMERIC without a scale (NUMBER(38,0) is the INT type) are integers
+  if (dialect === 'snowflake' && (rawBase === 'number' || rawBase === 'decimal' || rawBase === 'numeric') && (scale ?? 0) === 0) base = 'int';
 
   let row = tbl[base];
   let known = !!row;

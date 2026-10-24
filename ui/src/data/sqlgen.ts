@@ -323,6 +323,10 @@ export function generateChange(change: RowChange, t: TableTarget, dialect: Diale
   } else if (dialect === 'pgsql') {
     const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} DEFAULT VALUES`;
     sql = ret.length ? `${head} RETURNING ${ret.map(q).join(', ')}` : head;
+  } else if (dialect === 'mysql') {
+    // MySQL / MariaDB: no DEFAULT VALUES; the generated key of the row comes back through LAST_INSERT_ID().
+    sql = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} () VALUES ()`;
+    if (ret.length === 1 && identity.has(ret[0].toLowerCase())) followUp = `SELECT LAST_INSERT_ID() AS ${q(ret[0])}`;
   } else {
     const head = values.length ? `INSERT INTO ${table} (${cols}) VALUES (${vals})` : `INSERT INTO ${table} DEFAULT VALUES`;
     if (ret.length && versionAtLeast(opts.sqliteVersion, [3, 35])) sql = `${head} RETURNING ${ret.map(q).join(', ')}`;
@@ -356,9 +360,9 @@ export function rollbackToSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT):
   return dialect === 'tsql' ? `ROLLBACK TRANSACTION ${name}` : `ROLLBACK TO SAVEPOINT ${name}`;
 }
 
-/** SQLite / PostgreSQL: drop the savepoint after a successful submit (Oracle/T-SQL have no RELEASE). */
+/** SQLite / PostgreSQL / MySQL: drop the savepoint after a successful submit (Oracle/T-SQL have no RELEASE). */
 export function releaseSavepointSql(dialect: Dialect, name = EDIT_SAVEPOINT): string | null {
-  return dialect === 'sqlite' || dialect === 'pgsql' ? `RELEASE SAVEPOINT ${name}` : null;
+  return dialect === 'sqlite' || dialect === 'pgsql' || dialect === 'mysql' ? `RELEASE SAVEPOINT ${name}` : null;
 }
 
 /** Readable script for the preview / "Copy SQL" (parameters shown as literals). */

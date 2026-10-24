@@ -1,8 +1,8 @@
 import type { CatalogObject, CatalogObjectType, ConnectionProfile, ObjectRef, ProviderId } from '../../api/types';
 import { fuzzyMatchLower } from '../../lib/fuzzy';
 import { getSourceModule, sourceNodeId } from '../../lib/sources';
-import { hasDatabaseLevel, providerKind } from '../../store/connections';
-import { isTabular, OBJECT_TYPE_LABELS, OBJECT_TYPE_ORDER } from '../../lib/sql';
+import { dialectOf, hasDatabaseLevel, providerKind } from '../../store/connections';
+import { isTabular, objectTypeLabel, OBJECT_TYPE_ORDER } from '../../lib/sql';
 import { dbKey, type ConnCatalog, type DbCatalog } from '../../store/catalog';
 import type { ConnQueries, SavedQuery } from '../../store/savedQueries';
 import type { TypeChip } from './explorerStore';
@@ -257,13 +257,14 @@ function addFolders(rows: TreeRow[], input: TreeInput, cid: string, db: string |
   const groups = groupObjects(loaded.objects, types);
   const withQueries = !!input.savedQueries && (input.queriesFor?.(cid) ?? true);
   if (groups.size === 0 && !withQueries) return status(rows, parent, depth, 'empty', types ? 'No objects of the selected types' : 'No objects');
+  const dialect = dialectOf(cid);
   for (const t of OBJECT_TYPE_ORDER) {
     const objs = groups.get(t);
     if (!objs) continue;
     const fid = nodeId.folder(cid, db, schema, t);
     const open = input.expanded.has(fid);
     rows.push({
-      id: fid, kind: 'folder', depth, label: OBJECT_TYPE_LABELS[t], expandable: true, expanded: open, connectionId: cid, database: db,
+      id: fid, kind: 'folder', depth, label: objectTypeLabel(t, dialect), expandable: true, expanded: open, connectionId: cid, database: db,
       schema, objectType: t, count: objs.length,
     });
     if (!open) continue;

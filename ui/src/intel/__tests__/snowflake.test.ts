@@ -107,6 +107,13 @@ describe('Snowflake formatter', () => {
     const norm = (s: string) => kinds(s).map((k) => k.toUpperCase());
     expect(norm(out)).toEqual(norm(input));
     expect(out).toMatch(/FLATTEN\(input => c\.profile: ?orders\)/i);
-    // TODO(WPSF-shared): R3-4 (format/layout.ts) writes the path colon without a space: f.value:sku.
+    // the path colon is written without a space: f.value:sku
+    expect(out).toContain('f.value:sku::string');
+  });
+
+  it('QUALIFY is a clause line of its own, broken at AND / OR like WHERE', () => {
+    const out = formatSql('select * from t qualify row_number() over (partition by a order by b) = 1 and x > 0', 'snowflake');
+    expect(out.warnings).toEqual([]);
+    expect(out.text).toMatch(/\nQUALIFY ROW_NUMBER\(\) OVER \(PARTITION BY a ORDER BY b\) = 1\n {4}AND x > 0$/);
   });
 });

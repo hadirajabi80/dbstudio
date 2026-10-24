@@ -1,6 +1,6 @@
 // ClickHouse mock pack (plan-batch3 WP-CH): provider entry, sample connection (folder "Batch 3"), catalog extras (a
 // materialized view, a dictionary, a SQL UDF) and the /clickhouse/{cid}/… module routes with fake parts, partitions,
-// mutations and merges. The mock engine gives the connection the SQLite shop tables in schema "main" (mocks/engine.ts).
+// mutations and merges. The mock engine gives the connection the shop tables in database "shop" with ClickHouse types (`shop` below).
 // Read-only connections answer 403 READ_ONLY on every write. WP-CH owns this file.
 import { http, HttpResponse, type RequestHandler } from 'msw';
 import type { CatalogColumnTuple, CatalogObject, ConnectionProfile, ProviderInfo } from '../../api/types';
@@ -223,8 +223,23 @@ export function createClickHouseHandlers(ctx: M2MockContext): RequestHandler[] {
   ];
 }
 
+/** SQLite fixture type → ClickHouse type. */
+function chType(t: string): string {
+  const m = /^([A-Z]+)(\(.*\))?$/.exec(t);
+  if (!m) return 'String';
+  switch (m[1]) {
+    case 'INTEGER': return 'Int32';
+    case 'REAL': return 'Float64';
+    case 'DECIMAL': return `Decimal${m[2] ?? '(10, 2)'}`;
+    case 'BOOLEAN': return 'Bool';
+    case 'DATETIME': return 'DateTime';
+    default: return 'String';
+  }
+}
+
 export const clickhousePack: MockProviderPack = {
   providers: [clickhouseProvider],
+  shop: { clickhouse: { schema: 'shop', databases: ['default', 'shop'], type: chType, serverInfo: { version: '24.8.4.13', productVersion: '24.8.4.13' } } },
   // fresh copies per mock engine: tests flip readOnly on the engine's connection objects
   get connections() {
     return clickhouseConnections.map((c) => ({ ...c, props: { ...c.props } }));

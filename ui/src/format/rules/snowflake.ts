@@ -1,8 +1,7 @@
 // Snowflake formatter tables (plan-batch3 WP-SF). Part of the lazy snowflake chunk (DialectSpec.formatRules, built by
 // format/layout.ts rulesFor): no runtime imports, build from the FormatKit. Statements end at `;`; `$$` routine bodies are
 // single string tokens and stay verbatim. FLATTEN / PIVOT / UNPIVOT / MATCH_RECOGNIZE / OBJECT_CONSTRUCT … are called
-// like functions; QUALIFY breaks its condition at AND/OR like WHERE (its own clause line needs the layout hook requested
-// in docs/wp-notes/WP-SF.md, R3-4).
+// like functions; QUALIFY is a clause line of its own that breaks its condition at AND/OR like WHERE (extraClauses).
 import type { FormatRulesFactory } from '../../intel/dialect/spec';
 
 export const snowflakeRules: FormatRulesFactory = (kit) => ({
@@ -19,4 +18,5 @@ export const snowflakeRules: FormatRulesFactory = (kit) => ({
     MATCH_RECOGNIZE OBJECT_CONSTRUCT ARRAY_CONSTRUCT TABLE GENERATOR RESULT_SCAN IDENTIFIER SAMPLE TABLESAMPLE ANY`),
   operandKeywords: new Set([...kit.OPERAND_KEYWORDS_COMMON, ...kit.set('CURRENT_ROLE CURRENT_WAREHOUSE CURRENT_DATABASE CURRENT_SCHEMA LOCALTIMESTAMP')]),
   conditionClauses: new Set([...kit.CONDITION_CLAUSES, 'QUALIFY']),
+  extraClauses: { QUALIFY: 'where' },
 });

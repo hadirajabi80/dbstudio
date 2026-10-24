@@ -230,6 +230,7 @@ export function routineSnippet(spec: WizardSpec): string {
     }
   }
   if (dialect === 'pgsql') return pgSnippet(spec, name, s);
+  if (dialect === 'mysql') return mysqlSnippet(spec, name, s);
   // SQLite: triggers only.
   const t = spec.trigger ?? { table: 'table_name', timing: 'AFTER', events: ['INSERT'], forEachRow: true };
   const n = spec.schema && spec.schema !== 'main' ? `${lit(quoteIdent(spec.schema, 'sqlite'))}.${s.stop(name)}` : s.stop(name);
@@ -242,6 +243,32 @@ export function routineSnippet(spec: WizardSpec): string {
     `    \${0:SELECT 1; -- NEW / OLD hold the row values}`,
     'END;',
     '',
+  ].join('\n');
+}
+
+/**
+ * MySQL / MariaDB: BEGIN … END bodies (the console keeps a routine whole, DELIMITER is not needed); parameter modes only
+ * on procedures; one event per trigger (there is no INSERT OR UPDATE).
+ */
+function mysqlSnippet(spec: WizardSpec, name: string, s: Stops): string {
+  const q = (n: string) => lit(quoteIdent(n, 'mysql'));
+  const full = spec.schema ? `${q(spec.schema)}.${s.stop(name)}` : s.stop(name);
+  const params = spec.params
+    .map((p) => `${spec.kind === 'procedure' ? `${p.direction.toUpperCase()} ` : ''}${lit(oracleParamName(p.name))} ${s.stop(p.type)}`)
+    .join(', ');
+  if (spec.kind === 'procedure') return [`CREATE PROCEDURE ${full}(${params})`, 'BEGIN', '    ${0:SELECT 1;}', 'END;', ''].join('\n');
+  if (spec.kind === 'function') {
+    const ret = spec.returns || DEFAULT_RETURN_TYPE.mysql;
+    return [
+      `CREATE FUNCTION ${full}(${params})`, `RETURNS ${s.stop(ret)}`, 'DETERMINISTIC', 'BEGIN', `    DECLARE v_result ${lit(ret)};`,
+      '    ${0:SET v_result = NULL;}', '    RETURN v_result;', 'END;', '',
+    ].join('\n');
+  }
+  const t = spec.trigger ?? { table: 'table_name', timing: 'BEFORE', events: ['INSERT'], forEachRow: true };
+  const table = spec.schema ? `${q(spec.schema)}.${s.stop(t.table)}` : s.stop(t.table);
+  return [
+    `CREATE TRIGGER ${full}`, `${t.timing} ${t.events[0] ?? 'INSERT'} ON ${table}`, 'FOR EACH ROW', 'BEGIN',
+    '    ${0:-- NEW / OLD hold the row values}', 'END;', '',
   ].join('\n');
 }
 

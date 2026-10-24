@@ -5,7 +5,7 @@ import {
   Boxes, ChartBar, Clock, Cylinder, FileInput, FileOutput, Import, Key, Leaf, ListFilter, MessageSquare, PanelsTopLeft, Radio, Send, Skull, Users, Waypoints,
 } from 'lucide-react';
 import type { ContextEntry } from '../../commands/menuModel';
-import { CONTEXT_MENUS } from '../../commands/menuModel';
+import { contextMenuEntries, CONTEXT_MENUS } from '../../commands/menuModel';
 import { isMac } from '../../commands/keys';
 import { getCommand } from '../../commands/registry';
 import { commandView } from '../../commands/useCommands';
@@ -78,5 +78,5 @@ export function commandMenuItems(entries: readonly ContextEntry[], args?: unknow
 
 /** Items of a named context menu from the model (CONTEXT_MENUS). */
 export function contextMenu(id: keyof typeof CONTEXT_MENUS | string, args?: unknown): MenuItem[] {
-  return commandMenuItems(CONTEXT_MENUS[id] ?? [], args);
+  return commandMenuItems(contextMenuEntries(id), args);
 }

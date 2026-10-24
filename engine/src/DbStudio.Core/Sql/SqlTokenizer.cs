@@ -302,11 +302,16 @@ public static class SqlTokenizer
         var parenDepth = 0;
         var blockDepth = 0;
         var isBlockStatement = false;
+        var declares = 0; // Snowflake Scripting: DECLARE sections whose BEGIN has not been seen yet
 
         for (var k = 0; k < tokens.Count; k++)
         {
             var t = tokens[k];
-            if (current.Count == 0) isBlockStatement = StartsBlock(tokens, k, dialect);
+            if (current.Count == 0)
+            {
+                isBlockStatement = StartsBlock(tokens, k, dialect);
+                declares = 0;
+            }
 
             if (t.IsPunct('(')) parenDepth++;
             else if (t.IsPunct(')')) parenDepth = Math.Max(0, parenDepth - 1);
@@ -323,6 +328,10 @@ public static class SqlTokenizer
                 if (t.IsWord("BEGIN") && k + 1 < tokens.Count && tokens[k + 1].Kind == SqlTokenKind.Word && tokens[k + 1].Upper is "BATCH" or "UNLOGGED" or "COUNTER") blockDepth++;
                 else if (blockDepth > 0 && t.IsWord("APPLY") && k + 1 < tokens.Count && tokens[k + 1].IsWord("BATCH")) blockDepth--;
                 // WP-CS end
+            }
+            else if (isBlockStatement && dialect is Dialect.MySql or Dialect.Snowflake)
+            {
+                ScriptBlockStep(tokens, ref k, dialect, ref blockDepth, ref declares);
             }
             else if (isBlockStatement && t.Kind == SqlTokenKind.Word)
             {
@@ -353,6 +362,78 @@ public static class SqlTokenizer
     }
 
     private static bool PrevIsEnd(IReadOnlyList<SqlToken> tokens, int k) => k > 0 && tokens[k - 1].IsWord("END");
+
+    /// <summary>
+    /// Block nesting of MySQL / MariaDB compound statements and Snowflake Scripting. BEGIN, CASE and (in statement
+    /// position, so <c>IF(a, b, c)</c> and <c>IF NOT EXISTS</c> do not count) IF / LOOP / WHILE / REPEAT open a level; MySQL
+    /// also reads <c>label:LOOP</c>, which the tokenizer cuts into a word and a <c>:LOOP</c> parameter. Snowflake adds FOR and
+    /// DECLARE (the BEGIN after a DECLARE section is the same level). END closes a level, and <c>END IF / LOOP / WHILE /
+    /// REPEAT / FOR / CASE</c> is one close, not two.
+    /// </summary>
+    private static void ScriptBlockStep(IReadOnlyList<SqlToken> tokens, ref int k, Dialect dialect, ref int depth, ref int declares)
+    {
+        var t = tokens[k];
+        string u;
+        var labelled = false;
+        if (t.Kind == SqlTokenKind.Word) u = t.Upper;
+        else if (dialect == Dialect.MySql && t.Kind == SqlTokenKind.Parameter && t.Value.Length > 1 && t.Value[0] == ':' && k > 0
+                 && tokens[k - 1].Kind == SqlTokenKind.Word && tokens[k - 1].End == t.Start)
+        {
+            u = t.Value[1..].ToUpperInvariant(); // lbl:LOOP
+            labelled = true;
+        }
+        else return;
+
+        if (u == "END")
+        {
+            if (depth <= 0) return;
+            depth--;
+            if (k + 1 < tokens.Count && tokens[k + 1].Kind == SqlTokenKind.Word
+                && tokens[k + 1].Upper is "IF" or "LOOP" or "CASE" or "WHILE" or "REPEAT" or "FOR")
+                k++;
+            return;
+        }
+        if (PrevIsEnd(tokens, k)) return;
+
+        if (dialect == Dialect.Snowflake)
+        {
+            if (u == "DECLARE") { depth++; declares++; }
+            else if (u == "BEGIN" && declares > 0) declares--;
+            else if (u is "BEGIN" or "CASE" or "WHILE" or "REPEAT" or "LOOP"
+                     || (u == "FOR" && !(k > 0 && tokens[k - 1].IsWord("CURSOR")))
+                     || (u == "IF" && !(k + 1 < tokens.Count && tokens[k + 1].Kind == SqlTokenKind.Word && tokens[k + 1].Upper is "EXISTS" or "NOT")))
+                depth++;
+            return;
+        }
+
+        if (u is "BEGIN" or "CASE") depth++;
+        else if (u is "IF" or "LOOP" or "WHILE" or "REPEAT" && (labelled || MySqlStatementPosition(tokens, k))) depth++;
+    }
+
+    /// <summary>MySQL compound statements start after ';', BEGIN [NOT ATOMIC], THEN, ELSE, DO, LOOP, REPEAT or a label colon.</summary>
+    private static bool MySqlStatementPosition(IReadOnlyList<SqlToken> tokens, int k)
+    {
+        var p = k == 0 ? default : tokens[k - 1];
+        var inPosition = k == 0 || p.IsPunct(';') || (p.Kind == SqlTokenKind.Operator && p.Value == ":")
+            || (p.Kind == SqlTokenKind.Word && p.Upper is "BEGIN" or "ATOMIC" or "THEN" or "ELSE" or "DO" or "LOOP" or "REPEAT");
+        if (!inPosition) return false;
+        // IF(a, b, c) / REPEAT(s, n) after THEN or ELSE of a CASE expression are functions: the statement forms are
+        // `IF (cond) THEN` and `WHILE (cond) DO`, i.e. the closing parenthesis is followed by THEN / DO.
+        if (k + 1 < tokens.Count && tokens[k + 1].IsPunct('('))
+        {
+            var u = tokens[k].Value.ToUpperInvariant();
+            if (u is "LOOP" or "REPEAT") return false;
+            var depth = 0;
+            for (var j = k + 1; j < tokens.Count; j++)
+            {
+                if (tokens[j].IsPunct('(')) depth++;
+                else if (tokens[j].IsPunct(')') && --depth == 0)
+                    return j + 1 < tokens.Count && tokens[j + 1].IsWord(u == "IF" ? "THEN" : "DO");
+            }
+            return false;
+        }
+        return true;
+    }
 
     private static bool StartsBlock(IReadOnlyList<SqlToken> tokens, int k, Dialect dialect)
     {

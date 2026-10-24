@@ -47,6 +47,14 @@ describe('snippet sets', () => {
     for (const s of BUILTIN_SNIPPETS) expect(validateSnippet(s), s.id).toEqual([]);
   });
 
+  it('MySQL snippets: unique prefixes, DELIMITER escapes $$, valid bodies', () => {
+    const list = snippetsFor('mysql', []);
+    expect(new Set(list.map((s) => s.prefix)).size).toBe(list.length);
+    for (const p of ['tbl', 'upsert', 'proc', 'fn', 'trg', 'evt', 'delim', 'tx']) expect(list.map((s) => s.prefix), p).toContain(p);
+    expect(snippetPreview(list.find((s) => s.prefix === 'delim')!.body)).toBe('DELIMITER $$\n\n\n\nDELIMITER ;');
+    expect(snippetsFor('pgsql', []).some((s) => s.body.includes('AUTO_INCREMENT'))).toBe(false);
+  });
+
   it('PostgreSQL bodies escape $ (dollar quotes are literal text, not snippet variables)', () => {
     const pg = snippetsFor('pgsql', []);
     const fn = pg.find((s) => s.prefix === 'fn')!;

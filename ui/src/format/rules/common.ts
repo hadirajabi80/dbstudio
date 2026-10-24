@@ -17,6 +17,13 @@ export interface FormatRules {
   operandKeywords: Set<string>;
   /** Clause keywords that start a condition broken at AND/OR. */
   conditionClauses: Set<string>;
+  /**
+   * Dialect clauses that start a line like the standard ones: first word → clause name (`PREWHERE` → `where` breaks its
+   * condition at AND/OR; any other name is a plain clause line: `SETTINGS`, `FORMAT`).
+   */
+  extraClauses?: Record<string, string>;
+  /** Further words of JOIN phrases (ClickHouse `ARRAY GLOBAL ANY ALL ASOF PASTE`), merged into JOIN_WORDS. */
+  joinWords?: Set<string>;
 }
 
 /** Words before a name whose `(` gets a space: `INSERT INTO t (a)`, `CREATE TABLE t (`, `REFERENCES t (id)`. */

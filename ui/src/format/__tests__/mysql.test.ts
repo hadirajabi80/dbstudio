@@ -94,9 +94,45 @@ describe('MySQL formatter', () => {
     ]) expect(toks(fmt(sql))).toEqual(toks(sql));
   });
 
-  // Need the layout changes requested in docs/wp-notes/WP-MY.md (R3 format): until then these layouts are token-safe but
-  // not pretty (DELIMITER lines indent the next statement, routine bodies are reflowed, ODKU stays on the VALUES line).
-  it.todo('DELIMITER lines are chunks of their own and the custom delimiter stays glued to END (R3 format/index.ts)');
-  it.todo('CREATE PROCEDURE / FUNCTION / TRIGGER / EVENT bodies are kept verbatim (R3 format/layout.ts)');
-  it.todo('ON DUPLICATE KEY UPDATE, INSERT … SET and REPLACE INTO are laid out as clauses (R3 format/layout.ts)');
+  it('DELIMITER lines are chunks of their own and the custom delimiter stays glued to END', () => {
+    const sql = 'DELIMITER $$\nCREATE PROCEDURE p(IN a INT)\nBEGIN\n  DECLARE x INT DEFAULT 0;\n  IF a > 0 THEN\n    SELECT 1;\n  END IF;\nEND$$\ndelimiter ;\nselect 1;';
+    const r = formatSql(sql, 'mysql');
+    expect(r.warnings).toEqual([]);
+    expect(r.text).toBe('DELIMITER $$\n\nCREATE PROCEDURE p(IN a INT)\nBEGIN\n  DECLARE x INT DEFAULT 0;\n  IF a > 0 THEN\n    SELECT 1;\n  END IF;\nEND$$\ndelimiter ;\n\nSELECT 1;');
+    expect(fmt(r.text)).toBe(r.text); // idempotent
+  });
+
+  it('\\G stays with its statement', () => {
+    expect(fmt('select 1; select 2\\G select 3')).toBe('SELECT 1;\nSELECT 2 \\G\nSELECT 3');
+  });
+
+  it('CREATE PROCEDURE / FUNCTION / TRIGGER / EVENT bodies are kept verbatim', () => {
+    for (const sql of [
+      'CREATE DEFINER=`root`@`localhost` FUNCTION f(a INT) RETURNS INT DETERMINISTIC BEGIN RETURN a; END;',
+      'create trigger trg before insert on t for each row begin set new.a = 1; end',
+      'create event ev on schedule every 1 day do delete from t where d < now()',
+      'IF @a > 0 THEN SELECT 1; END IF',
+    ]) {
+      const r = formatSql(sql, 'mysql');
+      expect(r.warnings).toEqual([]);
+      expect(r.text).toBe(sql);
+    }
+    // a plain CREATE TABLE / VIEW is still laid out
+    expect(fmt('create view v as select a from t')).toContain('\nSELECT a');
+  });
+
+  it('ON DUPLICATE KEY UPDATE, INSERT … SET and REPLACE INTO are laid out as clauses', () => {
+    expect(fmt('insert into t (a, b) values (1, 2) on duplicate key update b = values(b), a = a + 1'))
+      .toBe('INSERT INTO t (a, b)\nVALUES (1, 2)\nON DUPLICATE KEY UPDATE\n    b = VALUES(b),\n    a = a + 1');
+    expect(fmt('insert into t set a = 1, b = 2')).toBe('INSERT INTO t\nSET\n    a = 1,\n    b = 2');
+    expect(fmt('replace into t (a) values (1)')).toBe('REPLACE INTO t (a)\nVALUES (1)');
+    expect(fmt('insert ignore into t (a) select a from u on duplicate key update a = u.a'))
+      .toBe('INSERT IGNORE INTO t (a)\nSELECT a\nFROM u\nON DUPLICATE KEY UPDATE a = u.a');
+  });
+
+  it('table options and ALTER words are upper-cased', () => {
+    expect(fmt("create table t (id int auto_increment, name varchar(10) comment 'x', primary key (id)) engine = InnoDB default charset = utf8mb4 auto_increment = 5"))
+      .toBe("CREATE TABLE t (\n    id INT AUTO_INCREMENT,\n    name VARCHAR(10) COMMENT 'x',\n    PRIMARY KEY (id)\n) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 AUTO_INCREMENT = 5");
+    expect(fmt('alter table t add column c int after a, modify column b varchar(5) first')).toBe('ALTER TABLE t ADD COLUMN c INT AFTER a, MODIFY COLUMN b VARCHAR(5) FIRST');
+  });
 });

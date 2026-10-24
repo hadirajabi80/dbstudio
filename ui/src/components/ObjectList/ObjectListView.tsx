@@ -17,7 +17,7 @@ import type { ContainerTarget, ObjectTarget } from '../../commands/types';
 import { commandView, useCommandsVersion } from '../../commands/useCommands';
 import { isTabular, OBJECT_TYPE_SINGULAR } from '../../lib/sql';
 import { dbKey, useCatalog } from '../../store/catalog';
-import { useConnection } from '../../store/connections';
+import { dialectOf, useConnection } from '../../store/connections';
 import { useTabs } from '../../store/tabs';
 import { ObjectIcon } from '../common/icons';
 import { showContextMenu, showMenuBelow } from '../common/Menu';
@@ -172,7 +172,7 @@ export function ObjectList({ state, patch, visible, highlight, header }: ObjectL
 
   const open = useCallback((it: ObjectListItem) => {
     const t = targetOf(it);
-    if (isTabular(it.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
+    if (isTabular(it.type, dialectOf(cid)) && hasCommand('data.open') && runCommand('data.open', t)) return;
     activateObject(cid, database, t.ref);
   }, [cid, database, targetOf]);
 

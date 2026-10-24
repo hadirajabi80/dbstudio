@@ -272,7 +272,10 @@ export function findCall(toks: Token[], j: number, limit: number, spec: DialectS
         const nameTok = toks[b - 1];
         if (!nameTok) return null;
         if (!(nameTok.kind === 'ident' || nameTok.kind === 'quotedIdent' || (nameTok.kind === 'keyword' && (spec.functionMap.has(nameTok.upper) || ['LEFT', 'RIGHT', 'CONVERT', 'COALESCE', 'NULLIF', 'TRY_CONVERT', 'REPLACE'].includes(nameTok.upper))))) return null;
-        if (nameTok.kind === 'keyword' && NOT_FUNCTION_BEFORE_PAREN.has(nameTok.upper)) return null;
+        // MySQL IF(cond, a, b) is a function unless it starts a statement (IF (x) THEN … in routine bodies)
+        const prevTok = toks[b - 2];
+        const mysqlIfCall = spec.id === 'mysql' && nameTok.upper === 'IF' && !!prevTok && prevTok.text !== ';' && !['BEGIN', 'THEN', 'ELSE', 'DO'].includes(prevTok.upper);
+        if (nameTok.kind === 'keyword' && NOT_FUNCTION_BEFORE_PAREN.has(nameTok.upper) && !mysqlIfCall) return null;
         if (nameTok.kind === 'ident' && NOT_FUNCTION_BEFORE_PAREN.has(nameTok.upper)) return null;
         const parts: NamePart[] = [namePart(nameTok)];
         let c = b - 2;

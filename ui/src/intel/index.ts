@@ -356,7 +356,7 @@ class IntelImpl implements Intel {
     const model = st ? this.model(d, st) : buildModel([], this.spec, offset, offset);
     const binder = this.binderFor(d, st);
     const ctx = detectContext(model, offset, this.spec, d.text);
-    return runComplete(ctx, { spec: this.spec, index: this.index, binder, opts: this.opts, usage: this.usage, text: d.text, statementEnd: st?.end ?? offset, extraSources: this.extraSources });
+    return runComplete(ctx, { spec: this.spec, index: this.index, binder, opts: this.opts, usage: this.usage, text: d.text, statementEnd: st?.end ?? offset, extraSources: this.spec.complete ? [this.spec.complete, ...this.extraSources] : this.extraSources });
   }
 
   resolveItem(item: CompletionItem): CompletionItem { return item; }

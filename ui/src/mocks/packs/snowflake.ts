@@ -1,8 +1,7 @@
 // Snowflake mock pack (plan-batch3 WP-SF): provider entry, sample connection, catalog extras and module routes
 // (/snowflake/{cid}/warehouses, roles, objects, objects/ddl, objects/action, /snowflake/sessions/{sid}/context, use).
 // The data mirrors the engine's recorded fixtures (engine/tests/DbStudio.Providers.Snowflake.Tests/Fixtures).
-// TODO(WPSF-shared): the mock engine gives every Batch 3 provider one "main" schema and no session dialect; R3-7 in
-// docs/wp-notes/WP-SF.md asks for SHOP / PUBLIC and the pack providers' dialects.
+// `shop` (MockProviderPack.shop) makes the mock engine present database SHOP with schemas PUBLIC and ANALYTICS.
 import { http, HttpResponse, type RequestHandler } from 'msw';
 import type { CatalogObject, ConnectionProfile, ProviderInfo } from '../../api/types';
 import type {
@@ -155,9 +154,31 @@ export function snowflakeHandlers(): RequestHandler[] {
   ];
 }
 
+/** SQLite fixture type → Snowflake type. */
+function sfType(t: string): string {
+  const m = /^([A-Z]+)(\(.*\))?$/.exec(t);
+  if (!m) return 'VARCHAR';
+  switch (m[1]) {
+    case 'INTEGER': return 'NUMBER(38,0)';
+    case 'REAL': return 'FLOAT';
+    case 'DECIMAL': return `NUMBER${m[2] ?? '(10,2)'}`;
+    case 'BOOLEAN': return 'BOOLEAN';
+    case 'DATETIME': return 'TIMESTAMP_NTZ(9)';
+    case 'BLOB': return 'BINARY';
+    case 'JSON': return 'VARIANT';
+    default: return 'VARCHAR';
+  }
+}
+
 export const snowflakePack: MockProviderPack = {
   providers: [snowflakeProvider],
   connections: snowflakeConnections,
+  shop: {
+    snowflake: {
+      schema: 'PUBLIC', schemas: ['ANALYTICS'], databases: ['SHOP'], upperCase: true, type: sfType,
+      serverInfo: { version: '9.31.0', productVersion: '9.31.0' },
+    },
+  },
   extraObjects: { snowflake: SNOWFLAKE_EXTRA_OBJECTS },
   handlers: () => snowflakeHandlers(),
 };

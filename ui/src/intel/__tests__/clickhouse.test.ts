@@ -13,11 +13,10 @@ import { complete, doc, find, fixtures, labels } from './helpers';
 
 const kinds = (s: string) => tokenize(s, getSpec('clickhouse')).filter((t) => t.kind !== 'eof').map((t) => `${t.kind}:${t.text}`);
 
-/** Intel with the shop fixture and the ClickHouse completion source wired (as intel/index.ts will once R3 lands). */
+/** Intel with the shop fixture (the ClickHouse completion source comes from the spec, DialectSpec.complete). */
 function chIntel() {
   const i = createIntel('clickhouse');
   i.setCatalog(fixtures.clickhouse);
-  i.setExtraCompletionSources([chComplete]);
   return i;
 }
 
@@ -99,9 +98,11 @@ describe('ClickHouse completion', () => {
 
   it('functions with signatures (aggregates mention the combinators)', () => {
     const r = complete('clickhouse', 'SELECT uniq| FROM orders');
-    // TODO(WPCH-shared): the completer upper-cases function names (kwCase); ClickHouse names are case-sensitive (R3)
+    // ClickHouse names are case-sensitive: the completer keeps the catalog's spelling (preserveNameCase)
     const u = r.items.find((x) => x.label.toLowerCase() === 'uniqexact');
     expect(u?.kind).toBe('function');
+    expect(u?.label).toBe('uniqExact');
+    expect(u?.insertText).toBe('uniqExact($0)');
     expect(getSpec('clickhouse').functionMap.get('UNIQEXACT')?.doc).toMatch(/-If/);
     expect(getSpec('clickhouse').functionMap.get('TOYYYYMM')?.returns).toBe('UInt32');
   });
@@ -193,6 +194,17 @@ describe('ClickHouse formatter', () => {
     expect(r.text).toMatch(/\nLIMIT 10/);
   });
 
+  it('PREWHERE, ARRAY JOIN, GLOBAL ANY JOIN, SETTINGS and FORMAT start their own lines', () => {
+    const r = formatSql("select a, tag from t final left array join tags as tag global any left join u on u.id = t.id prewhere x = 1 and y = 2 where z = 3 limit 5 by a settings max_threads = 4, join_use_nulls = 1 format JSONEachRow", 'clickhouse');
+    expect(r.warnings).toEqual([]);
+    expect(r.text).toBe([
+      'SELECT', '    a,', '    tag', 'FROM t FINAL', 'LEFT ARRAY JOIN tags AS tag', 'GLOBAL ANY LEFT JOIN u ON u.id = t.id', 'PREWHERE x = 1', '    AND y = 2',
+      'WHERE z = 3', 'LIMIT 5 BY a', 'SETTINGS max_threads = 4, join_use_nulls = 1', 'FORMAT JSONEachRow',
+    ].join('\n'));
+    // format / settings as function or column names are untouched
+    expect(formatSql("select format('{}', a), settings from t", 'clickhouse').text).toContain("format('{}', a)");
+  });
+
   it('keeps function-like keywords tight and splits statements at ClickHouse statement words', () => {
     const r = formatSql("select if(a, 1, 2), any(x) from t;\noptimize table t final;\nsystem flush logs", 'clickhouse');
     expect(r.text).toContain('IF(a, 1, 2)');
@@ -202,9 +214,13 @@ describe('ClickHouse formatter', () => {
     expect(r.text).toMatch(/\nSYSTEM flush logs$/);
   });
 
-  it('case-sensitive ClickHouse names survive with functionCase/datatypeCase asIs', () => {
-    // TODO(WPCH-shared): with the default functionCase 'upper' the shared layout writes ARRAYJOIN(tags); R3 makes the
-    // layout keep function and type spelling for ClickHouse (DialectSpec.preserveNameCase).
+  it('case-sensitive ClickHouse names survive the default function/type case (preserveNameCase)', () => {
+    const d = formatSql('select arrayJoin(tags), toYYYYMM(d), CAST(x AS UInt32), cast(y as Nullable(DateTime)) from t', 'clickhouse');
+    expect(d.text).toContain('arrayJoin(tags)');
+    expect(d.text).toContain('toYYYYMM(d)');
+    expect(d.text).toContain('UInt32');
+    expect(d.text).toContain('Nullable(DateTime)');
+    expect(d.text).not.toContain('ARRAYJOIN');
     const r = formatSql('select arrayJoin(tags), toYYYYMM(d), CAST(x AS UInt32) from t', 'clickhouse', { functionCase: 'asIs', datatypeCase: 'asIs' });
     expect(r.text).toContain('arrayJoin(tags)');
     expect(r.text).toContain('toYYYYMM(d)');

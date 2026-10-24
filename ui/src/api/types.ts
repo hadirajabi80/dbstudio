@@ -699,7 +699,9 @@ export interface DdlApplyResponse { ok: true; executed: number; elapsedMs: numbe
 export type StreamKind =
   | 'redis.monitor' | 'redis.subscribe' | 'kafka.tail' | 'kafka.fetch' | 'mongo.changes' | 'logs.tail' | 'activity.poll'
   // Find in database (api/types.search.ts)
-  | 'db.search';
+  | 'db.search'
+  // Batch 3 WP-ES (api/types.es.ts EsTasksStreamItem)
+  | 'es.tasks';
 export interface StreamOpenRequest { kind: StreamKind; connectionId: string; params: Record<string, unknown> }
 export interface StreamOpenResponse { streamId: string }
 /** `open` is re-sent about every second while items are dropped (with the running `dropped` total). */

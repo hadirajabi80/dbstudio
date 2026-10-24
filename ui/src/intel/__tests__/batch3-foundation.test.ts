@@ -53,9 +53,9 @@ describe('lexer traits (D8)', () => {
     expect(kinds('pgsql', "SELECT 'a\\'")).toEqual(['keyword:SELECT', "string:'a\\'"]);
   });
 
-  it('Snowflake: $$ bodies, $1, :name but not the :: cast', () => {
+  it('Snowflake: $$ bodies, $1 as a staged column (not a bind), :name but not the :: cast', () => {
     expect(kinds('snowflake', 'SELECT $1, x::int, :p, $$a;b$$')).toEqual([
-      'keyword:SELECT', 'param:$1', 'punct:,', 'ident:x', 'op:::', 'ident:int', 'punct:,', 'param::p', 'punct:,', 'string:$$a;b$$',
+      'keyword:SELECT', 'ident:$1', 'punct:,', 'ident:x', 'op:::', 'ident:int', 'punct:,', 'param::p', 'punct:,', 'string:$$a;b$$',
     ]);
   });
 

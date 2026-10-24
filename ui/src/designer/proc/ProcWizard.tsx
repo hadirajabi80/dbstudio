@@ -239,10 +239,10 @@ export function ProcWizard({ req }: { req: WizardRequest }) {
               {(['INSERT', 'UPDATE', 'DELETE'] as const).map((ev) => (
                 <label key={ev} className="check">
                   <input
-                    type={req.dialect === 'sqlite' ? 'radio' : 'checkbox'}
+                    type={req.dialect === 'sqlite' || req.dialect === 'mysql' ? 'radio' : 'checkbox'}
                     name="dz-w-event"
                     checked={events.includes(ev)}
-                    onChange={(e) => setEvents(req.dialect === 'sqlite' ? [ev] : e.target.checked ? [...events, ev] : events.filter((x) => x !== ev))}
+                    onChange={(e) => setEvents(req.dialect === 'sqlite' || req.dialect === 'mysql' ? [ev] : e.target.checked ? [...events, ev] : events.filter((x) => x !== ev))}
                   />
                   {ev}
                 </label>

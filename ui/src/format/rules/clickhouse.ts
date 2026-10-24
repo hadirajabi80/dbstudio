@@ -3,7 +3,7 @@
 // statement words (OPTIMIZE, SYSTEM, KILL, ATTACH/DETACH, EXCHANGE, SHOW, DESCRIBE …) start statements, and the clause
 // words that need a continuation (PREWHERE, SAMPLE, SETTINGS, FORMAT, ENGINE, TTL …) never end one.
 // The shared layout breaks lines at the standard clauses (SELECT/FROM/WHERE/GROUP BY/ORDER BY/LIMIT/JOIN …); the
-// ClickHouse-only clauses (PREWHERE, ARRAY JOIN, LIMIT BY, SETTINGS, FORMAT) need a layout hook: R3 TODO(WPCH-shared).
+// ClickHouse-only clauses (PREWHERE, SETTINGS, FORMAT) and JOIN words (ARRAY, GLOBAL, ANY, ASOF …) go through FormatRules.extraClauses / joinWords.
 import type { FormatRulesFactory } from '../../intel/dialect/spec';
 
 export const clickhouseRules: FormatRulesFactory = (kit) => ({
@@ -20,4 +20,6 @@ export const clickhouseRules: FormatRulesFactory = (kit) => ({
     COALESCE NULLIF GREATEST LEAST`),
   operandKeywords: new Set([...kit.OPERAND_KEYWORDS_COMMON, ...kit.set('FINAL TOTALS')]),
   conditionClauses: new Set([...kit.CONDITION_CLAUSES, ...kit.set('PREWHERE')]),
+  extraClauses: { PREWHERE: 'where', SETTINGS: 'settings', FORMAT: 'format' },
+  joinWords: kit.set('ARRAY GLOBAL ANY ALL ASOF PASTE'),
 });

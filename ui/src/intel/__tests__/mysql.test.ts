@@ -300,3 +300,20 @@ describe('MySQL mock pack', () => {
     expect(mysqlPack.extraObjects.mysql.some((o) => o.t === 'sequence')).toBe(false);
   });
 });
+
+describe('MySQL @@ completion and IF() signature help (R3-I1, R3-I2)', () => {
+  it('@@ offers the system variables, @ alone does not break', () => {
+    const r = complete('mysql', 'SELECT @@ver|');
+    expect(labels(r.items)).toEqual(expect.arrayContaining(['@@version', '@@version_comment']));
+    expect(complete('mysql', 'SELECT @|').items.length).toBeGreaterThan(0);
+  });
+
+  it('IF( in an expression has signature help; a statement-position IF ( does not', () => {
+    const i = intelFor('mysql');
+    const d = doc(i, 'SELECT IF(a, |');
+    const sh = i.signatureHelp(d.uri, d.offset);
+    expect(sh?.signatures[0].label).toMatch(/^if\(/i);
+    const stmt = doc(i, 'CREATE PROCEDURE p() BEGIN IF (|');
+    expect(i.signatureHelp(stmt.uri, stmt.offset)).toBeNull();
+  });
+});

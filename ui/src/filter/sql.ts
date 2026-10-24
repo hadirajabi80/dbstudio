@@ -68,7 +68,18 @@ export interface PredicateResult {
   warnings: string[];
 }
 
-const LIKE_ESCAPE = "ESCAPE '\\'";
+/**
+ * The ESCAPE clause (with its leading space). MySQL and Snowflake read a backslash as an escape inside string
+ * literals, so the escape character is written '\\'; ClickHouse has no ESCAPE clause (backslash is its fixed escape).
+ */
+function likeEscape(d: Dialect): string {
+  if (d === 'mysql' || d === 'snowflake') return " ESCAPE '\\\\'";
+  if (d === 'clickhouse') return '';
+  return " ESCAPE '\\'";
+}
+
+/** Dialects whose LIKE is case-sensitive but which have ILIKE. */
+const hasIlike = (d: Dialect) => d === 'pgsql' || d === 'snowflake' || d === 'clickhouse';
 
 function escapeLike(v: string, dialect: Dialect): string {
   const re = dialect === 'tsql' ? /[\\%_[]/g : /[\\%_]/g;
@@ -76,6 +87,7 @@ function escapeLike(v: string, dialect: Dialect): string {
 }
 
 function concat(dialect: Dialect, parts: string[]): string {
+  if (dialect === 'mysql') return `CONCAT(${parts.join(', ')})`; // `||` is a logical OR in MySQL
   return dialect === 'tsql' ? parts.join(' + ') : parts.join(' || ');
 }
 
@@ -159,14 +171,17 @@ function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
     if (d === 'tsql') return { left: cs ? `${c} COLLATE Latin1_General_CS_AS` : c, wrap: (p) => p, suffix: '' };
     if (d === 'plsql') return cs ? { left: c, wrap: (p) => p, suffix: '' } : { left: `UPPER(${c})`, wrap: (p) => `UPPER(${p})`, suffix: '' };
     if (d === 'pgsql') return cs ? { left: c, wrap: (p) => p, suffix: '' } : { left: `lower(${pgText})`, wrap: (p) => `lower(${p})`, suffix: '' };
+    // MySQL: a binary comparison is case-sensitive whatever the collation. The other servers have no COLLATE NOCASE.
+    if (d === 'mysql' && cs) return { left: c, wrap: (p) => `BINARY ${p}`, suffix: '' };
+    if (d !== 'sqlite') return cs ? { left: c, wrap: (p) => p, suffix: '' } : { left: `lower(${c})`, wrap: (p) => `lower(${p})`, suffix: '' };
     return { left: c, wrap: (p) => p, suffix: cs ? '' : ' COLLATE NOCASE' };
   };
 
   switch (cond.op) {
     case 'isNull': return `${c} IS NULL`;
     case 'isNotNull': return `${c} IS NOT NULL`;
-    case 'isTrue': return d === 'pgsql' ? `${c} = TRUE` : `${c} = 1`;
-    case 'isFalse': return d === 'pgsql' ? `${c} = FALSE` : `${c} = 0`;
+    case 'isTrue': return d === 'pgsql' || d === 'snowflake' ? `${c} = TRUE` : `${c} = 1`;
+    case 'isFalse': return d === 'pgsql' || d === 'snowflake' ? `${c} = FALSE` : `${c} = 0`;
     case 'isEmpty':
       if (d === 'plsql') {
         ctx.warnings.push('Oracle stores empty strings as NULL: “is empty” matches NULL');
@@ -188,13 +203,15 @@ function conditionText(ctx: Ctx, cond: FilterCondition): string | Piece | null {
       } else if (d === 'pgsql') {
         const p = strParam(escapeLike(raw, d));
         const pattern = concat(d, [...(pre ? ["'%'"] : []), p, ...(post ? ["'%'"] : [])]);
-        expr = `${pgText} ${cs ? 'LIKE' : 'ILIKE'} ${pattern} ${LIKE_ESCAPE}`;
+        expr = `${pgText} ${cs ? 'LIKE' : 'ILIKE'} ${pattern}${likeEscape(d)}`;
       } else {
         const p = strParam(escapeLike(raw, d));
         const operand = d === 'plsql' && !cs ? `UPPER(${p})` : p;
         const pattern = concat(d, [...(pre ? ["'%'"] : []), operand, ...(post ? ["'%'"] : [])]);
         const left = d === 'tsql' && cs ? `${c} COLLATE Latin1_General_CS_AS` : d === 'plsql' && !cs ? `UPPER(${c})` : c;
-        expr = `${left} LIKE ${pattern} ${LIKE_ESCAPE}`;
+        // Snowflake / ClickHouse: LIKE is case-sensitive, ILIKE the insensitive form; MySQL: LIKE BINARY is sensitive.
+        const like = hasIlike(d) && !cs ? 'ILIKE' : d === 'mysql' && cs ? 'LIKE BINARY' : 'LIKE';
+        expr = `${left} ${like} ${pattern}${likeEscape(d)}`;
       }
       return cond.op === 'notContains' ? `NOT (${expr})` : expr;
     }
@@ -336,8 +353,8 @@ function quickSql(ctx: Ctx, quick: string): Piece | null {
   const parts = cols.map((c) => {
     let ref = colRef(ctx, c);
     if (d === 'tsql' && (c.kind === 'xml' || c.kind === 'json')) ref = `CAST(${ref} AS NVARCHAR(MAX))`;
-    if (d === 'pgsql') return `${isPgText(c) ? ref : `${ref}::text`} ILIKE ${pattern} ${LIKE_ESCAPE}`;
-    return `${d === 'plsql' ? `UPPER(${ref})` : ref} LIKE ${pattern} ${LIKE_ESCAPE}`;
+    if (d === 'pgsql') return `${isPgText(c) ? ref : `${ref}::text`} ILIKE ${pattern}${likeEscape(d)}`;
+    return `${d === 'plsql' ? `UPPER(${ref})` : ref} ${hasIlike(d) ? 'ILIKE' : 'LIKE'} ${pattern}${likeEscape(d)}`;
   });
   return atom(parts.length === 1 ? parts[0] : `(${parts.join(' OR ')})`);
 }

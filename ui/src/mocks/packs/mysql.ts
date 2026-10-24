@@ -2,10 +2,7 @@
 // the two sample connections (folder "Batch 3") and the MySQL-specific objects of the shop seed
 // (engine/tests/docker/seed-mysql.sql / seed-mariadb.sql) on top of the shop tables the mock engine serves every pack.
 // No module routes: WP-MY has no /mysql endpoints. Dev-only (mocks are never part of the production bundle).
-//
-// TODO(WPMY-shared): mocks/engine.ts serves pack providers the SQLite shop in a schema named `main` with SQLite column
-// types, no `DIALECT` entry (session/catalog dialect undefined) and a SQLite server banner; docs/wp-notes/WP-MY.md R3
-// asks for a per-pack schema name / table types / banner hook so these connections browse `shop` with MySQL types.
+// `shop` (MockProviderPack.shop) makes the mock engine present the shop as schema `shop` with MySQL column types.
 import type { CatalogObject, ConnectionProfile, FormField, ProviderInfo } from '../../api/types';
 import { PACK_NOW, type MockProviderPack } from './types';
 
@@ -61,9 +58,27 @@ const SHOP_EXTRAS: CatalogObject[] = [
   { t: 'trigger', n: 'trg_orders_check', cm: 'on orders' },
 ];
 
+/** SQLite fixture type → MySQL type. */
+function mysqlType(t: string): string {
+  const m = /^([A-Z]+)(\(.*\))?$/.exec(t);
+  if (!m) return t.toLowerCase();
+  switch (m[1]) {
+    case 'INTEGER': return 'int';
+    case 'TEXT': return 'varchar(255)';
+    case 'REAL': return 'double';
+    case 'DECIMAL': return `decimal${m[2] ?? '(10,2)'}`;
+    case 'BOOLEAN': return 'tinyint(1)';
+    default: return m[1].toLowerCase();
+  }
+}
+
 export const mysqlPack: MockProviderPack = {
   providers: mysqlProviders,
   connections: mysqlConnections,
+  shop: {
+    mysql: { schema: 'shop', type: mysqlType, serverInfo: { version: '8.4.3', productVersion: '8.4.3' } },
+    mariadb: { schema: 'shop', type: mysqlType, serverInfo: { version: '11.4.4-MariaDB', productVersion: '11.4.4' } },
+  },
   extraObjects: {
     mysql: SHOP_EXTRAS,
     // MariaDB 10.3+ sequences (seed-mariadb.sql)

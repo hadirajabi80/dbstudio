@@ -16,9 +16,8 @@ import { traitLexer } from '../lexer/traits';
 import { splitSnowflake } from '../split/snowflake';
 import { snowflakeRules } from '../../format/rules/snowflake';
 
-// dollarParams: WP0's contract (batch3-foundation.test.ts) lexes `$1` as a parameter; a staged-file column followed by a
-// path (`$1:name`) is an identifier here. TODO(WPSF-shared): R3-3 in docs/wp-notes/WP-SF.md drops `$1` as a bind.
-const LEX: LexTraits = { backslashEscapes: true, dollarQuotes: true, dollarParams: true, paramPrefixes: ':?', stringPrefixes: 'X' };
+// `$1` is a staged-file column (SELECT $1, $2 FROM @stage), not a bind: no dollarParams (docs/wp-notes/WP-SF.md R3-3).
+const LEX: LexTraits = { backslashEscapes: true, dollarQuotes: true, paramPrefixes: ':?', stringPrefixes: 'X' };
 
 const base = traitLexer(LEX);
 const COLON = 58, QUOTE = 34, RBRACKET = 93, RPAREN = 41, DOLLAR = 36;
@@ -29,10 +28,9 @@ export const snowflakeLexHook: LexHook = (lx, start, c, c1) => {
   if (c === DOLLAR && isDigit(c1)) {
     let p = start + 1;
     while (p < lx.text.length && isDigit(lx.text.charCodeAt(p))) p++;
-    if (lx.text.charCodeAt(p) === COLON && lx.text.charCodeAt(p + 1) !== COLON) {
-      lx.pos = p;
-      return lx.make('ident', start, p);
-    }
+    // a staged-file column (`$1`, also `$1:path`): an identifier, never a bind
+    lx.pos = p;
+    return lx.make('ident', start, p);
   }
   if (c === COLON && c1 !== COLON && start > 0) {
     const p = lx.text.charCodeAt(start - 1);

@@ -4,6 +4,7 @@ import type { FormatRules } from '../../format/rules/common';
 import type { Dialect, StatementKind, Token } from '../types';
 import type { SplitBuilder, SplitOptions } from '../split/splitter';
 import type { LexHook } from '../lexer/lexer';
+import type { ExtraCompletionSource } from '../complete/completer';
 
 export interface FunctionSignature { params: string[]; returns?: string; doc?: string }
 export interface FunctionDef {
@@ -160,6 +161,16 @@ export interface DialectSpec {
    * the head word; undefined falls through to the shared rules (e.g. MySQL `START TRANSACTION`, CQL `BEGIN BATCH`).
    */
   classify?: (toks: Token[], head: number) => StatementKind | undefined;
+  /**
+   * Batch 3: dialect-specific completion source (ClickHouse engines after `ENGINE =`, settings, formats …), run before the
+   * editor's extra sources by the intel facade.
+   */
+  complete?: ExtraCompletionSource;
+  /**
+   * Batch 3: function and type names are case-sensitive (ClickHouse `toYYYYMM`, `UInt32`): completion inserts them as
+   * the catalog spells them and Format SQL keeps the case the user typed, whatever the keyword/function case setting.
+   */
+  preserveNameCase?: boolean;
 }
 
 export function words(s: string): string[] {

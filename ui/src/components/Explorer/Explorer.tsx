@@ -162,7 +162,7 @@ function activateRow(r: TreeRow, toggle: (r: TreeRow, open?: boolean) => void) {
   if (r.kind === 'object' || r.kind === 'column') {
     const t = targetOfRow(r);
     if (!t || t.kind !== 'object') return;
-    if (r.kind === 'object' && isTabular(t.ref.type) && hasCommand('data.open') && runCommand('data.open', t)) return;
+    if (r.kind === 'object' && isTabular(t.ref.type, dialectOf(t.connectionId)) && hasCommand('data.open') && runCommand('data.open', t)) return;
     activateObject(t.connectionId, t.database, t.ref, r.kind === 'column' ? r.column?.name : null);
   } else if ((r.kind === 'database' || r.kind === 'schema' || r.kind === 'folder' || r.kind === 'qfolder') && hasCommand('objects.open') && runCommand('objects.open', targetOfRow(r))) {
     if (!r.expanded) toggle(r, true); // WP3: Enter / double-click shows the Objects tab of the node (and expands it)

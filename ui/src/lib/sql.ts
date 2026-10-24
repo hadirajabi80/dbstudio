@@ -21,6 +21,11 @@ export const ORACLE_RESERVED = new Set(
   'ACCESS ADD ALL ALTER AND ANY AS ASC AUDIT BETWEEN BY CHAR CHECK CLUSTER COLUMN COMMENT COMPRESS CONNECT CREATE CURRENT DATE DECIMAL DEFAULT DELETE DESC DISTINCT DROP ELSE EXCLUSIVE EXISTS FILE FLOAT FOR FROM GRANT GROUP HAVING IDENTIFIED IMMEDIATE IN INCREMENT INDEX INITIAL INSERT INTEGER INTERSECT INTO IS LEVEL LIKE LOCK LONG MAXEXTENTS MINUS MLSLABEL MODE MODIFY NOAUDIT NOCOMPRESS NOT NOWAIT NULL NUMBER OF OFFLINE ON ONLINE OPTION OR ORDER PCTFREE PRIOR PUBLIC RAW RENAME RESOURCE REVOKE ROW ROWNUM ROWS SELECT SESSION SET SHARE SIZE SMALLINT START SUCCESSFUL SYNONYM SYSDATE TABLE THEN TO TRIGGER UID UNION UNIQUE UPDATE USER VALIDATE VALUES VARCHAR VARCHAR2 VIEW WHENEVER WHERE WITH'.split(' '),
 );
 
+/** MySQL 8 / MariaDB reserved words: a table named `order` or `group` must stay in backticks. */
+export const MYSQL_RESERVED = new Set(
+  'ACCESSIBLE ADD ALL ALTER ANALYZE AND AS ASC BEFORE BETWEEN BIGINT BINARY BLOB BOTH BY CALL CASCADE CASE CHANGE CHAR CHARACTER CHECK COLLATE COLUMN CONDITION CONSTRAINT CONTINUE CONVERT CREATE CROSS CUBE CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DATABASES DEC DECIMAL DECLARE DEFAULT DELAYED DELETE DESC DESCRIBE DETERMINISTIC DISTINCT DIV DOUBLE DROP DUAL EACH ELSE ELSEIF ENCLOSED ESCAPED EXCEPT EXISTS EXIT EXPLAIN FALSE FETCH FLOAT FOR FORCE FOREIGN FROM FULLTEXT FUNCTION GENERATED GET GRANT GROUP GROUPS HAVING IF IGNORE IN INDEX INNER INOUT INSERT INT INTEGER INTERSECT INTERVAL INTO IS ITERATE JOIN KEY KEYS KILL LATERAL LEADING LEAVE LEFT LIKE LIMIT LINEAR LINES LOAD LOCK LONG LOOP MATCH MOD NATURAL NOT NULL NUMERIC OF ON OPTIMIZE OPTION OR ORDER OUT OUTER OVER PARTITION PRECISION PRIMARY PROCEDURE PURGE RANGE RANK READ READS REAL RECURSIVE REFERENCES REGEXP RELEASE RENAME REPEAT REPLACE REQUIRE RESIGNAL RESTRICT RETURN REVOKE RIGHT RLIKE ROW ROWS SCHEMA SELECT SET SHOW SIGNAL SMALLINT SPATIAL SQL STARTING STORED STRAIGHT_JOIN SYSTEM TABLE TERMINATED THEN TO TRAILING TRIGGER TRUE UNDO UNION UNIQUE UNLOCK UNSIGNED UPDATE USAGE USE USING VALUES VARBINARY VARCHAR VIRTUAL WHEN WHERE WHILE WINDOW WITH WRITE XOR'.split(' '),
+);
+
 export function needsQuoting(name: string, dialect: Dialect): boolean {
   if (dialect === 'pgsql') {
     // Unquoted identifiers fold to lower case, so anything else is quoted to keep its spelling.
@@ -34,12 +39,15 @@ export function needsQuoting(name: string, dialect: Dialect): boolean {
     return true;
   }
   const up = name.toUpperCase();
+  if (dialect === 'mysql') return MYSQL_RESERVED.has(up) || COMMON_RESERVED.has(up);
   return dialect === 'tsql' ? TSQL_RESERVED.has(up) : COMMON_RESERVED.has(up);
 }
 
 export function quoteIdent(name: string, dialect: Dialect, force = false): string {
   if (!force && !needsQuoting(name, dialect)) return name;
   if (dialect === 'tsql') return `[${name.replace(/]/g, ']]')}]`;
+  // MySQL's default sql_mode reads "…" as a string; ClickHouse accepts both, backticks are its documented form.
+  if (dialect === 'mysql' || dialect === 'clickhouse') return '`' + name.replace(/`/g, '``') + '`';
   return `"${name.replace(/"/g, '""')}"`;
 }
 
@@ -68,8 +76,14 @@ export function selectTopSql(ref: ObjectRef, dialect: Dialect, n: number, defaul
   }
 }
 
-export function isTabular(t: CatalogObjectType): boolean {
-  return t === 'table' || t === 'view' || t === 'mview' || t === 'synonym' || t === 'tablefunc';
+/** Objects `SELECT * FROM x` works on. ClickHouse dictionaries (catalog type `type`) are queryable too. */
+export function isTabular(t: CatalogObjectType, dialect?: Dialect | null): boolean {
+  return t === 'table' || t === 'view' || t === 'mview' || t === 'synonym' || t === 'tablefunc' || (t === 'type' && dialect === 'clickhouse');
+}
+
+/** Explorer folder label of an object type ("Dictionaries" for the `type` objects of ClickHouse). */
+export function objectTypeLabel(t: CatalogObjectType, dialect?: Dialect | null): string {
+  return t === 'type' && dialect === 'clickhouse' ? 'Dictionaries' : OBJECT_TYPE_LABELS[t];
 }
 
 export const OBJECT_TYPE_LABELS: Record<CatalogObjectType, string> = {

@@ -409,7 +409,7 @@ export const chComplete: ExtraCompletionSource = (c: CursorContext, env: Complet
   return out;
 };
 
-/** ClickHouse spec plus its completion source (DialectSpec.complete once the R3 hook lands; see WP-CH notes). */
+/** ClickHouse spec plus its completion source (DialectSpec.complete). */
 export type ClickHouseSpec = DialectSpec & { complete?: ExtraCompletionSource };
 
 export const define: DialectDefine = (kit) => {
@@ -448,8 +448,8 @@ export const define: DialectDefine = (kit) => {
     formatRules: clickhouseRules,
     classify: classifyClickHouse,
   });
-  spec.complete = chComplete; // TODO(WPCH-shared): read by intel/index.ts once DialectSpec.complete exists (R3)
-  // TODO(WPCH-shared): set `preserveNameCase: true` once DialectSpec has it (R3): ClickHouse function/type names are
-  // case-sensitive, so completion and Format SQL must keep `toYYYYMM` / `UInt32` as spelled.
+  spec.complete = chComplete; // read by intel/index.ts (DialectSpec.complete)
+  // ClickHouse function/type names are case-sensitive: completion and Format SQL keep `toYYYYMM` / `UInt32` as spelled.
+  spec.preserveNameCase = true;
   return spec;
 };

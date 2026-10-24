@@ -1,11 +1,9 @@
 // ClickHouse commands (plan-batch3 WP-CH): the three lazy tab views (parts & partitions, mutations, merges) and the
 // palette / context-menu commands that open them, plus "Optimize table…". Commands accept an ObjectTarget (explorer
 // table), a ConnectionTarget, or fall back to the explorer selection, the active ClickHouse tab and the active console.
-//
-// TODO(WPCH-shared): the shell's `explorer.table` menu cannot be extended from here (commands/menuModel.ts is frozen); R3
-// request in docs/wp-notes/WP-CH.md adds these ids as optional, hide-when-disabled entries. Meanwhile they run from the
-// command palette (with a ClickHouse table selected in the explorer, or from a ClickHouse tab).
+// They are also entries of the explorer's table and connection menus (extendContextMenu, shown for ClickHouse only).
 import { objectTargetOf, targetOf } from '../../commands/core';
+import { extendContextMenu } from '../../commands/menuModel';
 import { registerCommands, type Command } from '../../commands/registry';
 import { isConnectionTarget } from '../../commands/types';
 import { getConnection } from '../../store/connections';
@@ -34,6 +32,8 @@ export function chTableOf(args?: unknown): { cid: string; database: string; tabl
 
 /** The ClickHouse connection a command acts on. */
 export function chConnOf(args?: unknown): string | null {
+  // an explicit target (a context-menu row) of another provider never falls back to the active tab
+  if (args && typeof args === 'object' && 'connectionId' in args && typeof args.connectionId === 'string') return isCh(args.connectionId) ? args.connectionId : null;
   const target = targetOf(args);
   if (isConnectionTarget(target) && isCh(target.connectionId)) return target.connectionId;
   const o = objectTargetOf(args);
@@ -101,4 +101,14 @@ export function registerClickHouseCommands(): void {
   registered = true;
   for (const view of Object.values(CH_VIEWS)) registerTabView(view, { component: ClickHouseTab, icon: view === CH_VIEWS.merges ? 'Workflow' : view === CH_VIEWS.mutations ? 'ListChecks' : 'Layers' });
   registerCommands(COMMANDS);
+  // hidden on every other provider (the commands' `when` needs a ClickHouse target)
+  extendContextMenu('explorer.table', [
+    { command: 'clickhouse.parts', optional: true, hideDisabled: true },
+    { command: 'clickhouse.mutations', optional: true, hideDisabled: true },
+    { command: 'clickhouse.optimize', optional: true, hideDisabled: true },
+  ]);
+  extendContextMenu('explorer.connection', [
+    { command: 'clickhouse.mutations', optional: true, hideDisabled: true },
+    { command: 'clickhouse.merges', optional: true, hideDisabled: true },
+  ]);
 }

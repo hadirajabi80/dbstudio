@@ -13,8 +13,7 @@ import { toast } from '../../store/ui';
 import { Banner, esErrorText, RefreshButton, ViewHeader } from './parts';
 import { isReadOnly } from './store';
 
-// TODO(WPES-shared): `es.tasks` is not in the StreamKind union of api/types.ts yet (R3-1 in docs/wp-notes/WP-ES.md).
-const TASKS_STREAM = 'es.tasks' as StreamKind;
+const TASKS_STREAM: StreamKind = 'es.tasks';
 
 /** Progress 0..1 of a task with a bulk-by-scroll status (reindex, update/delete by query), else null. */
 export function taskProgress(t: EsTask): { done: number; total: number } | null {

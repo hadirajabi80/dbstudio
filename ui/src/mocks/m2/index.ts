@@ -162,7 +162,7 @@ export class MockSourceClients {
       this.clients.set(connectionId, touched);
       return touched;
     }
-    const target = String(conn.props.host ?? conn.props.uri ?? conn.props.bootstrapServers ?? '');
+    const target = String(conn.props.host ?? conn.props.uri ?? conn.props.bootstrapServers ?? conn.props.url ?? '');
     if (/fail|nowhere/i.test(target)) return { status: 503, code: 'SOURCE_UNAVAILABLE', message: `Cannot connect to ${target}: connection refused` };
     const info: SourceClientInfo = { connectionId, state: 'open', server: mockServerInfo(conn.providerId, target), openedAt: iso(), lastUsed: iso() };
     this.clients.set(connectionId, info);
@@ -181,6 +181,7 @@ function mockServerInfo(providerId: string, target: string): ServerInfo {
   if (providerId === 'redis') return { version: 'Redis 7.4.1', productVersion: '7.4.1', serverName: target, user: 'default', database: '0' };
   if (providerId === 'mongodb') return { version: 'MongoDB 7.0.14 (replica set rs0)', productVersion: '7.0.14', serverName: target, user: null, database: null };
   if (providerId === 'kafka') return { version: 'Kafka 3.8 (3 brokers, controller 1)', productVersion: '3.8.0', serverName: target, user: null, database: null };
+  if (providerId === 'elasticsearch') return { version: 'Elasticsearch 8.15.3 (cluster rowlit-dev, green, 3 nodes)', productVersion: '8.15.3', serverName: 'rowlit-dev', user: null, database: null };
   return { version: `Mock ${providerId}`, productVersion: null, serverName: target, user: null, database: null };
 }
 

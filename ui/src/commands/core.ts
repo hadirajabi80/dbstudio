@@ -362,7 +362,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   // Explorer object actions
   {
     id: 'explorer.selectTop', title: 'Select top 1000 rows', category: 'Database', icon: 'Rows3', keywords: 'preview data',
-    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && isTabular(t.ref.type); },
+    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && isTabular(t.ref.type, dialectOf(t.connectionId)); },
     run: (a?: unknown) => { const t = objectTargetOf(a)!; selectTop(t.connectionId, t.database, t.ref, 1000); },
   },
   {
@@ -393,7 +393,7 @@ export const CORE_COMMANDS: Command<never>[] = [
   ...(['select', 'insert', 'update', 'delete'] as SqlTemplate[]).map((k): Command<never> => ({
     id: `explorer.generate${k[0].toUpperCase()}${k.slice(1)}`, title: `Generate ${k.toUpperCase()} statement`, category: 'Database',
     icon: k === 'select' ? 'Search' : k === 'insert' ? 'Plus' : k === 'update' ? 'Pencil' : 'Trash2', keywords: 'generate sql template statement',
-    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && isTabular(t.ref.type) && (k === 'select' || t.ref.type !== 'mview'); },
+    when: (a?: unknown) => { const t = objectTargetOf(a); return !!t && isTabular(t.ref.type, dialectOf(t.connectionId)) && (k === 'select' || t.ref.type !== 'mview'); },
     run: (a?: unknown) => { const t = objectTargetOf(a)!; generateSqlInto(k, t.connectionId, t.database, t.ref); },
   })),
   {
