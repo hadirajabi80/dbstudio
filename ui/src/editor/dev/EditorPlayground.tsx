@@ -95,7 +95,18 @@ SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
   // WP-MY end
   // WP-CH begin
   clickhouse: `-- ClickHouse playground
-SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+SELECT c.name, toYYYYMM(o.order_date) AS month, sum(o.total) AS revenue
+FROM customers c JOIN orders o FINAL ON o.customer_id = c.id
+PREWHERE o.status = 'paid' # hash comment
+GROUP BY c.name, month
+ORDER BY revenue DESC
+LIMIT 3 BY month
+SETTINGS max_threads = 4;
+
+CREATE TABLE events (id UInt64, ts DateTime64(3) CODEC(Delta, ZSTD(1)), tags Array(LowCardinality(String)))
+ENGINE = MergeTree PARTITION BY toYYYYMM(ts) ORDER BY (id, ts);
+
+SELECT * FROM system.parts WHERE active AND table = {table:String};
 `,
   // WP-CH end
   // WP-SF begin

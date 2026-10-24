@@ -1,25 +1,23 @@
 {
  "connectionId": "c_clickhouse",
  "dialect": "clickhouse",
- "database": "main",
- "defaultSchema": "main",
+ "database": null,
+ "defaultSchema": "shop",
  "version": 1,
- "databases": [
-  "main",
-  "archive"
- ],
+ "databases": [],
  "schemas": [
   {
-   "name": "main",
+   "name": "shop",
    "version": 1,
    "objects": [
     {
      "t": "table",
-     "n": "customers",
+     "n": "countries",
+     "cm": "ReplacingMergeTree ORDER BY id",
      "c": [
       [
        "id",
-       "INTEGER",
+       "UInt32",
        0,
        1,
        0,
@@ -27,15 +25,44 @@
       ],
       [
        "name",
-       "TEXT",
+       "String",
        0,
        0,
        0,
        null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customers",
+     "cm": "Registered customers",
+     "pk": [
+      "id"
+     ],
+     "c": [
+      [
+       "id",
+       "UInt32",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "name",
+       "String",
+       0,
+       0,
+       0,
+       "Display name"
       ],
       [
        "email",
-       "TEXT",
+       "Nullable(String)",
        1,
        0,
        0,
@@ -43,37 +70,34 @@
       ],
       [
        "country_id",
-       "INTEGER",
+       "Nullable(UInt32)",
        1,
        0,
        0,
        null
+      ],
+      [
+       "created_at",
+       "DateTime",
+       0,
+       0,
+       0,
+       null
       ]
-     ],
-     "pk": [
-      "id"
-     ],
-     "fk": [
-      {
-       "n": "fk_customers_0",
-       "cols": [
-        "country_id"
-       ],
-       "rs": "main",
-       "rt": "countries",
-       "rcols": [
-        "id"
-       ]
-      }
      ]
     },
     {
      "t": "table",
      "n": "orders",
+     "cm": "MergeTree PARTITION BY toYYYYMM(order_date) ORDER BY (customer_id, id)",
+     "pk": [
+      "customer_id",
+      "id"
+     ],
      "c": [
       [
        "id",
-       "INTEGER",
+       "UInt64",
        0,
        1,
        0,
@@ -81,111 +105,64 @@
       ],
       [
        "customer_id",
-       "INTEGER",
+       "UInt32",
        0,
-       0,
+       1,
        0,
        null
       ],
       [
        "order_date",
-       "TEXT",
-       1,
+       "DateTime64(3, 'UTC')",
+       0,
        0,
        0,
        null
       ],
       [
        "total",
-       "REAL",
+       "Decimal(12, 2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "status",
+       "LowCardinality(String)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "tags",
+       "Array(String)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "attrs",
+       "Map(String, String)",
        0,
        0,
        0,
        null
       ]
-     ],
-     "pk": [
-      "id"
-     ],
-     "fk": [
-      {
-       "n": "fk_orders_0",
-       "cols": [
-        "customer_id"
-       ],
-       "rs": "main",
-       "rt": "customers",
-       "rcols": [
-        "id"
-       ]
-      }
-     ]
-    },
-    {
-     "t": "table",
-     "n": "order_lines",
-     "c": [
-      [
-       "order_id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "product_id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "qty",
-       "INTEGER",
-       0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "order_id",
-      "product_id"
-     ],
-     "fk": [
-      {
-       "n": "fk_order_lines_0",
-       "cols": [
-        "order_id"
-       ],
-       "rs": "main",
-       "rt": "orders",
-       "rcols": [
-        "id"
-       ]
-      },
-      {
-       "n": "fk_order_lines_1",
-       "cols": [
-        "product_id"
-       ],
-       "rs": "main",
-       "rt": "products",
-       "rcols": [
-        "id"
-       ]
-      }
      ]
     },
     {
      "t": "table",
      "n": "products",
+     "pk": [
+      "id"
+     ],
      "c": [
       [
        "id",
-       "INTEGER",
+       "UInt32",
        0,
        1,
        0,
@@ -193,7 +170,7 @@
       ],
       [
        "name",
-       "TEXT",
+       "String",
        0,
        0,
        0,
@@ -201,24 +178,168 @@
       ],
       [
        "price",
-       "REAL",
+       "Nullable(Decimal(10, 2))",
+       1,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "table",
+     "n": "order_lines",
+     "cm": "SummingMergeTree ORDER BY (order_id, product_id)",
+     "pk": [
+      "order_id",
+      "product_id"
+     ],
+     "c": [
+      [
+       "order_id",
+       "UInt64",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "product_id",
+       "UInt32",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "qty",
+       "UInt16",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "line_total",
+       "Decimal(12, 2)",
+       0,
+       0,
+       2,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "view",
+     "n": "customer_orders",
+     "c": [
+      [
+       "customer_id",
+       "UInt32",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "String",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_id",
+       "UInt64",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "Decimal(12, 2)",
        0,
        0,
        0,
        null
       ]
-     ],
-     "pk": [
-      "id"
+     ]
+    },
+    {
+     "t": "mview",
+     "n": "daily_sales",
+     "cm": "Materialized view TO daily_sales_agg",
+     "c": [
+      [
+       "day",
+       "Date",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "orders",
+       "UInt64",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "revenue",
+       "Decimal(38, 2)",
+       0,
+       0,
+       0,
+       null
+      ]
      ]
     },
     {
      "t": "table",
-     "n": "countries",
+     "n": "daily_sales_agg",
+     "cm": "SummingMergeTree ORDER BY day",
+     "pk": [
+      "day"
+     ],
+     "c": [
+      [
+       "day",
+       "Date",
+       0,
+       1,
+       0,
+       null
+      ],
+      [
+       "orders",
+       "UInt64",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "revenue",
+       "Decimal(38, 2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "type",
+     "n": "product_dict",
+     "cm": "Dictionary: HASHED() from shop.products",
      "c": [
       [
        "id",
-       "INTEGER",
+       "UInt64",
        0,
        1,
        0,
@@ -226,33 +347,16 @@
       ],
       [
        "name",
-       "TEXT",
+       "String",
        0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "id"
-     ]
-    },
-    {
-     "t": "view",
-     "n": "customer_totals",
-     "c": [
-      [
-       "customer_id",
-       "INTEGER",
-       1,
        0,
        0,
        null
       ],
       [
-       "total",
-       "REAL",
-       1,
+       "price",
+       "Decimal(10, 2)",
+       0,
        0,
        0,
        null
@@ -260,8 +364,23 @@
      ]
     },
     {
-     "t": "trigger",
-     "n": "trg_orders_ai"
+     "t": "func",
+     "n": "tax",
+     "cm": "SQL user-defined function: (amount) -> amount * 0.19",
+     "p": [
+      [
+       "",
+       "Float64",
+       "return",
+       0
+      ],
+      [
+       "amount",
+       "Decimal(12, 2)",
+       "in",
+       0
+      ]
+     ]
     }
    ]
   },
@@ -271,11 +390,15 @@
    "objects": [
     {
      "t": "table",
-     "n": "orders_2020",
+     "n": "orders_2025",
+     "cm": "MergeTree ORDER BY id",
+     "pk": [
+      "id"
+     ],
      "c": [
       [
        "id",
-       "INTEGER",
+       "UInt64",
        0,
        1,
        0,
@@ -283,7 +406,7 @@
       ],
       [
        "customer_id",
-       "INTEGER",
+       "UInt32",
        0,
        0,
        0,
@@ -291,40 +414,12 @@
       ],
       [
        "total",
-       "REAL",
+       "Decimal(12, 2)",
        0,
        0,
        0,
        null
       ]
-     ],
-     "pk": [
-      "id"
-     ]
-    },
-    {
-     "t": "table",
-     "n": "customers_old",
-     "c": [
-      [
-       "id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "name",
-       "TEXT",
-       0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "id"
      ]
     }
    ]

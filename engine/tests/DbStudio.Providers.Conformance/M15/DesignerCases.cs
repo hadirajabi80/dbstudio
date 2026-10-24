@@ -39,6 +39,7 @@ public static class DesignerCases
         // WP-MY begin
         // WP-MY end
         // WP-CH begin
+        Dialect.ClickHouse => ShopSchema.ToSnake(pascal).ToLowerInvariant(),
         // WP-CH end
         // WP-SF begin
         // WP-SF end

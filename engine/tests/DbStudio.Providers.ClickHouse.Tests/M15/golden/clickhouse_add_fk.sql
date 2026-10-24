@@ -1,0 +1,2 @@
+-- rebuildRequired: false, transactional: false
+-- warning: ClickHouse has no foreign keys; they are not scripted.
