@@ -1,3 +1,24 @@
 {
-  "$comment": "CQL (Cassandra / ScyllaDB) type map for code generation (plan-batch3 WP-CS). WP0 stub: unknown types fall back to the wire column kind."
+  "$comment": "CQL type map (plan-batch3 WP-CS); keys as system_schema.columns prints them. Collections: types/index.ts (R3-4).",
+  "ascii": { "logical": "string", "cs": "string", "go": "string", "ts": "string", "java": "String", "py": "str" },
+  "text": { "logical": "string", "cs": "string", "go": "string", "ts": "string", "java": "String", "py": "str" },
+  "varchar": { "logical": "string", "cs": "string", "go": "string", "ts": "string", "java": "String", "py": "str" },
+  "tinyint": { "logical": "int16", "cs": "sbyte", "go": "int8", "ts": "number", "java": "byte", "py": "int" },
+  "smallint": { "logical": "int16", "cs": "short", "go": "int16", "ts": "number", "java": "short", "py": "int" },
+  "int": { "logical": "int32", "cs": "int", "go": "int32", "ts": "number", "java": "int", "py": "int" },
+  "bigint": { "logical": "int64", "cs": "long", "go": "int64", "ts": "number", "java": "long", "py": "int" },
+  "counter": { "logical": "int64", "cs": "long", "go": "int64", "ts": "number", "java": "long", "py": "int" },
+  "varint": { "logical": "decimal", "cs": "System.Numerics.BigInteger", "go": "string", "ts": "bigint", "java": "java.math.BigInteger", "py": "int" },
+  "decimal": { "logical": "decimal", "cs": "decimal", "go": "float64", "ts": "number", "java": "BigDecimal", "py": "Decimal" },
+  "float": { "logical": "float32", "cs": "float", "go": "float32", "ts": "number", "java": "float", "py": "float" },
+  "double": { "logical": "float64", "cs": "double", "go": "float64", "ts": "number", "java": "double", "py": "float" },
+  "boolean": { "logical": "bool", "cs": "bool", "go": "bool", "ts": "boolean", "java": "boolean", "py": "bool" },
+  "uuid": { "logical": "guid", "cs": "Guid", "go": "string", "ts": "string", "java": "UUID", "py": "UUID" },
+  "timeuuid": { "logical": "guid", "cs": "Guid", "go": "string", "ts": "string", "java": "UUID", "py": "UUID" },
+  "timestamp": { "logical": "datetimeoffset", "cs": "DateTimeOffset", "go": "time.Time", "ts": "string", "java": "java.time.Instant", "py": "datetime" },
+  "date": { "logical": "date", "cs": "DateOnly", "go": "time.Time", "ts": "string", "java": "LocalDate", "py": "date" },
+  "time": { "logical": "time", "cs": "TimeOnly", "go": "time.Duration", "ts": "string", "java": "LocalTime", "py": "time" },
+  "duration": { "logical": "interval", "cs": "TimeSpan", "go": "time.Duration", "ts": "string", "java": "Duration", "py": "timedelta" },
+  "inet": { "logical": "string", "cs": "IPAddress", "go": "string", "ts": "string", "java": "java.net.InetAddress", "py": "str" },
+  "blob": { "logical": "binary", "cs": "byte[]", "go": "[]byte", "ts": "Buffer", "java": "java.nio.ByteBuffer", "py": "bytes" }
 }

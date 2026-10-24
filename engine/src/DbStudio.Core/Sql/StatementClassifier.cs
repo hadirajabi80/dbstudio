@@ -267,7 +267,50 @@ public static class StatementClassifier
     // WP-SF end
 
     // WP-CS begin (CQL: BEGIN BATCH … APPLY BATCH = Dml, DESCRIBE/DESC, USE, LIST ROLES/USERS, GRANT/REVOKE, …)
-    private static StatementClassification? ClassifyCql(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    private static StatementClassification? ClassifyCql(List<SqlToken> t, int i, string u, bool hasWhere, int start)
+    {
+        string? Next(int k) => k < t.Count && t[k].Kind == SqlTokenKind.Word ? t[k].Upper : null;
+        switch (u)
+        {
+            case "BEGIN" when Next(i + 1) is "BATCH" or "UNLOGGED" or "COUNTER" or "LOGGED":
+                return new(StatementCategory.Dml, "BATCH", true, null, start);
+            case "DESCRIBE" or "DESC":
+                return new(StatementCategory.Query, "DESCRIBE", false, null, start);
+            case "LIST" or "SHOW":
+                return new(StatementCategory.Query, u, false, null, start);
+            case "CONSISTENCY" or "TRACING" or "PAGING" or "EXPAND" or "CAPTURE":
+                return new(StatementCategory.Session, u, false, null, start);
+            case "SERIAL" when Next(i + 1) == "CONSISTENCY":
+                return new(StatementCategory.Session, "SERIAL CONSISTENCY", false, null, start);
+            case "CREATE" or "ALTER" or "DROP":
+                {
+                    var j = i + 1;
+                    var obj = Next(j);
+                    if (obj is "KEYSPACE" or "SCHEMA")
+                    {
+                        j++;
+                        if (Next(j) == "IF") j += Next(j + 1) == "NOT" ? 3 : 2;
+                        var name = j < t.Count && t[j].IsIdentifier ? Unquote(t[j]) : null;
+                        return new(StatementCategory.Ddl, $"{u} KEYSPACE", false, new DdlTarget(u, "schema", null, null, name, DdlScope.Database), start);
+                    }
+                    if (obj is "CUSTOM" or "COLUMNFAMILY" or "AGGREGATE" or "ROLE")
+                    {
+                        // Normalise to the shared DDL shapes: CUSTOM INDEX → INDEX, COLUMNFAMILY → TABLE, AGGREGATE → FUNCTION, ROLE → USER.
+                        var copy = new List<SqlToken>(t);
+                        if (obj == "CUSTOM") copy.RemoveAt(j);
+                        else copy[j] = t[j] with { Value = obj switch { "COLUMNFAMILY" => "TABLE", "AGGREGATE" => "FUNCTION", _ => "USER" } };
+                        var c = ClassifyDdl(copy, i, u, Dialect.Cql, start);
+                        return obj == "AGGREGATE" ? c with { Kind = $"{u} AGGREGATE" } : obj == "ROLE" ? c with { Kind = $"{u} ROLE" } : c;
+                    }
+                    return null;
+                }
+            default:
+                return null;
+        }
+    }
+
+    private static string Unquote(SqlToken t) =>
+        t.Kind == SqlTokenKind.QuotedIdentifier && t.Value.Length >= 2 ? t.Value[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal) : t.Value;
     // WP-CS end
 
     private static StatementClassification ClassifyPragma(List<SqlToken> t, int i)
