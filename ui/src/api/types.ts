@@ -598,7 +598,7 @@ export interface ForeignKeyModel {
   onUpdate: ReferentialAction;
 }
 export interface CheckModel { name: string | null; expression: string }
-export interface TableOptions { withoutRowid: boolean; strict: boolean; tablespace: string | null }
+export interface TableOptions { withoutRowid: boolean; strict: boolean; tablespace: string | null; /** Batch 3: provider options (ClickHouse engine, orderBy, partitionBy, primaryKey, sampleBy, ttl, settings). */ extra?: Record<string, string> | null }
 export interface TableModel {
   schema: string | null;
   name: string;

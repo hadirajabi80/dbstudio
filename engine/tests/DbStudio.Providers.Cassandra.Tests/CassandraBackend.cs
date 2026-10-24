@@ -143,6 +143,8 @@ public sealed class CassandraFixture : ProviderFixture
     protected override bool SeedOnInitialize => false;
 
     public override bool SupportsTransactions => false;
+    public override bool SupportsForeignKeys => false;
+    public override bool SupportsIdentity => false;
 
     public override string? MultiResultSetBatch => "SELECT id FROM countries; SELECT name FROM products";
 

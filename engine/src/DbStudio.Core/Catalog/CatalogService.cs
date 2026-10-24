@@ -74,7 +74,7 @@ public sealed class CatalogService
 
     private (IDbProvider Provider, ConnectionProfile Profile, string? Password) Resolve(string connectionId)
     {
-        var profile = _connections.Get(connectionId);
+        var profile = _connections.WithSecrets(_connections.Get(connectionId));
         return (_providers.Get(profile.ProviderId), profile, _connections.GetPassword(connectionId));
     }
 

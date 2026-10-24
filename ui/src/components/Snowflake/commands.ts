@@ -7,6 +7,7 @@
 // They are also entries of the explorer's connection menu (extendContextMenu, shown for Snowflake connections only).
 import { createElement, lazy, Suspense } from 'react';
 import { extendContextMenu } from '../../commands/menuModel';
+import { registerDesignerOptionsPanel } from '../../designer/table/optionsPanels';
 import { registerCommands, type Command } from '../../commands/registry';
 import { isConnectionTarget } from '../../commands/types';
 import { getConnection } from '../../store/connections';
@@ -127,6 +128,8 @@ const ICONS: Record<SfView, string> = {
 
 export function registerSnowflakeCommands(): void {
   registerCommands(SNOWFLAKE_COMMANDS);
+  // the table designer's options row (TRANSIENT, retention, change tracking)
+  registerDesignerOptionsPanel('snowflake', lazy(() => import('./TableOptions')));
   // the connection menu of Snowflake connections (the commands' `when` needs a Snowflake connection target)
   extendContextMenu('explorer.connection', [
     { command: 'snowflake.session', optional: true, hideDisabled: true, label: 'Session (warehouse, role, database, schema)…' },

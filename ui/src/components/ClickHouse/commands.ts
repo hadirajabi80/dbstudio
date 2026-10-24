@@ -2,7 +2,9 @@
 // palette / context-menu commands that open them, plus "Optimize table…". Commands accept an ObjectTarget (explorer
 // table), a ConnectionTarget, or fall back to the explorer selection, the active ClickHouse tab and the active console.
 // They are also entries of the explorer's table and connection menus (extendContextMenu, shown for ClickHouse only).
+import { lazy } from 'react';
 import { objectTargetOf, targetOf } from '../../commands/core';
+import { registerDesignerOptionsPanel } from '../../designer/table/optionsPanels';
 import { extendContextMenu } from '../../commands/menuModel';
 import { registerCommands, type Command } from '../../commands/registry';
 import { isConnectionTarget } from '../../commands/types';
@@ -101,6 +103,8 @@ export function registerClickHouseCommands(): void {
   registered = true;
   for (const view of Object.values(CH_VIEWS)) registerTabView(view, { component: ClickHouseTab, icon: view === CH_VIEWS.merges ? 'Workflow' : view === CH_VIEWS.mutations ? 'ListChecks' : 'Layers' });
   registerCommands(COMMANDS);
+  // the table designer's Engine row (ORDER BY, PARTITION BY, TTL, SETTINGS …)
+  registerDesignerOptionsPanel('clickhouse', lazy(() => import('./EngineOptions')));
   // hidden on every other provider (the commands' `when` needs a ClickHouse target)
   extendContextMenu('explorer.table', [
     { command: 'clickhouse.parts', optional: true, hideDisabled: true },

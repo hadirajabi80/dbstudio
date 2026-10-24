@@ -1,5 +1,19 @@
 # WP-SF — Snowflake (notes for the orchestrator)
 
+## Integration status (Batch 3 integration pass)
+
+| Request | Status | Where / notes |
+|---|---|---|
+| R3-1 secrets for sessions / catalog / designer / search / logs | DONE | `ConnectionStore.WithSecrets` at `SessionManager` (open + both reopen paths), `CatalogService.Resolve`, `DesignerService.Resolve`, `ObjectsEndpoints.Resolve`, `DatabaseSearchService`, `SqlRunner`. `SnowflakeSecrets` stays for the module endpoints (no-op when the props are present) |
+| R3-2 Snowflake Scripting depth | DONE | `SqlTokenizer.ScriptBlockStep` (DECLARE ... BEGIN as one level, IF / FOR / WHILE / REPEAT / LOOP / CASE, `FOR ... CURSOR`, `IF [NOT] EXISTS`); `ScriptBlockSplitTests.cs` |
+| R3-3 `$1` is no bind | DONE | the Snowflake lex hook reads `$digits` as an identifier; `batch3-foundation.test.ts` pins `ident:$1`; `dollarParams` removed |
+| R3-4 QUALIFY / path colon | DONE | `extraClauses: { QUALIFY: 'where' }`, `spaceBefore` for `snowflake`; `snowflake.test.ts` |
+| R3-5 connection menu entries | DONE | `extendContextMenu('explorer.connection', ...)` in `components/Snowflake/commands.ts` |
+| R3-6 NUMBER(p,0) | DONE | `codegen/types/index.ts` (NUMBER / DECIMAL / NUMERIC without a scale -> `int`) |
+| R3-7 mock dialect / schemas / pack handlers first | DONE | `MockProviderPack.shop` (SHOP, PUBLIC, ANALYTICS), `DIALECT` from the packs, pack handlers before the logs handlers |
+| R3-8 CI macOS natives | DONE (not run on macOS here) | `scripts/ci/kafka-native-smoke.mjs`: `checkDylibs` over librdkafka, libMono.Unix, libsf_mini_core (arch, system deps only, codesign) + the Snowflake bogus-account REST check on every platform; provider list now includes all Batch 3 ids |
+| R3-9 table options | DONE | via `TableOptions.Extra` (`kind` = transient, `retentionDays`, `changeTracking`): `SfTableOptions`, scripter (CREATE TRANSIENT, SET / UNSET), `SnowflakeDesignerDatabase` (SHOW TABLES), UI panel `components/Snowflake/TableOptions.tsx`; `TableOptionsTests.cs` |
+
 Branch `worktree-agent-ae7598b9067abf11d`, on top of WP0 (`686056e`). file:line references below are to `686056e`.
 
 ## What landed

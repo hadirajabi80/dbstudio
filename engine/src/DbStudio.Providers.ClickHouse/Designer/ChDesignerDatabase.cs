@@ -76,7 +76,8 @@ public sealed partial class ChDesignerDatabase(ClickHouseProvider provider) : ID
         var db = schema ?? reader.DefaultDatabase;
         var conn = reader.Channel.Connection;
         var info = (await ChDb.QueryAsync(conn, ChCatalogQueries.TableInfo, r => (Engine: ChDb.S(r, 0), Comment: ChDb.Str(r, 1),
-            PrimaryKey: ChDb.Str(r, 2), SortingKey: ChDb.Str(r, 3), Create: ChDb.S(r, 10)), ct, ("db", db), ("t", name)).ConfigureAwait(false)).FirstOrDefault();
+            PrimaryKey: ChDb.Str(r, 2), SortingKey: ChDb.Str(r, 3), PartitionKey: ChDb.Str(r, 4), SamplingKey: ChDb.Str(r, 5),
+            EngineFull: ChDb.S(r, 6), Create: ChDb.S(r, 10)), ct, ("db", db), ("t", name)).ConfigureAwait(false)).FirstOrDefault();
         if (info == default || ChCatalogReader.ObjectType(info.Engine) != ObjectTypes.Table) throw EngineException.NotFound($"Table {db}.{name}");
 
         var cols = await reader.ReadColumnsAsync(db, name, ct).ConfigureAwait(false);
@@ -124,11 +125,32 @@ public sealed partial class ChDesignerDatabase(ClickHouseProvider provider) : ID
             Schema = db,
             Name = name,
             Comment = string.IsNullOrWhiteSpace(info.Comment) ? null : info.Comment,
+            Options = new TableOptions { Extra = EngineExtra(info.Engine, info.SortingKey, info.PrimaryKey, info.PartitionKey, info.SamplingKey, info.EngineFull) },
             Columns = columns,
             PrimaryKey = key.Count > 0 ? new PrimaryKeyModel { Columns = key, Clustered = true } : null,
             Indexes = indexes,
             Checks = ParseChecks(info.Create),
         };
+    }
+
+    [GeneratedRegex(@"(?:^|\s)TTL\s+(?<ttl>.*?)(?=\s+SETTINGS\s|\s*$)", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
+    private static partial Regex TtlClause();
+
+    /// <summary>The engine options the designer's Engine panel edits (<see cref="TableOptions.Extra"/>), from system.tables.</summary>
+    public static Dictionary<string, string> EngineExtra(string engine, string? sortingKey, string? primaryKey, string? partitionKey, string? samplingKey, string engineFull)
+    {
+        var extra = new Dictionary<string, string> { ["engine"] = engine };
+        void Put(string name, string? value) { if (!string.IsNullOrWhiteSpace(value)) extra[name] = value.Trim(); }
+        Put("orderBy", sortingKey);
+        // PRIMARY KEY is only a separate clause when it differs from the sorting key
+        if (!string.Equals(primaryKey?.Trim(), sortingKey?.Trim(), StringComparison.Ordinal)) Put("primaryKey", primaryKey);
+        Put("partitionBy", partitionKey);
+        Put("sampleBy", samplingKey);
+        var settings = engineFull.IndexOf(" SETTINGS ", StringComparison.Ordinal);
+        if (settings >= 0) Put("settings", engineFull[(settings + 10)..]);
+        var ttl = TtlClause().Match(settings >= 0 ? engineFull[..settings] : engineFull);
+        if (ttl.Success) Put("ttl", ttl.Groups["ttl"].Value);
+        return extra;
     }
 
     public async Task<ViewModel> ReadViewAsync(ConnectionProfile profile, string? password, string? database, string? schema, string name, CancellationToken ct)

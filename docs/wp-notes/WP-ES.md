@@ -1,5 +1,14 @@
 # WP-ES — Elasticsearch / OpenSearch (notes for the orchestrator)
 
+## Integration status (Batch 3 integration pass)
+
+| Request | Status | Notes |
+|---|---|---|
+| R3-1 `'es.tasks'` stream kind | DONE | `api/types.ts`; the casts in `TasksView.tsx` and the mock pack are gone |
+| R3-2 Docker Hub image | DONE | `engine/tests/docker/compose.yml` + README use `elasticsearch:8.15.3` (the CI integration job uses the compose file) |
+| R3-3 optional OpenSearch CI job | DEFERRED | optional, needs the ~800 MB `opensearchproject/opensearch:2` image on every run; the suite still runs locally with `DBSTUDIO_ES_OPENSEARCH=1` |
+| R3-4 mock server info | DONE | `mocks/m2/index.ts` (also reads `props.url` as the target) |
+
 Branch `worktree-agent-af2d87bb6f7a9c803`, on WP0 `686056e`. Line numbers below refer to `686056e`.
 
 ## What landed

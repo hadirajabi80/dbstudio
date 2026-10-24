@@ -5,9 +5,9 @@ namespace DbStudio.Providers.Snowflake;
 
 /// <summary>
 /// Restores the extra password-typed props (<c>privateKeyPassphrase</c>, <c>token</c>) from the secret store before a
-/// connection opens. The engine strips every password-typed prop when it saves a profile (docs/PLAN-M2.md D12) but, for
-/// relational providers, only the connection test puts them back (<c>ConnectionStore.WithSecrets</c>); sessions, catalog
-/// and designer get the bare profile. TODO(WPSF-shared): drop this once the R3 request in docs/wp-notes/WP-SF.md lands.
+/// connection opens. The engine strips every password-typed prop when it saves a profile (docs/PLAN-M2.md D12); the shared
+/// services (sessions, catalog, designer, search, logs) restore them with <c>ConnectionStore.WithSecrets</c>, and this
+/// covers the module endpoints, which read the stored profile themselves (a no-op when the props are already present).
 /// </summary>
 public sealed class SnowflakeSecrets(Func<string, string, string?>? lookup = null)
 {

@@ -205,7 +205,8 @@ jobs:
         run: bash scripts/build.sh
 
       # PLAN-M2 D8: the published osx-arm64 engine starts and answers GET /providers (M2-K adds the librdkafka load
-      # check and the osx-x64 file/otool/codesign checks).
+      # check and the osx-x64 file/otool/codesign checks). Batch 3: the Snowflake driver's natives (libMono.Unix.dylib,
+      # libsf_mini_core.dylib) are checked like librdkafka, and a Snowflake connection test loads the driver.
       - name: Engine native smoke
         run: node scripts/ci/kafka-native-smoke.mjs engine/publish/osx-arm64/Rowlit.Engine
 

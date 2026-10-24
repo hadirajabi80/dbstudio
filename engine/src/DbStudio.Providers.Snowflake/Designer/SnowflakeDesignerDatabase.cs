@@ -134,9 +134,11 @@ public sealed class SnowflakeDesignerDatabase(ISnowflakeGatewayFactory gateways)
         var metaRow = meta.Rows.FirstOrDefault(r => meta.Str(r, "name") == name);
         var indexes = new List<IndexModel>();
         string? comment = null;
+        Dictionary<string, string>? extra = null;
         if (metaRow is not null)
         {
             comment = SnowflakeCatalogReader.NullIfEmpty(meta.Str(metaRow, "comment"));
+            extra = SfTableOptions.ToExtra(meta.Str(metaRow, "kind"), meta.Str(metaRow, "retention_time"), meta.Str(metaRow, "change_tracking"));
             // A clustering key on expressions (TO_DATE(TS)) is not representable as index columns: left out of the model,
             // so saving the table never touches it.
             if (SnowflakeCatalogReader.NullIfEmpty(meta.Str(metaRow, "cluster_by")) is { } clusterBy
@@ -153,6 +155,7 @@ public sealed class SnowflakeDesignerDatabase(ISnowflakeGatewayFactory gateways)
             Schema = schema,
             Name = name,
             Comment = comment,
+            Options = new TableOptions { Extra = extra },
             Columns = columns,
             PrimaryKey = pk,
             Uniques = uniques,

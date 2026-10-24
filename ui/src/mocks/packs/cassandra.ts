@@ -658,5 +658,7 @@ export const cassandraPack: MockProviderPack = {
     return structuredClone(cassandraConnections);
   },
   extraObjects: { cassandra: CASSANDRA_EXTRA_OBJECTS },
+  // keyspace `shop` (the seed's), no database level (schemaIsDatabase('cassandra'))
+  shop: { cassandra: { schema: 'shop', databases: [], serverInfo: { version: 'Cassandra 5.0.2', productVersion: '5.0.2' } } },
   handlers: createCassandraHandlers,
 };

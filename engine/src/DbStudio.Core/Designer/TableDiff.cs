@@ -112,7 +112,8 @@ public static partial class TableDiff
         var commentChanged = !string.Equals(Blank(original.Comment), Blank(desired.Comment), StringComparison.Ordinal);
         if (commentChanged) changes.Add(new(TableChangeKinds.TableCommentChanged, desired.Name));
         var optionsChanged = original.Options.WithoutRowid != desired.Options.WithoutRowid || original.Options.Strict != desired.Options.Strict
-                             || !SameText(original.Options.Tablespace, desired.Options.Tablespace) && desired.Options.Tablespace is not null;
+                             || !SameText(original.Options.Tablespace, desired.Options.Tablespace) && desired.Options.Tablespace is not null
+                             || !SameExtra(original.Options.Extra, desired.Options.Extra);
         if (optionsChanged) changes.Add(new(TableChangeKinds.OptionsChanged, desired.Name));
 
         // ---- columns
@@ -275,6 +276,16 @@ public static partial class TableDiff
 
     public static bool SameText(string? a, string? b) =>
         string.Equals(Blank(a), Blank(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Provider table options (<see cref="TableOptions.Extra"/>) are equal when their non-blank entries are.</summary>
+    public static bool SameExtra(Dictionary<string, string>? a, Dictionary<string, string>? b)
+    {
+        static Dictionary<string, string> Norm(Dictionary<string, string>? d) =>
+            (d ?? []).Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim(), StringComparer.OrdinalIgnoreCase);
+        var x = Norm(a);
+        var y = Norm(b);
+        return x.Count == y.Count && x.All(kv => y.TryGetValue(kv.Key, out var v) && string.Equals(v, kv.Value, StringComparison.Ordinal));
+    }
 
     /// <summary>Type texts compare case-insensitively ignoring whitespace: "NVARCHAR (100)" == "nvarchar(100)".</summary>
     public static bool SameType(string? a, string? b) => NormalizeType(a) == NormalizeType(b);

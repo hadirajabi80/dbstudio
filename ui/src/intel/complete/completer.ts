@@ -308,7 +308,7 @@ export function complete(c: CursorContext, env: CompleteEnv): CompletionResult {
     globalVarItems(items, c, env);
   } else if (c.atStatementStart) {
     statementStartItems(items, c, env);
-  } else {
+  } else if (!followerItems(items, c, env)) {
     isIncomplete = clauseItems(items, c, env) || isIncomplete;
   }
 
@@ -330,6 +330,34 @@ export function complete(c: CursorContext, env: CompleteEnv): CompletionResult {
   }
   list.sort((a, b) => b.score - a.score || a.label.length - b.label.length || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
   return { items: list, isIncomplete: isIncomplete || items.capped, replaceRange };
+}
+
+// ------------------------------------------------------------ keyword followers
+
+/**
+ * DialectSpec.keywordFollowers (Batch 3): after `CONSISTENCY` the levels, after `DESCRIBE TABLE` the tables… Looked
+ * up: the two words before the cursor, then the last one; a `^` key only matches at the start of the statement.
+ * False when nothing is declared for them.
+ */
+function followerItems(items: Items, c: CursorContext, env: CompleteEnv): boolean {
+  const map = env.spec.keywordFollowers;
+  const p = c.prevToken;
+  const word = (t: { kind: string } | null | undefined) => !!t && (t.kind === 'keyword' || t.kind === 'ident');
+  if (!map || !word(p)) return false;
+  const toks = c.statement.tokens;
+  const at = toks.indexOf(p!);
+  const two = at > 0 && word(toks[at - 1]) ? toks[at - 1].upper + ' ' + p!.upper : null;
+  const list = (two && at === 1 ? map['^' + two] : undefined) ?? (two ? map[two] : undefined) ?? (at === 0 ? map['^' + p!.upper] : undefined) ?? map[p!.upper];
+  if (!list) return false;
+  const fe = fenv(c, env);
+  list.forEach((k, i) => {
+    if (k === '@keyspace') {
+      for (const sc of env.index.schemas.values()) items.add({ label: sc.name, kind: 'schema', group: 10, insertText: formatIdent(sc.name, fe), detail: schemaDetail(env, sc.name) });
+      for (const name of env.index.unloadedSchemaNames()) items.add({ label: name, kind: 'schema', group: 10, insertText: formatIdent(name, fe), detail: schemaDetail(env, name) });
+    } else if (k === '@table') tableItems(items, c, env, 9);
+    else items.add({ label: kwCase(k, env.opts), kind: 'keyword', group: 10, relevance: Math.max(0, 40 - i), usageKey: 'kw:' + k });
+  });
+  return true;
 }
 
 // ------------------------------------------------------------ statement start

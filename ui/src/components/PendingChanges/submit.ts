@@ -63,9 +63,13 @@ export function buildStatements(ctx: EditContext, p: Pending, verifyUnchanged: b
   return generateChanges(buildRowChanges(ctx, p), ctx.target, ctx.dialect, { verifyUnchanged, sqliteVersion: ctx.sqliteVersion, columns: ctx.columns });
 }
 
+/** Dialects without multi-statement transactions (plan-batch3 D3): edits run statement by statement, nothing to undo. */
+const NO_TRANSACTIONS: ReadonlySet<Dialect> = new Set<Dialect>(['cql', 'clickhouse']);
+
 export interface SubmitResult {
   ok: boolean;
-  /** Statements executed successfully before a failure (all undone: full rollback, or back to the savepoint). */
+  /** Statements executed successfully before a failure (all undone: full rollback, or back to the savepoint; on a
+   *  database without transactions they stay applied, and the error message lists them). */
   executed: number;
   error: string | null;
   issues: RowIssue[];
@@ -96,6 +100,9 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
   edits.setStatus(ctx.gridKey, 'submitting');
   const sessions = useSessions.getState();
   const runner = getSqlRunner();
+  const noTx = NO_TRANSACTIONS.has(ctx.dialect);
+  /** What ran (and stays applied on a database without transactions). */
+  const applied: string[] = [];
   let executed = 0;
   let wasAuto = true;
   /** This submit opened the transaction (auto mode, or manual mode with nothing open): a failure is a full ROLLBACK. */
@@ -113,6 +120,11 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
   };
   /** Undo this submit: back to the savepoint (user's open transaction) or a full rollback (the submit opened it). */
   const undo = async (): Promise<string> => {
+    if (noTx) {
+      return applied.length > 0
+        ? `${applied.length} earlier statement(s) stayed applied (this database has no transactions): ${applied.join(', ')}. Reload the grid before saving again.`
+        : 'Nothing was saved.';
+    }
     if (ownsTx) {
       await rollbackQuietly(ctx.tabId);
       if (wasAuto) await restoreAuto(ctx.tabId);
@@ -129,7 +141,9 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
     // even refuses SAVE TRANSACTION outside a transaction): the submit owns the transaction its statements open.
     ownsTx = wasAuto || !session.txOpen;
     sid = session.sessionId;
-    if (wasAuto) await sessions.setTxMode(ctx.tabId, 'manual');
+    if (noTx) {
+      // every statement is applied on its own: no manual mode, no savepoint
+    } else if (wasAuto) await sessions.setTxMode(ctx.tabId, 'manual');
     else if (!ownsTx) {
       const sp = await run(sid, savepointSql(ctx.dialect), [], { label: 'data', source, confirmedDestructive: true, skipHistory: true });
       if (sp.status !== 'ok' || sp.error) {
@@ -168,9 +182,12 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
         if (key) inserted.set(st.ref, key);
       }
       executed++;
+      applied.push(/^\d+$/.test(st.ref) ? `${describe(st)} of row ${Number(st.ref) + 1}` : `${describe(st)} of a new row`);
     }
 
-    if (wasAuto) {
+    if (noTx) {
+      // nothing to commit
+    } else if (wasAuto) {
       await sessions.commit(ctx.tabId);
       await restoreAuto(ctx.tabId);
     } else if (savepoint) {
@@ -179,7 +196,7 @@ async function submitNow(ctx: EditContext, opts: { verifyUnchanged: boolean }): 
     }
     // Whether the changes wait for a Commit: what the engine reported after this submit's statements (the refetch
     // below only reads). Unknown (no report) falls back to the session's state.
-    const leftOpen = !wasAuto && (txOpen ?? useSessions.getState().forTab(ctx.tabId)?.txOpen ?? false);
+    const leftOpen = !noTx && !wasAuto && (txOpen ?? useSessions.getState().forTab(ctx.tabId)?.txOpen ?? false);
 
     // Refetch updated + inserted rows by key.
     const p = buf.pending;

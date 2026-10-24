@@ -1,5 +1,19 @@
 # WP-CH — ClickHouse (notes for the orchestrator)
 
+## Integration status (Batch 3 integration pass)
+
+| Request | Status | Where / notes |
+|---|---|---|
+| R3-1 `TableOptions.Extra` | DONE | Core `TableOptions.Extra` + `TableDiff.SameExtra`, `ui/src/api/types.ts`, designer hook `designer/table/optionsPanels.ts` (`registerDesignerOptionsPanel`, rendered by `TableDesigner.tsx`), ClickHouse panel `components/ClickHouse/EngineOptions.tsx`, `ChEngineOptions.From`, `ChDesignerDatabase.EngineExtra` (reads `system.tables`); tests `ChEngineExtraTests.cs`, `engineOptions.test.tsx`. Snowflake uses the same slot (WP-SF R3-9) |
+| R3-2 conformance switches | DONE | `ProviderFixture.SupportsForeignKeys / SupportsIdentity / ReportsDmlRowCounts` + guards in the four tests; `ChFixture` (and the Cassandra fixture) set them false |
+| R3-UI-1 dialect completion hook | DONE | `DialectSpec.complete`, run first by `intel/index.ts` |
+| R3-UI-2 case-sensitive names | DONE | `DialectSpec.preserveNameCase` (completer function / table-function / type labels, formatter function and type names); the ClickHouse spec sets it; keyword-like functions (`IF`, `ANY`) still follow the keyword case |
+| R3-UI-3 clauses | DONE | `FormatRules.extraClauses` (`PREWHERE` -> where, `SETTINGS`, `FORMAT`) and `joinWords` (`ARRAY GLOBAL ANY ALL ASOF PASTE`); `LIMIT n BY` already worked |
+| R3-UI-4 dictionaries | DONE | `isTabular(type, dialect)`, `objectTypeLabel` ("Dictionaries"); explorer double-click, Select top, Generate SQL, Open data |
+| R3-UI-5 menu entries | DONE | generic `extendContextMenu(menuId, entries)` / `contextMenuEntries` in `commands/menuModel.ts` (entries land before the menu's last, destructive group); used by ClickHouse, Snowflake and Cassandra. `chConnOf` no longer falls back to the active tab for an explicit target of another provider |
+| R3-UI-6 wrapper types | DONE | `codegen/types/index.ts` (Nullable, LowCardinality, SimpleAggregateFunction, Array) |
+| R3-UI-7 mock schema / banner | DONE | `MockProviderPack.shop` |
+
 Branch on top of WP0 (`686056e`). Every file:line below refers to `686056e`. Local stubs are marked `TODO(WPCH-shared)`.
 
 ## Requests

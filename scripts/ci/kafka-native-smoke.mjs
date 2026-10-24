@@ -4,16 +4,19 @@
 // fails the build before anything is packaged.
 //
 // Checks, per engine binary:
-//   1. GET  /api/v1/providers         -> includes the 7 M2 providers with their kinds (a subset check since Batch 3).
+//   1. GET  /api/v1/providers         -> includes the 7 M2 providers and the 6 Batch 3 ones with their kinds (a subset check).
 //   2. GET  /api/v1/kafka/library     -> librdkafka version string (forces the native load: Library.VersionString).
 //   3. POST /api/v1/connections/test  -> provider kafka against 127.0.0.1:1: must FAIL with a librdkafka error
 //      (error.detail "librdkafka <version>"; the message names the refused/timed-out connection). A packaging problem
 //      answers ENGINE_ERROR with detail "librdkafka-missing" instead.
-// macOS extras (D8: librdkafka.dylib next to the apphost, signed with the app):
-//   - librdkafka.dylib exists next to the engine, `file` shows the expected architecture, `otool -L` lists only system
+//   4. POST /api/v1/connections/test  -> provider snowflake with a bogus account: must FAIL with a provider error, never
+//      ENGINE_ERROR (the driver and its natives load on every platform).
+// macOS extras (D8: librdkafka.dylib next to the apphost, signed with the app; likewise libMono.Unix.dylib and
+// libsf_mini_core.dylib of Snowflake.Data):
+//   - the three dylibs exist next to the engine, `file` shows the expected architecture, `otool -L` lists only system
 //     libraries (/usr/lib, /System), for osx-arm64 and (when published) the sibling osx-x64 engine;
 //   - osx-x64 runs through the same REST checks when Rosetta is available (`arch -x86_64`), else static checks only;
-//   - `codesign --verify --strict` on every librdkafka.dylib inside desktop/dist/**/Rowlit.app (when packaged).
+//   - `codesign --verify --strict` on every one of them inside desktop/dist/**/Rowlit.app (when packaged).
 //
 // Usage: node scripts/ci/kafka-native-smoke.mjs <path to Rowlit.Engine[.exe]> [--no-mac-extras]
 // Exit codes: 0 ok, 1 check failed, 2 usage / engine did not start.
@@ -32,7 +35,13 @@ if (!exe || !existsSync(exe)) {
 const EXPECTED = [
   ['sqlserver', 'relational'], ['oracle', 'relational'], ['postgresql', 'relational'], ['sqlite', 'relational'],
   ['redis', 'keyvalue'], ['mongodb', 'document'], ['kafka', 'stream'],
+  // Batch 3
+  ['mysql', 'relational'], ['mariadb', 'relational'], ['clickhouse', 'relational'], ['snowflake', 'relational'],
+  ['cassandra', 'relational'], ['elasticsearch', 'search'],
 ];
+
+/** Native libraries that must sit next to the macOS apphost: librdkafka (Kafka), Mono.Unix and sf_mini_core (Snowflake.Data). */
+const MAC_DYLIBS = ['librdkafka.dylib', 'libMono.Unix.dylib', 'libsf_mini_core.dylib'];
 
 class CheckFailed extends Error {}
 const fail = (message) => { throw new CheckFailed(message); };
@@ -88,8 +97,19 @@ async function smoke(engine, { launcher = null } = {}) {
     if (!/refused|timed out|timeout|transport|reach|connect/i.test(err.message ?? '')) {
       fail(`POST /connections/test: unexpected error text from librdkafka: ${err.message}`);
     }
+    // Snowflake.Data (and its natives) load on the first connection: a bogus account must answer with a provider error,
+    // never an ENGINE_ERROR from a missing library or a crashed driver (the DNS lookup of the account fails quickly).
+    const sf = await api(info, 'POST', '/connections/test', {
+      profile: { id: '', name: 'smoke', providerId: 'snowflake', props: { account: 'rowlit-smoke-invalid', user: 'X', connectTimeout: 10 } },
+      password: 'x',
+    });
+    const sfErr = sf.json?.error;
+    if (sf.status !== 200 || !sf.json || sf.json.ok !== false || !sfErr) {
+      fail(`POST /connections/test (snowflake, invalid account): expected a failed test result, got ${sf.status} ${JSON.stringify(sf.json)}`);
+    }
+    if (sfErr.code === 'ENGINE_ERROR') fail(`POST /connections/test (snowflake): the driver did not load: ${sfErr.code} ${sfErr.message} (${sfErr.detail})`);
     return `${basename(dirname(resolve(engine)))}: ready in ${readyMs} ms, librdkafka ${lib.json.version}`
-      + `${lib.json.loadedFrom ? ` (loaded from ${lib.json.loadedFrom})` : ''}; kafka test -> ${err.message}`;
+      + `${lib.json.loadedFrom ? ` (loaded from ${lib.json.loadedFrom})` : ''}; kafka test -> ${err.message}; snowflake test -> ${sfErr.code}`;
   } catch (e) {
     if (output) console.error(`---- engine output (${engine}) ----\n${output.slice(-4000)}`);
     throw e;
@@ -121,22 +141,27 @@ function run(cmd, args) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-/** Static checks of the librdkafka.dylib next to a macOS engine (architecture, dependencies). */
-function checkDylib(engineDir, arch) {
-  const dylib = join(engineDir, 'librdkafka.dylib');
-  if (!existsSync(dylib)) fail(`${dylib} is missing (D8: macOS ships librdkafka.dylib next to the apphost)`);
-  const kind = run('file', [dylib]);
+/** Static checks of the native libraries next to a macOS engine (present, architecture, system dependencies only). */
+function checkDylibs(engineDir, arch) {
   const wanted = arch === 'x64' ? 'x86_64' : 'arm64';
-  if (!kind.includes(wanted)) fail(`${dylib} is not ${wanted}: ${kind.trim()}`);
-  // `otool -L` on a dylib lists its own install name (LC_ID_DYLIB, e.g. /usr/local/lib/librdkafka.1.dylib from the
-  // Confluent build) before its dependencies; that id is not a dependency, so take it from `otool -D` and skip it.
-  const ownId = run('otool', ['-D', dylib]).split('\n').slice(1).map((l) => l.trim()).find(Boolean);
-  const deps = run('otool', ['-L', dylib]).split('\n').slice(1).map((l) => l.trim().split(' ')[0]).filter(Boolean)
-    .filter((d) => d !== ownId);
-  const foreign = deps.filter((d) => !/^(\/usr\/lib\/|\/System\/|@rpath\/librdkafka|@loader_path\/librdkafka|librdkafka)/.test(d));
-  if (foreign.length > 0) fail(`${dylib} links non-system libraries: ${foreign.join(', ')}`);
-  const mb = (statSync(dylib).size / 1024 / 1024).toFixed(1);
-  return `osx-${arch}: librdkafka.dylib ${wanted}, ${deps.length} system deps, ${mb} MB`;
+  const summary = [];
+  for (const name of MAC_DYLIBS) {
+    const dylib = join(engineDir, name);
+    if (!existsSync(dylib)) fail(`${dylib} is missing (D8: macOS ships ${name} next to the apphost)`);
+    const kind = run('file', [dylib]);
+    if (!kind.includes(wanted)) fail(`${dylib} is not ${wanted}: ${kind.trim()}`);
+    // `otool -L` on a dylib lists its own install name (LC_ID_DYLIB, e.g. /usr/local/lib/librdkafka.1.dylib from the
+    // Confluent build, a CI build path for libsf_mini_core) before its dependencies; that id is not a dependency, so
+    // take it from `otool -D` and skip it.
+    const ownId = run('otool', ['-D', dylib]).split('\n').slice(1).map((l) => l.trim()).find(Boolean);
+    const deps = run('otool', ['-L', dylib]).split('\n').slice(1).map((l) => l.trim().split(' ')[0]).filter(Boolean)
+      .filter((d) => d !== ownId);
+    const foreign = deps.filter((d) => !/^(\/usr\/lib\/|\/System\/|@rpath\/(librdkafka|libMono\.Unix|libsf_mini_core)|@loader_path\/(librdkafka|libMono\.Unix|libsf_mini_core)|librdkafka)/.test(d));
+    if (foreign.length > 0) fail(`${dylib} links non-system libraries: ${foreign.join(', ')}`);
+    const mb = (statSync(dylib).size / 1024 / 1024).toFixed(1);
+    summary.push(`${name} ${deps.length} system deps, ${mb} MB`);
+  }
+  return `osx-${arch}: ${wanted}; ${summary.join('; ')}`;
 }
 
 function findFiles(dir, name, depth = 0, out = []) {
@@ -166,18 +191,18 @@ try {
     const engineDir = dirname(resolve(exe));
     const rid = basename(engineDir); // engine/publish/osx-arm64
     const arch = rid.endsWith('x64') ? 'x64' : 'arm64';
-    lines.push(checkDylib(engineDir, arch));
+    lines.push(checkDylibs(engineDir, arch));
     const sibling = join(dirname(engineDir), arch === 'arm64' ? 'osx-x64' : 'osx-arm64');
     const siblingExe = join(sibling, 'Rowlit.Engine');
     if (existsSync(siblingExe)) {
       const otherArch = arch === 'arm64' ? 'x64' : 'arm64';
-      lines.push(checkDylib(sibling, otherArch));
+      lines.push(checkDylibs(sibling, otherArch));
       if (otherArch === 'x64' && rosettaAvailable()) lines.push(await smoke(siblingExe, { launcher: ['arch', '-x86_64'] }));
       else if (otherArch === 'x64') lines.push('osx-x64: Rosetta not available on this runner; static checks only (file/otool)');
     }
     // Packaged apps: every librdkafka.dylib must carry a valid signature (signed with the app, hardened runtime).
     const repo = resolve(engineDir, '..', '..', '..');
-    const apps = findFiles(join(repo, 'desktop', 'dist'), 'librdkafka.dylib');
+    const apps = MAC_DYLIBS.flatMap((name) => findFiles(join(repo, 'desktop', 'dist'), name));
     if (apps.length === 0) lines.push('codesign: no packaged Rowlit.app under desktop/dist (skipped)');
     for (const dylib of apps) {
       try {

@@ -65,6 +65,10 @@ const OBJECT_WORDS = set('TYPE BODY PACKAGE SEQUENCE SYNONYM MATERIALIZED DIRECT
 /** DDL words that may start a column-list item. */
 const ITEM_START_WORDS = set('CONSTRAINT PRIMARY FOREIGN');
 const CURSOR_WORDS = set('LOCAL GLOBAL FORWARD_ONLY SCROLL STATIC KEYSET DYNAMIC FAST_FORWARD READ_ONLY SCROLL_LOCKS OPTIMISTIC TYPE_WARNING INSENSITIVE');
+/** CQL: collection / wrapper types taking `<…>` type arguments. */
+const CQL_GENERIC = set('LIST SET MAP FROZEN TUPLE VECTOR');
+/** CQL CREATE FUNCTION / AGGREGATE: header words that start a continuation line. */
+const CQL_ROUTINE_LINES = set('RETURNS CALLED LANGUAGE SFUNC STYPE FINALFUNC INITCOND');
 
 interface St {
   /** Indent of the statement's first line. */
@@ -90,6 +94,10 @@ interface St {
   inParen: boolean;
   /** PostgreSQL CREATE INDEX that does not fit on one line: INCLUDE / WITH / WHERE start continuation lines. */
   pgIndexBreak?: boolean;
+  /** CQL CREATE / ALTER … WITH options: AND starts a continuation line. */
+  cqlOptions?: boolean;
+  /** CQL CREATE FUNCTION / AGGREGATE: RETURNS, LANGUAGE, AS … start continuation lines. */
+  cqlRoutine?: boolean;
 }
 
 interface TakeOpts {
@@ -132,6 +140,12 @@ export class Layout {
   private kwIdents = 0;
   /** Inside an inline table-valued function body (RETURN SELECT …). */
   private inlineTvf = false;
+  /** CQL: the `<` / `>` of type arguments (`map<text, frozen<list<int>>>`). */
+  private readonly angles = new Set<number>();
+  /** CQL: words cased as data types there (the generic word and the data types inside its brackets). */
+  private readonly angleTypes = new Set<number>();
+  /** CQL: commas inside type arguments (never list separators). */
+  private readonly angleCommas = new Set<number>();
 
   constructor(toks: FTok[], spec: DialectSpec, o: FormatOptions, eol: string) {
     this.toks = toks;
@@ -155,6 +169,40 @@ export class Layout {
       }
     }
     if (stack.length) this.problem = 'unbalanced parentheses';
+    if (this.d === 'cql') this.cqlScan();
+  }
+
+  /** CQL: type-argument brackets, and the `{…}` / `[…]` literal pairs (matched like parentheses for after()). */
+  private cqlScan(): void {
+    const angle: number[] = [];
+    const lit: number[] = [];
+    for (let k = 0; k < this.sig.length; k++) {
+      const t = this.S(k)!;
+      if (t.kind !== 'op') {
+        if (angle.length && t.word && this.spec.dataTypeSet.has(t.u)) this.angleTypes.add(k);
+        if (angle.length && t.kind === 'punct' && t.text === ',') this.angleCommas.add(k);
+        continue;
+      }
+      if (t.text === '<' && this.S(k - 1)?.word && CQL_GENERIC.has(this.U(k - 1))) {
+        angle.push(k);
+        this.angles.add(k);
+        this.angleTypes.add(k - 1);
+      } else if (t.text === '>' && angle.length) {
+        angle.pop();
+        this.angles.add(k);
+      } else if (t.text === '{' || t.text === '[') lit.push(k);
+      else if ((t.text === '}' || t.text === ']') && lit.length) {
+        const o = lit.pop()!;
+        this.match[o] = k;
+        this.match[k] = o;
+      }
+    }
+  }
+
+  /** CQL `{` / `[` of a collection, UDT or vector literal. */
+  private litOpen(k: number): boolean {
+    const t = this.S(k);
+    return this.d === 'cql' && !!t && t.kind === 'op' && (t.text === '{' || t.text === '[');
   }
 
   run(): LayoutOutcome {
@@ -197,7 +245,7 @@ export class Layout {
   }
   /** Skip a parenthesised group starting at k (returns the index after `)`). */
   private after(k: number): number {
-    return this.P(k, '(') && this.match[k] > k ? this.match[k] + 1 : k + 1;
+    return (this.P(k, '(') || this.litOpen(k)) && this.match[k] > k ? this.match[k] + 1 : k + 1;
   }
 
   // ------------------------------------------------------------------ emission
@@ -348,6 +396,13 @@ export class Layout {
       if (b.kind === 'op' && (bt === '[' || bt === ']')) return false;
       if (a.kind === 'op' && (at === '[' || at === ':')) return false;
     }
+    if (this.d === 'cql') {
+      // map<text, int>, {'k': 1}, ['a'], m['k']
+      if (this.angles.has(k) || (this.angles.has(k - 1) && at === '<')) return false;
+      if (a.kind === 'op' && (at === '{' || at === '[')) return false;
+      if (b.kind === 'op' && (bt === '}' || bt === ']')) return false;
+      if (b.kind === 'op' && bt === '[' && (a.kind === 'ident' || a.kind === 'quotedIdent' || at === ']')) return false;
+    }
     if (this.d === 'plsql' && a.kind === 'op' && at === '<<') return false;
     if (this.d === 'plsql' && b.kind === 'op' && bt === '>>') return false;
     if (b.kind === 'punct' && bt === '(') return this.spaceBeforeParen(k);
@@ -358,6 +413,7 @@ export class Layout {
     const a = this.S(k - 1)!;
     // MERGE … USING (SELECT …) / JOIN t USING (id): a clause keyword, never a function call
     if (a.word && a.u === 'USING') return true;
+    if (this.d === 'cql' && a.kind === 'punct' && a.text === '(') return false;
     if (this.d === 'pgsql') {
       if (a.kind === 'punct' && a.text === '(') return false;
       if (a.kind === 'op' && a.text === '[') return false;
@@ -386,6 +442,7 @@ export class Layout {
 
   private isTypeAt(k: number): boolean {
     const t = this.S(k)!;
+    if (this.angleTypes.has(k)) return true;
     if (!this.spec.dataTypeSet.has(t.u)) return false;
     const a = this.S(k - 1), b = this.S(k + 1);
     if (!a || a.text === '.' || (b && b.kind === 'punct' && b.text === '.')) return false;
@@ -454,7 +511,7 @@ export class Layout {
   /** Top-level comma count in [a, b). */
   private commas(a: number, b: number): number {
     let n = 0;
-    for (let k = a; k < b; k = this.after(k)) if (this.P(k, ',')) n++;
+    for (let k = a; k < b; k = this.after(k)) if (this.P(k, ',') && !this.angleCommas.has(k)) n++;
     return n;
   }
 
@@ -504,6 +561,7 @@ export class Layout {
     if (this.d === 'tsql') this.tsqlStatement(indent, outer);
     else if (this.d === 'plsql') this.plStatement(indent, outer);
     else if (this.d === 'pgsql') this.pgStatement(indent, outer);
+    else if (this.d === 'cql' && this.cqlBatchAt(this.p) >= 0) this.cqlBatch(indent, this.cqlBatchAt(this.p));
     else if (this.d === 'mysql') this.mysqlStatement(indent, outer);
     else this.sqliteStatement(indent, outer);
   }
@@ -531,6 +589,27 @@ export class Layout {
     while (e > k + 1 && this.P(e - 1, ';')) e--;
     this.takeRaw(e, this.srcText);
     while (this.P(this.p, ';')) this.take({ space: false });
+  }
+
+  // ------------------------------------------------------------------ CQL
+
+  /** `BEGIN [UNLOGGED | COUNTER] BATCH` at k: the index of BATCH, else -1. */
+  private cqlBatchAt(k: number): number {
+    if (!this.W(k, 'BEGIN')) return -1;
+    if (this.W(k + 1, 'BATCH')) return k + 1;
+    return (this.W(k + 1, 'UNLOGGED') || this.W(k + 1, 'COUNTER')) && this.W(k + 2, 'BATCH') ? k + 2 : -1;
+  }
+
+  /** BEGIN BATCH [USING TIMESTAMP n], its statements one level in, APPLY BATCH under BEGIN. */
+  private cqlBatch(indent: number, batchAt: number): void {
+    while (this.p <= batchAt) this.takeKw();
+    if (this.W(this.p, 'USING')) this.expr((k) => DML_START.has(this.U(k)) || this.W(k, 'APPLY'), {});
+    this.statements(indent + 1, (k) => this.W(k, 'APPLY') && this.W(k + 1, 'BATCH'));
+    if (this.eof()) return;
+    this.out.newline(indent);
+    this.take({ kw: true, closer: true });
+    this.takeKw();
+    if (this.P(this.p, ';')) this.take({ space: false });
   }
 
   // ------------------------------------------------------------------ T-SQL
@@ -1211,13 +1290,21 @@ export class Layout {
         const n = this.U(k + 1);
         return v.has('SELECT') && (n === 'XML' || n === 'JSON' || n === 'BROWSE' || n === 'UPDATE' || n === 'READ' || (this.d === 'pgsql' && (n === 'SHARE' || n === 'NO' || n === 'KEY'))) ? ['for', 1] : null;
       }
-      case 'LIMIT': return this.d !== 'plsql' ? ['limit', 1] : null;
+      case 'LIMIT': return this.d !== 'plsql' && !(this.d === 'cql' && this.W(k - 1, 'PARTITION')) ? ['limit', 1] : null;
+      // CQL: PER PARTITION LIMIT n, ALLOW FILTERING, IF [NOT] EXISTS / IF cond, INSERT … USING TTL, CREATE MATERIALIZED
+      // VIEW … PRIMARY KEY (…) WITH …
+      case 'PER': return this.d === 'cql' && this.W(k + 1, 'PARTITION') && this.W(k + 2, 'LIMIT') ? ['limit', 3] : null;
+      case 'ALLOW': return this.d === 'cql' && this.W(k + 1, 'FILTERING') ? ['allow', 2] : null;
+      case 'IF': return this.d === 'cql' && (v.has('INSERT') || v.has('UPDATE') || v.has('DELETE')) && st.clause !== 'if' ? ['if', 1] : null;
+      case 'PRIMARY': return this.d === 'cql' && this.verbCtx === 'CREATE' && this.W(k + 1, 'KEY') ? ['primaryKey', 2] : null;
+      case 'WITH': return this.d === 'cql' && this.verbCtx === 'CREATE' && st.clause === 'primaryKey' ? ['options', 1] : null;
       case 'OFFSET': return ['offset', 1];
       case 'FETCH': return this.W(k + 1, 'FIRST') || this.W(k + 1, 'NEXT') ? ['fetch', 1] : null;
       case 'RETURNING': return v.has('INSERT') || v.has('UPDATE') || v.has('DELETE') ? ['returning', 1] : null;
       case 'WINDOW': return (this.d === 'sqlite' || this.d === 'pgsql') && this.W(k + 2, 'AS') ? ['window', 1] : null;
       case 'USING':
         if (this.d === 'pgsql' && v.has('DELETE') && !v.has('MERGE') && st.clause === 'from') return ['from', 1];
+        if (this.d === 'cql' && v.has('INSERT') && (st.clause === 'values' || st.clause === 'if' || st.clause === 'insert')) return ['using', 1];
         return v.has('MERGE') && st.clause === 'merge' ? ['using', 1] : null;
       case 'WHEN': return v.has('MERGE') ? ['when', 1] : null;
       case 'ON':
@@ -1552,7 +1639,7 @@ export class Layout {
     st.clause = name;
     st.list = false;
     st.between = 0;
-    st.andOr = this.o.andOrOnNewLine && (name === 'where' || name === 'having' || name === 'connect' || name === 'start' || name === 'on');
+    st.andOr = this.o.andOrOnNewLine && (name === 'where' || name === 'having' || name === 'connect' || name === 'start' || name === 'on' || (this.d === 'cql' && (name === 'if' || name === 'options')));
     if (name === 'select') {
       while (!this.eof() && SELECT_MODIFIERS.has(this.U(this.p))) this.takeKw();
       if (this.d === 'pgsql' && this.W(this.p, 'ON') && this.P(this.p + 1, '(') && this.W(this.p - 1, 'DISTINCT')) {
@@ -1618,6 +1705,13 @@ export class Layout {
           continue;
         }
         if (u === 'CURSOR' && st.verb === 'DECLARE') { st.seenCursor = true; st.commaBreak = false; }
+        if (this.d === 'cql' && !st.dml && (st.verb === 'CREATE' || st.verb === 'ALTER')) {
+          // CREATE TABLE … WITH a = 1⏎ AND b = 2; CREATE FUNCTION f(…)⏎ RETURNS …⏎ LANGUAGE java⏎ AS $$ … $$
+          if (u === 'WITH') st.cqlOptions = true;
+          else if (u === 'AND' && st.cqlOptions) { this.out.newline(st.base + 1); this.takeKw(); continue; }
+          if ((u === 'FUNCTION' || u === 'AGGREGATE') && !st.cqlRoutine) st.cqlRoutine = true;
+          else if (st.cqlRoutine && (CQL_ROUTINE_LINES.has(u) || (u === 'AS' && this.S(k + 1)?.kind === 'string')) && !this.out.atLineStart) this.out.newline(st.base + 1);
+        }
         if (st.pgIndexBreak && (u === 'INCLUDE' || u === 'WHERE' || (u === 'WITH' && this.P(k + 1, '('))) && !this.out.atLineStart) this.out.newline(st.base + 1);
         if (!st.dml && u === 'FOR' && st.verb === 'OPEN' && (this.W(k + 1, 'SELECT') || this.isCteAt(k + 1))) {
           this.takeKw();
@@ -1677,7 +1771,7 @@ export class Layout {
         if (u === 'UPDATE' && this.W(k - 1, 'DO')) st.verbs.add('UPDATE');
         if (st.verb === 'INSERT' && (u === 'SELECT' || u === 'EXEC' || u === 'EXECUTE')) st.insertHasSource = true;
       }
-      if (this.d === 'pgsql' && t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
+      if ((this.d === 'pgsql' && t.kind === 'op' && t.text === '[') || this.litOpen(k)) { this.bracket(); continue; }
       if (t.kind === 'punct' && t.text === ',' && (st.list || st.commaBreak)) {
         this.comma(st.list ? st.listIndent : st.base + 1, true);
         continue;
@@ -1753,9 +1847,9 @@ export class Layout {
       const group = kind === 'expr' && items === 1;
       this.out.newline(L + 1);
       while (this.p < e && !this.eof()) {
-        if (this.P(this.p, ',')) { this.comma(L + 1, true); continue; }
+        if (this.P(this.p, ',') && !this.angleCommas.has(this.p)) { this.comma(L + 1, true); continue; }
         const start = this.p;
-        this.expr((q) => q >= e || this.P(q, ','), group && this.o.andOrOnNewLine ? { andOrIndent: L + 1 } : {});
+        this.expr((q) => q >= e || (this.P(q, ',') && !this.angleCommas.has(q)), group && this.o.andOrOnNewLine ? { andOrIndent: L + 1 } : {});
         if (this.p === start) this.take({ kw: this.S(this.p)?.kind === 'keyword' });
       }
       this.out.newline(L);
@@ -1764,13 +1858,14 @@ export class Layout {
     if (kind === 'columns' || kind === 'params') this.typeCtx--;
   }
 
-  /** PostgreSQL array subscript / constructor `[…]`: inline, commas never break. */
+  /** PostgreSQL array subscript / constructor `[…]`, CQL collection / UDT literal `{…}` / `[…]`: inline, commas never break. */
   private bracket(): void {
+    const close = this.S(this.p)!.text === '{' ? '}' : ']';
     this.take();
     while (!this.eof()) {
       const t = this.S(this.p)!;
-      if (t.kind === 'op' && t.text === ']') { this.take(); return; }
-      if (t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
+      if (t.kind === 'op' && t.text === close) { this.take(); return; }
+      if (t.kind === 'op' && (t.text === '[' || this.litOpen(this.p))) { this.bracket(); continue; }
       if (t.kind === 'punct' && (t.text === ';' || t.text === ')')) return;
       if (t.kind === 'punct' && t.text === '(') { this.paren(this.parenKind(this.p, this.newSt(0, this.verbCtx, NEVER, true)), this.spaceBeforeParen(this.p)); continue; }
       if (t.word && t.u === 'CASE') { this.caseExpr(); continue; }
@@ -1809,7 +1904,7 @@ export class Layout {
         this.paren(this.parenKind(k, this.newSt(0, this.verbCtx, NEVER, true)), this.spaceBeforeParen(k));
         continue;
       }
-      if (this.d === 'pgsql' && t.kind === 'op' && t.text === '[') { this.bracket(); continue; }
+      if ((this.d === 'pgsql' && t.kind === 'op' && t.text === '[') || this.litOpen(k)) { this.bracket(); continue; }
       if (t.word) {
         if (t.u === 'CASE') { this.caseExpr(); continue; }
         if (t.u === 'BETWEEN') between++;

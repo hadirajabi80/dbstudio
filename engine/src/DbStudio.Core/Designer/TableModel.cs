@@ -25,6 +25,11 @@ public sealed record TableOptions
     public bool WithoutRowid { get; init; }
     public bool Strict { get; init; }
     public string? Tablespace { get; init; }
+    /// <summary>
+    /// Batch 3: provider-specific table options as name → text (ClickHouse "engine", "orderBy", "partitionBy", "primaryKey",
+    /// "sampleBy", "ttl", "settings"). Scripters read the keys they know; the designer's options panel of the provider edits them.
+    /// </summary>
+    public Dictionary<string, string>? Extra { get; init; }
 }
 
 public sealed record TableColumnModel

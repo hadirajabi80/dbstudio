@@ -41,8 +41,11 @@ public static class DialectInfo
     /// <summary>A backslash escapes the next character inside <c>'…'</c> (doubled <c>''</c> still works).</summary>
     public static bool BackslashStringEscapes(Dialect d) => d is Dialect.MySql or Dialect.ClickHouse or Dialect.Snowflake;
 
-    /// <summary><c>$$…$$</c> / <c>$tag$…$tag$</c> string bodies (PostgreSQL, Snowflake).</summary>
-    public static bool DollarQuotedStrings(Dialect d) => d is Dialect.PgSql or Dialect.Snowflake;
+    /// <summary><c>$$…$$</c> / <c>$tag$…$tag$</c> string bodies (PostgreSQL, Snowflake, CQL function bodies).</summary>
+    public static bool DollarQuotedStrings(Dialect d) => d is Dialect.PgSql or Dialect.Snowflake or Dialect.Cql;
+
+    /// <summary><c>// …</c> is a line comment (CQL).</summary>
+    public static bool SlashLineComments(Dialect d) => d is Dialect.Cql;
 
     /// <summary>Open/close characters the engine uses to quote an identifier it generates.</summary>
     public static (char Open, char Close) IdentifierQuote(Dialect d) =>

@@ -259,6 +259,9 @@ public sealed partial class SqlInsertResultWriter : IResultWriter
 
         var text = ExportFormats.FullText(v) ?? "";
         var kind = column?.Kind;
+        // CQL: uuid / timeuuid are unquoted; collections, tuples and UDTs (kind json) need CQL literal syntax
+        if (_dialect == Dialect.Cql && kind == ColumnKinds.Guid && Guid.TryParse(text, out _)) return text;
+        if (_dialect == Dialect.Cql && kind == ColumnKinds.Json) return CqlLiterals.FromJson(text, column!.DbType);
         if (kind is ColumnKinds.Decimal or ColumnKinds.Int or ColumnKinds.Float && Numeric().IsMatch(text)) return text;
         if (_dialect == Dialect.PlSql)
         {

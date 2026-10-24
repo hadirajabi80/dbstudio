@@ -117,6 +117,9 @@ public sealed class ChFixture : ProviderFixture
     protected override bool SeedOnInitialize => false;
 
     public override bool SupportsTransactions => false;
+    public override bool SupportsForeignKeys => false;
+    public override bool SupportsIdentity => false;
+    public override bool ReportsDmlRowCounts => false;
 
     public override string LongRunningQuery => "SELECT sum(number) FROM numbers_mt(10000000000000)";
 

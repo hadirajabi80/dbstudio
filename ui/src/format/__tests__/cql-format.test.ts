@@ -141,7 +141,10 @@ describe('CQL formatter: goldens with the CQL layout (R3-1)', () => {
     );
   });
   it.skipIf(!R3_LAYOUT)('the seed script formats without warnings and idempotently', async () => {
-    const seed = (await import('../../../../engine/tests/docker/seed-cassandra.cql?raw')).default as string;
+    // read from disk: this file runs under the jsdom config too, whose dev server may not serve files outside ui/
+    const nodeFs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync(p: string, enc: 'utf8'): string };
+    const cwd = (globalThis as unknown as { process: { cwd(): string } }).process.cwd();
+    const seed = nodeFs.readFileSync(`${cwd}/../engine/tests/docker/seed-cassandra.cql`, 'utf8');
     const r = formatSql(seed, 'cql');
     expect(r.warnings).toEqual([]);
     expect(fmt(r.text)).toBe(r.text);

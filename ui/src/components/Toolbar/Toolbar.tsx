@@ -14,6 +14,7 @@ import { getCommand, hasCommand, runCommand } from '../../commands/registry';
 import { commandView, useCommandContext } from '../../commands/useCommands';
 import { formatCount, formatDuration } from '../../lib/format';
 import { dbKey, useCatalog } from '../../store/catalog';
+import { hasExplain, hasTransactions } from '../../lib/providerLevels';
 import { hasDatabaseLevel, schemaIsDatabase, schemaLevelLabel, useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
@@ -124,7 +125,9 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
   const save = edit ? commandView('file.save', undefined, `Save ${noun} ${edit.ref.name} to the database`) : null;
   const dirty = !!edit && isEditDirty(edit, tab.text);
   const queryDirty = !!tab.savedQuery && tab.text !== tab.savedText;
-  const explain = getCommand('explain.estimated');
+  // Cassandra has no EXPLAIN; Cassandra and ClickHouse have no multi-statement transactions (no Auto/Tx toggle, no Commit)
+  const explain = hasExplain(conn?.providerId) ? getCommand('explain.estimated') : undefined;
+  const transactional = hasTransactions(conn?.providerId);
   const codeItems: MenuItem[] = commandMenuItems(CODE_ENTRIES);
   const compare = commandView('designer.compareWithServer');
   // Commands that act on the editor give the focus back to it (the button would keep it, and typing or Ctrl+L would
@@ -309,7 +312,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
       ),
     });
   }
-  items.push({
+  if (transactional) items.push({
     id: 'tx', priority: 4,
     menu: () => (['auto', 'manual'] as TxMode[]).map((m): MenuItem => ({
       id: `tx.${m}`, label: m === 'auto' ? 'Auto-commit' : 'Manual transaction', checked: txMode === m, disabled: !conn,
@@ -335,7 +338,7 @@ export function Toolbar({ tab }: { tab: ConsoleTab }) {
       </div>
     ),
   });
-  if (txMode === 'manual') {
+  if (transactional && txMode === 'manual') {
     items.push({
       id: 'txActions', priority: 9, menu: () => commandMenuItems([{ command: 'tx.commit' }, { command: 'tx.rollback' }]),
       node: (

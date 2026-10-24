@@ -46,7 +46,7 @@ public static class ObjectsEndpoints
     private static (IObjectBrowserProvider Browser, ConnectionProfile Profile, string? Password) Resolve(string id, ConnectionStore connections,
         ProviderRegistry providers)
     {
-        var profile = connections.Get(id);
+        var profile = connections.WithSecrets(connections.Get(id));
         return (ProviderFeatures.ObjectBrowser(providers.Get(profile.ProviderId)), profile, connections.GetPassword(id));
     }
 

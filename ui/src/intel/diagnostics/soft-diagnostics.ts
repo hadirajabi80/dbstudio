@@ -114,6 +114,8 @@ export function statementDiagnostics(st: SplitStatement, model: StatementModel, 
       if (name.text === '*' || name.text === '') continue;
       const t = binder.resolveQualifier(q, ch.scope);
       if (!t) {
+        // CQL `address.city`: a field of a UDT column (CQL has no table aliases)
+        if (spec.id === 'cql' && q.length === 1 && binder.ownSources(ch.scope).some((src) => src.columns().some((c) => index.keyOfCatalog(c.name) === index.keyOf(q[0].text, q[0].quoted)))) continue;
         if (q.length === 1 && isLikelyAlias(q[0].text, spec) && !index.schema(q[0].text, q[0].quoted) && !binder.findVar(q[0].text, ch.scope) && !spec.packageMap.has(q[0].text.toUpperCase())) {
           if (ch.scope.kind !== 'plsqlBlock' && ch.scope.kind !== 'other' && index.defaultSchemaEntry()) {
             out.push({ start: q[0].range[0], end: q[0].range[1], severity: 'warning', code: 'unknown-alias', message: `Unknown alias or table '${q[0].text}'` });

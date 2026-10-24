@@ -206,6 +206,7 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
     public async Task Execute_Dml_ReportsRowsAffected()
     {
         RequireAvailable();
+        Skip.IfNot(Fixture.ReportsDmlRowCounts, $"{Fixture.Provider.Id} reports no UPDATE/DELETE row counts.");
         var table = NewScratchName();
         await using var session = await Fixture.OpenSessionAsync();
         try
@@ -553,20 +554,21 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
         Assert.Equal(new[] { N("Id") }, customers.PrimaryKey, StringComparer.OrdinalIgnoreCase);
         var id = customers.Columns[0];
         Assert.True(id.IsPk);
-        Assert.True((id.Flags & 1) == 1, "Customers.Id must be flagged identity/autoincrement.");
+        if (Fixture.SupportsIdentity) Assert.True((id.Flags & 1) == 1, "Customers.Id must be flagged identity/autoincrement.");
         Assert.False(customers.Columns[1].Nullable);
         Assert.True(customers.Columns[2].Nullable);
         Assert.All(customers.Columns, c => Assert.False(string.IsNullOrWhiteSpace(c.TypeText)));
 
         var lines = Find(schema, "OrderLines");
         Assert.Equal(new[] { N("OrderId"), N("ProductId") }, lines.PrimaryKey, StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(2, lines.ForeignKeys.Count);
+        if (Fixture.SupportsForeignKeys) Assert.Equal(2, lines.ForeignKeys.Count);
     }
 
     [SkippableFact]
     public async Task Catalog_LoadSchema_ForeignKeys()
     {
         RequireAvailable();
+        Skip.IfNot(Fixture.SupportsForeignKeys, $"{Fixture.Provider.Id} has no foreign keys.");
         var schema = await LoadShopSchemaAsync();
         var orders = Find(schema, "Orders");
         var fk = Assert.Single(orders.ForeignKeys);
@@ -601,14 +603,17 @@ public abstract class ProviderConformanceTests<TFixture> : IClassFixture<TFixtur
         Assert.Equal(4, details.Columns.Count);
         Assert.Equal(N("Id"), details.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
         Assert.True(details.Columns[0].IsPk);
-        Assert.True(details.Columns[0].IsIdentity);
+        if (Fixture.SupportsIdentity) Assert.True(details.Columns[0].IsIdentity);
         Assert.False(details.Columns[1].Nullable);
         Assert.Equal(Enumerable.Range(1, 4), details.Columns.Select(c => c.Ordinal));
-        Assert.Single(details.ForeignKeys);
-        // Incoming FKs: Orders.CustomerId → Customers.Id
-        var incoming = Assert.Single(details.ReferencedBy, r => NameEquals(r.Table, N("Orders")));
-        Assert.Equal(new[] { N("CustomerId") }, incoming.Columns, StringComparer.OrdinalIgnoreCase);
-        Assert.False(string.IsNullOrWhiteSpace(incoming.Constraint));
+        if (Fixture.SupportsForeignKeys)
+        {
+            Assert.Single(details.ForeignKeys);
+            // Incoming FKs: Orders.CustomerId → Customers.Id
+            var incoming = Assert.Single(details.ReferencedBy, r => NameEquals(r.Table, N("Orders")));
+            Assert.Equal(new[] { N("CustomerId") }, incoming.Columns, StringComparer.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(incoming.Constraint));
+        }
 
         var lineDetails = await reader.GetObjectDetailsAsync(new ObjectRef(Fixture.Database, Fixture.ShopSchema, N("OrderLines"), ObjectTypes.Table), CancellationToken.None);
         var qty = Assert.Single(lineDetails.Columns, c => NameEquals(c.Name, N("Qty")));

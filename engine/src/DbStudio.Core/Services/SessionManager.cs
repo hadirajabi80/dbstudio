@@ -152,7 +152,7 @@ public sealed class SessionManager : IAsyncDisposable
     public async Task<SessionHandle> CreateAsync(string connectionId, string? database, TransactionMode txMode, bool captureServerOutput,
         string? clientId, CancellationToken ct)
     {
-        var profile = _connections.Get(connectionId);
+        var profile = _connections.WithSecrets(_connections.Get(connectionId));
         var provider = _providers.Get(profile.ProviderId);
         var id = Ids.New("s");
         var options = new SessionOptions(id, string.IsNullOrWhiteSpace(database) ? null : database, txMode, captureServerOutput);
@@ -374,7 +374,7 @@ public sealed class SessionManager : IAsyncDisposable
         IDbSession fresh;
         try
         {
-            var profile = _connections.Find(h.Profile.Id) ?? h.Profile;
+            var profile = _connections.Find(h.Profile.Id) is { } p ? _connections.WithSecrets(p) : h.Profile;
             var options = h.Options with { Database = old.CurrentDatabase ?? h.Options.Database, TxMode = old.TxMode };
             fresh = await h.Provider.OpenSessionAsync(profile, _connections.GetPassword(profile.Id), options, ct).ConfigureAwait(false);
             h.Profile = profile;
@@ -405,7 +405,7 @@ public sealed class SessionManager : IAsyncDisposable
         try
         {
             var old = h.Session;
-            var profile = _connections.Find(h.Profile.Id) ?? h.Profile;
+            var profile = _connections.Find(h.Profile.Id) is { } p ? _connections.WithSecrets(p) : h.Profile;
             var options = h.Options with { Database = database.Trim(), TxMode = old.TxMode };
             var fresh = await h.Provider.OpenSessionAsync(profile, _connections.GetPassword(profile.Id), options, ct).ConfigureAwait(false);
             h.Session = fresh;

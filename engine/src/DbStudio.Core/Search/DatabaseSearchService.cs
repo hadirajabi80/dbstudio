@@ -34,7 +34,7 @@ public sealed class DatabaseSearchService
     public DatabaseSearchService(ConnectionStore connections, ProviderRegistry providers, ILogger<DatabaseSearchService>? log = null)
         : this(async (id, ct) =>
         {
-            var profile = connections.Get(id);
+            var profile = connections.WithSecrets(connections.Get(id));
             var provider = Searchable(providers, profile);
             return await provider.OpenSearcherAsync(profile, connections.GetPassword(id), ct).ConfigureAwait(false);
         }, log)

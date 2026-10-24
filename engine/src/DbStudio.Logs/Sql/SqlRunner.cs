@@ -223,7 +223,7 @@ public sealed class SessionSqlRunnerFactory : ISqlRunnerFactory, IAsyncDisposabl
             var provider = owner._providers.Get(profile.ProviderId);
             try
             {
-                _session = await provider.OpenSessionAsync(profile, owner._connections.GetPassword(connectionId),
+                _session = await provider.OpenSessionAsync(owner._connections.WithSecrets(profile), owner._connections.GetPassword(connectionId),
                     new SessionOptions(Ids.New("lg"), null, TransactionMode.Auto, false), ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException and not EngineException)

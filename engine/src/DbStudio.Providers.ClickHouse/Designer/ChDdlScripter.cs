@@ -5,10 +5,10 @@ namespace DbStudio.Providers.ClickHouse.Designer;
 
 /// <summary>
 /// MergeTree engine clauses of a table (ENGINE, ORDER BY, PARTITION BY, PRIMARY KEY, SAMPLE BY, TTL, SETTINGS).
-/// <para>TODO(WPCH-shared): the designer model has no slot for them yet (R3-1 in docs/wp-notes/WP-CH.md proposes
-/// <c>TableOptions.Extra</c>); until then new tables get <see cref="Default"/> (MergeTree ordered by the primary key) and
-/// <see cref="ChDdlScripter.ScriptTable(TableModel?, TableModel, DdlScriptContext, ChEngineOptions?, ChEngineOptions?)"/> is
-/// the entry point that takes them explicitly (unit-tested).</para>
+/// <para>The model carries them in <c>TableOptions.Extra</c> (<see cref="From"/>); a table without them gets
+/// <see cref="Default"/> (MergeTree ordered by the primary key).
+/// <see cref="ChDdlScripter.ScriptTable(TableModel?, TableModel, DdlScriptContext, ChEngineOptions?, ChEngineOptions?)"/> takes
+/// them explicitly (unit-tested).</para>
 /// </summary>
 /// <param name="OrderBy">Sorting key expression; null = the primary key columns (or <c>tuple()</c>).</param>
 /// <param name="PrimaryKey">Separate PRIMARY KEY expression (a prefix of ORDER BY); null = same as ORDER BY.</param>
@@ -27,10 +27,16 @@ public sealed record ChEngineOptions(
     public bool IsMergeTree => ChTypes.BaseName(Engine).EndsWith("MergeTree", StringComparison.Ordinal);
 
     /// <summary>
-    /// The options a model carries. TODO(WPCH-shared): read <c>desired.Options.Extra</c> ("engine", "orderBy", "partitionBy",
-    /// "primaryKey", "sampleBy", "ttl", "settings") once R3-1 lands.
+    /// The options a model carries in <c>Options.Extra</c> ("engine", "orderBy", "partitionBy", "primaryKey", "sampleBy",
+    /// "ttl", "settings"); null when it carries none (new tables then get <see cref="Default"/>).
     /// </summary>
-    public static ChEngineOptions? From(TableModel model) => null;
+    public static ChEngineOptions? From(TableModel model)
+    {
+        var x = model.Options.Extra;
+        if (x is null || x.Count == 0) return null;
+        string? Get(string key) => x.FirstOrDefault(kv => kv.Key.Equals(key, StringComparison.OrdinalIgnoreCase)).Value is { } v && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
+        return new ChEngineOptions(Get("engine") ?? "MergeTree", Get("orderBy"), Get("partitionBy"), Get("primaryKey"), Get("sampleBy"), Get("ttl"), Get("settings"));
+    }
 }
 
 /// <summary>

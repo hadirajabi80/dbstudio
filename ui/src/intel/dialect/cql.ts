@@ -206,6 +206,6 @@ export const define: DialectDefine = (kit) => {
     formatRules: cqlRules,
     classify: classifyCql,
   });
-  // TODO(WPCS-shared) R3-3: DialectSpec has no `keywordFollowers` yet; the completer ignores it until then.
-  return Object.assign(spec, { keywordFollowers: FOLLOWERS });
+  spec.keywordFollowers = FOLLOWERS; // read by the completer (followerItems)
+  return spec;
 };

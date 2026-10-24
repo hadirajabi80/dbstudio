@@ -18,7 +18,7 @@ public sealed class DesignerService(ConnectionStore connections, ProviderRegistr
 {
     private (ConnectionProfile Profile, ProviderRef Provider, string? Password) Resolve(string connectionId)
     {
-        var profile = connections.Get(connectionId);
+        var profile = connections.WithSecrets(connections.Get(connectionId));
         var provider = providers.Get(profile.ProviderId);
         return (profile, new ProviderRef(provider.Id, provider.Dialect), connections.GetPassword(connectionId));
     }

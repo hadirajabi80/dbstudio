@@ -57,6 +57,13 @@ public static class SqlTokenizer
                 continue;
             }
 
+            // // line comment (CQL)
+            if (c == '/' && i + 1 < n && sql[i + 1] == '/' && DialectInfo.SlashLineComments(dialect))
+            {
+                while (i < n && sql[i] != '\n') i++;
+                continue;
+            }
+
             // # line comment (MySQL, ClickHouse)
             if (c == '#' && DialectInfo.HashLineComments(dialect))
             {

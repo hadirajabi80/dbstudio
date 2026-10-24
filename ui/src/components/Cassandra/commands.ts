@@ -3,11 +3,11 @@
 //
 // Console commands act on the active console when it is on a Cassandra connection (or on the console of an active
 // "Console settings" / "Trace" tab). "Show cluster" and "Table keys & storage…" take a ConnectionTarget / ObjectTarget
-// and fall back to the active tab and the explorer selection.
-// TODO(WPCS-shared): add "Show cluster" to `explorer.connection` and "Table keys & storage…" to `explorer.table` /
-// `explorer.view` once the shell can extend its own context menus (docs/wp-notes/WP-CS-ui.md, R3-1); palette only meanwhile.
+// and fall back to the active tab and the explorer selection. They are also entries of the explorer's connection, table
+// and view menus (extendContextMenu, shown for Cassandra only).
 import { lazy } from 'react';
 import { api, errorMessage } from '../../api/client';
+import { extendContextMenu } from '../../commands/menuModel';
 import { registerCommands, type Command } from '../../commands/registry';
 import { toast } from '../../store/ui';
 import { registerTabView, type TabViewDef } from '../layout/tabViews';
@@ -98,4 +98,7 @@ export function registerCassandraCommands(): void {
   };
   for (const v of Object.values(CASSANDRA_VIEWS)) registerTabView(v, { ...view, icon: icons[v] });
   registerCommands(CASSANDRA_COMMANDS);
+  // hidden on every other provider (the commands' `when` needs a Cassandra target)
+  extendContextMenu('explorer.connection', [{ command: 'cassandra.cluster', optional: true, hideDisabled: true }]);
+  for (const id of ['explorer.table', 'explorer.view']) extendContextMenu(id, [{ command: 'cassandra.tableInfo', optional: true, hideDisabled: true }]);
 }

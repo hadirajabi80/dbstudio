@@ -171,6 +171,12 @@ export interface DialectSpec {
    * the catalog spells them and Format SQL keeps the case the user typed, whatever the keyword/function case setting.
    */
   preserveNameCase?: boolean;
+  /**
+   * Batch 3: keywords the completer offers right after a word (or two words: `'SERIAL CONSISTENCY'`), e.g. CQL
+   * `CONSISTENCY` → the levels; a `^` prefix only matches at the start of the statement. `@keyspace` / `@table`
+   * entries list the schemas / tables instead.
+   */
+  keywordFollowers?: Record<string, string[]>;
 }
 
 export function words(s: string): string[] {
@@ -217,6 +223,7 @@ export interface SpecInit {
   split?: DialectSplitter;
   formatRules?: FormatRulesFactory;
   classify?: (toks: Token[], head: number) => StatementKind | undefined;
+  keywordFollowers?: Record<string, string[]>;
 }
 
 /** What dialect/registry.ts hands a lazily loaded dialect module (its `define` export). */
@@ -273,5 +280,6 @@ export function buildSpec(init: SpecInit): DialectSpec {
     split: init.split,
     formatRules: init.formatRules,
     classify: init.classify,
+    keywordFollowers: init.keywordFollowers,
   };
 }

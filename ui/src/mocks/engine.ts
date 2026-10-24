@@ -175,7 +175,7 @@ export class MockEngine {
     if (ps) {
       const list = ps.databases ?? [ps.schema];
       const wanted = String(this.conn(cid)?.props.database ?? '');
-      return { databases: list, current: list.includes(wanted) ? wanted : list[0] };
+      return { databases: list, current: list.includes(wanted) ? wanted : list[0] ?? ps.schema };
     }
     return { databases: ['main'], current: 'main' };
   }

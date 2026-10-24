@@ -1,5 +1,18 @@
 # WP0 — Batch 3 foundation (notes for the work packages)
 
+## Integration status (Batch 3 integration pass)
+
+- The per-provider override for relational explorer menus (section 2, "Views, commands, menus") is now
+  `extendContextMenu(menuId, entries)` in `commands/menuModel.ts`: a provider's lazy `commands.ts` appends
+  `hideDisabled` entries to a shell menu; they appear only where the command's `when` holds.
+- Provider table options in the designer: `TableOptions.extra` + `registerDesignerOptionsPanel` (`designer/table/optionsPanels.ts`).
+- Mock packs may carry `shop` (schema, native types, banner, databases) per provider id (`mocks/packs/types.ts`).
+- **Initial bundle**: the tree at `df72a7e` measured +122.9 KB (budget +120) before this pass. The provider logo artwork
+  (`theme/brand/logos.tsx`, ~38 KB raw) is now its own lazy chunk (`ProviderLogo` shows a generic glyph until it loads;
+  tests preload it in `src/test/setup.ts`), which brings the initial load to +112.9 KB with this whole pass included (budget +120).
+- Still open: `codegen/__tests__/shop.ts` `ShopDialect` has no entries for the Batch 3 dialects (no codegen snapshots for
+  them yet, nothing requested); a shared `ProviderConformanceTests` opt-out per test (Cassandra re-implements its subset).
+
 Base: `main` @ `675ba34` (Rowlit 1.3.0). Plan: `plan-batch3.md` section 1. WP0 changed no behaviour of the existing
 providers: the five new engine modules register nothing (so `GET /providers` still lists the M2 seven), the new
 dialects only exist as lazy stubs, and every Batch 3 UI entry point (Welcome cards, mock connections) stays hidden until

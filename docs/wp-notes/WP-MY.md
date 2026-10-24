@@ -1,5 +1,23 @@
 # WP-MY — MySQL + MariaDB (notes for the orchestrator)
 
+## Integration status (Batch 3 integration pass)
+
+Every R3 request below is **DONE**, with tests (the `TODO(WPMY-shared)` stub is gone):
+
+| Request | Status | Where / notes |
+|---|---|---|
+| R3-Q1 backtick quoting | DONE | `ui/src/lib/sql.ts` (`MYSQL_RESERVED`, backticks for `mysql` and `clickhouse`); tests `filter/__tests__/batch3.test.ts` |
+| R3-F4 contains/starts/ends filters | DONE | `ui/src/filter/sql.ts`: `CONCAT()`, `ESCAPE '\\'`; beyond the request: `LIKE BINARY` / `= BINARY` for case-sensitive MySQL, `lower()` instead of SQLite's `COLLATE NOCASE` for the non-SQLite dialects, ILIKE for Snowflake / ClickHouse, no ESCAPE clause for ClickHouse, `= TRUE` for Snowflake |
+| R3-D1 inserts / savepoint | DONE | `ui/src/data/sqlgen.ts`: `INSERT INTO t () VALUES ()`, `SELECT LAST_INSERT_ID()` (only for an identity key), `RELEASE SAVEPOINT`; `sqlgen.mysql.test.ts` |
+| R3-T1 routine templates | DONE | `designer/proc/templates.ts` `mysqlSnippet`, one trigger event in `ProcWizard.tsx`; `templates.mysql.test.ts` |
+| R3-P1 `@var` is no bind | DONE | `ParamsDialog/detect.ts` (+ DEFINER / AGGREGATE / EVENT definitions), `editor/param-hint.ts`; `detect.mysql.test.ts` |
+| R3-E1 splitter nesting | DONE | `SqlTokenizer.ScriptBlockStep` (MySQL IF/LOOP/WHILE/REPEAT/CASE/labels in statement position, `IF(` functions excluded; also serves Snowflake Scripting, see WP-SF R3-2); `ScriptBlockSplitTests.cs` |
+| R3-F1 / F2 / F3 formatter | DONE | `format/index.ts`, `format/layout.ts` (`mysqlStatement`, ODKU, INSERT SET, REPLACE, IGNORE, DDL words); the three `it.todo` are real tests; also `VALUES(col)` stays a call in ODKU and `, MODIFY COLUMN` in ALTER |
+| R3-C1 codegen spellings | DONE | `codegen/types/index.ts`; `codegen/__tests__/batch3-types.test.ts` |
+| R3-I1 `@@` completion / R3-I2 `IF(` signature help | DONE | `completer.ts`, `context.ts`; `intel/__tests__/mysql.test.ts` |
+| R3-S1 snippets | DONE | `snippets/builtins.ts` |
+| R3-M1 mock shop | DONE | `MockProviderPack.shop` (schema, native types, banner, databases) in `mocks/packs/types.ts` + `mocks/engine.ts`; the MySQL, MariaDB, ClickHouse, Snowflake and Cassandra packs use it |
+
 Branch `worktree-agent-af932997ab1e37392`, based on WP0 (`686056e`). All file:line references below are at `686056e`.
 Local stubs are findable with `TODO(WPMY-shared)` (one: `ui/src/mocks/packs/mysql.ts`).
 

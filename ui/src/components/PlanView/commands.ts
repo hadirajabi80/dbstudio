@@ -7,6 +7,8 @@ import type { ExplainMode } from '../../api/types';
 import { getEditor } from '../../app/editors';
 import { activeBinding } from '../../editor/registry';
 import { setEditorConfig } from '../../editor/config';
+import { hasExplain } from '../../lib/providerLevels';
+import { getConnection } from '../../store/connections';
 import { getActiveConsole } from '../../store/tabs';
 import { toast } from '../../store/ui';
 import { registerTabView } from '../layout/tabViews';
@@ -15,7 +17,8 @@ import { explainInTab, PLAN_VIEW } from './explain';
 
 const hasConsoleEditor = () => {
   const t = getActiveConsole();
-  return !!t && (!!getEditor(t.id)?.explain || activeBinding()?.tabId === t.id);
+  // Cassandra has no EXPLAIN (the console traces instead)
+  return !!t && hasExplain(getConnection(t.connectionId)?.providerId) && (!!getEditor(t.id)?.explain || activeBinding()?.tabId === t.id);
 };
 
 function explainActive(mode: ExplainMode): void {

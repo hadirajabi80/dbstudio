@@ -1,5 +1,22 @@
 # WP-CS — Cassandra / ScyllaDB (relational provider, dialect `cql`)
 
+## Integration status (Batch 3 integration pass)
+
+| Request | Status | Where / notes |
+|---|---|---|
+| R3-E1 grid submit without transactions | DONE | `PendingChanges/submit.ts` (`cql`, `clickhouse`: no manual mode / savepoint / commit; a failure names the statements that stayed applied); `submitNoTx.test.tsx` |
+| R3-E2 compose cassandra | DONE | `engine/tests/docker/compose.yml` entrypoint enables materialized views and UDFs |
+| R3-E3 `$$` and `//` | DONE | `DialectInfo.DollarQuotedStrings` (+ Cql), `SlashLineComments`, `SqlTokenizer`; `CqlCoreTests.cs` |
+| R3-E4 CQL literals in INSERT export | DONE | `Core/Export/CqlLiterals.cs` (typed by the column's CQL type), `SqlInsertResultWriter.Literal`; `CqlCoreTests.cs` |
+| R3-E5 / ui R3-4 console chrome | DONE | `lib/providerLevels.ts` `hasTransactions` / `hasExplain`: no Auto/Tx toggle, Commit / Rollback or tx label for Cassandra and ClickHouse consoles, no Explain for Cassandra (toolbar, commands, shortcuts); status bar item "LOCAL_QUORUM · tracing" (`components/Cassandra/StatusItem.tsx`, lazy) |
+| intel R3-1 layout | DONE | `format/layout.ts` (batches, type arguments, literals, CQL clauses); the `(R3-1)` goldens run |
+| intel R3-2 parser / diagnostics | DONE | `partial-parser.ts`, `soft-diagnostics.ts` |
+| intel R3-3 keyword followers | DONE | `DialectSpec.keywordFollowers` + completer `followerItems` |
+| intel R3-4 collection types | DONE | `codegen/types/index.ts` `cqlCollection` |
+| intel R3-5 snippets | DONE | `snippets/builtins.ts` `NOT_CQL` for cte / join / case |
+| ui R3-1 menu entries | DONE | `extendContextMenu` (connection: cluster; table / view: keys & storage) |
+| ui R3-2 / R3-3 mock keyspace and dialect | DONE | `MockProviderPack.shop` (`shop` keyspace, no databases), `DIALECT` from the packs |
+
 Base: WP0 `686056e`. Line numbers below refer to that commit. The UI parts have their own detailed notes, written by the
 two sub-tasks of this WP and kept next to this file:
 

@@ -1,8 +1,9 @@
 import { Activity, Keyboard, LoaderCircle, Lock, Wifi, WifiOff } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { runCommand } from '../../commands/registry';
 import { displayShortcut } from '../../commands/keys';
 import { formatDuration } from '../../lib/format';
+import { hasTransactions } from '../../lib/providerLevels';
 import { useConnection } from '../../store/connections';
 import { useTabExecution } from '../../store/results';
 import { isRunning } from '../../store/resultsReducer';
@@ -16,6 +17,8 @@ import { connColorName } from '../../theme/connColors';
 import { ColorDot } from '../common/ConnectionBadge';
 import { ProviderLogo } from '../../theme/brand/ProviderLogo';
 import { UpdateChip } from './UpdateChip';
+
+const CassandraStatusItem = lazy(() => import('../Cassandra/StatusItem'));
 
 const WS_LABEL: Record<string, string> = {
   idle: 'Engine: idle', connecting: 'Engine: connecting…', open: 'Engine connected', reconnecting: 'Engine: reconnecting…',
@@ -50,7 +53,8 @@ export function StatusBar() {
   const clients = useSourceClients((s) => Object.keys(s.clients).length);
   const orphans = useMemo(() => useSessions.getState().orphans().length, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const tx = session ? (session.txMode === 'manual' ? (session.txOpen ? 'Manual tx · pending' : 'Manual tx') : 'Auto-commit') : tab?.kind === 'console' ? (tab.txMode === 'manual' ? 'Manual tx' : 'Auto-commit') : null;
+  // No Auto-commit / Manual tx label on engines without multi-statement transactions (Cassandra, ClickHouse)
+  const tx = !hasTransactions(conn?.providerId) ? null : session ? (session.txMode === 'manual' ? (session.txOpen ? 'Manual tx · pending' : 'Manual tx') : 'Auto-commit') : tab?.kind === 'console' ? (tab.txMode === 'manual' ? 'Manual tx' : 'Auto-commit') : null;
   const server = session?.serverInfo;
   const database = session?.database ?? (tab?.kind === 'console' ? tab.database : null);
 
@@ -86,6 +90,11 @@ export function StatusBar() {
         </span>
       )}
       {tx && <span className={`sb-item${session?.txOpen ? ' sb-warn' : ''}`}>{tx}</span>}
+      {tab?.kind === 'console' && conn?.providerId === 'cassandra' && (
+        <Suspense fallback={null}>
+          <CassandraStatusItem sessionId={session?.sessionId ?? null} version={`${exec?.startedAt ?? 0}:${running}`} />
+        </Suspense>
+      )}
       <div className="flex-1" />
       {exec && (
         <span className="sb-item tabular">

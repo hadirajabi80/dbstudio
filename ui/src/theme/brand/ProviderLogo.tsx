@@ -1,8 +1,30 @@
-import { useId } from 'react';
+import { useId, useSyncExternalStore } from 'react';
 import { Database } from 'lucide-react';
 import type { ProviderId } from '../../api/types';
+import { PROVIDER_LABEL } from '../../components/common/icons';
 import { connColorCss } from '../connColors';
-import { BRAND_LOGOS } from './logos';
+
+type BrandLogos = typeof import('./logos').BRAND_LOGOS;
+let logos: BrandLogos | null = null;
+let loading: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+
+/** The artwork (about 38 KB) is a chunk of its own, kept out of the initial load: a generic glyph shows until it arrives. */
+export function loadBrandLogos(): Promise<void> {
+  loading ??= import('./logos').then((m) => {
+    logos = m.BRAND_LOGOS;
+    listeners.forEach((l) => l());
+  });
+  return loading;
+}
+
+function subscribe(l: () => void): () => void {
+  listeners.add(l);
+  void loadBrandLogos();
+  return () => {
+    listeners.delete(l);
+  };
+}
 
 /**
  * A connection type's product logo (theme/brand/logos.tsx), drawn in a `size` px square.
@@ -20,12 +42,14 @@ export function ProviderLogo({ providerId, size = 16, title, color, className }:
   className?: string;
 }) {
   const uid = useId().replace(/:/g, '');
-  const logo = BRAND_LOGOS[providerId as ProviderId] as (typeof BRAND_LOGOS)[ProviderId] | undefined;
+  const all = useSyncExternalStore(subscribe, () => logos);
+  const logo = all?.[providerId as ProviderId] as BrandLogos[ProviderId] | undefined;
+  const known = providerId in PROVIDER_LABEL;
   const ring = connColorCss(color);
   const a11y = title ? { role: 'img', 'aria-label': title } : { 'aria-hidden': true as const };
   return (
     <span
-      className={`provider-logo${logo ? ` provider-logo-${providerId}` : ''}${className ? ` ${className}` : ''}`}
+      className={`provider-logo${known ? ` provider-logo-${providerId}` : ''}${className ? ` ${className}` : ''}`}
       style={{ width: size, height: size, boxShadow: ring ? `0 0 0 2px var(--bg-panel), 0 0 0 3.5px ${ring}` : undefined }}
       data-provider={providerId}
       title={title}

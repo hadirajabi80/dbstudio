@@ -274,7 +274,7 @@ services:
 
   # Elasticsearch 8.15 (profile "search", WP-ES): single node, security off, 512 MB heap.
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    image: elasticsearch:8.15.3 # Docker Hub's copy of docker.elastic.co/elasticsearch/elasticsearch (reachable everywhere)
     profiles: ["search"]
     environment:
       discovery.type: single-node
@@ -308,6 +308,8 @@ services:
   cassandra:
     image: cassandra:5
     profiles: ["cassandra"]
+    # cassandra:5 disables materialized views and UDFs; the seed (orders_by_status, line_total) needs both
+    entrypoint: ["/bin/sh", "-c", "sed -i -e 's/^materialized_views_enabled: false/materialized_views_enabled: true/' -e 's/^user_defined_functions_enabled: false/user_defined_functions_enabled: true/' /etc/cassandra/cassandra.yaml && exec docker-entrypoint.sh cassandra -f"]
     environment:
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M

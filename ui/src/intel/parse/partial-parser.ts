@@ -58,6 +58,7 @@ class Parser {
   readonly ora: boolean;
   readonly lite: boolean;
   readonly pg: boolean;
+  readonly cql: boolean;
 
   constructor(tokens: Token[], spec: DialectSpec, start: number, end: number) {
     this.t = tokens;
@@ -67,6 +68,7 @@ class Parser {
     this.ora = spec.id === 'plsql';
     this.lite = spec.id === 'sqlite';
     this.pg = spec.id === 'pgsql';
+    this.cql = spec.id === 'cql';
     const root = this.mkScope('other', null, null, start);
     this.m = { root, scopes: [root], tokens, chains: [], created: [], declared: [], start, end };
   }
@@ -250,6 +252,9 @@ class Parser {
         continue;
       }
       if (tok.kind === 'punct' && tok.text === ')') { depth--; this.i++; continue; }
+      // CQL collection / UDT / vector literals: their commas are not argument or value separators
+      if (this.cql && tok.kind === 'op' && (tok.text === '{' || tok.text === '[')) { depth++; this.i++; continue; }
+      if (this.cql && tok.kind === 'op' && (tok.text === '}' || tok.text === ']') && depth > 0) { depth--; this.i++; continue; }
       if (isWord(tok) && tok.upper === 'CASE') { caseDepth++; this.i++; continue; }
       if (isWord(tok) && tok.upper === 'END' && caseDepth > 0) {
         caseDepth--;
@@ -353,6 +358,15 @@ class Parser {
         break;
       case 'BEGIN':
         if (this.ora) { this.parseBlock(c); return; }
+        if (this.cql && (this.at('BATCH', 1) || ((this.at('UNLOGGED', 1) || this.at('COUNTER', 1)) && this.at('BATCH', 2)))) {
+          // BEGIN [UNLOGGED | COUNTER] BATCH [USING TIMESTAMP n] stmt; … APPLY BATCH
+          this.i += this.at('BATCH', 1) ? 2 : 3;
+          if (this.at('USING')) while (!this.eof() && !this.atP(';') && !['INSERT', 'UPDATE', 'DELETE', 'APPLY'].includes(this.u())) this.i++;
+          this.mark(c, 'unknown', this.prevEnd(), { statementStart: true });
+          this.parseStatementList(c, wordSet('APPLY'));
+          if (this.at('APPLY')) this.i += this.at('BATCH', 1) ? 2 : 1;
+          return;
+        }
         if (this.tsql) {
           if (TSQL_BLOCK_BEGIN_NOT.has(this.u(1))) { this.skipSimple(c); return; }
           this.i++;
@@ -1098,6 +1112,11 @@ class Parser {
     this.mark(s, 'update', up.end);
     const ref = this.parseTableSource(s, false, true);
     if (ref) s.targetTable = ref;
+    if (this.cql && this.at('USING')) {
+      // CQL UPDATE t USING TTL n [AND TIMESTAMP n] SET …
+      this.mark(s, 'unknown', this.t[this.i].end);
+      while (!this.eof() && !this.atP(';') && !this.at('SET')) this.i++;
+    }
     if (this.at('SET')) this.parseSetClause(s);
     if (this.tsql && this.at('OUTPUT')) {
       this.i++;
@@ -1121,10 +1140,20 @@ class Parser {
     this.i++;
     if (this.tsql && this.at('TOP')) { this.i++; if (this.atP('(')) this.skipParens(); if (this.at('PERCENT')) this.i++; }
     let kwEnd = del.end;
+    if (this.cql && this.t.slice(this.i).some((t) => isWord(t) && t.upper === 'FROM')) {
+      // CQL DELETE col, m['k'], l[0] FROM t: the columns of the target, like a select list
+      this.mark(s, 'select', del.end);
+      if (!this.at('FROM')) this.scanExpr(s, (k) => this.clauseAt(k) === 'FROM');
+    }
     if (this.at('FROM')) { kwEnd = this.t[this.i].end; this.i++; }
     this.mark(s, 'delete', kwEnd);
     const ref = this.parseTableSource(s, false, true);
     if (ref) s.targetTable = ref;
+    if (this.cql && this.at('USING')) {
+      // DELETE FROM t USING TIMESTAMP n WHERE …
+      this.mark(s, 'unknown', this.t[this.i].end);
+      while (!this.eof() && !this.atP(';') && !this.at('WHERE')) this.i++;
+    }
     if (this.tsql && this.at('OUTPUT')) {
       this.i++;
       this.scanExpr(s, (k) => this.clauseAt(k) === 'FROM' || this.clauseAt(k) === 'WHERE' || this.clauseAt(k) === 'INTO');

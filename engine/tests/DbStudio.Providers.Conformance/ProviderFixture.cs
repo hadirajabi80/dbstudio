@@ -46,6 +46,15 @@ public abstract class ProviderFixture : IAsyncLifetime
     /// <summary>Batch 3: false when manual transactions have no savepoints (Snowflake): the edit-savepoint tests skip.</summary>
     public virtual bool SupportsSavepoints => true;
 
+    /// <summary>Batch 3: false when the engine has no foreign keys (ClickHouse, Cassandra): the FK assertions are skipped.</summary>
+    public virtual bool SupportsForeignKeys => true;
+
+    /// <summary>Batch 3: false when there is no identity / auto-increment column (ClickHouse, Cassandra).</summary>
+    public virtual bool SupportsIdentity => true;
+
+    /// <summary>Batch 3: false when UPDATE / DELETE report no row counts (ClickHouse mutations): the DML count test skips.</summary>
+    public virtual bool ReportsDmlRowCounts => true;
+
     /// <summary>Batch 3: false when a running statement cannot be cancelled: the cancel tests skip.</summary>
     public virtual bool SupportsCancel => true;
 

@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
+import { loadBrandLogos } from '../theme/brand/ProviderLogo';
+
+// the logo artwork is a lazy chunk in the app; tests render it synchronously
+await loadBrandLogos();
 
 afterEach(() => cleanup());
 

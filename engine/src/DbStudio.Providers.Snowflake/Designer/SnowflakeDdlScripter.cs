@@ -92,6 +92,7 @@ public sealed class SnowflakeDdlScripter : IDdlScripter
         }
         if (diff.IsEmpty) return new TableScript([], false, false, warnings, diff.Changes);
         ScriptAlter(diff, statements, warnings);
+        ScriptTableOptions(SfTableOptions.From(original!), SfTableOptions.From(desired), Table(original!.Schema!, original.Name), diff, statements, warnings);
         if (diff.ColumnsReordered) warnings.Add("Snowflake keeps the existing column order (reordering needs a new table: CREATE TABLE … AS SELECT).");
         if (statements.Count > 1) warnings.Add("Snowflake DDL is not transactional: each statement commits; a failure leaves the earlier statements applied.");
         return new TableScript(statements, false, false, warnings, diff.Changes);
@@ -103,7 +104,7 @@ public sealed class SnowflakeDdlScripter : IDdlScripter
     /// <summary>What Snowflake cannot hold compares equal (non-clustered indexes, checks, computed, autoincrement flags).</summary>
     private static TableModel Normalize(TableModel t) => t with
     {
-        Options = new TableOptions(),
+        Options = new TableOptions { Extra = t.Options.Extra },
         PrimaryKey = t.PrimaryKey is null ? null : t.PrimaryKey with { Clustered = false },
         Indexes = t.Indexes.Where(i => i.Clustered).Select(i => i with { Name = ClusterIndexName, Unique = false, Include = [], Filter = null }).ToList(),
         Checks = [],
@@ -116,10 +117,28 @@ public sealed class SnowflakeDdlScripter : IDdlScripter
         if (t.PrimaryKey is { Columns.Count: > 0 } pk) parts.Add(PrimaryKeySql(pk));
         foreach (var u in t.Uniques) parts.Add(UniqueSql(u));
         foreach (var fk in t.ForeignKeys) parts.Add(ForeignKeySql(t, fk));
-        var sb = new StringBuilder($"CREATE TABLE {Table(t.Schema!, t.Name)} (\n{string.Join(",\n", parts.Select(p => "    " + p))}\n)");
+        var options = SfTableOptions.From(t);
+        var sb = new StringBuilder($"CREATE {(options.Transient ? "TRANSIENT " : "")}TABLE {Table(t.Schema!, t.Name)} (\n{string.Join(",\n", parts.Select(p => "    " + p))}\n)");
         if (t.Indexes.FirstOrDefault(i => i.Clustered) is { } cluster) sb.Append("\nCLUSTER BY (").Append(ClusterKeys(cluster)).Append(')');
+        if (options.RetentionDays is { } days) sb.Append("\nDATA_RETENTION_TIME_IN_DAYS = ").Append(days.ToString(Inv));
+        if (options.ChangeTracking == true) sb.Append("\nCHANGE_TRACKING = TRUE");
         if (!string.IsNullOrWhiteSpace(t.Comment)) sb.Append("\nCOMMENT = ").Append(SnowflakeSql.Literal(t.Comment));
         return sb.ToString();
+    }
+
+    /// <summary>TRANSIENT cannot change on an existing table; retention and change tracking are ALTER … SET / UNSET.</summary>
+    private static void ScriptTableOptions(SfTableOptions old, SfTableOptions now, string table, TableDiffResult diff, List<DdlStatement> statements, List<string> warnings)
+    {
+        // The table may have been renamed by ScriptAlter; the option statements run after it.
+        if (diff.TableRenamed) table = Table(diff.Desired.Schema!, diff.Desired.Name);
+        if (old.Transient != now.Transient) warnings.Add("A table cannot be turned into a transient table (or back); recreate it with CREATE TABLE … CLONE or AS SELECT.");
+        if (old.RetentionDays != now.RetentionDays)
+            statements.Add(now.RetentionDays is { } days
+                ? new DdlStatement($"ALTER TABLE {table} SET DATA_RETENTION_TIME_IN_DAYS = {days.ToString(Inv)}", DdlKinds.Alter,
+                    days > 1 ? "Retention beyond 1 day needs Enterprise Edition and adds storage cost." : null)
+                : new DdlStatement($"ALTER TABLE {table} UNSET DATA_RETENTION_TIME_IN_DAYS", DdlKinds.Alter));
+        if ((old.ChangeTracking ?? false) != (now.ChangeTracking ?? false))
+            statements.Add(new DdlStatement($"ALTER TABLE {table} SET CHANGE_TRACKING = {((now.ChangeTracking ?? false) ? "TRUE" : "FALSE")}", DdlKinds.Alter));
     }
 
     private static void ScriptAlter(TableDiffResult d, List<DdlStatement> statements, List<string> warnings)

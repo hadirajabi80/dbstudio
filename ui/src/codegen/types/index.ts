@@ -141,6 +141,47 @@ function arrayRow(e: TypeRow): TypeRow {
   return { logical: 'object', cs: `${e.cs}[]`, go: `[]${e.go}`, ts: /^[A-Za-z_.]+$/.test(e.ts) ? `${e.ts}[]` : `(${e.ts})[]`, java: `${java}[]`, py: `list[${e.py}]` };
 }
 
+/** Top-level comma split of CQL type arguments (`text, frozen<map<int, text>>`). */
+function cqlArgs(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0, from = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '<') depth++;
+    else if (s[i] === '>') depth--;
+    else if (s[i] === ',' && depth === 0) { out.push(s.slice(from, i).trim()); from = i + 1; }
+  }
+  out.push(s.slice(from).trim());
+  return out;
+}
+
+/** CQL `list<T>`, `set<T>`, `map<K, V>`, `frozen<T>` (recursive): the language collection types of the element types. */
+function cqlCollection(typeText: string): ResolvedType | null {
+  const m = /^(frozen|list|set|map)\s*<(.*)>$/i.exec(typeText.trim());
+  if (!m) return null;
+  const kind = m[1].toLowerCase();
+  const args = cqlArgs(m[2]).map((a) => resolveType('cql', a));
+  const tsEl = (t: string) => (/^[A-Za-z_.]+$/.test(t) ? t : `(${t})`);
+  const box = (j: string) => JAVA_BOXED[j] ?? j;
+  const meta = { known: args.every((a) => a.known), length: null, precision: null, scale: null, dbType: typeText };
+  if (kind === 'frozen' && args.length === 1) return { ...args[0], dbType: typeText };
+  if ((kind === 'list' || kind === 'set') && args.length === 1) {
+    const [e] = args;
+    const row: TypeRow = kind === 'list'
+      ? { logical: 'object', cs: `List<${e.cs}>`, go: `[]${e.go}`, ts: `${tsEl(e.ts)}[]`, java: `java.util.List<${box(e.java)}>`, py: `list[${e.py}]` }
+      : { logical: 'object', cs: `IEnumerable<${e.cs}>`, go: `[]${e.go}`, ts: `${tsEl(e.ts)}[]`, java: `java.util.Set<${box(e.java)}>`, py: `set[${e.py}]` };
+    return { ...row, base: typeText.trim().toLowerCase(), ...meta, element: e };
+  }
+  if (kind === 'map' && args.length === 2) {
+    const [k, v] = args;
+    const row: TypeRow = {
+      logical: 'object', cs: `IDictionary<${k.cs}, ${v.cs}>`, go: `map[${k.go}]${v.go}`, ts: `Record<${k.ts === 'number' ? 'number' : 'string'}, ${v.ts}>`,
+      java: `java.util.Map<${box(k.java)}, ${box(v.java)}>`, py: `dict[${k.py}, ${v.py}]`,
+    };
+    return { ...row, base: typeText.trim().toLowerCase(), ...meta };
+  }
+  return null;
+}
+
 /** `f, Int32` → `Int32`: the last argument that is not nested in parentheses. */
 function lastTopLevelArg(args: string): string {
   let depth = 0;
@@ -226,6 +267,10 @@ export function resolveType(dialect: Dialect, typeText: string, opts: TypeOption
 
   let row = tbl[base];
   let known = !!row;
+  if (!row && dialect === 'cql') {
+    const g = cqlCollection(typeText);
+    if (g) return g;
+  }
   if (!row && dialect === 'sqlite') {
     row = tbl[sqliteAffinity(rawBase)];
     known = true;

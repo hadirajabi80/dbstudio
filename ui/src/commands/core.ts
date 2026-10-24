@@ -17,6 +17,7 @@ import { cycleRegion, focusEditorRegion, focusExplorer, focusResults } from '../
 import { isTabular, qualifiedName } from '../lib/sql';
 import { getPlatform } from '../platform';
 import { dbKey, useCatalog } from '../store/catalog';
+import { hasTransactions } from '../lib/providerLevels';
 import { dialectOf, getConnection, kindOf, providerKind, useConnections } from '../store/connections';
 import { sourceClientOpen, useSourceClients } from '../store/sourceClients';
 import { useHistory } from '../store/history';
@@ -219,7 +220,8 @@ export const CORE_COMMANDS: Command<never>[] = [
     run: () => void rollbackTab(),
   },
   {
-    id: 'tx.toggleMode', title: 'Toggle auto-commit / manual transaction', category: 'Transaction', icon: 'ArrowRightLeft', when: () => !!consoleWithConnection(),
+    id: 'tx.toggleMode', title: 'Toggle auto-commit / manual transaction', category: 'Transaction', icon: 'ArrowRightLeft',
+    when: () => { const t = consoleWithConnection(); return !!t && hasTransactions(getConnection(t.connectionId)?.providerId); },
     run: () => {
       const t = getActiveConsole()!;
       const mode = useSessions.getState().forTab(t.id)?.txMode ?? t.txMode;
