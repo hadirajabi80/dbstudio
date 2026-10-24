@@ -1,41 +1,81 @@
 {
  "connectionId": "c_cql",
  "dialect": "cql",
- "database": "main",
- "defaultSchema": "main",
+ "database": null,
+ "defaultSchema": "shop",
  "version": 1,
- "databases": [
-  "main",
-  "archive"
- ],
+ "databases": [],
  "schemas": [
   {
-   "name": "main",
+   "name": "shop",
    "version": 1,
    "objects": [
     {
      "t": "table",
-     "n": "customers",
+     "n": "countries",
+     "cm": "Countries (reference data)",
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
+       0,
+       "partition key"
+      ],
+      [
+       "code",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "local_name",
+       "text",
+       1,
+       0,
        0,
        null
       ],
       [
        "name",
-       "TEXT",
+       "text",
+       1,
        0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customers",
+     "cm": "Customers by id",
+     "c": [
+      [
+       "id",
+       "int",
+       0,
+       1,
+       0,
+       "partition key"
+      ],
+      [
+       "address",
+       "frozen<address>",
+       1,
        0,
        0,
        null
       ],
       [
-       "email",
-       "TEXT",
+       "country",
+       "text",
        1,
        0,
        0,
@@ -43,7 +83,71 @@
       ],
       [
        "country_id",
-       "INTEGER",
+       "int",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "created_at",
+       "timestamp",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "email",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "ext_id",
+       "uuid",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "note",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "phones",
+       "list<text>",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "preferences",
+       "map<text, text>",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "tags",
+       "set<text>",
        1,
        0,
        0,
@@ -52,44 +156,138 @@
      ],
      "pk": [
       "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "products",
+     "cm": "Product catalogue",
+     "c": [
+      [
+       "id",
+       "int",
+       0,
+       1,
+       0,
+       "partition key"
+      ],
+      [
+       "attributes",
+       "map<text, text>",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "category",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "discontinued",
+       "boolean",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "price",
+       "decimal",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "sku",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "stock",
+       "int",
+       1,
+       0,
+       0,
+       null
+      ]
      ],
-     "fk": [
-      {
-       "n": "fk_customers_0",
-       "cols": [
-        "country_id"
-       ],
-       "rs": "main",
-       "rt": "countries",
-       "rcols": [
-        "id"
-       ]
-      }
+     "pk": [
+      "id"
      ]
     },
     {
      "t": "table",
      "n": "orders",
+     "cm": "Orders by id",
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
+       0,
+       "partition key"
+      ],
+      [
+       "customer_id",
+       "int",
+       1,
+       0,
        0,
        null
       ],
       [
-       "customer_id",
-       "INTEGER",
+       "customer_name",
+       "text",
+       1,
        0,
+       0,
+       null
+      ],
+      [
+       "note",
+       "text",
+       1,
        0,
        0,
        null
       ],
       [
        "order_date",
-       "TEXT",
+       "timestamp",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "shipping_address",
+       "frozen<address>",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "status",
+       "text",
        1,
        0,
        0,
@@ -97,8 +295,8 @@
       ],
       [
        "total",
-       "REAL",
-       0,
+       "decimal",
+       1,
        0,
        0,
        null
@@ -106,45 +304,101 @@
      ],
      "pk": [
       "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "orders_by_customer",
+     "cm": "Query table: the orders of a customer, newest first",
+     "c": [
+      [
+       "customer_id",
+       "int",
+       0,
+       1,
+       0,
+       "partition key"
+      ],
+      [
+       "order_date",
+       "timestamp",
+       0,
+       1,
+       0,
+       "clustering key DESC"
+      ],
+      [
+       "order_id",
+       "int",
+       0,
+       1,
+       0,
+       "clustering key ASC"
+      ],
+      [
+       "status",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "total",
+       "decimal",
+       1,
+       0,
+       0,
+       null
+      ]
      ],
-     "fk": [
-      {
-       "n": "fk_orders_0",
-       "cols": [
-        "customer_id"
-       ],
-       "rs": "main",
-       "rt": "customers",
-       "rcols": [
-        "id"
-       ]
-      }
+     "pk": [
+      "customer_id",
+      "order_date",
+      "order_id"
      ]
     },
     {
      "t": "table",
      "n": "order_lines",
+     "cm": "The lines of an order (one partition per order)",
      "c": [
       [
        "order_id",
-       "INTEGER",
+       "int",
        0,
        1,
        0,
-       null
+       "partition key"
       ],
       [
        "product_id",
-       "INTEGER",
+       "int",
        0,
        1,
+       0,
+       "clustering key ASC"
+      ],
+      [
+       "product_name",
+       "text",
+       1,
+       0,
        0,
        null
       ],
       [
        "qty",
-       "INTEGER",
+       "int",
+       1,
        0,
+       0,
+       null
+      ],
+      [
+       "unit_price",
+       "decimal",
+       1,
        0,
        0,
        null
@@ -153,97 +407,118 @@
      "pk": [
       "order_id",
       "product_id"
-     ],
-     "fk": [
-      {
-       "n": "fk_order_lines_0",
-       "cols": [
-        "order_id"
-       ],
-       "rs": "main",
-       "rt": "orders",
-       "rcols": [
-        "id"
-       ]
-      },
-      {
-       "n": "fk_order_lines_1",
-       "cols": [
-        "product_id"
-       ],
-       "rs": "main",
-       "rt": "products",
-       "rcols": [
-        "id"
-       ]
-      }
      ]
     },
     {
      "t": "table",
-     "n": "products",
+     "n": "product_views",
+     "cm": "Counter table: product page views",
      "c": [
       [
-       "id",
-       "INTEGER",
+       "product_id",
+       "int",
        0,
        1,
        0,
-       null
+       "partition key"
       ],
       [
-       "name",
-       "TEXT",
-       0,
-       0,
-       0,
-       null
-      ],
-      [
-       "price",
-       "REAL",
-       0,
+       "views",
+       "counter",
+       1,
        0,
        0,
        null
       ]
      ],
      "pk": [
-      "id"
+      "product_id"
      ]
     },
     {
      "t": "table",
-     "n": "countries",
-     "c": [
-      [
-       "id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "name",
-       "TEXT",
-       0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "id"
-     ]
-    },
-    {
-     "t": "view",
-     "n": "customer_totals",
+     "n": "events_by_day",
+     "cm": "Customer activity per day (composite partition key, 90-day TTL)",
      "c": [
       [
        "customer_id",
-       "INTEGER",
+       "int",
+       0,
+       1,
+       0,
+       "partition key (1 of 2)"
+      ],
+      [
+       "day",
+       "date",
+       0,
+       1,
+       0,
+       "partition key (2 of 2)"
+      ],
+      [
+       "event_time",
+       "timeuuid",
+       0,
+       1,
+       0,
+       "clustering key DESC"
+      ],
+      [
+       "kind",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "payload",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "customer_id",
+      "day",
+      "event_time"
+     ]
+    },
+    {
+     "t": "mview",
+     "n": "orders_by_status",
+     "cm": "Orders by status (materialized view)",
+     "c": [
+      [
+       "status",
+       "text",
+       0,
+       1,
+       0,
+       "partition key"
+      ],
+      [
+       "id",
+       "int",
+       0,
+       1,
+       0,
+       "clustering key ASC"
+      ],
+      [
+       "customer_id",
+       "int",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_date",
+       "timestamp",
        1,
        0,
        0,
@@ -251,7 +526,49 @@
       ],
       [
        "total",
-       "REAL",
+       "decimal",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "status",
+      "id"
+     ]
+    },
+    {
+     "t": "type",
+     "n": "address",
+     "c": [
+      [
+       "street",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "city",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "postal_code",
+       "text",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "country",
+       "text",
        1,
        0,
        0,
@@ -260,71 +577,28 @@
      ]
     },
     {
-     "t": "trigger",
-     "n": "trg_orders_ai"
-    }
-   ]
-  },
-  {
-   "name": "archive",
-   "version": 1,
-   "objects": [
-    {
-     "t": "table",
-     "n": "orders_2020",
-     "c": [
+     "t": "func",
+     "n": "line_total",
+     "cm": "RETURNS NULL ON NULL INPUT · LANGUAGE java",
+     "p": [
       [
-       "id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
+       "qty",
+       "int",
+       "in",
+       0
       ],
       [
-       "customer_id",
-       "INTEGER",
-       0,
-       0,
-       0,
-       null
+       "unit_price",
+       "decimal",
+       "in",
+       0
       ],
       [
-       "total",
-       "REAL",
-       0,
-       0,
-       0,
-       null
+       "",
+       "decimal",
+       "return",
+       0
       ]
-     ],
-     "pk": [
-      "id"
-     ]
-    },
-    {
-     "t": "table",
-     "n": "customers_old",
-     "c": [
-      [
-       "id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "name",
-       "TEXT",
-       0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "id"
      ]
     }
    ]

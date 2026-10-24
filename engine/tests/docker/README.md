@@ -236,3 +236,26 @@ dotnet test engine/tests/DbStudio.Providers.MySql.Tests
 
 The fixtures seed as `root` (events, triggers and the log/activity tests need it). `DBSTUDIO_UPDATE_GOLDEN=1` rewrites the
 designer goldens (`M15/golden/mysql_*.sql`) and refreshes the plan fixtures (`Plans/fixtures/*`) from the live servers.
+
+### Cassandra (WP-CS)
+
+`seed-cassandra.cql` drops and recreates the keyspace `shop` (SimpleStrategy, RF 1): the shop data of the other fixtures
+modelled the Cassandra way — `countries`, `customers` (UDT `address`, set/list/map columns, SAI index on `email`),
+`products`, `orders`, the query table `orders_by_customer` (clustering `order_date DESC`), `order_lines` (one partition
+per order), the counter table `product_views`, `events_by_day` (composite partition key, timeuuid clustering, 90-day TTL),
+the materialized view `orders_by_status` and the UDF `line_total`, with Persian text in notes and attributes.
+
+`cassandra:5` ships with materialized views and user-defined functions disabled, so with the compose service as it is the
+seed reports two errors (the view and the function) and creates everything else. The test fixture
+(`engine/tests/DbStudio.Providers.Cassandra.Tests/CassandraBackend.cs`) starts the node through a small entrypoint that
+sets `materialized_views_enabled: true` and `user_defined_functions_enabled: true` in `cassandra.yaml` first; the same
+change for this compose service is requested in `docs/wp-notes/WP-CS.md` (R3-E2).
+
+```powershell
+docker compose -f engine/tests/docker/compose.yml --profile cassandra up -d     # first start takes 60-90 s
+$env:DBSTUDIO_CASSANDRA_HOST = "localhost"; $env:DBSTUDIO_CASSANDRA_PORT = "19042"
+dotnet test engine/tests/DbStudio.Providers.Cassandra.Tests
+```
+
+Without the variables the suite starts its own `cassandra:5` container (MAX_HEAP_SIZE=512M, HEAP_NEWSIZE=128M, random
+port) and seeds it through a provider session.
