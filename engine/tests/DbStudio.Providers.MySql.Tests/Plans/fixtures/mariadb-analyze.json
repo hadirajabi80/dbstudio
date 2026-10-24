@@ -1,0 +1,72 @@
+{
+  "query_optimization": {
+    "r_total_time_ms": 0.213758235
+  },
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.010994257,
+    "r_loops": 1,
+    "r_total_time_ms": 0.212117349,
+    "filesort": {
+      "sort_key": "o.total",
+      "r_loops": 1,
+      "r_total_time_ms": 0.013527642,
+      "r_used_priority_queue": false,
+      "r_output_rows": 4,
+      "r_buffer_size": "336",
+      "r_sort_mode": "sort_key,rowid",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "c",
+              "access_type": "ref",
+              "possible_keys": ["PRIMARY", "fk_customers_countries"],
+              "key": "fk_customers_countries",
+              "key_length": "5",
+              "used_key_parts": ["country_id"],
+              "ref": ["const"],
+              "loops": 1,
+              "r_loops": 1,
+              "rows": 2,
+              "r_rows": 2,
+              "cost": 0.004452,
+              "r_table_time_ms": 0.022020501,
+              "r_other_time_ms": 0.009601734,
+              "r_engine_stats": {
+                "pages_accessed": 4
+              },
+              "filtered": 100,
+              "r_total_filtered": 100,
+              "r_filtered": 100
+            }
+          },
+          {
+            "table": {
+              "table_name": "o",
+              "access_type": "ref",
+              "possible_keys": ["ix_orders_customer"],
+              "key": "ix_orders_customer",
+              "key_length": "4",
+              "used_key_parts": ["customer_id"],
+              "ref": ["shop.c.id"],
+              "loops": 2,
+              "r_loops": 2,
+              "rows": 1,
+              "r_rows": 2,
+              "cost": 0.00527872,
+              "r_table_time_ms": 0.015627852,
+              "r_other_time_ms": 0.129752152,
+              "r_engine_stats": {
+                "pages_accessed": 6
+              },
+              "filtered": 100,
+              "r_total_filtered": 100,
+              "r_filtered": 100
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -8,7 +8,7 @@ import { qualifiedName } from '../../lib/sql';
 export const DEFAULT_COLUMN_TYPE: Record<Dialect, string> = {
   tsql: 'nvarchar(100)', plsql: 'VARCHAR2(100)', sqlite: 'TEXT', pgsql: 'text',
   // WP-MY begin
-  mysql: 'varchar(100)',
+  mysql: 'varchar(255)',
   // WP-MY end
   // WP-CH begin
   clickhouse: 'String',

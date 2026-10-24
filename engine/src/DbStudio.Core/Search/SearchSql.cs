@@ -109,7 +109,8 @@ public static class SearchSql
         Dialect.PlSql => $"REGEXP_LIKE({expr}, {param}, '{(matchCase ? "c" : "i")}')",
         Dialect.Sqlite => $"{expr} REGEXP {param}",
         // WP-MY begin (REGEXP_LIKE is MySQL 8.0+; MariaDB has only REGEXP / RLIKE)
-        Dialect.MySql => $"REGEXP_LIKE({expr}, {param}, '{(matchCase ? "c" : "i")}')",
+        // REGEXP works on both servers; the explicit collation makes the case rule independent of the column's collation.
+        Dialect.MySql => $"CONVERT({expr} USING utf8mb4) COLLATE {(matchCase ? "utf8mb4_bin" : "utf8mb4_general_ci")} REGEXP {param}",
         // WP-MY end
         // WP-CH begin (re2; case-insensitivity goes into the pattern, see RegexParameter)
         Dialect.ClickHouse => $"match({expr}, {param})",
@@ -212,7 +213,7 @@ public static class SearchSql
                 return t switch
                 {
                     "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext" or "enum" or "set" => quotedColumn,
-                    "json" => $"CAST({quotedColumn} AS CHAR)",
+                    "json" or "uuid" or "inet4" or "inet6" => $"CAST({quotedColumn} AS CHAR)",
                     _ => null,
                 };
             // WP-MY end

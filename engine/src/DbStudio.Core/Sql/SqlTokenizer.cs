@@ -361,6 +361,20 @@ public static class SqlTokenizer
         var u = t.Upper;
         if (dialect == Dialect.PlSql && u is "BEGIN" or "DECLARE") return true;
         // WP-MY begin (MySQL/MariaDB: BEGIN … END compound statements; CREATE PROCEDURE/FUNCTION/EVENT bodies, DEFINER=…)
+        if (dialect == Dialect.MySql)
+        {
+            // A top-level BEGIN is START TRANSACTION; MariaDB's BEGIN NOT ATOMIC … END is a compound statement.
+            if (u == "BEGIN") return k + 1 < tokens.Count && tokens[k + 1].IsWord("NOT");
+            if (u is not ("CREATE" or "ALTER")) return false;
+            for (var j = k + 1; j < Math.Min(tokens.Count, k + 16); j++)
+            {
+                var tj = tokens[j];
+                if (tj.Kind == SqlTokenKind.Word && tj.Upper is "PROCEDURE" or "FUNCTION" or "TRIGGER" or "EVENT") return true;
+                if (tj.Kind == SqlTokenKind.Word && tj.Upper is "TABLE" or "VIEW" or "INDEX" or "DATABASE" or "SCHEMA" or "USER" or "SEQUENCE" or "SERVER") return false;
+                // OR REPLACE, DEFINER = 'u'@'h' / CURRENT_USER(), SQL SECURITY x, AGGREGATE: keep scanning
+            }
+            return false;
+        }
         // WP-MY end
         // WP-SF begin (Snowflake Scripting: anonymous BEGIN … END / DECLARE blocks outside $$ bodies)
         // WP-SF end

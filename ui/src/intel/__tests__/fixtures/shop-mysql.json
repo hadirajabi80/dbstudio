@@ -1,25 +1,22 @@
 {
  "connectionId": "c_mysql",
  "dialect": "mysql",
- "database": "main",
- "defaultSchema": "main",
+ "database": null,
+ "defaultSchema": "shop",
  "version": 1,
- "databases": [
-  "main",
-  "archive"
- ],
+ "databases": [],
  "schemas": [
   {
-   "name": "main",
+   "name": "shop",
    "version": 1,
    "objects": [
     {
      "t": "table",
-     "n": "customers",
+     "n": "countries",
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
        0,
@@ -27,15 +24,41 @@
       ],
       [
        "name",
-       "TEXT",
+       "varchar(100)",
        0,
        0,
        0,
        null
+      ]
+     ],
+     "pk": [
+      "id"
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customers",
+     "cm": "Registered customers",
+     "c": [
+      [
+       "id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "name",
+       "varchar(100)",
+       0,
+       0,
+       0,
+       "Display name"
       ],
       [
        "email",
-       "TEXT",
+       "varchar(200)",
        1,
        0,
        0,
@@ -43,7 +66,7 @@
       ],
       [
        "country_id",
-       "INTEGER",
+       "int",
        1,
        0,
        0,
@@ -55,11 +78,11 @@
      ],
      "fk": [
       {
-       "n": "fk_customers_0",
+       "n": "fk_customers_countries",
        "cols": [
         "country_id"
        ],
-       "rs": "main",
+       "rs": "shop",
        "rt": "countries",
        "rcols": [
         "id"
@@ -73,7 +96,7 @@
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
        0,
@@ -81,7 +104,7 @@
       ],
       [
        "customer_id",
-       "INTEGER",
+       "int",
        0,
        0,
        0,
@@ -89,15 +112,23 @@
       ],
       [
        "order_date",
-       "TEXT",
-       1,
+       "datetime",
+       0,
        0,
        0,
        null
       ],
       [
        "total",
-       "REAL",
+       "decimal(12,2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "status",
+       "enum('new','paid','shipped','cancelled')",
        0,
        0,
        0,
@@ -109,70 +140,12 @@
      ],
      "fk": [
       {
-       "n": "fk_orders_0",
+       "n": "fk_orders_customers",
        "cols": [
         "customer_id"
        ],
-       "rs": "main",
+       "rs": "shop",
        "rt": "customers",
-       "rcols": [
-        "id"
-       ]
-      }
-     ]
-    },
-    {
-     "t": "table",
-     "n": "order_lines",
-     "c": [
-      [
-       "order_id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "product_id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "qty",
-       "INTEGER",
-       0,
-       0,
-       0,
-       null
-      ]
-     ],
-     "pk": [
-      "order_id",
-      "product_id"
-     ],
-     "fk": [
-      {
-       "n": "fk_order_lines_0",
-       "cols": [
-        "order_id"
-       ],
-       "rs": "main",
-       "rt": "orders",
-       "rcols": [
-        "id"
-       ]
-      },
-      {
-       "n": "fk_order_lines_1",
-       "cols": [
-        "product_id"
-       ],
-       "rs": "main",
-       "rt": "products",
        "rcols": [
         "id"
        ]
@@ -185,7 +158,7 @@
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
        0,
@@ -193,7 +166,7 @@
       ],
       [
        "name",
-       "TEXT",
+       "varchar(100)",
        0,
        0,
        0,
@@ -201,8 +174,16 @@
       ],
       [
        "price",
-       "REAL",
+       "decimal(10,2)",
+       1,
        0,
+       0,
+       null
+      ],
+      [
+       "description",
+       "text",
+       1,
        0,
        0,
        null
@@ -214,20 +195,236 @@
     },
     {
      "t": "table",
-     "n": "countries",
+     "n": "order_lines",
      "c": [
       [
-       "id",
-       "INTEGER",
+       "order_id",
+       "int",
        0,
        1,
        0,
        null
       ],
       [
-       "name",
-       "TEXT",
+       "product_id",
+       "int",
        0,
+       1,
+       0,
+       null
+      ],
+      [
+       "qty",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "line_total",
+       "decimal(12,2)",
+       1,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "order_id",
+      "product_id"
+     ],
+     "fk": [
+      {
+       "n": "fk_order_lines_orders",
+       "cols": [
+        "order_id"
+       ],
+       "rs": "shop",
+       "rt": "orders",
+       "rcols": [
+        "id"
+       ]
+      },
+      {
+       "n": "fk_order_lines_products",
+       "cols": [
+        "product_id"
+       ],
+       "rs": "shop",
+       "rt": "products",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "customer_notes",
+     "c": [
+      [
+       "id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "customer_id",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "lang",
+       "char(2)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "note",
+       "text",
+       0,
+       0,
+       0,
+       null
+      ]
+     ],
+     "pk": [
+      "id"
+     ],
+     "fk": [
+      {
+       "n": "fk_customer_notes_customers",
+       "cols": [
+        "customer_id"
+       ],
+       "rs": "shop",
+       "rt": "customers",
+       "rcols": [
+        "id"
+       ]
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "n": "extra_types",
+     "c": [
+      [
+       "id",
+       "int",
+       0,
+       1,
+       1,
+       null
+      ],
+      [
+       "u_big",
+       "bigint unsigned",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "flags",
+       "bit(4)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "yr",
+       "year",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "tags",
+       "set('vip','b2b','new')",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "meta",
+       "json",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "pos",
+       "point",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "raw",
+       "varbinary(16)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "created",
+       "timestamp(6)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "d",
+       "date",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "t",
+       "time(3)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "tiny",
+       "tinyint",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "flag",
+       "tinyint(1)",
+       1,
+       0,
+       0,
+       null
+      ],
+      [
+       "ext_id",
+       "char(36)",
+       1,
        0,
        0,
        null
@@ -239,19 +436,73 @@
     },
     {
      "t": "view",
-     "n": "customer_totals",
+     "n": "customer_orders",
      "c": [
       [
        "customer_id",
-       "INTEGER",
-       1,
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "varchar(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_id",
+       "int",
+       0,
        0,
        0,
        null
       ],
       [
        "total",
-       "REAL",
+       "decimal(12,2)",
+       0,
+       0,
+       0,
+       null
+      ]
+     ]
+    },
+    {
+     "t": "view",
+     "n": "customer_totals",
+     "c": [
+      [
+       "customer_id",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "name",
+       "varchar(100)",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "orders",
+       "bigint",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "revenue",
+       "decimal(34,2)",
        1,
        0,
        0,
@@ -260,8 +511,89 @@
      ]
     },
     {
+     "t": "func",
+     "n": "fn_tax",
+     "cm": "Tax on an amount (default rate)",
+     "p": [
+      [
+       "amount",
+       "decimal(12,2)",
+       "in",
+       0
+      ],
+      [
+       "",
+       "decimal(12,2)",
+       "return",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "get_customer",
+     "p": [
+      [
+       "p_id",
+       "int",
+       "in",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "get_customer_report",
+     "cm": "Two result sets and a warning",
+     "p": [
+      [
+       "p_id",
+       "int",
+       "in",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "add_order_line",
+     "p": [
+      [
+       "p_order",
+       "int",
+       "in",
+       0
+      ],
+      [
+       "p_product",
+       "int",
+       "in",
+       0
+      ],
+      [
+       "p_qty",
+       "int",
+       "in",
+       0
+      ],
+      [
+       "inserted",
+       "int",
+       "out",
+       0
+      ]
+     ]
+    },
+    {
+     "t": "proc",
+     "n": "ev_purge_notes",
+     "cm": "event",
+     "p": []
+    },
+    {
      "t": "trigger",
-     "n": "trg_orders_ai"
+     "n": "trg_orders_check",
+     "cm": "on orders"
     }
    ]
   },
@@ -275,7 +607,7 @@
      "c": [
       [
        "id",
-       "INTEGER",
+       "int",
        0,
        1,
        0,
@@ -283,7 +615,15 @@
       ],
       [
        "customer_id",
-       "INTEGER",
+       "int",
+       0,
+       0,
+       0,
+       null
+      ],
+      [
+       "order_date",
+       "datetime",
        0,
        0,
        0,
@@ -291,7 +631,7 @@
       ],
       [
        "total",
-       "REAL",
+       "decimal(12,2)",
        0,
        0,
        0,
@@ -300,31 +640,19 @@
      ],
      "pk": [
       "id"
-     ]
-    },
-    {
-     "t": "table",
-     "n": "customers_old",
-     "c": [
-      [
-       "id",
-       "INTEGER",
-       0,
-       1,
-       0,
-       null
-      ],
-      [
-       "name",
-       "TEXT",
-       0,
-       0,
-       0,
-       null
-      ]
      ],
-     "pk": [
-      "id"
+     "fk": [
+      {
+       "n": "fk_orders_2020_customers",
+       "cols": [
+        "customer_id"
+       ],
+       "rs": "shop",
+       "rt": "customers",
+       "rcols": [
+        "id"
+       ]
+      }
      ]
     }
    ]

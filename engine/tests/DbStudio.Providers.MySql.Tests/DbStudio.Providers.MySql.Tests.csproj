@@ -34,6 +34,7 @@
   <ItemGroup>
     <None Include="../docker/seed-mysql.sql" Link="docker/seed-mysql.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../docker/seed-mariadb.sql" Link="docker/seed-mariadb.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Plans/fixtures/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

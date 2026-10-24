@@ -255,7 +255,100 @@ public static class StatementClassifier
     // to use the shared switch. Each WP edits only its own block.
 
     // WP-MY begin (MySQL/MariaDB: SHOW, DESCRIBE/DESC, START TRANSACTION, CALL, HANDLER, LOCK/UNLOCK TABLES, …)
-    private static StatementClassification? ClassifyMySql(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    private static StatementClassification? ClassifyMySql(List<SqlToken> t, int i, string u, bool hasWhere, int start)
+    {
+        string? Next(int k) => i + k < t.Count && t[i + k].Kind == SqlTokenKind.Word ? t[i + k].Upper : null;
+        switch (u)
+        {
+            case "SHOW" or "DESCRIBE" or "DESC" or "HELP" or "HANDLER" or "CHECKSUM":
+                return new(StatementCategory.Query, u is "DESC" ? "DESCRIBE" : u, false, null, start);
+            case "EXPLAIN" or "ANALYZE":
+            {
+                // EXPLAIN ANALYZE / MariaDB ANALYZE <stmt> execute the statement; ANALYZE TABLE writes statistics.
+                if (u == "ANALYZE" && Next(1) is "TABLE" or "NO_WRITE_TO_BINLOG" or "LOCAL") return new(StatementCategory.Other, "ANALYZE TABLE", false, null, start);
+                var dml = FirstDepth0Word(t, i + 1, "INSERT", "UPDATE", "DELETE", "REPLACE");
+                return dml is null || (u == "EXPLAIN" && Next(1) != "ANALYZE")
+                    ? new(StatementCategory.Query, "EXPLAIN", hasWhere, null, start)
+                    : new(StatementCategory.Dml, dml, hasWhere, null, start);
+            }
+            case "START" when Next(1) == "TRANSACTION":
+                return new(StatementCategory.Transaction, "BEGIN", false, null, start);
+            case "BEGIN":
+                return Next(1) == "NOT"
+                    ? new(StatementCategory.Block, "BEGIN", hasWhere, null, start)
+                    : new(StatementCategory.Transaction, "BEGIN", false, null, start);
+            case "ROLLBACK" when FirstDepth0Word(t, i + 1, "TO") is not null:
+                return new(StatementCategory.Transaction, "ROLLBACK TO SAVEPOINT", false, null, start);
+            case "XA":
+                return new(StatementCategory.Transaction, "XA", false, null, start);
+            case "CALL":
+                return new(StatementCategory.Other, "CALL", false, null, start);
+            case "LOCK" or "UNLOCK":
+                return new(StatementCategory.Session, u + " " + (Next(1) ?? "TABLES"), false, null, start);
+            case "LOAD":
+                return new(StatementCategory.Dml, "LOAD " + (Next(1) ?? "DATA"), false, null, start);
+            case "PREPARE" or "DEALLOCATE":
+                return new(StatementCategory.Session, u, false, null, start);
+            case "TABLE":
+                return new(StatementCategory.Query, "TABLE", false, null, start);
+            case "DO" or "KILL" or "FLUSH" or "RESET" or "PURGE" or "OPTIMIZE" or "REPAIR" or "CHECK" or "INSTALL" or "UNINSTALL"
+                or "SIGNAL" or "RESIGNAL" or "CACHE" or "BINLOG" or "CHANGE" or "SHUTDOWN" or "RESTART":
+                return new(StatementCategory.Other, u is "OPTIMIZE" or "REPAIR" or "CHECK" ? u + " TABLE" : u, false, null, start);
+            case "RENAME":
+            {
+                // RENAME TABLE a TO b [, c TO d] / RENAME USER …
+                if (Next(1) is "USER") return new(StatementCategory.Other, "RENAME USER", false, null, start);
+                var parts = Next(1) == "TABLE" ? NameAfter(t, i + 2, out _) : null;
+                var (_, schema, name) = SplitName(parts, Dialect.MySql);
+                return new(StatementCategory.Ddl, "RENAME TABLE", false, new DdlTarget("RENAME", ObjectTypes.Table, null, schema, name, DdlScope.Object), start);
+            }
+            case "CREATE" or "ALTER" or "DROP":
+            {
+                // MySQL modifiers the shared DDL parser does not know: DEFINER = user@host, ALGORITHM = x, SQL SECURITY x,
+                // AGGREGATE (MariaDB); events are routines of the catalog (proc).
+                var filtered = new List<SqlToken>(t.Count) { };
+                filtered.AddRange(t.Take(i + 1));
+                var changed = false;
+                var k = i + 1;
+                while (k < t.Count)
+                {
+                    var w = t[k].Kind == SqlTokenKind.Word ? t[k].Upper : null;
+                    if (w is "OR" or "REPLACE") { filtered.Add(t[k]); k++; continue; }
+                    if (w is "DEFINER" or "ALGORITHM" && k + 1 < t.Count && t[k + 1].Kind == SqlTokenKind.Operator && t[k + 1].Value == "=")
+                    {
+                        k += 2;
+                        if (k < t.Count && t[k].IsWord("CURRENT_USER") && k + 2 < t.Count && t[k + 1].IsPunct('(') && t[k + 2].IsPunct(')')) k += 2;
+                        k++;
+                        // user@host: '@' (operator) and the host
+                        if (k + 1 < t.Count && t[k].Kind == SqlTokenKind.Operator && t[k].Value == "@") k += 2;
+                        else if (k < t.Count && t[k].Kind == SqlTokenKind.Parameter && t[k].Value.StartsWith('@')) k++;
+                        changed = true;
+                        continue;
+                    }
+                    if (w is "SQL" && k + 2 < t.Count && t[k + 1].IsWord("SECURITY")) { k += 3; changed = true; continue; }
+                    if (w is "AGGREGATE") { k++; changed = true; continue; }
+                    break;
+                }
+                if (k < t.Count && t[k].IsWord("EVENT"))
+                {
+                    var j = k + 1;
+                    if (j < t.Count && t[j].IsWord("IF"))
+                    {
+                        j++;
+                        if (j < t.Count && t[j].IsWord("NOT")) j++;
+                        if (j < t.Count && t[j].IsWord("EXISTS")) j++;
+                    }
+                    var (_, schema, name) = SplitName(NameAfter(t, j, out _), Dialect.MySql);
+                    return new(StatementCategory.Ddl, u + " EVENT", false, new DdlTarget(u, ObjectTypes.Proc, null, schema, name, DdlScope.Object), start);
+                }
+                if (!changed) return null;
+                filtered.AddRange(t.Skip(k));
+                return ClassifyDdl(filtered, i, u, Dialect.MySql, start);
+            }
+            default:
+                return null;
+        }
+    }
     // WP-MY end
 
     // WP-CH begin (ClickHouse: SHOW, DESCRIBE, EXISTS, OPTIMIZE, SYSTEM, KILL, ALTER … UPDATE/DELETE mutations, …)

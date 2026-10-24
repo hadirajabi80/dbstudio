@@ -170,3 +170,26 @@ The suites follow the M2 pattern: `DBSTUDIO_IT=0` skips them, the env vars point
 otherwise they start their own container (`Testcontainers.MySql`, `.MariaDb`, `.ClickHouse`, `.Elasticsearch`,
 `.Cassandra` 4.16.0). Snowflake has no container: its unit tests replay recorded fixtures and the live suite runs only
 when `DBSTUDIO_SF_ACCOUNT` is set.
+
+### MySQL / MariaDB (WP-MY)
+
+`seed-mysql.sql` builds the shop in database `shop` on both servers: the five shop tables (AUTO_INCREMENT customers,
+comments, an ENUM status, a STORED generated `line_total`, a FULLTEXT index and a CHECK on products), `customer_notes`
+(Persian, Arabic and Hebrew text), `extra_types` (BIGINT UNSIGNED at its maximum, BIT(4), YEAR, SET, JSON, POINT,
+VARBINARY, TIMESTAMP(6), DATE, TIME(3), TINYINT, BOOLEAN, CHAR(36)), the views `customer_orders` / `customer_totals`, the
+function `fn_tax`, the procedures `get_customer`, `get_customer_report` (two result sets, a SIGNAL warning for unknown
+ids) and `add_order_line` (OUT parameter), the trigger `trg_orders_check` and the disabled event `ev_purge_notes`.
+Routine bodies use `DELIMITER $$`, so the script runs from the mysql client (docker init) and through the provider's
+splitter (the test fixture). `seed-mariadb.sql` adds the sequence `order_numbers` on MariaDB. Both are idempotent.
+
+```powershell
+docker compose -f engine/tests/docker/compose.yml up -d mysql mariadb
+$env:DBSTUDIO_MYSQL_HOST = "localhost"; $env:DBSTUDIO_MYSQL_PORT = "13306"; $env:DBSTUDIO_MYSQL_USER = "root"; $env:DBSTUDIO_MYSQL_PASSWORD = "shop"
+$env:DBSTUDIO_MARIADB_HOST = "localhost"; $env:DBSTUDIO_MARIADB_PORT = "13307"; $env:DBSTUDIO_MARIADB_USER = "root"; $env:DBSTUDIO_MARIADB_PASSWORD = "shop"
+dotnet test engine/tests/DbStudio.Providers.MySql.Tests
+# without the env vars the suite starts mysql:8.4 and mariadb:11 containers itself (random ports, 64 MB buffer pool,
+# log_output=TABLE for the log tests); DBSTUDIO_IT=0 skips them
+```
+
+The fixtures seed as `root` (events, triggers and the log/activity tests need it). `DBSTUDIO_UPDATE_GOLDEN=1` rewrites the
+designer goldens (`M15/golden/mysql_*.sql`) and refreshes the plan fixtures (`Plans/fixtures/*`) from the live servers.

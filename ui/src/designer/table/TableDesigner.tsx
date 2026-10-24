@@ -58,7 +58,12 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
     'timestamp(3)', 'timestamptz(3)', 'time', 'timetz', 'interval', 'bytea', 'json', 'jsonb', 'xml', 'inet', 'cidr', 'macaddr', 'money',
   ],
   // WP-MY begin
-  mysql: ['int', 'bigint', 'smallint', 'tinyint', 'decimal(12,2)', 'double', 'float', 'varchar(100)', 'char(10)', 'text', 'longtext', 'date', 'datetime', 'timestamp', 'time', 'year', 'json', 'blob', 'boolean'],
+  // the common MySQL 8 / MariaDB column types (the engine's MySqlDdlScripter.GetTypes answers when it is reachable)
+  mysql: [
+    'int', 'int unsigned', 'bigint', 'bigint unsigned', 'smallint', 'tinyint', 'tinyint(1)', 'mediumint', 'decimal(12,2)', 'double', 'float',
+    'bit(1)', 'varchar(255)', 'char(36)', 'text', 'mediumtext', 'longtext', 'json', 'date', 'datetime(6)',
+    'timestamp(6)', 'time', 'year', 'binary(16)', 'varbinary(255)', 'blob', 'longblob', 'geometry', 'point',
+  ],
   // WP-MY end
   // WP-CH begin
   clickhouse: ['UInt8', 'UInt32', 'UInt64', 'Int32', 'Int64', 'Float64', 'Decimal(12, 2)', 'String', 'LowCardinality(String)', 'Date', 'DateTime', 'DateTime64(3)', 'UUID', 'Bool', 'Array(String)', 'Nullable(String)'],

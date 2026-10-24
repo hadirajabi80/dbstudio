@@ -89,8 +89,31 @@ END
 $$;
 `,
   // WP-MY begin
-  mysql: `-- MySQL playground
-SELECT c.name, o.total FROM customers c JOIN orders o ON o.customer_id = c.id;
+  mysql: `-- MySQL / MariaDB playground: backticks, # comments, @vars, ->>, LIMIT m, n, DELIMITER blocks, \\G
+SELECT c.\`name\`, o.total, o.status # paid / shipped
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE o.status <=> 'paid' AND c.email LIKE '%@example.com'
+LIMIT 0, 20;
+
+SET @n := 0;
+SELECT @n := @n + 1 AS rn, e.meta->>'$.source' AS source, @@version FROM extra_types e\\G
+
+INSERT INTO countries (id, name) VALUES (99, 'Atlantis')
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+DELIMITER $$
+CREATE PROCEDURE add_note(IN p_customer INT, IN p_note TEXT)
+BEGIN
+  DECLARE v_count INT DEFAULT 0;
+  SELECT COUNT(*) INTO v_count FROM customer_notes WHERE customer_id = p_customer;
+  IF v_count < 10 THEN
+    INSERT INTO customer_notes (customer_id, lang, note) VALUES (p_customer, 'en', p_note);
+  END IF;
+END$$
+DELIMITER ;
+
+CALL add_note(1, 'hello; world');
 `,
   // WP-MY end
   // WP-CH begin
