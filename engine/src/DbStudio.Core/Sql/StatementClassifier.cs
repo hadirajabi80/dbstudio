@@ -259,7 +259,73 @@ public static class StatementClassifier
     // WP-MY end
 
     // WP-CH begin (ClickHouse: SHOW, DESCRIBE, EXISTS, OPTIMIZE, SYSTEM, KILL, ALTER … UPDATE/DELETE mutations, …)
-    private static StatementClassification? ClassifyClickHouse(List<SqlToken> t, int i, string u, bool hasWhere, int start) => null;
+    private static StatementClassification? ClassifyClickHouse(List<SqlToken> t, int i, string u, bool hasWhere, int start)
+    {
+        string? Next(int k) => i + k < t.Count && t[i + k].Kind == SqlTokenKind.Word ? t[i + k].Upper : null;
+        DdlTarget? ObjectAt(string action, string objectType, int nameAt)
+        {
+            if (nameAt < t.Count && t[nameAt].IsWord("IF"))
+            {
+                nameAt++;
+                if (nameAt < t.Count && t[nameAt].IsWord("NOT")) nameAt++;
+                if (nameAt < t.Count && t[nameAt].IsWord("EXISTS")) nameAt++;
+            }
+            var (db, schema, name) = SplitName(NameAfter(t, nameAt, out _), Dialect.ClickHouse);
+            return new DdlTarget(action, objectType, db, schema, name, DdlScope.Object);
+        }
+        switch (u)
+        {
+            case "SHOW" or "DESCRIBE" or "DESC" or "EXISTS" or "WATCH":
+                return new(StatementCategory.Query, u, hasWhere, null, start);
+            case "OPTIMIZE" or "SYSTEM" or "KILL" or "CHECK":
+                return new(StatementCategory.Other, u, hasWhere, null, start);
+            case "ALTER" when Next(1) == "TABLE":
+            {
+                // ALTER TABLE t UPDATE … / DELETE … are mutations (DML); DROP/DETACH PARTITION|PART deletes data.
+                var depth = 0;
+                for (var k = i + 2; k < t.Count; k++)
+                {
+                    if (t[k].IsPunct('(')) depth++;
+                    else if (t[k].IsPunct(')')) depth--;
+                    if (depth != 0 || t[k].Kind != SqlTokenKind.Word) continue;
+                    var w = t[k].Upper;
+                    if (w is "UPDATE" or "DELETE" && k > i + 2)
+                        return new(StatementCategory.Dml, w, HasDepth0Word(t, k, "WHERE") && !WhereIsTrivial(t, k), null, start);
+                    if (w is "DROP" or "DETACH" && k + 1 < t.Count && t[k + 1].Kind == SqlTokenKind.Word && t[k + 1].Upper is "PARTITION" or "PART")
+                        return new(StatementCategory.Ddl, $"DROP {t[k + 1].Upper}", false, ObjectAt("ALTER", ObjectTypes.Table, i + 2), start);
+                }
+                return null;
+            }
+            case "CREATE" or "DROP" or "ATTACH" or "DETACH" or "UNDROP" or "ALTER" or "EXCHANGE" or "RENAME":
+            {
+                var j = 1;
+                while (Next(j) is "OR" or "REPLACE" or "TEMPORARY") j++;
+                var what = Next(j);
+                if (what == "DICTIONARY" || what == "DICTIONARIES")
+                    return new(StatementCategory.Ddl, $"{u} DICTIONARY", false, ObjectAt(u, ObjectTypes.Type, i + j + 1), start);
+                if (u is "ATTACH" or "DETACH" or "UNDROP" && what is "TABLE" or "VIEW")
+                    return new(StatementCategory.Ddl, $"{u} {what}", false, ObjectAt(u, what == "VIEW" ? ObjectTypes.View : ObjectTypes.Table, i + j + 1), start);
+                if (u is "ATTACH" or "DETACH" && what == "DATABASE")
+                    return new(StatementCategory.Ddl, $"{u} DATABASE", false, new DdlTarget(u, "database", null, null, null, DdlScope.Database), start);
+                if (u is "RENAME" or "EXCHANGE" && what is "TABLE" or "TABLES" or "DATABASE")
+                    return new(StatementCategory.Ddl, $"{u} {what}", false,
+                        what == "DATABASE" ? new DdlTarget(u, "database", null, null, null, DdlScope.Database) : ObjectAt(u, ObjectTypes.Table, i + j + 1), start);
+                if (u == "DROP" && what is "PARTITION") return new(StatementCategory.Ddl, "DROP PARTITION", false, null, start);
+                return null;
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary><c>WHERE 1</c> / <c>WHERE true</c> after a ClickHouse mutation: deletes or updates every row.</summary>
+    private static bool WhereIsTrivial(List<SqlToken> t, int from)
+    {
+        var w = FirstDepth0Index(t, from, "WHERE");
+        if (w < 0 || w + 1 >= t.Count) return false;
+        var last = w + 2 >= t.Count || t[w + 2].IsPunct(';');
+        return last && (t[w + 1].Value is "1" || t[w + 1].IsWord("TRUE"));
+    }
     // WP-CH end
 
     // WP-SF begin (Snowflake: SHOW, DESCRIBE/DESC, LIST/LS, GET/PUT, COPY INTO, USE WAREHOUSE/ROLE, CALL, UNDROP, …)

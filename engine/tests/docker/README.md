@@ -181,3 +181,17 @@ or `DBSTUDIO_SF_PRIVATE_KEY_PATH` [+ `DBSTUDIO_SF_PRIVATE_KEY_PASSPHRASE`], `DBS
 `ShopSchema.Seed(Snowflake)`); `DBSTUDIO_UPDATE_GOLDEN=1` writes the live answers of the catalog commands to
 `Fixtures/recorded/live.json.txt` to refresh the handwritten fixtures. A free trial account is enough
 (`docs/qa/snowflake-walkthrough.md`).
+
+### ClickHouse (WP-CH)
+
+`seed-clickhouse.sql` builds database `shop` with the same logical model as `seed-postgres.sql` (3 countries, 5 customers,
+6 orders — order 1 total 120.50 —, 4 products, 7 order lines) as MergeTree tables, plus ClickHouse extras: `orders`
+partitioned by `toYYYYMM(order_date)` with a TTL, a minmax skipping index, a CHECK constraint and a MATERIALIZED column;
+`products` with `Array`/`Map` columns; `reviews` (ReplacingMergeTree) with Persian and Arabic text; the view
+`customer_orders`, the parametrised view `orders_since` (`SELECT * FROM shop.orders_since(since = '2026-02-01 00:00:00')`),
+the materialized view `daily_sales` → `daily_sales_agg` (SummingMergeTree), the dictionary `product_dict` over `products`
+and the SQL function `tax`. The dictionary's local source logs in as `shop`/`shop` (the image removes the `default` user
+when `CLICKHOUSE_USER` is set): change its `USER`/`PASSWORD` together with `CLICKHOUSE_PASSWORD`. The script is idempotent
+and runs either through `docker-entrypoint-initdb.d` or, in the tests, as one console batch (the session splits it into
+statements). `DBSTUDIO_CH_HOST=localhost DBSTUDIO_CH_PORT=18123` points the integration tests at the compose service;
+without them they start `clickhouse/clickhouse-server:24.8` on a random port (1.5 GB memory cap).

@@ -61,7 +61,11 @@ const FALLBACK_TYPES: Record<Dialect, string[]> = {
   mysql: ['int', 'bigint', 'smallint', 'tinyint', 'decimal(12,2)', 'double', 'float', 'varchar(100)', 'char(10)', 'text', 'longtext', 'date', 'datetime', 'timestamp', 'time', 'year', 'json', 'blob', 'boolean'],
   // WP-MY end
   // WP-CH begin
-  clickhouse: ['UInt8', 'UInt32', 'UInt64', 'Int32', 'Int64', 'Float64', 'Decimal(12, 2)', 'String', 'LowCardinality(String)', 'Date', 'DateTime', 'DateTime64(3)', 'UUID', 'Bool', 'Array(String)', 'Nullable(String)'],
+  clickhouse: [
+    'UInt8', 'UInt16', 'UInt32', 'UInt64', 'Int8', 'Int16', 'Int32', 'Int64', 'Int128', 'Float32', 'Float64', 'Decimal(12, 2)', 'Bool', 'String',
+    'FixedString(16)', 'LowCardinality(String)', 'Nullable(String)', 'Enum8(\'a\' = 1, \'b\' = 2)', 'UUID', 'Date', 'Date32', 'DateTime',
+    'DateTime64(3)', 'IPv4', 'IPv6', 'Array(String)', 'Map(String, String)', 'Tuple(String, UInt64)', 'JSON',
+  ],
   // WP-CH end
   // WP-SF begin
   snowflake: ['NUMBER(38,0)', 'NUMBER(12,2)', 'FLOAT', 'DECFLOAT', 'VARCHAR(100)', 'VARCHAR', 'CHAR(10)', 'BOOLEAN', 'DATE', 'TIME(9)', 'TIMESTAMP_NTZ(9)', 'TIMESTAMP_LTZ(9)', 'TIMESTAMP_TZ(9)', 'VARIANT', 'OBJECT', 'ARRAY', 'BINARY', 'GEOGRAPHY', 'GEOMETRY', 'VECTOR(FLOAT, 768)'],

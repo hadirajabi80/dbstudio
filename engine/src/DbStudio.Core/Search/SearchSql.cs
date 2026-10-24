@@ -219,12 +219,25 @@ public static class SearchSql
             // WP-MY end
             // WP-CH begin
             case Dialect.ClickHouse:
-                return t switch
+            {
+                // Nullable(…) / LowCardinality(…) wrappers: decide on the inner type.
+                var inner = (typeText ?? "").Trim();
+                while (true)
+                {
+                    var open = inner.IndexOf('(');
+                    var head = open < 0 ? inner : inner[..open].Trim();
+                    if (open > 0 && inner.EndsWith(')') && head is "Nullable" or "LowCardinality") { inner = inner[(open + 1)..^1].Trim(); continue; }
+                    break;
+                }
+                var b = BaseType(inner);
+                return b switch
                 {
                     "string" or "fixedstring" => quotedColumn,
-                    "lowcardinality" or "nullable" or "uuid" or "enum8" or "enum16" or "json" => $"toString({quotedColumn})",
+                    "uuid" or "enum8" or "enum16" or "enum" or "json" or "object" or "ipv4" or "ipv6" => $"toString({quotedColumn})",
+                    "array" or "map" or "tuple" when inner.Contains("String", StringComparison.Ordinal) => $"toString({quotedColumn})",
                     _ => null,
                 };
+            }
             // WP-CH end
             // WP-SF begin
             case Dialect.Snowflake:
