@@ -13,8 +13,8 @@ A fast, keyboard-first desktop database client for Windows and macOS.</p>
   <a href="https://github.com/hadirajabi80/rowlit/releases">All releases</a>
 </p>
 
-**Microsoft SQL Server**, **Oracle**, **PostgreSQL** and **SQLite**, plus workspaces for **Redis**, **MongoDB** and
-**Kafka**, in one app. Rowlit pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas
+**Microsoft SQL Server**, **Oracle**, **PostgreSQL**, **MySQL**, **MariaDB**, **SQLite**, **ClickHouse**, **Snowflake**
+and **Cassandra**, plus workspaces for **Redis**, **MongoDB**, **Kafka** and **Elasticsearch / OpenSearch**, in one app. Rowlit pairs a Monaco editor with schema-aware IntelliSense, streams result sets into a canvas
 grid that stays smooth at hundreds of thousands of rows, and keeps every database driver out of the UI: a .NET 10
 engine runs as a local sidecar and the React UI talks to it over authenticated HTTP and WebSocket.
 
@@ -26,14 +26,24 @@ engine runs as a local sidecar and the React UI talks to it over authenticated H
 
 ### Databases
 
-- **SQL Server, Oracle, PostgreSQL, SQLite**: explorer for databases, schemas, tables, views, routines, packages,
-  sequences, synonyms, triggers and types, with lazy loading, fuzzy filter, "Select top 1000" and "Open DDL".
+- **SQL Server, Oracle, PostgreSQL, MySQL, MariaDB, SQLite**: explorer for databases, schemas, tables, views, routines,
+  packages, sequences, synonyms, triggers, events and types, with lazy loading, fuzzy filter, "Select top 1000" and
+  "Open DDL". MySQL/MariaDB consoles run `DELIMITER` scripts and cancel with `KILL QUERY`.
+- **ClickHouse**: exact big numbers and nested types in the grid, tables, materialized views, dictionaries, a
+  MergeTree-aware designer, EXPLAIN with index use, query log, mutations, merges and a Parts & partitions view.
+- **Snowflake** (password, key pair, browser SSO, OAuth): warehouse/role/database/schema switching, catalog browsing
+  without waking a warehouse, GET_DDL, operator statistics, query history and stages/streams/tasks/pipes.
+- **Cassandra / ScyllaDB**: CQL console with cqlsh commands (CONSISTENCY, TRACING, DESCRIBE), paged results, a
+  tracing timeline, keyspaces, tables, MVs, UDTs with partition/clustering keys, editing by primary key, cluster view.
 - **Redis** (standalone, cluster, sentinel, TLS): key browser with a folder tree and TTL countdown, an editor per
   type (strings with JSON/hex views, hashes, lists, sets, sorted sets, streams, ReJSON), workbench, CLI, Pub/Sub,
   slowlog, info dashboard and memory analysis.
 - **MongoDB** (URI and SRV, replica sets, Atlas): documents as list, JSON or table with Extended JSON round trips,
   filter/projection/sort completion, aggregation builder with per-stage previews and code export, schema analysis,
   indexes, validation rules, explain, import and export.
+- **Elasticsearch / OpenSearch**: cluster overview, index browser (documents, mappings, settings, shards), document
+  editing with conflict protection, query DSL editor with completion and aggregations, Kibana-style Dev Tools console,
+  SQL, tasks, and reindex/import/export jobs.
 - **Kafka** (PLAINTEXT, SASL, SSL, Schema Registry): topics, partitions and configs, a message browser by offset or
   time with JSON, Avro and Protobuf decoders, live tail, produce, consumer groups with lag and offset reset.
 - **Several connections at once**: colour-coded connections (production = red), read-only connections enforced by
